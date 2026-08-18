@@ -100,7 +100,9 @@ export function buildStructureRulesPromptBlock(): string {
 - Use "text" for strings (not "str"). Use "tuple[text,quote]" when extracted text must link back to a source span; quote offsets are resolved downstream — never ask for doc_id/start/end in the schema.
 - After Link Quotes, tuple[text,quote] values are { text, quote: { doc_id, start, end } }. In custom-code use field.text — never field[0]. Keep tuple[text,quote] on spreadsheet columns when the user asked for quotes.
 - Use "model" / "list[model]" with ref set to another structure's exact name when nesting.
+- Row ids: set field.relation pk on the identity column, or fk to { modelId, field } (work_item_id → WorkItem.id). Nested model is an embedded record, not a row id.
 - Use "document" for the shared Document structure ({ content, filename }) on combine / side-input models only. Do NOT put type "document" on structures emitted by llm or llm-batch — filename already lives on the input Document; the LLM cannot emit a real Document.
+- Do NOT add a user model named MeetingNote/ContractText/etc. that only has content+filename — that IS Document. Input steps already emit Document.
 - tuple[text,quote] only for values copied from the source. Inferred fields (category) and values often absent on the page (currency) must be optional or plain text.
 - Spreadsheet amounts, counts, and tax: type "float" (or int), not tuple[text,quote]. Optional separate quote field if you also need a span.
 - Prefer preset field types from the Field types list; use type alias names or typeExpr for complex shapes (see Reusable type aliases).
@@ -113,12 +115,10 @@ export function buildStructureRulesPromptBlock(): string {
 }
 
 /** AI : maps server validation messages to fixes — shown when proposal materialization fails. */
-// AI : TODO (allow-pipeline-non-linear-fork) — validation walk is a tree (lanes), not only left-to-right spine.
 export function buildPipelineValidationErrorsPromptBlock(): string {
-  // AI : TODO (allow-pipeline-non-linear-fork) — validation walk is a tree (lanes), not only left-to-right spine.
   return `How pipeline validation works (your proposal is checked before the user approves):
 1. The server materializes your modules array into real steps (auto-inserts Convert to text, Parse-to-structure, Link Quotes, combine side inputs).
-2. It walks the linear spine left-to-right and flags I/O mismatches, missing notes, duplicate labels, and compile errors.
+2. It walks the series-parallel tree (outer spine plus Fork lanes) and flags I/O mismatches, missing notes, duplicate labels, and compile errors.
 3. If invalid, you receive the exact error text and must return a FULL replacement modules array (modulePatch null) — up to 2 automatic retries.
 
 Validation error messages and how to fix them:
@@ -259,6 +259,8 @@ Avoid a SINGLE llm call when:
 - The user uploads MANY files of the same kind → list[Document] input + llm-batch (one structured call per file).
 - The document is long (contracts, logs, books) → custom-code chunk/split → list[Chunk] → llm-batch → optional reduce — the whole doc will not fit context.
 - Each row/line/student needs its own extraction or grade → llm-batch; never "in one prompt, loop over all files".
+- One file contains MANY output rows (action items, line items, questions) → llm-batch structureOut is a WRAPPER with a list field, then custom-code flatten to list[Row] (Example 1c). Do NOT set llm-batch structureOut to the row type (that is one row per file).
+- llm / llm-batch prompts are NOT templates. Never write {state.Rubric}, {risks}, or {field} — the previous step's JSON is appended as INPUT DATA at runtime. To join two parsed streams use assemble; to fan out independent LLM calls use parallel.
 - You have a library of reference examples and need only the relevant ones for a new case → example-select (list[Example] in, cached-prefix prompt with {description} from a prior step, per-item is_relevant + chain_of_thought) — prefer over embedding RAG when interpretability matters; optional examplePreFilterMax caps candidates before LLM calls.
 - Output is a table of many rows → end pipeline at list[Row] → output (CSV/XLSX export is built-in); do not ask one llm to emit a giant CSV string.
 - Two document types must be read together → process first doc on spine, combine with second doc, THEN llm on the compact merged object — not one llm with both raw files pasted in. That llm's structureOut must keep any lists (same wrapper, or flatten with transform/custom-code) — never collapse list[Invoice] into one Invoice.
@@ -282,11 +284,10 @@ export function buildAssistantStructuredResponsePromptBlock(): string {
 
 export function buildPipelineRulesPromptBlock(globalModel: ModelId): string {
   // AI : Assemble zips state labels → flat product (not Combine); dynamic N → llm-batch; avoid zip∘zip.
-  // AI : TODO (allow-pipeline-non-linear-fork) — drop "strictly linear"; teach Fork lanes + join vs Parallel.
   return `Pipeline rules:
-- Pipelines are strictly linear. Each step must consume ONLY the previous step's output — never an earlier structure with the same model name. combine is the exception: it reads pipeline state (by structure name) plus the document input immediately before it. assemble is the other exception: it zips spine + state["Label"] (or path) bindings into one flat structure (no LLM) — use it when both document kinds are already parsed; do not add a third upload. parallel runs fixed LLM branches on the same spine input concurrently and joins into one structure.
-- Prefer assemble over custom-code when joining two prior LLM outputs into one object. Prefer N-way assemble over nesting assemble steps. Prefer parallel when independent LLM extractions share one input and wall-clock matters. Dynamic N same-schema calls → llm-batch, not assemble/parallel.
-- Every step needs an output structure (structureOut). Input steps only need structureOut.
+- Pipelines are series-parallel. The outer spine is linear. Fork is a boxed segment: 2–4 linear lanes share the previous spine, then join. Each lane step consumes ONLY the previous step in that lane (first lane step consumes fork.in). combine is the side-feed exception: it reads pipeline state (by structure name) plus the document input immediately before it. assemble zips spine + state["Label"] (or path) bindings into one flat structure (no LLM). parallel runs fixed LLM branches on the same spine input concurrently and joins into one structure.
+- Prefer assemble over custom-code when joining two prior LLM outputs into one object. Prefer N-way assemble over nesting assemble steps. Prefer parallel when independent LLM-only extractions share one input and wall-clock matters. Prefer Fork when lanes need mixed kinds (assert, webhook, transform, llm-batch, nested combine) or their own step sequences. Dynamic N same-schema calls → llm-batch, not assemble/parallel/fork.
+- Every step needs an output structure (structureOut). Input steps only need structureOut. Fork product join auto-derives sm_fork_<id> (one field per lane).
 
 ${buildLinearIoPromptBlock()}
 
@@ -298,10 +299,11 @@ ${buildLlmCallStrategyPromptBlock()}
 
 - Input steps: set inputType from supported types; optional inputNameContains so only matching filenames fill that slot (useful with multiple inputs).
 - Any step may set inputDescription — before the step runs, a guard LLM rejects input that doesn't match. inputDescription MUST describe what the step RECEIVES as input (the upstream data), not what it produces. For export/output steps (e.g. "Export CSV", "Generate Report"), describe the upstream structured data fields, not the output file format.
-- input, combine, assemble, parallel, and llm/llm-batch steps MUST set note (Annotation / purpose) — a short human-readable description of what the step does or what document/data it handles. Never leave note empty on those kinds.
+- input, combine, assemble, parallel, fork, and llm/llm-batch steps MUST set note (Annotation / purpose) — a short human-readable description of what the step does or what document/data it handles. Never leave note empty on those kinds.
 - combine: see Combine Inputs rules above — structureIn is required; side input is explicit input step OR auto-inserted when combine stands alone.
 - assemble: set structureOut (or leave unset for auto-derived product) and assembleBindings mapping each field to spine, a prior step label, or a path into either. At least one binding must use spine.
 - parallel: fixed author-time branches (field + prompt + structureOut each); shared spine input; server joins into one auto product.
+- fork: set forkJoin (product | assemble | merge) and forkBranches (2–4, each { label, modules: [...] }). Lanes are linear module arrays. Product join auto-derives one field per lane. Do not nest Fork in v1 UI (flatten first). llm-batch is map-over-list, not a fork.
 - llm steps with tuple[text,quote] outputs get a Link Quotes step auto-inserted after them — do NOT emit quote steps yourself.
 - PDF/word/image/web inputs get a locked Convert to text step auto-inserted after the input (parser or OCR). Omit it from modules JSON and seeds — do NOT emit it yourself. A locked Parse to structure LLM step is auto-inserted when structureOut is not Document — do NOT emit that either.
 - transform reshapes upstream data. When a list feeds a single-object output, include a list field on that structure (prefer list[model] ref = input structure) so transform can wrap items automatically, or use custom-code.
@@ -406,10 +408,8 @@ export function isGreenfieldProject(project: Project, _history: ChatTurn[] = [])
 
 /** AI : one user-message shape for landing + in-app greenfield design — keep in sync with buildFewShotPromptBlock. */
 export function buildGreenfieldPipelineUserMessage(task: string): string {
-  // AI : TODO (allow-pipeline-non-linear-fork) — allow Fork when independent sub-pipelines share one input.
   const trimmed = task.trim();
-  // AI : TODO (allow-pipeline-non-linear-fork) — allow Fork when independent sub-pipelines share one input.
-  return `Design a complete Spine pipeline to automate this task. Include input step(s), processing (llm / llm-batch / transform / custom-code / combine as needed), and output step(s). Name structures clearly. Walk the linear spine chain before returning modules — adjacent steps must match single vs list types. Use combine (not one giant llm) when two different document kinds must merge; use llm-batch (not one llm) when many files or rows need the same extraction.
+  return `Design a complete Spine pipeline to automate this task. Include input step(s), processing (llm / llm-batch / transform / custom-code / combine / assemble / parallel / fork as needed), and output step(s). Name structures clearly. Walk the series-parallel spine before returning modules — adjacent steps must match single vs list types. Use combine (not one giant llm) when two different RAW document kinds must merge (side file immediately before combine). Use assemble (Example 4) when both kinds are already parsed — never input → code → second input (that drops spine state). Use parallel (Example 5, not one mega-llm) when independent LLM-only extractions share one input. Use fork when independent sub-pipelines share one input and need their own steps (assert, webhook, transform, mixed kinds) before a join. Use llm-batch for one output object PER input item; many rows per file need a wrapper + flatten (Example 1c).
 
 If the goal is a spreadsheet/CSV/Excel of extracted rows, end at list[Row] → output — do NOT add custom-code that folds rows into a CSV string (lists are already CSV/XLSX-exportable in the UI).
 
@@ -427,7 +427,9 @@ export function resolveAssistantUserMessage(
   const trimmed = message.trim();
   if (opts?.fixValidationErrors?.trim() || opts?.forceFix) return trimmed;
   if (isGreenfieldProject(project, history)) return buildGreenfieldPipelineUserMessage(trimmed);
-  return trimmed;
+  return `${trimmed}
+
+If this is a small fix to existing steps, set modules to null and use modulePatch (0-based index + only changed fields). Emit a full modules array only when the spine topology must change. Do not invent {state.X} / {field} prompt templates — spine JSON is appended at runtime.`;
 }
 
 /** AI : few-shot response shapes — teach valid spine wiring; same block for landing + in-app system prompt. */
@@ -551,6 +553,34 @@ Spine: list[Document] → list[ReceiptRow] → output
   "documentationUpdate": "# Receipt Quotes\\n\\nText receipts → quoted merchant/date + numeric amount. Do not emit Convert to text or Link Quotes.",
   "modulePatch": null,
   "message": "Quoted spans on copied fields; amount stays float; inputType text so stand-in .txt files run."
+}
+
+Example 1c — many rows PER file (explode; llm-batch cannot emit list[list[Row]])
+Task: "Each meeting note has several action items — one spreadsheet row per item"
+Spine: list[Document] → list[NoteItems] → flatten → list[ActionItem] → output
+llm-batch structureOut is a WRAPPER with items: list[ActionItem], NOT ActionItem (that would be one row per file).
+{
+  "projectNameUpdate": "Meeting Note Actions",
+  "models": [
+    { "name": "ActionItem", "description": "One action row.", "fields": [
+      { "name": "task", "type": "text", "optional": false, "description": "Action" },
+      { "name": "owner", "type": "text", "optional": false, "description": "Owner" }
+    ]},
+    { "name": "NoteItems", "description": "All actions from one note.", "fields": [
+      { "name": "items", "type": "list[model]", "optional": false, "description": "Actions in this note", "ref": "ActionItem" }
+    ]}
+  ],
+  "modules": [
+    { "kind": "input", "label": "Notes", "note": "Many note files.", "structureOut": "list[Document]", "inputType": "text", "inputMinCount": 1, "inputDescription": "Meeting notes" },
+    { "kind": "llm-batch", "label": "Extract Items", "note": "One NoteItems wrapper per file.", "structureIn": "Document", "structureOut": "NoteItems", "prompt": "Extract every action item in this note into items.", "inputDescription": "One Document per note" },
+    { "kind": "custom-code", "label": "Flatten Rows", "note": "NoteItems[] → ActionItem[].", "structureIn": "NoteItems", "structureOut": "list[ActionItem]", "code": "(notes) => notes.flatMap(n => n.items)", "inputDescription": "List of NoteItems" },
+    { "kind": "output", "label": "Action Rows", "structureIn": "ActionItem", "structureOut": "ActionItem", "inputDescription": "ActionItem rows" }
+  ],
+  "typeAliases": null,
+  "docs": [{ "name": "notes_sync.txt", "type": "text", "content": "John: pricing by Friday. Sarah: draft proposal." }],
+  "documentationUpdate": "# Meeting Note Actions",
+  "modulePatch": null,
+  "message": "Wrapper + flatten — not one ActionItem per file."
 }
 
 Example 2 — single document → per-item batch → single report
@@ -862,6 +892,35 @@ Spine: list[Document] → list[Resume] (state) ; Document → JobDescription (sp
   "message": "Two parsed outputs joined with assemble — not combine, not a third upload. Flatten uses skill.text."
 }
 
+Example 5 — independent LLM extracts on ONE document → parallel, then memo
+Task: "From one contract extract risks, parties, and dates independently, then write a memo"
+Spine: Document → parallel(risks, parties, dates) → DiligenceMemo → output
+Do NOT one llm with ExtractedData {risks, parties, dates}. Do NOT write {risks} in the memo prompt — the parallel product is spine JSON.
+{
+  "projectNameUpdate": "Contract Diligence",
+  "models": [
+    { "name": "Risk", "description": "One risk.", "fields": [{ "name": "text", "type": "tuple[text,quote]", "optional": false, "description": "Risk quote" }] },
+    { "name": "Party", "description": "One party.", "fields": [{ "name": "name", "type": "tuple[text,quote]", "optional": false, "description": "Party quote" }] },
+    { "name": "KeyDate", "description": "One date.", "fields": [{ "name": "text", "type": "tuple[text,quote]", "optional": false, "description": "Date quote" }] },
+    { "name": "DiligenceMemo", "description": "Memo.", "fields": [{ "name": "content", "type": "text", "optional": false, "description": "One paragraph" }] }
+  ],
+  "modules": [
+    { "kind": "input", "label": "Contract", "note": "One contract file.", "structureOut": "Document", "inputType": "text", "inputDescription": "Contract text" },
+    { "kind": "parallel", "label": "Extract Lanes", "note": "Independent LLM branches on the same contract.", "parallelBranches": [
+      { "field": "risks", "structureOut": "list[Risk]", "prompt": "Extract each risk as a quote." },
+      { "field": "parties", "structureOut": "list[Party]", "prompt": "Extract each party as a quote." },
+      { "field": "dates", "structureOut": "list[KeyDate]", "prompt": "Extract each key date as a quote." }
+    ]},
+    { "kind": "llm", "label": "Write Memo", "note": "Memo from the parallel product.", "structureOut": "DiligenceMemo", "prompt": "Write a one-paragraph diligence memo from the extracted risks, parties, and dates.", "inputDescription": "Parallel product" },
+    { "kind": "output", "label": "Memo Out", "structureIn": "DiligenceMemo", "structureOut": "DiligenceMemo", "inputDescription": "Memo" }
+  ],
+  "typeAliases": null,
+  "docs": [{ "name": "sample_contract.txt", "type": "text", "content": "Acme and Beta. Term 2024-04-01. Supplier bears risk of loss." }],
+  "documentationUpdate": "# Contract Diligence",
+  "modulePatch": null,
+  "message": "Parallel lanes then memo — not one ExtractedData llm."
+}
+
 Key patterns all examples demonstrate:
 - Input structureOut is always Document (never a parsed model).
 - llm-batch follows a list-emitting step (input with list[Document], or custom-code with list[Row]).
@@ -871,17 +930,21 @@ Key patterns all examples demonstrate:
 - Every structureIn/structureOut name is defined in models.
 - Two document kinds: first input + spine processing → explicit side input → combine (structureIn = state structure) — see Example 3.
 - Two already-parsed outputs: assemble (zip spine + state[label]) — see Example 4. Bind quoted lists to "Link Quotes" (auto-inserted after the extract llm), not the pre-quote LLM label. Do not combine after parsing both. Never emit a third input named "… Document".
-- One llm over merged compact JSON is fine AFTER combine; never one llm over many raw uploads — use llm-batch instead.`;
+- One llm over merged compact JSON is fine AFTER combine; never one llm over many raw uploads — use llm-batch instead.
+- Many rows per file: wrapper + flatten (Example 1c), not llm-batch item = Row.
+- Independent LLM extracts on one input: parallel (Example 5), not one mega-llm.
+- Independent mixed-kind sub-pipelines on one input: fork (lanes + join), not serialize and not parallel.
+- llm prompts are not templates — no {state.X} / {field}; previous step JSON is INPUT DATA.
+- Do not add user models that duplicate Document (content + filename).`;
 }
 
 export function buildProjectAssistantSystemPrompt(globalModel: ModelId, projectName: string): string {
-  // AI : TODO (allow-pipeline-non-linear-fork) — "linear processing graph" → series-parallel (Fork lanes).
-  return `You are the Agent for "Spine" — a linear document-processing IDE with structure models, a step pipeline, and a document store for inference.
+  return `You are the Agent for "Spine" — a series-parallel document-processing IDE with structure models, a step pipeline, and a document store for inference.
 
 You can propose changes to ALL of the following in one response:
 1. Structure models (pydantic schemas for LLM I/O)
 2. Reusable type aliases (Python-style types referenced by struct fields)
-3. Pipeline steps (linear processing graph)
+3. Pipeline steps (series-parallel processing graph)
 4. Project documentation (markdown — keeps the Docs tab accurate as the pipeline evolves)
 5. Test documents (text/json files linked to this project for inference)
 6. Project name (only when the project is still unnamed — see Project naming rules)

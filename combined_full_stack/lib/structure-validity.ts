@@ -1,4 +1,4 @@
-// AI : structure field integrity — empty names, dangling refs, duplicate names within a model.
+// AI : structure field integrity — empty names, dangling refs, duplicate names, pk/fk relations.
 import {
   collectTypeExprRefModelIds,
   fieldToTypeExpr,
@@ -12,6 +12,7 @@ import {
 } from "@/lib/server/field_example_validity";
 import { withSharedModels } from "@/lib/structure";
 import { isBuiltinTypeAliasName, stripBuiltinTypeAliases, withBuiltinTypeAliases } from "@/lib/server/builtin_types";
+import { declaredPkFields, fkTypeMatchesPk, pkFieldOf } from "@/lib/sql-id-types";
 import type { ModelField, StructureModel, StructureModelId, TypeAlias } from "@/lib/types";
 
 export const StructureIssueKind = {
@@ -23,6 +24,10 @@ export const StructureIssueKind = {
   DuplicateAliasName: "duplicate-alias-name",
   IncompleteTypeExpr: "incomplete-type-expr",
   InvalidFieldExample: "invalid-field-example",
+  DanglingFkTarget: "dangling-fk-target",
+  FkUnknownField: "fk-unknown-field",
+  FkTypeMismatch: "fk-type-mismatch",
+  MultiplePk: "multiple-pk",
 } as const;
 
 export type StructureIssueKind = (typeof StructureIssueKind)[keyof typeof StructureIssueKind];
@@ -191,6 +196,59 @@ export function computeStructureIssues(
         }
       }
 
+      const rel = field.relation;
+      if (rel?.kind === "pk") {
+        const declared = declaredPkFields(model);
+        if (declared.length > 1 && declared[0]?.id !== field.id) {
+          issues.push({
+            modelId: model.id,
+            kind: StructureIssueKind.MultiplePk,
+            fieldId: field.id,
+            fieldName: name,
+          });
+        }
+      }
+      if (rel?.kind === "fk") {
+        const target = withSharedModels(models).find((m) => m.id === rel.to.modelId);
+        if (!target) {
+          issues.push({
+            modelId: model.id,
+            kind: StructureIssueKind.DanglingFkTarget,
+            fieldId: field.id,
+            fieldName: name,
+            refId: rel.to.modelId,
+          });
+        } else {
+          const pk = pkFieldOf(target);
+          const dest = target.fields.find((f) => f.name === rel.to.field);
+          if (!dest) {
+            issues.push({
+              modelId: model.id,
+              kind: StructureIssueKind.FkUnknownField,
+              fieldId: field.id,
+              fieldName: name,
+              refId: target.id,
+            });
+          } else if (pk && dest.name !== pk.name) {
+            issues.push({
+              modelId: model.id,
+              kind: StructureIssueKind.FkUnknownField,
+              fieldId: field.id,
+              fieldName: name,
+              refId: target.id,
+            });
+          } else if (pk && !fkTypeMatchesPk(field, pk)) {
+            issues.push({
+              modelId: model.id,
+              kind: StructureIssueKind.FkTypeMismatch,
+              fieldId: field.id,
+              fieldName: name,
+              refId: target.id,
+            });
+          }
+        }
+      }
+
       const fieldExpr = fieldToTypeExpr(field);
       for (const aliasName of unknownNamedTypes(fieldExpr, mergedAliases)) {
         issues.push({
@@ -340,6 +398,14 @@ export function structureIssueMessage(issue: StructureIssue, models: StructureMo
       const n = (issue.exampleIndex ?? 0) + 1;
       return `${modelName}.${issue.fieldName ?? "?"} ${label} ${n} does not match field type — ${issue.exampleError ?? "invalid value"}`;
     }
+    case StructureIssueKind.DanglingFkTarget:
+      return `${modelName}.${issue.fieldName ?? "?"} fk references missing structure`;
+    case StructureIssueKind.FkUnknownField:
+      return `${modelName}.${issue.fieldName ?? "?"} fk target field is not the primary key`;
+    case StructureIssueKind.FkTypeMismatch:
+      return `${modelName}.${issue.fieldName ?? "?"} fk type does not match target pk`;
+    case StructureIssueKind.MultiplePk:
+      return `${modelName}.${issue.fieldName ?? "?"} extra primary key`;
     default:
       return "structure validation error";
   }

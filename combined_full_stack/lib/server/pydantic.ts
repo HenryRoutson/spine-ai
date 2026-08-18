@@ -12,6 +12,7 @@ import {
 import { stripBuiltinTypeAliases } from "./builtin_types";
 import { stripSharedModels } from "./builtin_models";
 import type { TypeExpr } from "./types";
+import { collectSqlIdTypes, fieldSqlIdType, idTypeBrand } from "@/lib/sql-id-types";
 import {
   goFieldIdent,
   modelExportIdentifier,
@@ -92,7 +93,7 @@ export function modelToPydantic(model: StructureModel, models: StructureModel[])
   const doc = model.description ? `    """${model.description}"""` : null;
   const body =
     model.fields.length > 0
-      ? model.fields.map((f) => fieldToPy(f, models)).join("\n")
+      ? model.fields.map((f) => fieldToPy(f, models, fieldSqlIdType(model, f, models))).join("\n")
       : "    pass";
   return [header, doc, body].filter(Boolean).join("\n");
 }
@@ -129,6 +130,18 @@ function pydanticBuiltinModels(): string {
   ].join("\n");
 }
 
+function sqlIdAliasesPy(models: StructureModel[]): string {
+  const types = collectSqlIdTypes(models)
+  if (!types.length) return ""
+  return `${types.map((t) => `type ${t.name} = str`).join("\n")}\n`
+}
+
+function sqlIdAliasesDts(models: StructureModel[]): string {
+  const types = collectSqlIdTypes(models)
+  if (!types.length) return ""
+  return `${types.map((t) => `export type ${t.name} = string & { __brand: ${JSON.stringify(idTypeBrand(t.name))} };`).join("\n")}\n`
+}
+
 export function allModelsToPydantic(
   models: StructureModel[],
   typeAliases: TypeAlias[] = [],
@@ -154,16 +167,19 @@ export function allModelsToPydantic(
       ].join("\n")
     : "";
   const aliasesBlock = typeAliasesToPydantic(stripBuiltinTypeAliases(typeAliases), exportModels);
+  const idAliases = sqlIdAliasesPy(exportModels);
   const classes = exportModels.map((m) => modelToPydantic(m, exportModels)).join("\n\n\n");
   const aliasGap = aliasesBlock ? `\n${aliasesBlock}` : "";
-  return `${imports}${pydanticBuiltinModels()}${aliasGap}\n${classes}\n`;
+  const idGap = idAliases ? `\n${idAliases}` : "";
+  return `${imports}${pydanticBuiltinModels()}${aliasGap}${idGap}\n${classes}\n`;
 }
 
 function modelToDts(model: StructureModel, models: StructureModel[]): string {
   const lines = model.fields
     .filter((f) => f.name.trim())
     .map((f) => {
-      let t = typeExprToTs(fieldToTypeExpr(f), models);
+      const branded = fieldSqlIdType(model, f, models)
+      let t = branded ?? typeExprToTs(fieldToTypeExpr(f), models);
       if (f.optional) t = `${t} | undefined`;
       return `  ${f.name}: ${t};`;
     });
@@ -188,9 +204,11 @@ export function allModelsToDts(
   const userModels = stripSharedModels(models);
   const exportModels = modelsForPydanticExport(userModels);
   const aliasesBlock = typeAliasesToDts(stripBuiltinTypeAliases(typeAliases), exportModels);
+  const idAliases = sqlIdAliasesDts(exportModels);
   const aliasGap = aliasesBlock ? `${aliasesBlock}\n` : "";
+  const idGap = idAliases ? `${idAliases}\n` : "";
   const user = exportModels.map((m) => modelToDts(m, exportModels)).join("\n\n");
-  return `${header}${aliasGap}${user}\n`;
+  return `${header}${aliasGap}${idGap}${user}\n`;
 }
 
 function typeExprToAliasDefinitionRust(expr: TypeExpr, models: StructureModel[]): string {

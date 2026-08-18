@@ -1,3 +1,4 @@
+import { flattenPipelineModules } from "@/lib/fork-pipeline";
 import { isLlmKind, usesPassthroughStructure } from "@/lib/module-kinds";
 // AI : materializeStepOutput / spine list-ness is INSERT into a named table (or JSON
 // AI :   column). Helpers stay; annotation is CREATE TABLE step_<label> AS SELECT …
@@ -66,7 +67,7 @@ export function prevModuleFor(
   modules: PipelineModule[],
   prevModuleId?: ModuleId,
 ): PipelineModule | undefined {
-  return prevModuleId ? modules.find((mod) => mod.id === prevModuleId) : undefined;
+  return prevModuleId ? flattenPipelineModules(modules).find((mod) => mod.id === prevModuleId) : undefined;
 }
 
 export function materializeStepOutput(

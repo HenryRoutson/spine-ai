@@ -12,6 +12,7 @@ import {
   invalidStepMessage,
   warningStepMessage,
 } from "./validity";
+import { flattenPipelineModules } from "@/lib/fork-pipeline";
 import type { ModuleId, PipelineModule, Project, ProjectId, Strategy, StructureModel, StructureModelId, TypeAlias } from "./types";
 
 export type lint_severity = "error" | "warning";
@@ -72,7 +73,6 @@ export function parsePipelineLintInput(
 }
 
 function graphLints(project: Project): PipelineLint[] {
-  // AI : TODO (allow-pipeline-non-linear-fork) — lints on nested lane modules (flatten or recurse).
   const models = withSharedModels(project.models);
   const typeAliases = project.typeAliases ?? [];
   const invalid = computeInvalid(project.modules, project.models, { typeAliases });
@@ -89,7 +89,8 @@ function graphLints(project: Project): PipelineLint[] {
     });
   }
 
-  for (const m of project.modules) {
+  const steps = flattenPipelineModules(project.modules);
+  for (const m of steps) {
     for (const issue of invalidIssuesForModule(invalid, m.id)) {
       if (issue.kind === InvalidKind.StructureField) {
         out.push({
@@ -114,7 +115,7 @@ function graphLints(project: Project): PipelineLint[] {
   }
 
   for (const [moduleId, warnings] of computeWarnings(project.modules, project.models)) {
-    const step = project.modules.find((m) => m.id === moduleId);
+    const step = steps.find((m) => m.id === moduleId);
     for (const w of warnings) {
       out.push({
         severity: "warning",

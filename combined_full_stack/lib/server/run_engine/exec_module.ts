@@ -20,6 +20,7 @@ import {
 } from "./steps/misc";
 import { execWebhookStep } from "./steps/webhook";
 import { execChatbotStep } from "./steps/chatbot";
+import { execForkJoin } from "./steps/fork";
 
 export async function execModule(m: PipelineModule, ctx: RunCtx, log: RunLogger): Promise<ExecResult> {
   log.debug(`execModule start`, { moduleId: m.id, kind: m.kind, label: m.label });
@@ -35,7 +36,8 @@ export async function execModule(m: PipelineModule, ctx: RunCtx, log: RunLogger)
       return execAssembleStep(m, ctx, log);
     case ModuleKind.Parallel:
       return execParallelStep(m, ctx, log);
-    // AI : TODO (allow-pipeline-non-linear-fork) — case Fork: execForkStep (Promise.all lanes + join).
+    case ModuleKind.Fork:
+      return execForkJoin(m, ctx, log);
     case ModuleKind.Combine:
       return execCombineStep(m, ctx, log);
     case ModuleKind.Transform:

@@ -16,13 +16,17 @@ import {
   patchStep,
   removeModelField,
   removeStep,
+  setModelFieldRelation,
 } from "@/lib/cli/workspace_edits"
 import { askAgent } from "@/lib/cli/agent"
+import { inspectCatalogDocs } from "@/lib/sql-id-index"
 import type { ProjectProposal } from "@/lib/project-assistant-types"
 import { filterRunsByErrorStatus } from "@/lib/run-error-log"
 import { exclusionReasonForInputModule, exclusionReasonLabel } from "@/lib/inference-input-picker"
 // AI : import enums from server/types — tsx ESM drops named values through lib/types `export *`.
 import { DocLabel, InputType, type Project } from "@/lib/server/types"
+
+const askAgentJobs = new Map<string, Promise<unknown>>()
 
 export function openMcpSession(sessionPath?: string, offline = false) {
   const persist = createFilePersist(resolveSessionPath(sessionPath))
@@ -151,6 +155,36 @@ export function addFieldFromSession(
   return getProjectFromSession(sessionPath)
 }
 
+export function setRelationFromSession(
+  model: string,
+  field: string,
+  spec: string,
+  sessionPath?: string,
+) {
+  const session = openMcpSession(sessionPath, true)
+  setModelFieldRelation(session, model, field, spec)
+  return getProjectFromSession(sessionPath)
+}
+
+export function inspectIdsFromSession(
+  opts: { sessionPath?: string; idType?: string; docName?: string; filter?: "all" | "missing" | "unused" | "duplicate" },
+) {
+  const session = openMcpSession(opts.sessionPath, true)
+  const snap = session.getSnapshot()
+  const docs = snap.docs
+    .filter((d) => !opts.docName || d.name === opts.docName)
+    .map((d) => {
+      const content = snap.docContents[d.id]
+      return content ? { name: d.name, type: d.type, content, id: d.id } : undefined
+    })
+    .filter((d): d is NonNullable<typeof d> => !!d)
+  return inspectCatalogDocs(session.models, docs, {
+    idType: opts.idType,
+    filter: opts.filter ?? "all",
+    typeAliases: session.project?.typeAliases,
+  })
+}
+
 export function removeFieldFromSession(model: string, name: string, sessionPath?: string) {
   const session = openMcpSession(sessionPath, true)
   removeModelField(session, model, name)
@@ -163,11 +197,16 @@ export function addAliasFromSession(name: string, expr: string, sessionPath?: st
   return { id: alias.id, name: alias.name, params: alias.params }
 }
 
-export function addStepFromSession(kind: string, label?: string, sessionPath?: string) {
+export function addStepFromSession(
+  kind: string,
+  label?: string,
+  sessionPath?: string,
+  opts?: { forkId?: string; branchId?: string },
+) {
   const session = openMcpSession(sessionPath, true)
   const parsed = parseAddableKind(kind)
   if (!parsed) throw new Error(`unknown step kind: ${kind}`)
-  const added = addPipelineStep(session, parsed, label)
+  const added = addPipelineStep(session, parsed, label, opts)
   return added.map((m) => ({ id: m.id, kind: m.kind, label: m.label }))
 }
 
@@ -230,10 +269,40 @@ export function rejectProposalFromSession(sessionPath?: string) {
 
 export async function askAgentFromSession(message: string, sessionPath?: string, kind?: string) {
   // AI : TODO (mcp-vibe-http) — POST /api/pipeline-assistant (billed + auth) like GUI Send, not in-process proposePipelineChange.
+  const path = resolveSessionPath(sessionPath)
   const session = openMcpSession(sessionPath, false)
+  if (session.assistantInFlight || askAgentJobs.has(path)) {
+    return {
+      ok: true,
+      command: "agent ask",
+      issues: [],
+      data: {
+        inFlight: true,
+        pending: Boolean(session.pendingProposal),
+        message: "vibe still running — poll get_project",
+        human: "vibe still running — poll get_project",
+      },
+    }
+  }
   const assistant =
     kind === "structure" || kind === "testing" || kind === "diagnosis" || kind === "vibe" ? kind : "vibe"
-  return askAgent(session, message, { kind: assistant })
+  const job = askAgent(session, message, { kind: assistant }).catch((err) => {
+    console.error(err)
+  }).finally(() => {
+    if (askAgentJobs.get(path) === job) askAgentJobs.delete(path)
+  })
+  askAgentJobs.set(path, job)
+  return {
+    ok: true,
+    command: "agent ask",
+    issues: [],
+    data: {
+      inFlight: true,
+      pending: Boolean(session.pendingProposal),
+      message: "vibe still running — poll get_project",
+      human: "vibe still running — poll get_project",
+    },
+  }
 }
 
 export async function refreshBillingFromSession(sessionPath?: string) {
@@ -289,6 +358,7 @@ export type SessionActionArgs = {
   proposalJson?: string
   testDocName?: string
   testing?: boolean
+  relation?: string
 }
 
 export async function runSessionAction(args: SessionActionArgs): Promise<unknown> {
@@ -324,6 +394,10 @@ export async function runSessionAction(args: SessionActionArgs): Promise<unknown
     case "structure.add-field":
       if (!args.model || !args.name || !args.type) throw new Error("model, name, type required")
       return addFieldFromSession(args.model, args.name, args.type, args.optional === true, sessionPath)
+    case "structure.set-relation":
+      if (!args.model || !args.name) throw new Error("model, name required")
+      if (!args.relation) throw new Error("relation required (pk | none | WorkItem.id)")
+      return setRelationFromSession(args.model, args.name, args.relation, sessionPath)
     case "structure.remove-field":
       if (!args.model || !args.name) throw new Error("model, name required")
       return removeFieldFromSession(args.model, args.name, sessionPath)
@@ -332,9 +406,11 @@ export async function runSessionAction(args: SessionActionArgs): Promise<unknown
       return addAliasFromSession(args.name, args.expr, sessionPath, args.params)
     case "pipeline.add-step":
     case "add_step":
-      // AI : TODO (allow-pipeline-non-linear-fork) — add_step args: optional branchId for insert into a lane.
       if (!args.kind) throw new Error("kind required")
-      return addStepFromSession(args.kind, args.label, sessionPath)
+      return addStepFromSession(args.kind, args.label, sessionPath, {
+        forkId: typeof args.forkId === "string" ? args.forkId : undefined,
+        branchId: typeof args.branchId === "string" ? args.branchId : undefined,
+      })
     case "pipeline.configure-step":
       if (!args.stepId) throw new Error("stepId required")
       return patchStepFromSession(args.stepId, { label: args.label, prompt: args.prompt, note: args.note }, sessionPath)

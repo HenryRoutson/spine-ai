@@ -25,6 +25,7 @@ export async function execLlmStep(m: PipelineModule, ctx: RunCtx, log: RunLogger
     ? sourceDocumentBlock(ctx.sourceText, ctx.sourceDocId)
     : `INPUT DATA:\n${JSON.stringify(inputData, null, 2)}`;
   const userPrompt = `${m.prompt ?? "Process the input."}\n\n${context}`;
+  // AI : m.prompt is literal; spine JSON is appended above. {state.X} / {risks} are not interpolated.
   const schema = llmSchema(out, project.models, stepEmitsList(m), project.typeAliases ?? []);
   const prompt = structuredLlmPrompt(userPrompt, schema);
   log.debug(`llm prompt built`, { promptChars: prompt.length, hasQuoteField: hasQuoteField(out, project.models) });

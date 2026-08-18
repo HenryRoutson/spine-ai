@@ -12,7 +12,7 @@ export const USER_ADDABLE_MODULE_KINDS = [
   ModuleKind.Merge,
   ModuleKind.Assemble,
   ModuleKind.Parallel,
-  // AI : TODO (allow-pipeline-non-linear-fork) — ModuleKind.Fork once kind exists (lanes, not Parallel).
+  ModuleKind.Fork,
   ModuleKind.Combine,
   ModuleKind.CustomCode,
   ModuleKind.Assert,
@@ -54,6 +54,7 @@ export function stepRequiresNote(kind: ModuleKind): boolean {
     kind === ModuleKind.Combine ||
     kind === ModuleKind.Assemble ||
     kind === ModuleKind.Parallel ||
+    kind === ModuleKind.Fork ||
     isLlmKind(kind)
   )
 }

@@ -1,11 +1,16 @@
-import { mkdtempSync, rmSync } from "node:fs"
+import { mkdtempSync, readFileSync, rmSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
-import { describe, expect, it } from "vitest"
+import { describe, expect, it, vi } from "vitest"
 import { createSpineSession } from "@/lib/core/session"
-import { createFilePersist } from "@/lib/cli/session_persist"
-import { getProjectFromSession, validateProjectFromSession } from "./spine-session-bar-a.js"
+import { createFilePersist, hydratePendingCreates } from "@/lib/cli/session_persist"
+import { askAgentFromSession, getProjectFromSession, validateProjectFromSession } from "./spine-session-bar-a.js"
 import { InputType, ModuleKind, type ModuleId, type StructureModelId } from "@/lib/server/types"
+import type { Project } from "@/lib/types"
+
+vi.mock("@/lib/cli/agent", () => ({
+  askAgent: vi.fn(() => new Promise(() => {})),
+}))
 
 describe("MCP Bar A session tools", () => {
   it("get_project / validate_project read a session file", () => {
@@ -83,6 +88,47 @@ describe("MCP Bar A session tools", () => {
         projectId: created.id,
       })) as { name: string }
       expect(renamed.name).toBe("From MCP")
+    } finally {
+      rmSync(dir, { recursive: true, force: true })
+    }
+  })
+
+  it("file persist stores pendingCreate ids without cloning projects already on disk", () => {
+    const dir = mkdtempSync(join(tmpdir(), "mcp-pending-"))
+    const sessionPath = join(dir, "session.json")
+    try {
+      const persist = createFilePersist(sessionPath)
+      const session = createSpineSession({ persist })
+      const created = session.addProject({ open: true })
+      const disk = JSON.parse(readFileSync(sessionPath, "utf8")) as {
+        pendingCreateIds?: string[]
+        pendingCreates?: Project[]
+        projects?: Project[]
+      }
+      expect(disk.pendingCreateIds).toContain(created.id)
+      expect(disk.pendingCreates ?? []).toEqual([])
+      expect(disk.projects?.some((p) => p.id === created.id)).toBe(true)
+      const hydrated = hydratePendingCreates(disk.projects ?? [], disk.pendingCreates, disk.pendingCreateIds)
+      expect(hydrated.some((p) => p.id === created.id)).toBe(true)
+      const reloaded = createSpineSession({ persist: createFilePersist(sessionPath) })
+      expect(reloaded.getSnapshot().pendingCreates.some((p) => p.id === created.id)).toBe(true)
+    } finally {
+      rmSync(dir, { recursive: true, force: true })
+    }
+  })
+
+  it("ask_agent returns inFlight without waiting for the agent", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "mcp-ask-"))
+    const sessionPath = join(dir, "session.json")
+    try {
+      const session = createSpineSession({ persist: createFilePersist(sessionPath) })
+      session.addProject({ open: true })
+      const started = Date.now()
+      const first = await askAgentFromSession("build a pipeline", sessionPath)
+      const second = await askAgentFromSession("build a pipeline", sessionPath)
+      expect(Date.now() - started).toBeLessThan(2000)
+      expect(first.data.inFlight).toBe(true)
+      expect(second.data.inFlight).toBe(true)
     } finally {
       rmSync(dir, { recursive: true, force: true })
     }

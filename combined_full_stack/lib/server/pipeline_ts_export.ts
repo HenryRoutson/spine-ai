@@ -16,6 +16,7 @@ import {
 import { analyzeExportRuntimeNeeds } from "./pipeline_export_setup";
 import { exportRuntimeImportTs } from "./pipeline_export_runtime_lib";
 import { MODULE_META, ModuleKind } from "./types";
+import { flattenPipelineModules } from "@/lib/fork-pipeline";
 import type { PipelineModule, Project } from "./types";
 
 // AI : TODO export — emit only pipeline-referenced structures, not every project model.
@@ -52,7 +53,8 @@ export function generatePipelineSourceTs(project: Project): string {
     llmBatch: prepared.modules.some((m) => m.kind === ModuleKind.LlmBatch),
   });
   const sections: string[] = [];
-  const stepFns = prepared.modules.map((m, i) => generateStepFn(m, prepared, i)).join("\n");
+  const flat = flattenPipelineModules(prepared.modules);
+  const stepFns = flat.map((m, i) => generateStepFn(m, prepared, i)).join("\n");
   const orchestrator = generateOrchestratorTs(prepared, stepFnNameFromLabel);
 
   sections.push(

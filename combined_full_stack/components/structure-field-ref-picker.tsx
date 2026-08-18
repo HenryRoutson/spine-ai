@@ -1,4 +1,6 @@
 "use client"
+// AI : this picker is nested record embed (field.ref), not SQL row-id FK (field.relation).
+// AI : DONE (sql-id-ref) — FK authoring is StructureFieldKeyPicker, not this select.
 
 import { Link2 } from "lucide-react"
 import { Button } from "@/components/ui/button"

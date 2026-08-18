@@ -474,9 +474,15 @@ export function normalizeStructureModels(models: StructureModel[]): StructureMod
   }));
 }
 
-function fieldDescribe(f: ModelField): string | undefined {
+function fieldDescribe(f: ModelField, models: StructureModel[] = []): string | undefined {
   const parts: string[] = [];
   if (f.description.trim()) parts.push(f.description.trim());
+  if (f.relation?.kind === "pk") parts.push("PRIMARY KEY");
+  const rel = f.relation;
+  if (rel?.kind === "fk") {
+    const target = models.find((m) => m.id === rel.to.modelId);
+    parts.push(target ? `FK → ${target.name}.${rel.to.field}` : "FK → missing");
+  }
   const examples = fieldExamplesList(f);
   if (examples.length) {
     parts.push(`Examples: ${examples.map((e) => JSON.stringify(e)).join(", ")}`);
@@ -488,8 +494,8 @@ function fieldDescribe(f: ModelField): string | undefined {
   return parts.length ? parts.join(" — ") : undefined;
 }
 
-export function withFieldMeta(schema: ZodType, f: ModelField): ZodType {
-  const d = fieldDescribe(f);
+export function withFieldMeta(schema: ZodType, f: ModelField, models: StructureModel[] = []): ZodType {
+  const d = fieldDescribe(f, models);
   return d ? schema.describe(d) : schema;
 }
 
@@ -656,6 +662,7 @@ function modelToZod(
     let base = withFieldMeta(
       typeExprToZod(fieldToTypeExpr(f), [...index.values()], next),
       f,
+      [...index.values()],
     );
     base = applyFieldCardinalityConstraints(base, f);
     shape[f.name] = f.optional
@@ -750,9 +757,9 @@ export function typeExprToPy(expr: TypeExpr, models: StructureModel[] = []): str
   }
 }
 
-export function fieldToPy(field: ModelField, models: StructureModel[]): string {
+export function fieldToPy(field: ModelField, models: StructureModel[], typeName?: string): string {
   const expr = fieldToTypeExpr(field);
-  let t = typeExprToPy(expr, models);
+  let t = typeName ?? typeExprToPy(expr, models);
   if (field.optional && expr.kind !== "optional") t = `${t} | None`;
   const fieldArgs: string[] = [];
   if (field.optional) fieldArgs.push("default=None");

@@ -1,5 +1,5 @@
 // AI : IO-mismatch inspector — one-click fix hints and connector highlight logic for the pipeline canvas.
-// AI : TODO (allow-pipeline-non-linear-fork) — io-mismatch links use lane predecessor, not flat prevModuleId.
+// AI : io-mismatch links use locatePipelineModule predecessor (lanes included).
 import { ModuleKind, type ModuleId, type PipelineModule, type StructureModel } from "./types";
 import {
   InvalidKind,

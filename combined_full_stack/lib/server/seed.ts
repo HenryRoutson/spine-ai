@@ -34,7 +34,6 @@ import {
 export const SEEDS_DIR = resolve(process.cwd(), "seeds");
 
 // AI : zod guard for user-authored seed files — fails early with a precise error (config.py pattern).
-// AI : TODO (allow-pipeline-non-linear-fork) — SeedFileSchema nested modules on Fork; stage F seeds.
 const enumOf = <T extends string>(values: readonly T[]) => z.enum(values as [T, ...T[]]);
 const FieldTypeSchema = enumOf(FIELD_TYPES);
 const InputTypeSchema = enumOf(INPUT_TYPES.map((t) => t.value) as InputType[]);
@@ -170,6 +169,12 @@ const SeedFileSchema = z.object({
       // AI : TODO (example-select-view) — examplePromptFields: z.array(z.string()).optional()
       examplePromptFields: z.array(z.string()).optional(),
       examplePromptView: z.string().optional(),
+      webhookUrl: z.string().optional(),
+      webhookMethod: z.enum(["POST", "PUT", "PATCH"]).optional(),
+      webhookAuthEnv: z.string().optional(),
+      webhookTimeoutMs: z.number().int().min(1).optional(),
+      webhookIncludeState: z.boolean().optional(),
+      webhookResponsePath: z.string().optional(),
       mergeStateLabel: z.string().optional(),
       mergeWrapListField: z.string().optional(),
       mergeCustom: z.string().optional(),
@@ -196,6 +201,16 @@ const SeedFileSchema = z.object({
             outStructureId: z.string(),
             model: z.string().optional(),
             note: z.string().optional(),
+          }),
+        )
+        .optional(),
+      forkJoin: z.enum(["product", "assemble", "merge"]).optional(),
+      forkBranches: z
+        .array(
+          z.object({
+            id: z.string(),
+            label: z.string(),
+            modules: z.array(z.any()),
           }),
         )
         .optional(),
@@ -297,12 +312,27 @@ function stripSeedDocToTextModules(raw: unknown): unknown {
   if (!raw || typeof raw !== "object") return raw;
   const obj = raw as { modules?: unknown };
   if (!Array.isArray(obj.modules)) return raw;
-  return {
-    ...obj,
-    modules: obj.modules.filter(
-      (m) => !(m && typeof m === "object" && (m as { kind?: string }).kind === "doc-to-text"),
-    ),
-  };
+  return { ...obj, modules: stripDocToTextList(obj.modules) };
+}
+
+function stripDocToTextList(modules: unknown[]): unknown[] {
+  return modules.flatMap((m) => {
+    if (!m || typeof m !== "object") return [m];
+    const row = m as { kind?: string; forkBranches?: unknown };
+    if (row.kind === "doc-to-text") return [];
+    if (!Array.isArray(row.forkBranches)) return [row];
+    return [
+      {
+        ...row,
+        forkBranches: row.forkBranches.map((b) => {
+          if (!b || typeof b !== "object") return b;
+          const branch = b as { modules?: unknown };
+          if (!Array.isArray(branch.modules)) return b;
+          return { ...branch, modules: stripDocToTextList(branch.modules) };
+        }),
+      },
+    ];
+  });
 }
 
 // AI : in-app documents/ wins (Vercel bundle); monorepo dev falls back to repo-root documents/.
@@ -376,6 +406,27 @@ export function expectedOutputsForRun(project: Project, runInputDocNames: string
   return expectedOutputsForProject(project);
 }
 
+function normalizeSeedModule(m: {
+  kind: ModuleKind;
+  label: string;
+  note?: string;
+  inputDescription?: string;
+  forkBranches?: { id: string; label: string; modules: unknown[] }[];
+  [key: string]: unknown;
+}): PipelineModule {
+  return {
+    ...m,
+    note: resolveModuleNote(m.kind, m.note, {
+      label: m.label,
+      inputDescription: m.inputDescription,
+    }),
+    forkBranches: m.forkBranches?.map((b) => ({
+      ...b,
+      modules: (b.modules ?? []).map((child) => normalizeSeedModule(child as typeof m)),
+    })),
+  } as PipelineModule;
+}
+
 // AI : the generic entry point — any validated seed JSON becomes a project + its source docs.
 export function loadProjectSeed(path: string): ProjectSeed {
   const raw = SeedFileSchema.parse(stripSeedDocToTextModules(JSON.parse(readFileSync(path, "utf8"))));
@@ -394,13 +445,7 @@ export function loadProjectSeed(path: string): ProjectSeed {
       kind: raw.kind,
       models: normalizeStructureModels(raw.models as StructureModel[]),
       typeAliases: raw.typeAliases as TypeAlias[] | undefined,
-      modules: raw.modules.map((m) => ({
-        ...m,
-        note: resolveModuleNote(m.kind, m.note, {
-          label: m.label,
-          inputDescription: m.inputDescription,
-        }),
-      })) as PipelineModule[],
+      modules: raw.modules.map(normalizeSeedModule) as PipelineModule[],
       strategies: raw.strategies as Strategy[],
       seedDocNames: raw.docs.map((d) => d.name),
       expectedOutputs,

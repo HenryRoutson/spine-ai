@@ -1,3 +1,4 @@
+import { flattenPipelineModules } from "@/lib/fork-pipeline";
 import { invariant } from "@/lib/assert";
 import { exampleSelectAcceptsWrapper } from "@/lib/example-select";
 import { orderedInputModules, inputModuleNeedsOcr } from "../../inference-input";
@@ -22,6 +23,8 @@ export function serializeCtx(ctx: RunCtx): SerializedCtx {
     sourceText: ctx.sourceText,
     sourceDocId: ctx.sourceDocId,
     prevModuleId: ctx.prevModuleId,
+    forkId: ctx.forkId,
+    branchId: ctx.branchId,
   };
 }
 
@@ -51,12 +54,13 @@ export function restoreCtx(
     sourceText: snap.sourceText,
     sourceDocId: snap.sourceDocId,
     prevModuleId: snap.prevModuleId,
+    forkId: snap.forkId,
+    branchId: snap.branchId,
   };
 }
 
 export function requireLinearInput(m: PipelineModule, ctx: RunCtx): unknown {
-  // AI : TODO (allow-pipeline-non-linear-fork) — lane steps still use this; Fork join is a separate exec.
-  const prev = ctx.prevModuleId ? ctx.project.modules.find((x) => x.id === ctx.prevModuleId) : undefined;
+  const prev = ctx.prevModuleId ? flattenPipelineModules(ctx.project.modules).find((x) => x.id === ctx.prevModuleId) : undefined;
   const upstream = stepEmits(prev);
   if (m.inStructureId !== upstream) {
     // AI : example-select unwraps the sole list[T] field on a combine wrapper (same rule as validity).

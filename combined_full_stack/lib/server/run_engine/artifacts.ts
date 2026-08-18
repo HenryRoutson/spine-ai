@@ -1,5 +1,6 @@
 import { join } from "node:path";
 import { customCodeEntriesForModule } from "@/lib/custom_code_entries";
+import { flattenPipelineModules } from "@/lib/fork-pipeline";
 import { dataDir } from "../config";
 import { fileWriteHelper } from "../file_write_helper";
 import { collectQuotes } from "../quotation";
@@ -51,7 +52,7 @@ export function persistArtifacts(
   const dir = join(dataDir(), "runs", runId);
   const inputText = store.docContent(inputDocId) ?? "";
   fileWriteHelper(dir, "document_input", "txt", inputText);
-  const modById = new Map(modules.map((m) => [m.id, m]));
+  const modById = new Map(flattenPipelineModules(modules).map((m) => [m.id, m]));
   for (const a of artifacts) {
     fileWriteHelper(
       dir,
@@ -72,7 +73,7 @@ export function persistArtifacts(
     ).values(),
   ];
   if (quotes.length) fileWriteHelper(dir, "quotes", "json", JSON.stringify(quotes, null, 2));
-  const outputIds = new Set(modules.filter((m) => m.kind === "output").map((m) => m.id));
+  const outputIds = new Set(flattenPipelineModules(modules).filter((m) => m.kind === "output").map((m) => m.id));
   for (const a of artifacts.filter((x) => outputIds.has(x.moduleId))) {
     const name = a.structure?.name ?? "Output";
     fileWriteHelper(

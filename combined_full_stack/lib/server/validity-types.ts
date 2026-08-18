@@ -1,5 +1,6 @@
 // AI : Shared validity types and pure query helpers — imported by validity.ts, validity-messages.ts, validity-inspect.ts.
 import type { ModuleId, PipelineModule, StructureModel, StructureModelId } from "./types";
+import { locatePipelineModule } from "@/lib/fork-pipeline";
 
 export enum InvalidKind {
   IoMismatch = "io-mismatch",
@@ -42,6 +43,8 @@ export enum PipelineWarningKind {
   TransformMultiList = "transform-multi-list",
   JsonInputType = "json-input-type",
   PromptQuoteMismatch = "prompt-quote-mismatch",
+  UnusedModel = "unused-model",
+  PromptListVsItem = "prompt-list-vs-item",
 }
 
 export interface PipelineWarning {
@@ -80,7 +83,5 @@ export function modelName(models: StructureModel[], id?: StructureModelId): stri
 }
 
 export function prevModuleId(modules: PipelineModule[], moduleId: ModuleId): ModuleId | undefined {
-  // AI : TODO (allow-pipeline-non-linear-fork) — predecessor is previous in lane, not modules[i-1] of a flat list.
-  const i = modules.findIndex((m) => m.id === moduleId);
-  return i > 0 ? modules[i - 1]!.id : undefined;
+  return locatePipelineModule(modules, moduleId)?.predecessor?.id;
 }

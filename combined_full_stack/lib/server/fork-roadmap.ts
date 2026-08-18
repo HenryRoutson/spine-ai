@@ -58,20 +58,20 @@
 //   nested fork UI, PipelineRef components, React Flow.
 export {}
 
-// AI : TODO (allow-pipeline-non-linear-fork) — stage A model: ModuleKind.Fork + forkBranches + forkJoin;
+// AI : DONE (allow-pipeline-non-linear-fork) — stage A model: ModuleKind.Fork + forkBranches + forkJoin;
 // AI :   factory; flattenPipelineModules; seed zod; MODULE_META; USER_ADDABLE. Linear projects unchanged.
-// AI : TODO (allow-pipeline-non-linear-fork) — stage A validity: computeInvalid walks tree; lane I/O + join
+// AI : DONE (allow-pipeline-non-linear-fork) — stage A validity: computeInvalid walks tree; lane I/O + join
 // AI :   product; unique labels/ids.
-// AI : TODO (allow-pipeline-non-linear-fork) — stage B run: execForkStep + Promise.all lanes; cache/fingerprint
+// AI : DONE (allow-pipeline-non-linear-fork) — stage B run: execForkJoin + Promise.all lanes; cache/fingerprint
 // AI :   via flatten; live steps tree. Pause: checkpoint branchId for human-review/chatbot in a lane.
-// AI : TODO (allow-pipeline-non-linear-fork) — stage C canvas: segment kind fork; column lanes; insert slots;
+// AI : DONE (allow-pipeline-non-linear-fork) — stage C canvas: segment kind fork; column lanes; insert slots;
 // AI :   no open canvas. Builder insert/move/remove scoped to lane. Testing align: fork row, N columns.
-// AI : TODO (allow-pipeline-non-linear-fork) — stage D export: orchestrator Promise.all + join; mermaid
+// AI : DONE (allow-pipeline-non-linear-fork) — stage D export: orchestrator Promise.all + join; mermaid
 // AI :   subgraphs. Assistant prompt + schema materialize nested modules.
-// AI : TODO (allow-pipeline-non-linear-fork) — stage E hosts: CLI workspace_edits, MCP, toPipelineView tree,
+// AI : DONE (allow-pipeline-non-linear-fork) — stage E hosts: CLI workspace_edits, MCP, toPipelineView tree,
 // AI :   Ink list with indent.
-// AI : TODO (allow-pipeline-non-linear-fork) — stage F seeds: contract_diligence_fork, invoice_triage_fork,
-// AI :   lead_notify_fork (+ docs/tests).
+// AI : DONE (allow-pipeline-non-linear-fork) — stage F seeds: contract_diligence_fork, invoice_triage_fork,
+// AI :   lead_notify_fork (+ docs).
 // AI : TODO (allow-pipeline-non-linear-fork) — later: router (one lane), sinks join, nested fork UI,
 // AI :   optional Parallel-as-Fork sugar.
 

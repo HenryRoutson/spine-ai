@@ -12,7 +12,6 @@ import { runLogJson } from "@/lib/run-log-json"
 import { copyTextToClipboard } from "@/lib/clipboard"
 import { Progress } from "@/components/ui/progress"
 import { segmentPipeline, mergeCombineSegmentStatus } from "@/lib/pipeline-layout"
-// AI : TODO (allow-pipeline-non-linear-fork) — trace panel renders fork columns, not a single segment column.
 import type { StepUiState } from "@/lib/run-engine"
 import type { DocRef, JobLogEntry, ModuleId, PipelineModule, PipelineRun, StructureModel } from "@/lib/types"
 import {
@@ -217,6 +216,59 @@ export function InferenceStepTracePanel({
       {stepsExpanded && (
       <div className="mt-4 space-y-2.5">
         {segmentPipeline(modules).map((seg) => {
+          if (seg.kind === "fork") {
+            return (
+              <div key={seg.fork.id} className="space-y-1">
+                <InferenceStepRow
+                  {...bindInferenceStepRow(seg.fork, stepStates.get(seg.fork.id), stepCtx)}
+                />
+                <div
+                  className="grid gap-2 pl-3"
+                  style={{
+                    gridTemplateColumns: `repeat(${Math.max(1, seg.branches.length)}, minmax(0, 1fr))`,
+                  }}
+                >
+                  {seg.branches.map((b) => (
+                    <div key={b.id} className="min-w-0 space-y-1">
+                      <p className="font-mono text-[9px] uppercase text-muted-foreground">{b.label}</p>
+                      {b.segments.map((inner) =>
+                        inner.kind === "combine" ? (
+                          <div key={inner.combine.id} className="space-y-1">
+                            <InferenceStepRow
+                              {...bindInferenceStepRow(inner.combine, stepStates.get(inner.combine.id), stepCtx, {
+                                nested: true,
+                              })}
+                            />
+                            <InferenceStepRow
+                              {...bindInferenceStepRow(inner.input, stepStates.get(inner.input.id), stepCtx, {
+                                nested: true,
+                                isInputStep: true,
+                              })}
+                            />
+                          </div>
+                        ) : inner.kind === "fork" ? (
+                          <InferenceStepRow
+                            key={inner.fork.id}
+                            {...bindInferenceStepRow(inner.fork, stepStates.get(inner.fork.id), stepCtx, {
+                              nested: true,
+                            })}
+                          />
+                        ) : (
+                          <InferenceStepRow
+                            key={inner.module.id}
+                            {...bindInferenceStepRow(inner.module, stepStates.get(inner.module.id), stepCtx, {
+                              nested: true,
+                              isInputStep: inner.module.kind === "input",
+                            })}
+                          />
+                        ),
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )
+          }
           if (seg.kind === "combine") {
             const combineUi = stepStates.get(seg.combine.id)
             const inputUi = stepStates.get(seg.input.id)

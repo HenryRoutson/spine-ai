@@ -92,7 +92,10 @@ export function ExampleSelectModuleFields({
         )}
       </PipelineField>
 
-      <PipelineField label="Context field" hint="optional dot path within that step — omit to stringify the whole output">
+      <PipelineField
+        label="Context field"
+        hint="optional dot path within that step — omit to stringify the whole output. FKs in this context that point at the candidate catalog are expanded (description/code/…) for the prompt only; kept rows stay normalized."
+      >
         {edit ? (
           <Input
             value={selected.exampleContextField ?? ""}

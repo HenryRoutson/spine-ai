@@ -73,10 +73,7 @@ export function migrateSessionChat(raw: Partial<SessionSnapshot>): {
         .filter(Boolean),
     ),
   ]
-  // AI : orphan global chat can only be attributed when a single project exists — otherwise invoice history leaks into a new recruiting project.
-  if (Object.keys(byId).length === 0 && (raw.chat?.length ?? 0) > 0 && raw.activeProjectId) {
-    if (projectIds.length <= 1) byId[raw.activeProjectId] = raw.chat ?? []
-  }
+  // AI : never copy orphan global chat onto a project — leftover invoice history was leaking onto a new blank.
   for (const id of projectIds) {
     if (!byId[id]) byId[id] = []
   }
@@ -406,7 +403,6 @@ export class SpineSession {
   }
 
   setModules(m: PipelineModule[]): void {
-    // AI : TODO (allow-pipeline-non-linear-fork) — syncManagedPipelineSteps must recurse forkBranches.
     const project = this.requireProject()
     this.patchProject({ modules: syncManagedPipelineSteps(m, project.models, this.snap.model) })
   }

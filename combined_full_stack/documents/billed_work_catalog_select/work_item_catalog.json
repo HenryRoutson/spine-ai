@@ -4,7 +4,7 @@
     "code": "PLB-ISO-001",
     "trade": "plumbing",
     "unit": "each",
-    "description": "Isolate water supply to upstairs bathroom suite"
+    "description": "Isolate water supply"
   },
   {
     "id": "WI-00002",
@@ -25,7 +25,7 @@
     "code": "PLB-TAP-004",
     "trade": "plumbing",
     "unit": "each",
-    "description": "Replace leaking mixer tap — ensuite"
+    "description": "Replace leaking mixer tap"
   },
   {
     "id": "WI-00005",
@@ -60,7 +60,7 @@
     "code": "PLB-DRN-009",
     "trade": "plumbing",
     "unit": "each",
-    "description": "Clear blocked floor waste — laundry"
+    "description": "Clear blocked floor waste"
   },
   {
     "id": "WI-00010",
@@ -74,35 +74,35 @@
     "code": "ELC-ISO-001",
     "trade": "electrical",
     "unit": "each",
-    "description": "Isolate and tag circuits in wet-area bathroom"
+    "description": "Isolate and tag wet-area circuits"
   },
   {
     "id": "WI-00012",
     "code": "ELC-GPO-002",
     "trade": "electrical",
     "unit": "each",
-    "description": "Replace water-damaged GPO — kitchen bench"
+    "description": "Replace water-damaged GPO"
   },
   {
     "id": "WI-00013",
     "code": "ELC-LED-003",
     "trade": "electrical",
     "unit": "each",
-    "description": "Supply and install LED downlight — living"
+    "description": "Supply and install LED downlight"
   },
   {
     "id": "WI-00014",
     "code": "ELC-SW-004",
     "trade": "electrical",
     "unit": "each",
-    "description": "Replace light switch — hallway"
+    "description": "Replace light switch"
   },
   {
     "id": "WI-00015",
     "code": "ELC-FAN-005",
     "trade": "electrical",
     "unit": "each",
-    "description": "Install exhaust fan with timer — bathroom"
+    "description": "Install exhaust fan with timer"
   },
   {
     "id": "WI-00016",
@@ -123,14 +123,14 @@
     "code": "ELC-OVN-008",
     "trade": "electrical",
     "unit": "each",
-    "description": "Connect electric oven — new kitchen"
+    "description": "Connect electric oven"
   },
   {
     "id": "WI-00019",
     "code": "ELC-DATA-009",
     "trade": "electrical",
     "unit": "each",
-    "description": "Install data point — home office"
+    "description": "Install data point"
   },
   {
     "id": "WI-00020",
@@ -165,7 +165,7 @@
     "code": "ROF-GUT-004",
     "trade": "roofing",
     "unit": "lm",
-    "description": "Replace damaged gutter section — rear elevation"
+    "description": "Replace damaged gutter section"
   },
   {
     "id": "WI-00025",
@@ -179,7 +179,7 @@
     "code": "ROF-SHT-006",
     "trade": "roofing",
     "unit": "m2",
-    "description": "Install sarking under tile field — storm damage"
+    "description": "Install sarking under tile field"
   },
   {
     "id": "WI-00027",
@@ -200,7 +200,7 @@
     "code": "ROF-EP-009",
     "trade": "roofing",
     "unit": "each",
-    "description": "Erect edge protection — single storey"
+    "description": "Erect edge protection"
   },
   {
     "id": "WI-00030",
@@ -221,7 +221,7 @@
     "code": "FLR-SND-002",
     "trade": "flooring",
     "unit": "m2",
-    "description": "Sand and recoat cupped timber floorboards — affected zone"
+    "description": "Sand and recoat cupped timber floorboards"
   },
   {
     "id": "WI-00033",
@@ -235,14 +235,14 @@
     "code": "FLR-VIN-004",
     "trade": "flooring",
     "unit": "m2",
-    "description": "Supply and lay luxury vinyl plank — bedroom"
+    "description": "Supply and lay luxury vinyl plank"
   },
   {
     "id": "WI-00035",
     "code": "FLR-TIL-005",
     "trade": "flooring",
     "unit": "m2",
-    "description": "Tile bathroom floor — porcelain 300x300"
+    "description": "Tile floor — porcelain 300x300"
   },
   {
     "id": "WI-00036",
@@ -256,7 +256,7 @@
     "code": "FLR-SLV-007",
     "trade": "flooring",
     "unit": "m2",
-    "description": "Self-levelling compound to slab — garage conversion"
+    "description": "Self-levelling compound to slab"
   },
   {
     "id": "WI-00038",
@@ -270,21 +270,21 @@
     "code": "FLR-LAM-009",
     "trade": "flooring",
     "unit": "m2",
-    "description": "Floating laminate — rumpus room"
+    "description": "Supply and lay floating laminate"
   },
   {
     "id": "WI-00040",
     "code": "FLR-POL-010",
     "trade": "flooring",
     "unit": "m2",
-    "description": "Grind and polish exposed concrete — patio"
+    "description": "Grind and polish exposed concrete"
   },
   {
     "id": "WI-00041",
     "code": "DRW-SH-001",
     "trade": "drywall",
     "unit": "m2",
-    "description": "Install 13mm plasterboard to kitchen ceiling"
+    "description": "Install 13mm plasterboard to ceiling"
   },
   {
     "id": "WI-00042",
@@ -319,14 +319,14 @@
     "code": "DRW-ENC-006",
     "trade": "drywall",
     "unit": "each",
-    "description": "Build bulkhead over kitchen cupboards"
+    "description": "Build bulkhead over cupboards"
   },
   {
     "id": "WI-00047",
     "code": "DRW-FIR-007",
     "trade": "drywall",
     "unit": "m2",
-    "description": "Fire-rated board to garage habitation wall"
+    "description": "Install fire-rated board to habitation wall"
   },
   {
     "id": "WI-00048",
@@ -340,35 +340,35 @@
     "code": "DRW-SKM-009",
     "trade": "drywall",
     "unit": "m2",
-    "description": "Skim coat over textured ceiling — whole room"
+    "description": "Skim coat over textured ceiling"
   },
   {
     "id": "WI-00050",
     "code": "DRW-DMP-010",
     "trade": "drywall",
     "unit": "m2",
-    "description": "Install moisture-resistant board — laundry"
+    "description": "Install moisture-resistant board"
   },
   {
     "id": "WI-00051",
     "code": "PNT-CLG-001",
     "trade": "painting",
     "unit": "m2",
-    "description": "Prime and paint kitchen ceiling — two coats"
+    "description": "Prime and paint ceiling — two coats"
   },
   {
     "id": "WI-00052",
     "code": "PNT-WAL-002",
     "trade": "painting",
     "unit": "m2",
-    "description": "Wash, prep and paint internal walls — living"
+    "description": "Wash, prep and paint internal walls"
   },
   {
     "id": "WI-00053",
     "code": "PNT-EXT-003",
     "trade": "painting",
     "unit": "m2",
-    "description": "Repaint weatherboard exterior — front elevation"
+    "description": "Repaint weatherboard exterior"
   },
   {
     "id": "WI-00054",
@@ -382,14 +382,14 @@
     "code": "PNT-DR-005",
     "trade": "painting",
     "unit": "each",
-    "description": "Paint entry door — semi-gloss enamel"
+    "description": "Paint door — semi-gloss enamel"
   },
   {
     "id": "WI-00056",
     "code": "PNT-FEN-006",
     "trade": "painting",
     "unit": "lm",
-    "description": "Stain and seal timber fence — boundary"
+    "description": "Stain and seal timber fence"
   },
   {
     "id": "WI-00057",
@@ -410,42 +410,42 @@
     "code": "PNT-RF-009",
     "trade": "painting",
     "unit": "m2",
-    "description": "Roof membrane topcoat — flat section"
+    "description": "Roof membrane topcoat"
   },
   {
     "id": "WI-00060",
     "code": "PNT-FLR-010",
     "trade": "painting",
     "unit": "m2",
-    "description": "Apply floor enamel to garage slab"
+    "description": "Apply floor enamel to concrete slab"
   },
   {
     "id": "WI-00061",
     "code": "DEM-CLG-001",
     "trade": "demolition",
     "unit": "m2",
-    "description": "Remove collapsed plasterboard ceiling — kitchen below bathroom"
+    "description": "Remove collapsed plasterboard ceiling"
   },
   {
     "id": "WI-00062",
     "code": "DEM-STR-002",
     "trade": "demolition",
     "unit": "m2",
-    "description": "Strip water-damaged drywall to studs — wet line"
+    "description": "Strip water-damaged drywall to studs"
   },
   {
     "id": "WI-00063",
     "code": "DEM-TIL-003",
     "trade": "demolition",
     "unit": "m2",
-    "description": "Hack off failed bathroom wall tiles"
+    "description": "Hack off failed wall tiles"
   },
   {
     "id": "WI-00064",
     "code": "DEM-CAB-004",
     "trade": "demolition",
     "unit": "each",
-    "description": "Remove existing kitchen cabinetry for disposal"
+    "description": "Remove existing cabinetry for disposal"
   },
   {
     "id": "WI-00065",
@@ -522,7 +522,7 @@
     "code": "MIT-EXT-005",
     "trade": "mitigation",
     "unit": "each",
-    "description": "Extract standing water — carpeted bedroom"
+    "description": "Extract standing water"
   },
   {
     "id": "WI-00076",
@@ -557,7 +557,7 @@
     "code": "MIT-SAN-010",
     "trade": "mitigation",
     "unit": "each",
-    "description": "Sanitise soft furnishings — smoke not water (warehouse)"
+    "description": "Sanitise soft furnishings — smoke not water"
   },
   {
     "id": "WI-00081",
@@ -613,28 +613,28 @@
     "code": "CAB-HND-008",
     "trade": "cabinetry",
     "unit": "each",
-    "description": "Supply handles and hinges — whole kitchen"
+    "description": "Supply handles and hinges"
   },
   {
     "id": "WI-00089",
     "code": "CAB-WIR-009",
     "trade": "cabinetry",
     "unit": "each",
-    "description": "Built-in wardrobe internals — master bedroom"
+    "description": "Built-in wardrobe internals"
   },
   {
     "id": "WI-00090",
     "code": "CAB-BAR-010",
     "trade": "cabinetry",
     "unit": "each",
-    "description": "Outdoor kitchen BBQ module — alfresco"
+    "description": "Outdoor kitchen BBQ module"
   },
   {
     "id": "WI-00091",
     "code": "STR-JST-001",
     "trade": "structural",
     "unit": "each",
-    "description": "Prop and replace deflected ceiling joist — kitchen"
+    "description": "Prop and replace deflected ceiling joist"
   },
   {
     "id": "WI-00092",
@@ -662,7 +662,7 @@
     "code": "STR-PIER-005",
     "trade": "structural",
     "unit": "each",
-    "description": "Replace rotted stump — subfloor access"
+    "description": "Replace rotted stump"
   },
   {
     "id": "WI-00096",
@@ -683,20 +683,20 @@
     "code": "STR-FND-008",
     "trade": "structural",
     "unit": "each",
-    "description": "Epoxy inject crack in foundation — unrelated garage"
+    "description": "Epoxy inject crack in foundation"
   },
   {
     "id": "WI-00099",
     "code": "STR-RET-009",
     "trade": "structural",
     "unit": "each",
-    "description": "Retaining wall tie-back — hillside block"
+    "description": "Retaining wall tie-back"
   },
   {
     "id": "WI-00100",
     "code": "STR-STP-010",
     "trade": "structural",
     "unit": "each",
-    "description": "Steel portal frame — new carport (greenfield)"
+    "description": "Steel portal frame"
   }
 ]

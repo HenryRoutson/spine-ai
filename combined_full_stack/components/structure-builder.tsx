@@ -3,7 +3,7 @@
 
 // AI : TODO (spec) — per-structure "Quick summarise" button: cheap LLM flags inconsistencies (e.g. document_summary:int).
 import { useEffect, useMemo, useRef, useState } from "react"
-import { Plus, Code2, Sparkles, Lock, Braces, FileSpreadsheet, Loader2, Upload } from "lucide-react"
+import { Plus, Code2, Sparkles, Lock, Braces, FileSpreadsheet, Loader2, Upload, KeyRound } from "lucide-react"
 import { StructureExcelEditor } from "@/components/structure-excel-editor"
 import { StructureTypeAliasEditor, TypeAliasTextSync } from "@/components/structure-type-alias-editor"
 import { Button, buttonVariants } from "@/components/ui/button"
@@ -23,6 +23,9 @@ import { useMarkPrimarySectionReady } from "@/lib/primary-section-opening"
 import { AppPrimarySection } from "@/lib/app-primary-section-labels"
 import { useStore, uid } from "@/lib/store"
 import { StructureCodeView } from "@/components/structure-code-view"
+import { IdInspector } from "@/components/id-inspector"
+import { useProjectIdIndex } from "@/lib/use-project-id-index"
+import { collectSqlIdTypes } from "@/lib/sql-id-types"
 import { EntityRail, EntityRailItem, EntityRailSection } from "@/components/entity-rail"
 import { ResizableSplit } from "@/components/resizable-split"
 import {
@@ -48,6 +51,7 @@ import { inputTypeAccept } from "@/lib/inference-input"
 type EditorTarget =
   | { kind: "struct"; id: string }
   | { kind: "type"; id: string }
+  | { kind: "ids"; idType: string }
 
 // AI : "structures" = spreadsheet editor; code lives in the sidebar menu, not per-struct.
 type StructureView = "structures" | "code"
@@ -55,6 +59,8 @@ type StructureView = "structures" | "code"
 export function StructureBuilder() {
   useMarkPrimarySectionReady(AppPrimarySection.Build)
   const { models, setModels, typeAliases, setTypeAliases, project, docs, addDoc } = useStore()
+  const { index: idIndex, loading: idIndexLoading } = useProjectIdIndex()
+  const idTypes = useMemo(() => collectSqlIdTypes(models), [models])
   const teamReadOnly = !!project?.teamReadOnly
   const { focusStructureId, clearFocusStructure } = useAppShell()
   const [target, setTarget] = useState<EditorTarget>(() =>
@@ -380,6 +386,39 @@ export function StructureBuilder() {
                   ))}
                 </EntityRailSection>
 
+                <EntityRailSection title="Row ids" className="max-h-[28%] min-h-0">
+                  {idTypes.length === 0 && (
+                    <p className="px-1 py-2 text-center font-mono text-[10px] text-muted-foreground">
+                      set Key on a field
+                    </p>
+                  )}
+                  {idTypes.map((t) => {
+                    const bucket = idIndex.buckets.find((b) => b.idType === t.name)
+                    return (
+                      <EntityRailItem
+                        key={t.name}
+                        active={view === "structures" && target.kind === "ids" && target.idType === t.name}
+                        onClick={() => {
+                          setTarget({ kind: "ids", idType: t.name })
+                          setView("structures")
+                        }}
+                      >
+                        <div className="flex w-full items-center gap-1.5">
+                          <KeyRound className="h-3 w-3 shrink-0 text-muted-foreground" />
+                          <div className="min-w-0">
+                            <p className="truncate font-mono text-xs text-foreground">{t.name}</p>
+                            <p className="font-mono text-[10px] text-muted-foreground">
+                              {bucket
+                                ? `${bucket.pkCount} pk · ${bucket.missing} missing`
+                                : `${t.pkModelName}.${t.pkField}`}
+                            </p>
+                          </div>
+                        </div>
+                      </EntityRailItem>
+                    )
+                  })}
+                </EntityRailSection>
+
                 <EntityRailSection
                   title="Type aliases"
                   action={
@@ -506,6 +545,13 @@ export function StructureBuilder() {
                       </div>
                     </div>
                   </div>
+                ) : target.kind === "ids" ? (
+                  <IdInspector
+                    index={idIndex}
+                    models={models}
+                    idType={target.idType}
+                    loading={idIndexLoading}
+                  />
                 ) : (
                   <StructureExcelEditor
                     selectedId={selectedStructId}

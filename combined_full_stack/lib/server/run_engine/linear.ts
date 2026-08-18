@@ -2,6 +2,7 @@ import { invariant } from "@/lib/assert";
 import { isLlmKind, usesPassthroughStructure } from "@/lib/module-kinds";
 import { compactPreview } from "@/lib/text-preview";
 import { labelAsStateKey } from "../pipeline_state";
+import { forkBranchesOf } from "@/lib/fork-pipeline";
 import { inputTypeLabel } from "../../inference-input";
 import { assertInputMatchesDescription, InputDescriptionRejectedError, shouldCheckInputDescription } from "../input_description_check";
 import { collectLogsDuring, withStepModuleContext } from "../job_log_sink";
@@ -32,9 +33,9 @@ export async function runLinearStepsFrom(
   params: LinearStepParams,
   startIndex: number,
 ): Promise<"ok" | "error" | "paused"> {
-  // AI : TODO (allow-pipeline-non-linear-fork) — keep this for a module list; Fork calls it per lane then joins.
   const { project, projectId, model, cacheOwnerId, ctx, steps, artifacts, ledger, log, opts, writeLive, runId, startedAt, inputDocId, fingerprintInputDocIds, savedCentsAcc } =
     params;
+  const modules = params.modules ?? project.modules;
 
   // AI : golden picked per run — a preset matching these input docs overrides the project default,
   // AI : so assert steps pass on alternate pre-selected runs (1st grade / university examples).
@@ -47,16 +48,16 @@ export async function runLinearStepsFrom(
       }),
     );
 
-  for (let i = startIndex; i < project.modules.length; i++) {
-    const m = project.modules[i];
+  for (let i = startIndex; i < modules.length; i++) {
+    const m = modules[i];
     invariant(m, `pipeline module missing at index ${i}`);
-    await opts.onStep?.({ index: i, total: project.modules.length, moduleId: m.id, label: m.label, status: "running" });
+    await opts.onStep?.({ index: i, total: modules.length, moduleId: m.id, label: m.label, status: "running" });
     writeLive(i);
 
     ctx.reportSub = (sub) => {
       void opts.onStep?.({
         index: i,
-        total: project.modules.length,
+        total: modules.length,
         moduleId: m.id,
         label: m.label,
         status: "running",
@@ -79,7 +80,7 @@ export async function runLinearStepsFrom(
         let status: RunStepStatus = RunStepStatus.Ok;
         let result: ExecResult | undefined;
 
-        log.section(`step ${i + 1}/${project.modules.length}: ${m.label}`);
+        log.section(`step ${i + 1}/${modules.length}: ${m.label}`);
         log.info(`step starting`, { moduleId: m.id, kind: m.kind, cached: !!m.cached, stepModel: m.model ?? model });
 
         const key = stepCacheKey(cacheOwnerId, projectId, m, m.model ?? model, fingerprintInputDocIds, project);
@@ -123,7 +124,7 @@ export async function runLinearStepsFrom(
               descriptionCheckCostCents = +(ledger.totalCents() - descBeforeCents).toFixed(4);
               await opts.onStep?.({
                 index: i,
-                total: project.modules.length,
+                total: modules.length,
                 moduleId: m.id,
                 label: m.label,
                 status: "running",
@@ -144,13 +145,33 @@ export async function runLinearStepsFrom(
             result = resultFromCache(m, cached, ctx);
             log.info(`cache HIT`, { moduleId: m.id, key, savedCents: savedCostCents });
           } else {
+            if (m.kind === ModuleKind.Fork) {
+              const forkPrev = ctx.prevModuleId;
+              await Promise.all(
+                forkBranchesOf(m).map((b) =>
+                  runLinearStepsFrom(
+                    {
+                      ...params,
+                      ctx: { ...ctx, prevModuleId: forkPrev },
+                      modules: b.modules,
+                      forkId: m.id,
+                      branchId: b.id,
+                    },
+                    0,
+                  ).then((status) => {
+                    if (status === "error") throw new Error(`fork lane "${b.label}" failed`);
+                  }),
+                ),
+              );
+              ctx.prevModuleId = forkPrev;
+            }
             result = await execModule(m, ctx, log);
             // AI : passthrough steps (output/assert/human-review) are validated against inStructureId,
             // not outStructureId — outStructureId on those kinds is display-only and may be stale.
             const validationStructId = usesPassthroughStructure(m.kind) ? m.inStructureId : m.outStructureId;
             const out = modelById(project.models, validationStructId);
             if (out) {
-              const prev = i > 0 ? project.modules[i - 1] : undefined;
+              const prev = i > 0 ? modules[i - 1] : undefined;
               const isList = validatesStepOutputAsList(m, result.value, prev);
               const rawQuotes = isLlmKind(m.kind) && hasQuoteField(out, project.models);
               // AI : TODO (linter-first) — replace zod validateStepOutput with pydantic parse from generated models.py.
@@ -216,7 +237,7 @@ export async function runLinearStepsFrom(
               stepIndex: i,
               startedAt,
               steps: [...steps],
-              ctx: serializeCtx(ctx),
+              ctx: { ...serializeCtx(ctx), forkId: params.forkId, branchId: params.branchId },
               expectedOutputs: golden,
               clientStep: {
                 moduleId: m.id,
@@ -243,7 +264,7 @@ export async function runLinearStepsFrom(
               stepIndex: i,
               startedAt,
               steps: [...steps],
-              ctx: serializeCtx(ctx),
+              ctx: { ...serializeCtx(ctx), forkId: params.forkId, branchId: params.branchId },
               expectedOutputs: runGolden(),
               clientStep: {
                 moduleId: m.id,
@@ -266,7 +287,7 @@ export async function runLinearStepsFrom(
               stepIndex: i,
               startedAt,
               steps: [...steps],
-              ctx: serializeCtx(ctx),
+              ctx: { ...serializeCtx(ctx), forkId: params.forkId, branchId: params.branchId },
               expectedOutputs: runGolden(),
               clientStep: {
                 moduleId: m.id,
@@ -288,7 +309,7 @@ export async function runLinearStepsFrom(
               stepIndex: i,
               startedAt,
               steps: [...steps],
-              ctx: serializeCtx(ctx),
+              ctx: { ...serializeCtx(ctx), forkId: params.forkId, branchId: params.branchId },
               expectedOutputs: runGolden(),
               clientStep: {
                 moduleId: m.id,
@@ -391,7 +412,7 @@ export async function runLinearStepsFrom(
     exportLangfuseRunStep(stepRecord);
     await opts.onStep?.({
       index: i,
-      total: project.modules.length,
+      total: modules.length,
       moduleId: m.id,
       label: m.label,
       status,

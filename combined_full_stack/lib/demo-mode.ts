@@ -13,7 +13,8 @@ export function setDemoMode(next: boolean): void {
 }
 
 export function isDemoMode(): boolean {
-  return demoMode;
+  // AI : pathname fallback — StoreProvider toggles demoMode in an effect, after child prefetches.
+  return demoMode || isDemoRoute();
 }
 
 export function setPreviewOnly(next: boolean): void {

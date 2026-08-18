@@ -11,6 +11,7 @@ import { AUTO_DOC_TO_TEXT_EXPLAINER, AUTO_STRUCTURE_PARSE_EXPLAINER, isAutoDocTo
 import { inputModuleNeedsOcr, upstreamInputModule } from "@/lib/inference-input"
 import { isExampleSelectKind } from "@/lib/example-select"
 import { isLlmKind, isMergeModuleKind, usesPassthroughStructure } from "@/lib/module-kinds"
+import { flattenPipelineModules, forkJoinOf, forkJoinScopeModules, locatePipelineModule } from "@/lib/fork-pipeline"
 import { formatModuleSpineIn, formatModuleSpineOut } from "@/lib/spine-type"
 import { MODULE_META, ModuleKind, DOC_PARSE_MODES, docParseModeForModule, type PipelineModule, type StructureModel, type TypeAlias } from "@/lib/types"
 import {
@@ -44,6 +45,7 @@ import { CodeModuleFields } from "@/components/pipeline-fields/code-fields"
 import { ListOpsModuleFields } from "@/components/pipeline-fields/list-ops-fields"
 import { AssembleModuleFields } from "@/components/pipeline-fields/assemble-fields"
 import { ParallelModuleFields } from "@/components/pipeline-fields/parallel-fields"
+import { ForkModuleFields } from "@/components/pipeline-fields/fork-fields"
 import { ExampleSelectModuleFields } from "@/components/pipeline-fields/example-select-fields"
 import { WebhookModuleFields } from "@/components/pipeline-fields/webhook-fields"
 import { ChatbotModuleFields } from "@/components/pipeline-fields/chatbot-fields"
@@ -82,10 +84,20 @@ export function PipelineModuleFields({
   onFixIoMismatch,
 }: PipelineModuleFieldsProps) {
   const priorLabels = useMemo(() => {
-    const idx = modules.findIndex((m) => m.id === selected.id)
+    if (selected.kind === ModuleKind.Fork) {
+      const loc = locatePipelineModule(modules, selected.id)
+      if (loc) {
+        return forkJoinScopeModules(selected, loc)
+          .modules.filter((m) => m.id !== selected.id)
+          .map((m) => m.label.trim())
+          .filter(Boolean)
+      }
+    }
+    const flat = flattenPipelineModules(modules)
+    const idx = flat.findIndex((m) => m.id === selected.id)
     if (idx <= 0) return []
-    return modules.slice(0, idx).map((m) => m.label.trim()).filter(Boolean)
-  }, [modules, selected.id])
+    return flat.slice(0, idx).map((m) => m.label.trim()).filter(Boolean)
+  }, [modules, selected])
   const llmSchemaPreview = useLlmSchemaPreview(selected, models, typeAliases)
   const edit = mode === "edit" && onUpdate
   const requireInputDescriptions = useBrowserPrefEvent(LOGGING_SETTINGS_CHANGED_EVENT, readRequireInputDescriptions)
@@ -325,6 +337,7 @@ export function PipelineModuleFields({
         selected.kind === ModuleKind.Combine ||
         selected.kind === ModuleKind.Assemble ||
         selected.kind === ModuleKind.Parallel ||
+        selected.kind === ModuleKind.Fork ||
         isLlmKind(selected.kind)) && (
         <PipelineField
           label="Annotation / purpose"
@@ -366,7 +379,7 @@ export function PipelineModuleFields({
         />
       )}
 
-      {selected.kind !== ModuleKind.Input && selected.kind !== ModuleKind.Chatbot && (
+      {selected.kind !== ModuleKind.Input && selected.kind !== ModuleKind.Chatbot && selected.kind !== ModuleKind.Fork && (
         <PipelineField
           label={usesPassthroughStructure(selected.kind) ? "Structure to materialize" : "Input model"}
           hint={
@@ -413,7 +426,8 @@ export function PipelineModuleFields({
         selected.kind !== ModuleKind.HumanReview &&
         selected.kind !== ModuleKind.Chatbot &&
         selected.kind !== ModuleKind.Assemble &&
-        selected.kind !== ModuleKind.Parallel && (
+        selected.kind !== ModuleKind.Parallel &&
+        selected.kind !== ModuleKind.Fork && (
         <PipelineField
           label="Output model"
           hint={invalid?.kind === InvalidKind.NoOutput ? "required — step must emit a structure" : undefined}
@@ -440,6 +454,21 @@ export function PipelineModuleFields({
       )}
 
       {selected.kind === ModuleKind.Assemble && (
+        <AssembleModuleFields
+          selected={selected}
+          models={models}
+          modules={modules}
+          priorLabels={priorLabels}
+          edit={!!edit}
+          onUpdate={onUpdate}
+        />
+      )}
+
+      {selected.kind === ModuleKind.Fork && (
+        <ForkModuleFields selected={selected} edit={!!edit} onUpdate={onUpdate} />
+      )}
+
+      {selected.kind === ModuleKind.Fork && forkJoinOf(selected) === "assemble" && (
         <AssembleModuleFields
           selected={selected}
           models={models}
@@ -498,7 +527,10 @@ export function PipelineModuleFields({
         />
       )}
 
-      {(selected.kind === ModuleKind.Chunk || selected.kind === ModuleKind.Merge || isMergeModuleKind(selected.kind)) && (
+      {(selected.kind === ModuleKind.Chunk ||
+        selected.kind === ModuleKind.Merge ||
+        isMergeModuleKind(selected.kind) ||
+        (selected.kind === ModuleKind.Fork && forkJoinOf(selected) === "merge")) && (
         <ListOpsModuleFields
           selected={selected}
           models={models}

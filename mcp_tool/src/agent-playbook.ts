@@ -6,7 +6,7 @@ export const SPINE_MCP_INSTRUCTIONS = `Spine MCP: same actions a human has in th
 
 WORKSPACES — never mix:
 - Session tools mutate .spine-session.json (omit sessionPath → SPINE_SESSION_PATH). This is your editable project (same SpineSession as the CLI).
-- Seed tools (pinpoint_failure, compare_run_to_test, validate_test, parse_test, list_project_tests, describe_pipeline_steps, validate_step_output, derive_step_prompt, validate_pipeline_wiring, lint_pipeline, export_pydantic) read seeds/*.json + *_testing.json. They do not write the session.
+- Seed tools (pinpoint_failure, compare_run_to_test, validate_test, parse_test, list_project_tests, describe_pipeline_steps, validate_step_output, derive_step_prompt, validate_pipeline_wiring, lint_pipeline, export_pydantic, inspect_ids) read seeds/*.json + *_testing.json. They do not write the session. inspect_ids also accepts sessionPath.
 - Signed-in GUI uses Supabase via cookies. pullRemoteState / flushPendingSave exist on SpineSession but are not MCP tools yet.
 
 DEFAULT LOOP (vibe like clicking the UI):
@@ -19,11 +19,12 @@ DEFAULT LOOP (vibe like clicking the UI):
 
 NAMED TOOLS vs session_action:
 Prefer named tools. session_action id is the GUI data-spine-id (docs/parity.md). Use it when there is no named tool:
-  structure.add-field, structure.remove-field, structure.add-alias,
+  structure.add-field, structure.remove-field, structure.set-relation, structure.add-alias,
   pipeline.configure-step, pipeline.remove-step, pipeline.assign-structure,
   assistant.reject, billing.refresh, earnings.refresh, cache.refresh, logging.errors-only.
 
-NOT TOOLS YET (do not invent them): documents.remove, quotes.link, logging.hydrate, session pull/push, wait_for_run, run cancel, share/hosted-api/embed mint, Stripe, human-review, chatbot turn, custom-code (browser CodeHost), auth login.`
+NOT TOOLS YET (do not invent them): documents.remove, quotes.link, logging.hydrate, session pull/push, wait_for_run, run cancel, share/hosted-api/embed mint, Stripe, human-review, chatbot turn, custom-code (browser CodeHost), auth login.
+ID / catalog: inspect_ids lists branded row ids (missing/unused/duplicate). get_project.models fields include fk→ and idTypes. structure.set-relation via session_action.`
 
 function userMessage(text: string) {
   return { messages: [{ role: "user" as const, content: { type: "text" as const, text } }] }

@@ -1,4 +1,5 @@
 import { stepEmitsList } from "@/lib/server/type_expr"
+import { flattenPipelineModules } from "@/lib/fork-pipeline"
 
 import { INPUT_TYPES, InputType, type DocRef, type InputTypeSpec, type ModuleId, type PipelineModule } from "@/lib/types"
 
@@ -88,7 +89,7 @@ export function inputNameRestrictionLabel(inputModule: PipelineModule): string |
 }
 
 export function orderedInputModules(modules: PipelineModule[]): PipelineModule[] {
-  return modules.filter((m) => m.kind === "input")
+  return flattenPipelineModules(modules).filter((m) => m.kind === "input")
 }
 
 // AI : multi-doc slots — templates first, then seed doc order, then filename.

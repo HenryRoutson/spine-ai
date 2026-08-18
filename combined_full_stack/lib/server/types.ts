@@ -74,8 +74,10 @@ export interface ModelField {
   deterministic?: boolean;
   // AI : ± allowed on int/float test compare — field-level (spec § Testing), not per test file.
   testTolerance?: number;
-  // AI : TODO (type-join) — relation?: { kind: "pk" } | { kind: "fk"; to: { modelId: StructureModelId; field: string } }
-  // AI :   runtime type stays text; validity: fk field type equals target pk. Enables lookup-embed without Python joins.
+  // AI : relation is persisted (seeds + schema.sql). Runtime type stays text/int.
+  // AI : DONE (sql-id-ref) — Structure UI Key column authors relation; branded work_item_id_string in codegen.
+  // AI :   Nested field.ref stays embed; relation is row-id FK. See lib/sql-id-roadmap.ts.
+  // AI : TODO (type-join) — validity: fk field type equals target pk. Lookup-embed views without Python joins.
   relation?: FieldRelation;
 }
 
@@ -129,6 +131,7 @@ export interface StructureModel {
   // AI : author via TypeParamsField, assistant params, CLI --params, MCP params. Codegen: class TreeNode[T](BaseModel).
   params?: string[];
   // AI : TODO (type-join) — pk lives on ModelField.relation, not here. Lookup-embed derives views; do not flatten models to 3NF.
+  // AI : DONE (sql-id-ref) — branded ids + catalog/index are lib/sql-id-*.ts; this type stays the table.
   // AI : StructureModel = CREATE TABLE (or VIEW). Nested list[model] is either a child table
   // AI :   or a JSON column — declare which. Generics/trees can stay JSON until someone needs adjacency-list SQL.
 }
@@ -159,6 +162,7 @@ export enum InputType {
   // AI : InputType is document.mime / blob wrapper, not a separate type universe.
   // AI :   pdf/image/word → BLOB + mime; json/text/markdown/latex → TEXT content (blob optional).
   // AI :   sqlite/.sql dump as an input loads tables into the run catalog instead of nested JSON files.
+  // AI : TODO (sql-id-ref) — later slice: .sqlite / .sql InputType → catalog tables (lib/sql-id-roadmap.ts).
 }
 
 // AI : input steps accept one type or a subset — e.g. ["word", "pdf"] for company filings.
@@ -181,7 +185,8 @@ export enum ModuleKind {
   Assemble = "assemble",
   // AI : fixed author-time LLM branches on same spine input → Promise.all → flat product join.
   Parallel = "parallel",
-  // AI : TODO (allow-pipeline-non-linear-fork) — Fork = nested linear lanes + join (not Parallel LLM-only).
+  // AI : nested linear lanes + join (not Parallel LLM-only). See lib/server/fork-roadmap.ts.
+  Fork = "fork",
   Combine = "combine",
   Chunk = "chunk", // AI : split text / document into list chunks (generated TS)
   Merge = "merge", // AI : recursive structural merge — dict deep, list concat/union/dedupe, per-path rules
@@ -275,6 +280,16 @@ export type ParallelBranch = {
   note?: string;
 };
 
+// AI : fork join — product auto-zips lane last outputs; assemble/merge reuse those step fields.
+export type ForkJoin = "product" | "assemble" | "merge";
+
+// AI : one linear lane inside a Fork — unique ids/labels across the whole tree.
+export type ForkBranch = {
+  id: string;
+  label: string;
+  modules: PipelineModule[];
+};
+
 // AI : one language key per entry — e.g. { "typescript": "(input) => input" } or { "python": "..." }.
 export interface CustomCodeEntry { typescript?: string; python?: string };
 
@@ -330,7 +345,9 @@ export interface PipelineModule {
   assembleBindings?: Record<string, AssembleSource>;
   // AI : parallel — fixed LLM branches sharing spine input; joined into auto product
   parallelBranches?: ParallelBranch[];
-  // AI : TODO (allow-pipeline-non-linear-fork) — forkBranches / forkJoin on Fork steps (nested modules[]).
+  // AI : fork — nested linear lanes; join product | assemble | merge
+  forkBranches?: ForkBranch[];
+  forkJoin?: ForkJoin;
   // AI : example-select — cached-prefix relevance filter (see lib/example-select.ts defaults)
   exampleContextLabel?: string; // prior step label supplying {description} text
   exampleContextField?: string; // optional dot path within that step output
@@ -341,8 +358,9 @@ export interface PipelineModule {
   // AI :   {passthrough} in the template — passthrough is the kept spine row, already full object + reason.
   examplePromptFields?: string[];
   // AI : TODO (example-select-view) — optional examplePromptItemTemplate for prose (Title: {title}) instead of JSON.
-  // AI : TODO (type-join) — optional examplePromptJoins: lookup-embed spec for the *view only* (pass 2 cached
-  // AI :   prefix / draft). Same inType/outType; do not denormalize billed_items onto pass 1 {example}.
+  // AI : DONE (type-join) — pass 2 {description} auto-spreads context FKs that point at the candidate catalog
+  // AI :   (billed_items.work_item_id → WorkItem). Same inType/outType; {example} + kept rows stay normalized.
+  // AI : TODO (type-join) — optional examplePromptJoins for explicit rightLabel / embedAs; draft prefix later.
   examplePromptView?: string;
   useOcr?: boolean; // AI : doc-to-text (legacy: input) — vision OCR when PDF/image is accepted
   // AI : step result cache toggle — authoring may omit (defaults true via seed/factory).
@@ -435,7 +453,7 @@ export interface Project {
   kind: string;
   models: StructureModel[];
   typeAliases?: TypeAlias[];
-  // AI : TODO (allow-pipeline-non-linear-fork) — outer spine; Fork nests per-lane modules[]. flatten for logs/cache.
+  // AI : outer spine; Fork nests per-lane modules[]. flattenPipelineModules for logs/cache.
   modules: PipelineModule[];
   strategies: Strategy[];
   seedDocNames?: string[]; // AI : filenames from seeds/*.json — scopes inference inputs to this project
@@ -828,7 +846,10 @@ export const MODULE_META: Record<ModuleKind, { label: string; description: strin
     label: "Parallel LLM",
     description: "Run fixed LLM branches on the same spine input concurrently, then join into one structure",
   },
-  // AI : TODO (allow-pipeline-non-linear-fork) — MODULE_META.Fork: nested linear lanes + join.
+  [ModuleKind.Fork]: {
+    label: "Fork",
+    description: "Run independent linear lanes on the same spine input, then join (product, assemble, or merge)",
+  },
   [ModuleKind.Combine]: { label: "Combine Inputs", description: "Merge a new input with the pipeline state" },
   [ModuleKind.Chunk]: {
     label: "Chunk",

@@ -1,7 +1,7 @@
 // AI : kind × lang step-body table — adding a ModuleKind must fill ts/py/go/rs (typecheck).
 // AI : TODO (arch-export-file) — generatePipelineSource* still assemble sections in 4 files.
 // AI : TODO (arch-export-orchestrator) — after dispatch is the only kind switch, one IR then printers (leave BAML).
-// AI : TODO (allow-pipeline-non-linear-fork) — Fork row in STEP_BODY; lane modules dispatched as today.
+// AI : DONE (allow-pipeline-non-linear-fork) — Fork row in STEP_BODY; lane modules dispatched as today.
 
 import { assertEntriesForModule, wrapAssertPython, wrapAssertTypeScriptForExport } from "@/lib/assert_steps";
 import { customCodeEntriesForModule } from "@/lib/custom_code_entries";
@@ -55,6 +55,10 @@ import {
   generateParallelStepBodyPy,
   generateParallelStepBodyRust,
   generateParallelStepBodyTs,
+  generateForkStepBodyGo,
+  generateForkStepBodyPy,
+  generateForkStepBodyRust,
+  generateForkStepBodyTs,
   goZeroValue,
   humanReviewComment,
   llmBatchComment,
@@ -422,6 +426,7 @@ const emitExampleSelect: Record<ExportLang, StepBodyEmitter> = {
     const reason = exampleReasonField(ctx.m);
     const cols = examplePromptColumns(ctx.m);
     // AI : TODO (example-select-view) — export must project each item for the prompt and still return full rows.
+    // AI : TODO (type-join) — host runtime lookup-embeds context FKs into {description}; export still stringifies raw.
     let selectCall: string;
     if (cols?.length) {
       selectCall = `selectRelevant(items, description, template, ${JSON.stringify(reason)}, ${JSON.stringify(cols)})`;
@@ -745,7 +750,12 @@ export const STEP_BODY: Record<ModuleKind, Record<ExportLang, StepBodyEmitter>> 
     go: (ctx) => generateParallelStepBodyGo(ctx.m, ctx.project, ctx.outType),
     rs: (ctx) => generateParallelStepBodyRust(ctx.m, ctx.project, ctx.outType),
   },
-  // AI : TODO (allow-pipeline-non-linear-fork) — dispatch table row for Fork (lane bodies + join).
+  [ModuleKind.Fork]: {
+    ts: (ctx) => generateForkStepBodyTs(ctx.m, ctx.project, ctx.outType),
+    py: (ctx) => generateForkStepBodyPy(ctx.m, ctx.project, ctx.outType),
+    go: (ctx) => generateForkStepBodyGo(ctx.m, ctx.project, ctx.outType),
+    rs: (ctx) => generateForkStepBodyRust(ctx.m, ctx.project, ctx.outType),
+  },
   [ModuleKind.Chunk]: {
     ts: emitTsMergeChunkCustom,
     py: emitPyMergeChunkCustom,

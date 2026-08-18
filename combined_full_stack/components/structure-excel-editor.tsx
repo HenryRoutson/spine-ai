@@ -18,6 +18,7 @@ import {
   formatFieldExamplesSummary,
 } from "@/components/field-examples-editor-dialog"
 import { StructureFieldTypeEditor } from "@/components/structure-field-type-editor"
+import { StructureFieldKeyPicker } from "@/components/structure-field-key-picker"
 import { TypeParamsField } from "@/components/type-params-field"
 import { StructureSourceDocLink } from "@/components/structure-source-doc-link"
 import { fieldTypeLabel } from "@/lib/structure-field-labels"
@@ -183,7 +184,7 @@ export function StructureExcelEditor({ selectedId, onSelectId }: StructureExcelE
 
       {/* AI : spreadsheet grid */}
       <div className="min-h-0 flex-1 overflow-auto">
-        <table className="w-full min-w-[860px] border-collapse text-[11.5px]">
+        <table className="w-full min-w-[1000px] border-collapse text-[11.5px]">
           <thead className="sticky top-0 z-10">
             <tr className="bg-secondary/80 backdrop-blur-sm">
               <th className="w-9 border-b border-r border-border px-1 py-1.5 text-center text-[10px] font-medium text-muted-foreground">
@@ -194,6 +195,9 @@ export function StructureExcelEditor({ selectedId, onSelectId }: StructureExcelE
               </th>
               <th className="min-w-[150px] border-b border-r border-border px-2 py-1.5 text-left text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
                 Data type
+              </th>
+              <th className="min-w-[140px] border-b border-r border-border px-2 py-1.5 text-left text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                Key
               </th>
               <th className="min-w-[180px] border-b border-r border-border px-2 py-1.5 text-left text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
                 Description
@@ -228,6 +232,7 @@ export function StructureExcelEditor({ selectedId, onSelectId }: StructureExcelE
                 key={f.id}
                 field={f}
                 fields={selected.fields}
+                host={selected}
                 rowIdx={rowIdx}
                 locked={selectedLocked}
                 models={models}
@@ -256,6 +261,7 @@ export function StructureExcelEditor({ selectedId, onSelectId }: StructureExcelE
 type FieldRowProps = {
   field: ModelField
   fields: ModelField[]
+  host: StructureModel
   rowIdx: number
   locked: boolean
   models: StructureModel[]
@@ -269,6 +275,7 @@ type FieldRowProps = {
 function FieldRow({
   field,
   fields,
+  host,
   rowIdx,
   locked,
   models,
@@ -354,6 +361,22 @@ function FieldRow({
                 selectedId={selectedId}
                 locked={locked}
                 onUpdate={onUpdate}
+              />
+            </div>
+          </div>
+        </td>
+        <td className="border-b border-r border-border p-0 align-top">
+          <div
+            className={cn("min-w-0", locked && "cursor-not-allowed")}
+            onPointerDown={locked ? onLockedInteract : undefined}
+          >
+            <div className={cn(locked && "pointer-events-none")}>
+              <StructureFieldKeyPicker
+                field={field}
+                host={host}
+                models={models}
+                locked={locked}
+                onChange={(relation) => onUpdate({ relation })}
               />
             </div>
           </div>
@@ -550,7 +573,7 @@ function FieldRow({
       {field.type === "json" && !field.typeExpr && (
         <tr className={cn(stripe && "bg-secondary/15")}>
           <td className="border-b border-r border-border bg-secondary/25" />
-          <td colSpan={9} className="border-b border-border px-2 py-1 text-[10px] text-amber-700 dark:text-amber-500">
+          <td colSpan={10} className="border-b border-border px-2 py-1 text-[10px] text-amber-700 dark:text-amber-500">
             Flexible data stores anything — prefer &ldquo;{fieldTypeLabel(FieldType.Model)}&rdquo; or a Type from the sidebar.
           </td>
         </tr>

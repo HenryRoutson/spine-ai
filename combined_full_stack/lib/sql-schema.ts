@@ -203,17 +203,22 @@
 // AI :   and the view SQL does not select billed_items
 // AI :
 // AI : =============================================================================
-// AI : LATER (do not implement)
+// AI : LATER (do not implement in this file)
 // AI : =============================================================================
-// AI : SQLite per run, .sqlite input, Postgres connector, JOIN views, lookup-embed, Pick/Omit TypeExpr,
-// AI : SelectedJobExample = JobExample & { selection_reason }. Keep (example-select-view) and (type-join) TODOs.
+// AI : SQLite per run, .sqlite input, Postgres connector, JOIN views, Pick/Omit TypeExpr,
+// AI : SelectedJobExample = JobExample & { selection_reason }. Keep (example-select-view) TODOs.
+// AI : DONE (type-join) — host example-select {description} auto-spreads context FKs → candidate catalog (lib/lookup-embed.ts).
+// AI : DONE (sql-id-ref) — A–B live in lib/sql-id-*.ts; this file stays the DDL printer.
 // AI :
 // AI : User rules: // AI : comments; StrReplace on large combined_full_stack files; python3; no extra markdown.
 
 import { stripSharedModels } from "@/lib/server/builtin_models"
 import { fieldToTypeExpr, PrimName, TypeExprKind, type TypeExpr } from "@/lib/server/type_expr"
-import { modelExportIdentifier, modelsForPydanticExport, rustFieldIdent } from "@/lib/structure-shape"
+import { pkFieldOf, sqlIdent, sqlTableName } from "@/lib/sql-id-types"
+import { modelsForPydanticExport } from "@/lib/structure-shape"
 import { ModuleKind, type ModelField, type PipelineModule, type StructureModel } from "@/lib/types"
+
+export { pkFieldOf, sqlIdent, sqlTableName } from "@/lib/sql-id-types"
 
 const JOIN_SLICE_ERROR =
   "prompt view in this slice is SELECT columns FROM table only (no JOIN)"
@@ -226,14 +231,6 @@ export type ParsedSqlSelect = {
   from?: string
   hasJoin: boolean
   error?: string
-}
-
-export function sqlIdent(name: string): string {
-  return rustFieldIdent(modelExportIdentifier(name)).ident
-}
-
-export function sqlTableName(modelName: string): string {
-  return sqlIdent(modelName)
 }
 
 function stripSqlComments(sql: string): string {
@@ -342,10 +339,6 @@ type ChildTable = {
 }
 
 type ColumnEmit = { line: string; childModelId?: string }
-
-function pkFieldOf(model: StructureModel): ModelField | undefined {
-  return model.fields.find((f) => f.relation?.kind === "pk") ?? model.fields.find((f) => f.name === "id")
-}
 
 function isPkColumn(f: ModelField, pkField: ModelField | undefined): boolean {
   return !!pkField && f === pkField

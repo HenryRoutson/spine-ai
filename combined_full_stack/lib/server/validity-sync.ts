@@ -1,5 +1,4 @@
 // AI : Pipeline step sync & migration helpers — standalone, no dependency on validity.ts I/O graph.
-// AI : TODO (allow-pipeline-non-linear-fork) — sync/migrate recurse into forkBranches; unique labels across tree.
 import type {
   ModelId,
   ModuleId,
@@ -18,6 +17,7 @@ import { BUILTIN_DOCUMENT_ID, BUILTIN_CHATBOT_PROMPT_ID, BUILTIN_CHATBOT_RESULT_
 import { migrateCustomCodeModule } from "@/lib/custom_code_entries";
 import { migrateListMergeModule, syncListOpsModules } from "@/lib/list-ops-steps";
 import { syncAssembleModules } from "@/lib/assemble-type-expr";
+import { mapPipelineModules, syncForkModules } from "@/lib/fork-pipeline";
 import { resolveModuleNote } from "@/lib/pipeline-module-factory";
 import { usesPassthroughStructure, isLlmKind } from "@/lib/module-kinds";
 import { assertEntriesForModule, parseAssertReferencedLabels } from "@/lib/assert_steps";
@@ -203,6 +203,16 @@ export function authoredPipelineModules(modules: PipelineModule[]): PipelineModu
       out.push(foldConvertOcrOntoInput(m, convert));
       continue;
     }
+    if (m.kind === ModuleKind.Fork) {
+      out.push({
+        ...m,
+        forkBranches: (m.forkBranches ?? []).map((b) => ({
+          ...b,
+          modules: authoredPipelineModules(b.modules),
+        })),
+      });
+      continue;
+    }
     out.push(m);
   }
   return modulesEqual(modules, out) ? modules : out;
@@ -356,12 +366,22 @@ export function syncManagedPipelineSteps(
   models: StructureModel[],
   globalModel: ModelId = DEFAULT_MODEL,
 ): PipelineModule[] {
-  return migrateModulesSpineTypes(
+  const outer = migrateModulesSpineTypes(
     syncAutoQuoteSteps(
       syncAutoStructureParseSteps(syncAutoDocToTextSteps(modules), models, globalModel),
       models,
     ),
   );
+  return outer.map((m) => {
+    if (m.kind !== ModuleKind.Fork) return m;
+    return {
+      ...m,
+      forkBranches: (m.forkBranches ?? []).map((b) => ({
+        ...b,
+        modules: syncManagedPipelineSteps(b.modules, models, globalModel),
+      })),
+    };
+  });
 }
 
 export function isAutoQuoteStep(m: PipelineModule): boolean {
@@ -548,11 +568,12 @@ export function migrateProjectModules(project: Project): Project {
   );
   const quoted = syncManagedPipelineSteps(project.modules, models);
   const placed = syncAssertPlacement(quoted);
-  const migrated = placed.map((m) => migrateListMergeModule(migrateCustomCodeModule(m)));
+  const migrated = mapPipelineModules(placed, (m) => migrateListMergeModule(migrateCustomCodeModule(m)));
   const listSynced = syncListOpsModules(migrated, models);
   const assembleSynced = syncAssembleModules(listSynced.modules, models);
-  const withCache = assembleSynced.modules.map((m) => (m.cached ? m : { ...m, cached: true }));
-  models = assembleSynced.models;
+  const forkSynced = syncForkModules(assembleSynced.modules, assembleSynced.models);
+  const withCache = mapPipelineModules(forkSynced.modules, (m) => (m.cached ? m : { ...m, cached: true }));
+  models = forkSynced.models;
   const normalized = normalizePassthroughStructureIds(withCache);
   const chatbotPinned = normalizeChatbotStructureIds(normalized);
   const noted = normalizeModuleNotes(chatbotPinned);
@@ -573,7 +594,8 @@ export function migrateProjectModules(project: Project): Project {
     migrated.some((m, i) => m !== placed[i]) ||
     !modulesEqual(listSynced.modules, migrated) ||
     !modulesEqual(assembleSynced.modules, listSynced.modules) ||
-    withCache.some((m, i) => m !== assembleSynced.modules[i]) ||
+    !modulesEqual(forkSynced.modules, assembleSynced.modules) ||
+    !modulesEqual(withCache, forkSynced.modules) ||
     normalized.some((m, i) => m !== withCache[i]) ||
     noted.some((m, i) => m !== normalized[i]) ||
     spineTyped.some((m, i) => m !== noted[i]);

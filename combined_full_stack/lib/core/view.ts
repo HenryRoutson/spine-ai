@@ -4,10 +4,12 @@
 
 import { computeInvalid, invalidIssuesForModule } from "@/lib/validity"
 import { computeStructureIssues, structureIssueMessage } from "@/lib/structure-validity"
+import { collectSqlIdTypes, fieldRelationLabel, fieldSqlIdType } from "@/lib/sql-id-types"
 import { invalidStepMessage } from "@/lib/server/validity-messages"
 import { withSharedModels, formatTypeExpr, stepSpineInType, stepSpineOutType } from "@/lib/structure"
 import { quoteHref, type QuoteMatch } from "@/lib/quotes"
 import { isTestingFileName, lastTestRunVerdictForDoc, testReportPassed } from "@/lib/testing-files"
+import { flattenPipelineModules } from "@/lib/fork-pipeline"
 import { derivePipelineMermaid } from "@/lib/pipeline-mermaid"
 import { formatTypeExprPy } from "@/lib/type-expr-parse"
 import { formatParametricName } from "@/lib/type-params"
@@ -42,13 +44,14 @@ export type PipelineStepView = {
   kind: string
   invalid: string[]
   selected: boolean
+  parentForkId?: string
+  indent?: number
 }
 
 export type PipelineView = {
   title: string
   projectId: string
   steps: PipelineStepView[]
-  // AI : TODO (allow-pipeline-non-linear-fork) — nest steps or add parentForkId/branchId for Ink indent.
 }
 
 export type ValidationIssueView = {
@@ -73,7 +76,6 @@ export type QuoteView = {
 }
 
 export function toPipelineView(snap: SessionSnapshot): PipelineView | null {
-  // AI : TODO (allow-pipeline-non-linear-fork) — steps tree with indent / parentForkId, not a flat map.
   const project = snap.projects.find((p) => p.id === snap.activeProjectId) ?? snap.projects[0]
   if (!project) return null
   const invalid = computeInvalid(project.modules, project.models, {
@@ -84,18 +86,40 @@ export function toPipelineView(snap: SessionSnapshot): PipelineView | null {
   return {
     title: project.name,
     projectId: project.id,
-    steps: project.modules.map((m) => ({
+    steps: pipelineStepViews(project.modules, invalid, models, project.modules),
+  }
+}
+
+function pipelineStepViews(
+  modules: PipelineModule[],
+  invalid: ReturnType<typeof computeInvalid>,
+  models: StructureModel[],
+  root: PipelineModule[],
+  parentForkId?: string,
+  indent = 0,
+): PipelineStepView[] {
+  return modules.flatMap((m) => {
+    const view: PipelineStepView = {
       id: m.id,
       label: m.label,
       kind: m.kind,
       invalid: invalidIssuesForModule(invalid, m.id).map((issue) =>
         issue.kind === "structure-field"
           ? (issue.structureMessage ?? "structure field error")
-          : invalidStepMessage(issue, models, project.modules),
+          : invalidStepMessage(issue, models, root),
       ),
       selected: false,
-    })),
-  }
+      parentForkId,
+      indent,
+    }
+    if (m.kind !== "fork") return [view]
+    return [
+      view,
+      ...((m.forkBranches ?? []).flatMap((b) =>
+        pipelineStepViews(b.modules, invalid, models, root, m.id, indent + 1),
+      )),
+    ]
+  })
 }
 
 function snapDocInvalidOpts(snap: SessionSnapshot) {
@@ -127,7 +151,7 @@ export function toValidationView(snap: SessionSnapshot): ValidationView {
   }))
   const invalid = computeInvalid(viewed.modules, models, { typeAliases, ...snapDocInvalidOpts(snap) })
   const modelsForMessages = withSharedModels(models)
-  for (const m of viewed.modules) {
+  for (const m of flattenPipelineModules(viewed.modules)) {
     for (const issue of invalidIssuesForModule(invalid, m.id)) {
       issues.push({
         level: "error",
@@ -560,10 +584,19 @@ export type McpStepReview = {
   structureOut?: string
 }
 
+function mcpFieldReview(model: StructureModel, field: StructureModel["fields"][number], models: StructureModel[]): string {
+  const branded = fieldSqlIdType(model, field, models)
+  const rel = field.relation ? fieldRelationLabel(field, models).replace(/\s+/g, "") : ""
+  const opt = field.optional ? "?" : ""
+  if (branded && rel) return `${field.name}:${branded}${opt}!${rel}`
+  if (branded) return `${field.name}:${branded}${opt}`
+  return `${field.name}:${field.type}${opt}`
+}
+
 function mcpModelReview(models: StructureModel[]): McpModelReview[] {
   return models.map((m) => ({
     name: m.name,
-    fields: m.fields.map((f) => `${f.name}:${f.type}${f.optional ? "?" : ""}`),
+    fields: m.fields.map((f) => mcpFieldReview(m, f, models)),
   }))
 }
 
@@ -621,6 +654,11 @@ export function toMcpProjectReview(snap: SessionSnapshot) {
     name: viewed.name,
     kind: viewed.kind,
     models: mcpModelReview(viewed.models),
+    idTypes: collectSqlIdTypes(viewed.models).map((t) => ({
+      name: t.name,
+      pk: `${t.pkModelName}.${t.pkField}`,
+      fkFields: t.fkFields.map((f) => `${f.modelName}.${f.field}`),
+    })),
     steps: mcpStepReview(viewed.modules, viewed.models),
     docs: mergeDocsByName(
       snap.docs.map((d) => ({ name: d.name, type: d.type, label: d.label })),

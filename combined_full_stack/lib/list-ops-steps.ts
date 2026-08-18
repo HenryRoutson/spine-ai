@@ -215,16 +215,22 @@ export function syncListOpsModules(
   modules: PipelineModule[],
   models: StructureModel[],
 ): { modules: PipelineModule[]; models: StructureModel[] } {
-  // AI : TODO (allow-pipeline-non-linear-fork) — prev is previous in lane, not modules[i-1] of a flat list.
   let scratchModels = models
   const nextModules = modules.map((m, i) => {
     const prev = i > 0 ? modules[i - 1] : undefined
+    if (m.kind === ModuleKind.Fork) {
+      const nested = (m.forkBranches ?? []).map((b) => {
+        const syncedLane = syncListOpsModules(b.modules, scratchModels)
+        scratchModels = syncedLane.models
+        return { ...b, modules: syncedLane.modules }
+      })
+      return { ...m, forkBranches: nested }
+    }
     const synced = syncListOpsStepModule(m, scratchModels, prev, modules)
     scratchModels = synced.models
     return synced.module
   })
-  // AI : ephemeral sm_merge_* / sm_merge_wrap_* models are for type derivation only — not persisted.
-  return { modules: nextModules, models }
+  return { modules: nextModules, models: scratchModels }
 }
 
 export function defaultLayerPolicy(policy?: MergePolicy): MergeLayerPolicy {

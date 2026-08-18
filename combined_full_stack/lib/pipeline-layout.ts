@@ -1,14 +1,27 @@
 import type { StepUiState } from "@/lib/run-engine"
-import { RunStepStatus } from "@/lib/types"
+import { ModuleKind, RunStepStatus } from "@/lib/types"
 import type { PipelineModule } from "@/lib/types"
 import { isLlmKind } from "@/lib/module-kinds"
 import { isAutoQuoteStep } from "@/lib/quote-steps"
 import { isAutoDocToTextStep, isAutoStructureParseStep, isInputManagedFollower } from "@/lib/structure-parse-steps"
+import { forkBranchesOf, locatePipelineModule } from "@/lib/fork-pipeline"
+
+export type ForkLaneSegment = {
+  id: string
+  label: string
+  modules: PipelineModule[]
+  segments: PipelineSegment[]
+}
 
 export type PipelineSegment =
   | { kind: "step"; module: PipelineModule; index: number }
   | { kind: "combine"; combine: PipelineModule; input: PipelineModule; convert?: PipelineModule; parse?: PipelineModule; index: number }
-  // AI : TODO (allow-pipeline-non-linear-fork) — kind "fork": boxed lanes + join; insert scoped to branchId.
+  | { kind: "fork"; fork: PipelineModule; index: number; branches: ForkLaneSegment[] }
+
+export type PipelineInsertLoc = {
+  forkId: string
+  branchId: string
+}
 
 // AI : TODO(spec) — delete combine segments when implicit combine ships (pipeline_state.ts #10).
 // AI : second+ input steps stand alone; canvas shows label-keyed state arrows instead.
@@ -34,8 +47,12 @@ export function combineGroupAt(
 
 // AI : combine steps consume pipeline state + a secondary input module immediately before them —
 // AI : group input (+ auto parse llm) so the linear canvas shows where the extra document feeds in.
-// AI : TODO (allow-pipeline-non-linear-fork) — emit fork segments; flatten is not a linear walk.
-export function segmentPipeline(modules: PipelineModule[]): PipelineSegment[] {
+// AI : nested forks in a lane render as a single step card (v1 UI: flatten first).
+export function segmentPipeline(
+  modules: PipelineModule[],
+  opts?: { nestedForkAsStep?: boolean },
+): PipelineSegment[] {
+  const nestedForkAsStep = opts?.nestedForkAsStep ?? false
   const inGroup = new Set<string>()
   for (let i = 0; i < modules.length; i++) {
     const g = combineGroupAt(modules, i)
@@ -50,12 +67,32 @@ export function segmentPipeline(modules: PipelineModule[]): PipelineSegment[] {
     const m = modules[i]
     const g = combineGroupAt(modules, i)
     if (g) {
-      segments.push({ kind: "combine", combine: m, input: g.input, parse: g.parse, index: i })
+      segments.push({ kind: "combine", combine: m, input: g.input, parse: g.parse, convert: g.convert, index: i })
     } else if (!inGroup.has(m.id)) {
-      segments.push({ kind: "step", module: m, index: i })
+      if (m.kind === ModuleKind.Fork && !nestedForkAsStep) {
+        segments.push({
+          kind: "fork",
+          fork: m,
+          index: i,
+          branches: forkBranchesOf(m).map((b) => ({
+            id: b.id,
+            label: b.label,
+            modules: b.modules,
+            segments: segmentPipeline(b.modules, { nestedForkAsStep: true }),
+          })),
+        })
+      } else {
+        segments.push({ kind: "step", module: m, index: i })
+      }
     }
   }
   return segments
+}
+
+export function pipelineSegmentKey(seg: PipelineSegment): string {
+  if (seg.kind === "combine") return seg.combine.id
+  if (seg.kind === "fork") return seg.fork.id
+  return seg.module.id
 }
 
 // AI : move/remove treat the secondary input (+ auto parse llm) + combine as one block.
@@ -77,9 +114,10 @@ export function combinePairIds(modules: PipelineModule[], id: string): string[] 
 }
 
 export function insertBeforeIndex(seg: PipelineSegment): number {
-  return seg.kind === "combine"
-    ? seg.index - (seg.parse ? 1 : 0) - (seg.convert ? 1 : 0) - 1
-    : seg.index
+  if (seg.kind === "combine") {
+    return seg.index - (seg.parse ? 1 : 0) - (seg.convert ? 1 : 0) - 1
+  }
+  return seg.index
 }
 
 export function insertAfterIndex(seg: PipelineSegment): number {
@@ -90,6 +128,9 @@ export function insertAfterIndex(seg: PipelineSegment): number {
 export function modulesInSegment(seg: PipelineSegment): PipelineModule[] {
   if (seg.kind === "combine") {
     return [seg.input, ...(seg.convert ? [seg.convert] : []), ...(seg.parse ? [seg.parse] : []), seg.combine]
+  }
+  if (seg.kind === "fork") {
+    return [seg.fork, ...seg.branches.flatMap((b) => b.segments.flatMap(modulesInSegment))]
   }
   return [seg.module]
 }
@@ -119,22 +160,24 @@ export function blocksInsertBefore(modules: PipelineModule[], insertAt: number):
 
 // AI : input + auto structure LLM, or combine group (input [+ parse] + combine), move/remove as one block.
 export function managedPipelinePairIds(modules: PipelineModule[], id: string): string[] {
-  const group = combinePairIds(modules, id)
+  const loc = locatePipelineModule(modules, id)
+  const siblings = loc?.siblings ?? modules
+  const group = combinePairIds(siblings, id)
   if (group.length > 1) return group
-  const i = modules.findIndex((m) => m.id === id)
+  const i = siblings.findIndex((m) => m.id === id)
   if (i < 0) return [id]
-  const m = modules[i]
+  const m = siblings[i]
   if (m.kind === "input") {
     const ids = [m.id]
     let j = i + 1
-    while (isInputManagedFollower(modules[j])) {
-      ids.push(modules[j]!.id)
+    while (isInputManagedFollower(siblings[j])) {
+      ids.push(siblings[j]!.id)
       j++
     }
     return ids
   }
   if (isInputManagedFollower(m) && i > 0) {
-    return managedPipelinePairIds(modules, modules[i - 1]!.id)
+    return managedPipelinePairIds(modules, siblings[i - 1]!.id)
   }
   return [id]
 }

@@ -35,6 +35,17 @@ import { managedPipelinePairIds } from "@/lib/pipeline-layout"
 import { KindMenuItemIcon, AutoQuoteLock, AutoDocToTextLock, AutoStructureParseLock } from "@/lib/module-ui"
 import { makeModule } from "@/lib/pipeline-module-factory"
 import { MODULE_META, ModuleKind, type PipelineModule, type ModuleId } from "@/lib/types"
+import {
+  deriveForkStepTypes,
+  findPipelineModule,
+  flattenPipelineModules,
+  insertPipelineModules,
+  locatePipelineModule,
+  removePipelineModules,
+  replacePipelineSiblings,
+  updatePipelineModule,
+} from "@/lib/fork-pipeline"
+import type { PipelineInsertLoc } from "@/lib/pipeline-layout"
 import { WindowHeader } from "@/components/window-header"
 import { PipelineCanvas } from "@/components/pipeline-canvas"
 import { PipelineSummaryBox } from "@/components/pipeline-summary-box"
@@ -84,7 +95,7 @@ export function PipelineBuilder() {
   const [inspectorWidth, setInspectorWidth] = useState(readPipelineInspectorWidth)
   useEffect(() => setInspectorWidth(savedInspectorWidth), [savedInspectorWidth])
 
-  const selected = modules.find((m) => m.id === selectedId)
+  const selected = findPipelineModule(modules, selectedId)
   const { pipelineEditingBlocked: editingBlocked } = computeWorkspaceValidity(
     modules,
     models,
@@ -101,10 +112,9 @@ export function PipelineBuilder() {
     okRuns.length > 0 ? okRuns.reduce((a, r) => a + runTotalMs(r), 0) / okRuns.length : null
   const totalCost =
     okRuns.length > 0 ? okRuns.reduce((a, r) => a + runBilledCents(r), 0) / okRuns.length : null
-  const cachedCount = modules.filter((m) => m.cached).length
+  const cachedCount = flattenPipelineModules(modules).filter((m) => m.cached).length
 
-  // AI : TODO (allow-pipeline-non-linear-fork) — insert/move/remove take optional branchId; splice into that lane.
-  function insertModule(kind: ModuleKind, at = modules.length) {
+  function insertModule(kind: ModuleKind, at = modules.length, loc?: PipelineInsertLoc) {
     const fresh: PipelineModule[] =
       kind === ModuleKind.Combine
         ? [
@@ -112,34 +122,39 @@ export function PipelineBuilder() {
             makeModule(ModuleKind.Combine, models, globalModel),
           ]
         : [makeModule(kind, models, globalModel)]
-    const next = [...modules.slice(0, at), ...fresh, ...modules.slice(at)]
+    const next = insertPipelineModules(modules, at, fresh, loc)
     setModules(next)
-    setSelectedId(fresh[fresh.length - 1].id)
+    setSelectedId(fresh[fresh.length - 1]!.id)
   }
 
   function update(id: string, patch: Partial<PipelineModule>) {
     let derivedModels = models
-    let next = modules.map((m, i) => {
-      if (m.id !== id) return m
+    const loc = locatePipelineModule(modules, id)
+    const next = updatePipelineModule(modules, id, (m) => {
       const updated = { ...m, ...patch }
       if (updated.kind === ModuleKind.Output && patch.inStructureId) {
         updated.outStructureId = patch.inStructureId
       }
+      const prev = loc?.predecessor
+      const span = loc?.siblings ?? modules
+      const idx = loc?.index ?? span.findIndex((x) => x.id === id)
       if (updated.kind === ModuleKind.Chunk || updated.kind === ModuleKind.Merge) {
-        const prev = i > 0 ? modules[i - 1] : undefined
-        const synced = syncListOpsStepModule(updated, derivedModels, prev, modules)
+        const synced = syncListOpsStepModule(updated, derivedModels, prev, span)
         derivedModels = synced.models
         return synced.module
       }
       if (updated.kind === ModuleKind.Assemble) {
-        const prev = i > 0 ? modules[i - 1] : undefined
-        const synced = deriveAssembleStepTypes(updated, prev, modules, i, derivedModels)
+        const synced = deriveAssembleStepTypes(updated, prev, span, idx, derivedModels)
         derivedModels = synced.models
         return synced.module
       }
       if (updated.kind === ModuleKind.Parallel) {
-        const prev = i > 0 ? modules[i - 1] : undefined
         const synced = deriveParallelStepTypes(updated, prev, derivedModels)
+        derivedModels = synced.models
+        return synced.module
+      }
+      if (updated.kind === ModuleKind.Fork) {
+        const synced = deriveForkStepTypes(updated, prev, derivedModels, typeAliases)
         derivedModels = synced.models
         return synced.module
       }
@@ -147,9 +162,10 @@ export function PipelineBuilder() {
     })
     if (derivedModels !== models) setModels(derivedModels)
     if (patch.outStructureId !== undefined) {
-      const step = modules.find((x) => x.id === id)
+      const step = findPipelineModule(modules, id)
       if (step?.kind === ModuleKind.Input) {
-        next = patchInputTargetStructure(next, id as ModuleId, patch.outStructureId)
+        setModules(patchInputTargetStructure(next, id as ModuleId, patch.outStructureId))
+        return
       }
     }
     setModules(next)
@@ -172,25 +188,26 @@ export function PipelineBuilder() {
   }
 
   function remove(id: string) {
-    const m = modules.find((x) => x.id === id)
+    const m = findPipelineModule(modules, id)
     if (m && isManagedLockedStep(m)) return
     const drop = new Set(managedPipelinePairIds(modules, id))
-    const next = modules.filter((m) => !drop.has(m.id))
+    const next = removePipelineModules(modules, drop)
     setModules(next)
     if (drop.has(selectedId)) setSelectedId(next[0]?.id ?? "")
   }
 
   function move(id: string, dir: -1 | 1) {
-    const m = modules.find((x) => x.id === id)
-    if (m && isManagedLockedStep(m)) return
+    const loc = locatePipelineModule(modules, id)
+    if (!loc) return
+    if (isManagedLockedStep(loc.module)) return
     const ids = managedPipelinePairIds(modules, id)
-    const block = ids.map((x) => modules.find((m) => m.id === x)!)
-    const rest = modules.filter((m) => !ids.includes(m.id))
-    const at = modules.findIndex((m) => m.id === ids[0])
+    const block = ids.map((x) => loc.siblings.find((m) => m.id === x)!).filter(Boolean)
+    const rest = loc.siblings.filter((m) => !ids.includes(m.id))
+    const at = loc.siblings.findIndex((m) => m.id === ids[0])
     const insertAt = dir === -1 ? at - 1 : at + ids.length
     if (insertAt < 0 || insertAt > rest.length) return
-    const next = [...rest.slice(0, insertAt), ...block, ...rest.slice(insertAt)]
-    setModules(next)
+    const nextSiblings = [...rest.slice(0, insertAt), ...block, ...rest.slice(insertAt)]
+    setModules(replacePipelineSiblings(modules, loc, nextSiblings))
   }
 
   async function copyPipelineJson() {
@@ -321,6 +338,7 @@ export function PipelineBuilder() {
                       onInsert={insertModule}
                       connectionInvalid={opts.connectionInvalid}
                       blocked={editingBlocked || opts.blocked}
+                      loc={opts.forkId && opts.branchId ? { forkId: opts.forkId, branchId: opts.branchId } : undefined}
                     />
                   )}
                   renderFooter={() => (
@@ -467,12 +485,14 @@ function InsertSlot({
   connectionInvalid,
   alwaysShow,
   blocked,
+  loc,
 }: {
   insertAt: number
-  onInsert: (kind: ModuleKind, at: number) => void
+  onInsert: (kind: ModuleKind, at: number, loc?: PipelineInsertLoc) => void
   connectionInvalid?: boolean
   alwaysShow?: boolean
   blocked?: boolean
+  loc?: PipelineInsertLoc
 }) {
   if (blocked) {
     return <div className="h-4 w-px bg-border/60" aria-hidden />
@@ -485,7 +505,7 @@ function InsertSlot({
           connectionInvalid ? "bg-destructive" : "bg-border group-hover:bg-muted-foreground/40",
         )}
       />
-      <AddStepMenu insertAt={insertAt} onInsert={onInsert} variant="slot" alwaysShow={alwaysShow} />
+      <AddStepMenu insertAt={insertAt} onInsert={onInsert} variant="slot" alwaysShow={alwaysShow} loc={loc} />
     </div>
   )
 }
@@ -495,11 +515,13 @@ function AddStepMenu({
   onInsert,
   variant,
   alwaysShow,
+  loc,
 }: {
   insertAt: number
-  onInsert: (kind: ModuleKind, at: number) => void
+  onInsert: (kind: ModuleKind, at: number, loc?: PipelineInsertLoc) => void
   variant: "slot" | "button"
   alwaysShow?: boolean
+  loc?: PipelineInsertLoc
 }) {
   return (
     <DropdownMenu>
@@ -530,7 +552,7 @@ function AddStepMenu({
           {USER_ADDABLE_MODULE_KINDS.map((k) => (
             <DropdownMenuItem
               key={k}
-              onClick={() => onInsert(k, insertAt)}
+              onClick={() => onInsert(k, insertAt, loc)}
               className="gap-3 px-2 py-2"
             >
               <KindMenuItemIcon kind={k} />

@@ -6,6 +6,10 @@ import { isLlmKind } from "@/lib/module-kinds"
 import { spineEmitsLabel, spineExpectsLabel } from "@/lib/server/assistant-prompt"
 import { modelById } from "@/lib/server/run_engine/helpers"
 import { allModelsToPydantic, modelToPydantic } from "@/lib/server/pydantic"
+import { allModelsToSql } from "@/lib/sql-schema"
+import { collectSqlIdTypes } from "@/lib/sql-id-types"
+import { inspectCatalogDocs, type InspectIdsFilter } from "@/lib/sql-id-index"
+import { readFileSync } from "node:fs"
 import {
   formatPipelineTypeSummary,
   generatePipelineTypes,
@@ -24,7 +28,7 @@ import { lintPipeline, lintPipelineJson } from "@/lib/server/pipeline_lint"
 import { stepOutputJsonSchema } from "@/lib/step-json-schema"
 import { formatTypeExpr, stepEmitsList, stepSpineInType, stepSpineOutType } from "@/lib/server/type_expr"
 import { tryParseJson } from "@/lib/json-utils"
-import { isComparableStep } from "@/lib/testing-files"
+import { isComparableStep, isTestingFileName } from "@/lib/testing-files"
 import type { PipelineModule, Project } from "@/lib/types"
 import type { repo_path_string } from "./spine-pinpoint.js"
 
@@ -265,18 +269,55 @@ export function exportPydanticProject(
   projectName: string
   seedPath: string
   modelsPy: string
+  schemaSql: string
+  idTypes: Array<{ name: string; pk: string; fkFields: string[] }>
   pipelineSignatures?: GeneratedPipelineTypes
 } {
   const { seedPath, ctx } = loadProject(input.projectSeedPath, cwd)
   const { project } = ctx
   const modelsPy = allModelsToPydantic(project.models, project.typeAliases ?? [])
   const includePipelineSignatures = input.includePipelineSignatures ?? true
+  const pipelineSignatures = includePipelineSignatures ? generatePipelineTypes(project) : undefined
   return {
     projectName: project.name,
     seedPath,
     modelsPy,
-    pipelineSignatures: includePipelineSignatures ? generatePipelineTypes(project) : undefined,
+    schemaSql: pipelineSignatures?.schemaSql ?? allModelsToSql(project.models, project.modules),
+    idTypes: collectSqlIdTypes(project.models).map((t) => ({
+      name: t.name,
+      pk: `${t.pkModelName}.${t.pkField}`,
+      fkFields: t.fkFields.map((f) => `${f.modelName}.${f.field}`),
+    })),
+    pipelineSignatures,
   }
+}
+
+export function inspectIdsFromSeed(
+  input: {
+    projectSeedPath: repo_path_string
+    idType?: string
+    docName?: string
+    filter?: InspectIdsFilter
+  },
+  cwd: string,
+) {
+  const { ctx } = loadProject(input.projectSeedPath, cwd)
+  const docs = ctx.seed.docSpecs
+    .filter((d) => !isTestingFileName(d.name))
+    .filter((d) => !input.docName || d.name === input.docName)
+    .map((d) => {
+      try {
+        return { name: d.name, type: d.type, content: readFileSync(d.path, "utf8") }
+      } catch {
+        return undefined
+      }
+    })
+    .filter((d): d is NonNullable<typeof d> => !!d)
+  return inspectCatalogDocs(ctx.project.models, docs, {
+    idType: input.idType,
+    filter: input.filter ?? "all",
+    typeAliases: ctx.project.typeAliases,
+  })
 }
 
 export function deriveStepPrompt(

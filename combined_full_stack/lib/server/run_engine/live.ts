@@ -1,6 +1,7 @@
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { isLlmKind } from "@/lib/module-kinds";
+import { flattenPipelineModules } from "@/lib/fork-pipeline";
 import { dataDir } from "../config";
 import { type LiveStep, progressHtml } from "../logging";
 import type { ModelId, Project, RunStep } from "../types";
@@ -15,8 +16,7 @@ export function createWriteLive(
 ): (runningIndex: number) => void {
   return (runningIndex: number) => {
     if (!enabled) return;
-    const display: LiveStep[] = project.modules.map((m, idx) => {
-      // AI : TODO (allow-pipeline-non-linear-fork) — flatten Fork lanes so live HTML lists nested steps.
+    const display: LiveStep[] = flattenPipelineModules(project.modules).map((m, idx) => {
       const done = steps.find((s) => s.moduleId === m.id);
       if (done) {
         const inLabel = isLlmKind(m.kind) ? "prompt" : "in";
@@ -31,13 +31,13 @@ export function createWriteLive(
       }
       return { label: m.label, kind: m.kind, status: idx === runningIndex ? "running" : "pending", ms: 0, costCents: 0 };
     });
-    const at = Math.min(steps.length + 1, project.modules.length);
+    const at = Math.min(steps.length + 1, display.length);
     mkdirSync(join(dataDir(), "live"), { recursive: true });
     writeFileSync(
       LIVE_HTML_PATH,
       progressHtml(
         `${project.name} — ${runningIndex === -1 ? "run finished" : "running"}`,
-        `${model} · step ${at}/${project.modules.length}`,
+        `${model} · step ${at}/${display.length}`,
         display,
         runningIndex !== -1,
       ),

@@ -2,12 +2,14 @@ import { resolve } from "node:path"
 import { describe, expect, it } from "vitest"
 import { createSpineSession } from "@/lib/core/session"
 import { loadProjectContext } from "@/lib/cli/project_context"
-import { DEFAULT_MODEL, ModuleKind } from "@/lib/types"
+import { DEFAULT_MODEL, FieldType, ModuleKind, type StructureModel, type StructureModelId } from "@/lib/types"
+import { uid } from "@/lib/id"
 import { BUILTIN_DOCUMENT_ID } from "@/lib/server/builtin_models"
 import { materializeProposal } from "@/lib/server/pipeline_assistant"
-import { formatPipelineValidationErrors } from "@/lib/server/validity"
+import { computeWarnings, formatPipelineValidationErrors } from "@/lib/server/validity"
+import { PipelineWarningKind } from "@/lib/server/validity-types"
 import { stepEmitsList } from "@/lib/server/type_expr"
-import { structureOutForAssistant } from "@/lib/server/assistant-prompt"
+import { buildFewShotPromptBlock, resolveAssistantUserMessage, structureOutForAssistant } from "@/lib/server/assistant-prompt"
 import { loadProjectSeed, SEEDS_DIR } from "@/lib/server/seed"
 
 type AssistantRaw = Parameters<typeof materializeProposal>[0]
@@ -347,6 +349,53 @@ describe("pipeline assistant materialize", () => {
       proposal!.typeAliases,
     )
     expect(errors).toMatch(/no field for the side input/)
+  })
+
+  it("incremental user messages prefer modulePatch", () => {
+    const session = createSpineSession()
+    session.addProject({ open: true })
+    const green = resolveAssistantUserMessage(session.project!, "build a pipeline", [])
+    expect(green).toContain("assemble")
+    expect(green).toContain("Example 1c")
+    const fewShot = buildFewShotPromptBlock()
+    expect(fewShot).toContain("Example 1c")
+    expect(fewShot).toContain("Example 5")
+    const model: StructureModel = {
+      id: uid<StructureModelId>("m_"),
+      name: "ReceiptRow",
+      description: "",
+      fields: [{ id: uid("f_"), name: "vendor", type: FieldType.Text, optional: false, description: "" }],
+    }
+    session.applyProjectChanges({ models: [model] })
+    const incremental = resolveAssistantUserMessage(session.project!, "just fix the extract prompt", [])
+    expect(incremental).toContain("modulePatch")
+    expect(incremental).not.toContain("Design a complete Spine pipeline")
+  })
+
+  it("warns on unused authored models and list-vs-item llm-batch prompts", () => {
+    const session = createSpineSession()
+    session.addProject({ open: true })
+    const raw = receiptMapRaw()
+    raw.models = [
+      ...(raw.models ?? []),
+      {
+        name: "MeetingNote",
+        description: "Clone of Document.",
+        fields: [
+          { name: "content", type: "text", optional: false, description: "text" },
+          { name: "filename", type: "text", optional: false, description: "name" },
+        ],
+      },
+    ]
+    raw.modules = raw.modules!.map((m) =>
+      m.kind === ModuleKind.LlmBatch ? { ...m, prompt: "Return as a list of JSON objects." } : m,
+    )
+    const proposal = materializeProposal(raw, session.project!, DEFAULT_MODEL)!
+    const warnings = [...computeWarnings(proposal.modules, proposal.models).values()].flat()
+    expect(warnings.some((w) => w.kind === PipelineWarningKind.UnusedModel && w.detail?.includes("MeetingNote"))).toBe(
+      true,
+    )
+    expect(warnings.some((w) => w.kind === PipelineWarningKind.PromptListVsItem)).toBe(true)
   })
 })
 

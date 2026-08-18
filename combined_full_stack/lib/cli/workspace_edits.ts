@@ -4,15 +4,26 @@
 import { existsSync, readFileSync, readdirSync } from "node:fs"
 import { join } from "node:path"
 import { FieldType, FIELD_TYPES, ModuleKind } from "@/lib/types"
-import type { ModelId, PipelineModule, StructureModel, StructureModelId, TypeAlias, TypeAliasId } from "@/lib/types"
+import type { FieldRelation, ModelId, PipelineModule, StructureModel, StructureModelId, TypeAlias, TypeAliasId } from "@/lib/types"
 import type { TypeExpr } from "@/lib/server/type_expr"
 import type { SpineSession } from "@/lib/core/session"
 import { uid } from "@/lib/id"
 import { makeModule } from "@/lib/pipeline-module-factory"
 import { USER_ADDABLE_MODULE_KINDS, usesPassthroughStructure } from "@/lib/module-kinds"
+import {
+  findPipelineModule,
+  flattenPipelineModules,
+  forkBranchesOf,
+  insertPipelineModules,
+  locatePipelineModule,
+  removePipelineModules,
+  replacePipelineSiblings,
+  updatePipelineModule,
+} from "@/lib/fork-pipeline"
 import { loadProjectContext } from "@/lib/cli/project_context"
 import { SEEDS_DIR, type SeedDocSpec } from "@/lib/server/seed"
 import { allModelsToPydantic } from "@/lib/server/pydantic"
+import { parseFkTarget } from "@/lib/sql-id-types"
 import { tryParseTypeExprString } from "@/lib/type-expr-parse"
 import { normalizeTypeParams } from "@/lib/type-params"
 import { isTestingFileName } from "@/lib/testing-files"
@@ -89,13 +100,18 @@ export function parseAddableKind(raw: string): ModuleKind | undefined {
   return USER_ADDABLE_MODULE_KINDS.find((k) => k === raw)
 }
 
-export function addPipelineStep(session: SpineSession, kind: ModuleKind, label?: string): PipelineModule[] {
-  // AI : TODO (allow-pipeline-non-linear-fork) — insertAt + optional branchId; Fork inserts 2 empty lanes.
+export function addPipelineStep(
+  session: SpineSession,
+  kind: ModuleKind,
+  label?: string,
+  opts?: { at?: number; forkId?: string; branchId?: string },
+): PipelineModule[] {
   const models = session.models
   const globalModel = session.model as ModelId
   const modules = session.modules
+  const loc = resolveForkInsertLoc(modules, opts)
   const outAt = modules.findIndex((m) => m.kind === ModuleKind.Output)
-  const insertAt = outAt < 0 ? modules.length : outAt
+  const insertAt = opts?.at ?? (loc ? (forkLaneLength(modules, loc) ) : outAt < 0 ? modules.length : outAt)
   const fresh: PipelineModule[] =
     kind === ModuleKind.Combine
       ? [
@@ -106,8 +122,35 @@ export function addPipelineStep(session: SpineSession, kind: ModuleKind, label?:
   if (label?.trim() && fresh.length === 1 && fresh[0]) {
     fresh[0] = { ...fresh[0], label: label.trim() }
   }
-  session.setModules([...modules.slice(0, insertAt), ...fresh, ...modules.slice(insertAt)])
+  session.setModules(insertPipelineModules(modules, insertAt, fresh, loc))
   return fresh
+}
+
+function forkLaneLength(
+  modules: PipelineModule[],
+  loc: { forkId: string; branchId: string },
+): number {
+  const fork = findPipelineModule(modules, loc.forkId)
+  const branch = fork ? forkBranchesOf(fork).find((b) => b.id === loc.branchId) : undefined
+  return branch?.modules.length ?? 0
+}
+
+function resolveForkInsertLoc(
+  modules: PipelineModule[],
+  opts?: { forkId?: string; branchId?: string },
+): { forkId: string; branchId: string } | undefined {
+  if (!opts?.branchId) return undefined
+  if (opts.forkId) return { forkId: opts.forkId, branchId: opts.branchId }
+  const fork = flattenPipelineModules(modules).find(
+    (m) =>
+      m.kind === ModuleKind.Fork &&
+      forkBranchesOf(m).some((b) => b.id === opts.branchId || b.label === opts.branchId),
+  )
+  const branch = fork
+    ? forkBranchesOf(fork).find((b) => b.id === opts.branchId || b.label === opts.branchId)
+    : undefined
+  if (!fork || !branch) throw new Error(`unknown fork lane ${opts.branchId}`)
+  return { forkId: fork.id, branchId: branch.id }
 }
 
 export function validateSessionTests(session: SpineSession): CliCommandResult {
@@ -174,6 +217,32 @@ export function fieldFromTypeRaw(
   throw new Error(`unknown field type: ${raw}`)
 }
 
+export function setModelFieldRelation(
+  session: SpineSession,
+  modelName: string,
+  fieldName: string,
+  spec: "pk" | "none" | string,
+): void {
+  requireModel(session, modelName)
+  let relation: FieldRelation | undefined
+  if (spec === "pk") relation = { kind: "pk" }
+  else if (spec && spec !== "none") {
+    const to = parseFkTarget(spec, session.models)
+    if (!to) throw new Error(`unknown fk target: ${spec}`)
+    relation = { kind: "fk", to }
+  }
+  const models = (session.project?.models ?? []).map((m) => {
+    if (m.name !== modelName && m.id !== modelName) return m
+    return {
+      ...m,
+      fields: m.fields.map((f) => (f.name === fieldName ? { ...f, relation } : f)),
+    }
+  })
+  const host = models.find((m) => m.name === modelName || m.id === modelName)
+  if (!host?.fields.some((f) => f.name === fieldName)) throw new Error(`unknown field ${fieldName}`)
+  session.applyProjectChanges({ models })
+}
+
 export function addModelField(
   session: SpineSession,
   modelName: string,
@@ -232,17 +301,17 @@ export function patchStep(
   idOrLabel: string,
   patch: Partial<PipelineModule>,
 ): PipelineModule {
-  const modules = session.modules.map((m) => (m.id === idOrLabel || m.label === idOrLabel ? { ...m, ...patch } : m))
-  const found = modules.find((m) => m.id === idOrLabel || m.label === idOrLabel)
+  const found = flattenPipelineModules(session.modules).find((m) => m.id === idOrLabel || m.label === idOrLabel)
   if (!found) throw new Error(`unknown step ${idOrLabel}`)
-  session.setModules(modules)
-  return found
+  const next = updatePipelineModule(session.modules, found.id, (m) => ({ ...m, ...patch }))
+  session.setModules(next)
+  return findPipelineModule(next, found.id) ?? found
 }
 
 export function assignStepStructure(session: SpineSession, stepId: string, modelNameOrId: string): StructureModel {
   const model = session.models.find((m) => m.name === modelNameOrId || m.id === modelNameOrId)
   if (!model) throw new Error(`unknown model ${modelNameOrId}`)
-  const step = session.modules.find((m) => m.id === stepId || m.label === stepId)
+  const step = findPipelineModule(session.modules, stepId) ?? flattenPipelineModules(session.modules).find((m) => m.label === stepId)
   if (!step) throw new Error(`unknown step ${stepId}`)
   const ids = { inStructureId: model.id, outStructureId: model.id }
   patchStep(
@@ -254,20 +323,23 @@ export function assignStepStructure(session: SpineSession, stepId: string, model
 }
 
 export function removeStep(session: SpineSession, idOrLabel: string): void {
-  const next = session.modules.filter((m) => m.id !== idOrLabel && m.label !== idOrLabel)
-  if (next.length === session.modules.length) throw new Error(`unknown step ${idOrLabel}`)
-  session.setModules(next)
+  const found = flattenPipelineModules(session.modules).find((m) => m.id === idOrLabel || m.label === idOrLabel)
+  if (!found) throw new Error(`unknown step ${idOrLabel}`)
+  session.setModules(removePipelineModules(session.modules, new Set([found.id])))
 }
 
 export function moveStep(session: SpineSession, idOrLabel: string, at: number): void {
-  // AI : TODO (allow-pipeline-non-linear-fork) — move within a lane; do not splice across fork boundaries.
-  const modules = [...session.modules]
-  const from = modules.findIndex((m) => m.id === idOrLabel || m.label === idOrLabel)
-  if (from < 0) throw new Error(`unknown step ${idOrLabel}`)
-  const [row] = modules.splice(from, 1)
+  const loc = locatePipelineModule(session.modules, idOrLabel)
+    ?? (() => {
+      const found = flattenPipelineModules(session.modules).find((m) => m.label === idOrLabel)
+      return found ? locatePipelineModule(session.modules, found.id) : undefined
+    })()
+  if (!loc) throw new Error(`unknown step ${idOrLabel}`)
+  const siblings = [...loc.siblings]
+  const [row] = siblings.splice(loc.index, 1)
   if (!row) return
-  modules.splice(Math.max(0, Math.min(at, modules.length)), 0, row)
-  session.setModules(modules)
+  siblings.splice(Math.max(0, Math.min(at, siblings.length)), 0, row)
+  session.setModules(replacePipelineSiblings(session.modules, loc, siblings))
 }
 
 export function exportSessionPydantic(session: SpineSession): string {

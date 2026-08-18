@@ -76,8 +76,9 @@ export type SessionSnapshot = {
 
 export function chatForActiveProject(snap: SessionSnapshot): SessionChatTurn[] {
   const id = snap.activeProjectId
-  if (id && snap.chatByProjectId?.[id]) return snap.chatByProjectId[id]
-  return snap.chat
+  // AI : never fall back to snap.chat — that leaks the previous project's vibe history.
+  if (!id) return []
+  return snap.chatByProjectId?.[id] ?? []
 }
 
 export type ProjectPatch = {

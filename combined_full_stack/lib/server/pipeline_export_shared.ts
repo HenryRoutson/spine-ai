@@ -8,6 +8,7 @@ import { modelExportIdentifierGo, modelExportIdentifierRust, rustFieldIdent } fr
 import { webhookStepUsesPipelineState } from "@/lib/webhook-step";
 import { BUILTIN_DOCUMENT_ID, withSharedModels } from "./builtin_models";
 import { labelAsStateKey } from "./pipeline_state";
+import { forkBranchesOf, forkJoinOf, forkProductField, laneLastModule, locatePipelineModule, flattenPipelineModules } from "@/lib/fork-pipeline";
 import { migrateProjectModules } from "./validity";
 import {
   fieldToTypeExpr,
@@ -174,6 +175,10 @@ export function parallelBranchesComment(): string {
   return "Parallel LLM branches — run concurrently then join (see runtime)";
 }
 
+export function forkJoinComment(): string {
+  return "Fork join — lanes already wrote state; zip/assemble/merge here";
+}
+
 export function assertValidateComment(): string {
   return "Validate pipeline state — passthrough on success";
 }
@@ -333,9 +338,9 @@ export function exportSpineOutType(
   project: Project,
   index: number,
 ): TypeExpr | undefined {
-  // AI : TODO (allow-pipeline-non-linear-fork) — passthrough prev is lane predecessor, not project.modules[index-1].
   if (usesPassthroughStructure(m.kind)) {
-    const prev = index > 0 ? project.modules[index - 1] : undefined;
+    const loc = locatePipelineModule(project.modules, m.id);
+    const prev = loc?.predecessor ?? (index > 0 ? project.modules[index - 1] : undefined);
     return prev ? stepSpineOutType(prev) : stepSpineOutType(m);
   }
   return stepSpineOutType(m);
@@ -1023,6 +1028,94 @@ export function generateParallelStepBodyGo(m: PipelineModule, project: Project, 
   ].join("\n");
 }
 
+export function generateForkStepBodyTs(m: PipelineModule, _project: Project, outTs: string): string {
+  const join = forkJoinOf(m);
+  if (join === "assemble") return generateAssembleStepBodyTs(m, _project, outTs);
+  if (join === "merge") {
+    return [
+      exportComment("//", forkJoinComment()),
+      "const values = Object.values(state);",
+      `return values[values.length - 1] as ${outTs};`,
+    ].join("\n");
+  }
+  const fields = forkBranchesOf(m).flatMap((b) => {
+    const last = laneLastModule(b);
+    if (!last) return [];
+    return [`${JSON.stringify(forkProductField(b))}: state[${JSON.stringify(last.label.trim())}]`];
+  });
+  return [
+    exportComment("//", forkJoinComment()),
+    `const assembled = { ${fields.join(", ")} };`,
+    `return assembled as ${outTs};`,
+  ].join("\n");
+}
+
+export function generateForkStepBodyPy(m: PipelineModule, _project: Project, outPy: string): string {
+  const join = forkJoinOf(m);
+  if (join === "assemble") return generateAssembleStepBodyPy(m, _project, outPy);
+  if (join === "merge") {
+    return [
+      exportComment("#", forkJoinComment()),
+      `return cast(${outPy}, list(state.values())[-1] if state else input)`,
+    ].join("\n");
+  }
+  const fields = forkBranchesOf(m).flatMap((b) => {
+    const last = laneLastModule(b);
+    if (!last) return [];
+    return [`${JSON.stringify(forkProductField(b))}: state.get(${JSON.stringify(last.label.trim())})`];
+  });
+  return [
+    exportComment("#", forkJoinComment()),
+    `return cast(${outPy}, cast(object, {${fields.join(", ")}}))`,
+  ].join("\n");
+}
+
+export function generateForkStepBodyGo(m: PipelineModule, project: Project, outGo: string): string {
+  const join = forkJoinOf(m);
+  if (join === "assemble") return generateAssembleStepBodyGo(m, project, outGo);
+  const zero = goZeroValue(outGo);
+  const inserts = forkBranchesOf(m).flatMap((b) => {
+    const last = laneLastModule(b);
+    if (!last) return [];
+    return [
+      `payload[${JSON.stringify(forkProductField(b))}] = state[${JSON.stringify(last.label.trim())}]`,
+    ];
+  });
+  return [
+    exportComment("//", forkJoinComment()),
+    "payload := map[string]any{}",
+    ...inserts,
+    "b, err := json.Marshal(payload)",
+    "if err != nil {",
+    `\treturn ${zero}, err`,
+    "}",
+    `var merged ${outGo}`,
+    "if err := json.Unmarshal(b, &merged); err != nil {",
+    `\treturn ${zero}, err`,
+    "}",
+    "return merged, nil",
+  ].join("\n");
+}
+
+export function generateForkStepBodyRust(m: PipelineModule, project: Project, outRust: string): string {
+  const join = forkJoinOf(m);
+  if (join === "assemble") return generateAssembleStepBodyRust(m, project, outRust);
+  const inserts = forkBranchesOf(m).flatMap((b) => {
+    const last = laneLastModule(b);
+    if (!last) return [];
+    return [
+      `map.insert(${JSON.stringify(forkProductField(b))}.to_string(), state.get(${JSON.stringify(last.label.trim())}).cloned().unwrap_or(Value::Null));`,
+    ];
+  });
+  return [
+    exportComment("//", forkJoinComment()),
+    "let mut map = serde_json::Map::new();",
+    ...inserts,
+    `let out: ${outRust} = serde_json::from_value(Value::Object(map))?;`,
+    "Ok(out)",
+  ].join("\n");
+}
+
 export function generateAssembleStepBodyRust(m: PipelineModule, project: Project, outRust: string): string {
   const bindings = m.assembleBindings ?? {};
   const rawOutName = modelName(project, m.outStructureId);
@@ -1288,7 +1381,66 @@ function orchestratorInvokeLine(
 }
 
 // AI : TODO (arch-export-orchestrator) — Ts/Py/Rust/Go walk the same spine; one IR then printers.
-// AI : TODO (allow-pipeline-non-linear-fork) — Fork → Promise.all of lane IIFEs then join (ts/py/go/rs).
+// AI : DONE (allow-pipeline-non-linear-fork) — Fork → Promise.all of lane IIFEs then join (ts/py; go/rs sequential walk).
+function orchestratorIndexById(project: Project): Map<string, number> {
+  return new Map(flattenPipelineModules(project.modules).map((m, i) => [m.id, i]));
+}
+
+function emitTsOrchestratorWalk(
+  modules: PipelineModule[],
+  project: Project,
+  stepFnName: (m: PipelineModule, i: number) => string,
+  indexById: Map<string, number>,
+  multi: boolean,
+  indent: string,
+): string[] {
+  const lines: string[] = [];
+  for (const m of modules) {
+    const i = indexById.get(m.id) ?? 0;
+    const fn = stepFnName(m, i);
+    const label = labelAsStateKey(m.label);
+    const outTs = exportSpineOutTs(m, project, i);
+    const inTs = exportSpineInTs(m, project, i);
+    if (m.kind === ModuleKind.Fork) {
+      const lanes = forkBranchesOf(m);
+      lines.push(`${indent}// ${i + 1}. ${m.label} (fork)`);
+      lines.push(`${indent}{`);
+      lines.push(`${indent}  const __forkIn = spine;`);
+      lines.push(`${indent}  await Promise.all([`);
+      for (const b of lanes) {
+        lines.push(`${indent}    (async () => {`);
+        lines.push(`${indent}      let spine: unknown = __forkIn;`);
+        lines.push(
+          ...emitTsOrchestratorWalk(b.modules, project, stepFnName, indexById, multi, indent + "      "),
+        );
+        lines.push(`${indent}      return spine;`);
+        lines.push(`${indent}    })(),`);
+      }
+      lines.push(`${indent}  ]);`);
+      lines.push(`${indent}  spine = __forkIn;`);
+      lines.push(`${indent}  ${orchestratorInvokeLine(m, fn, "ts", !multi, inTs).trim()}`);
+      if (label) {
+        lines.push(`${indent}  state[${JSON.stringify(label)}] = spine as ${outTs};`);
+        lines.push(
+          `${indent}  lastRunTrace.push({ label: ${JSON.stringify(label)}, output: snapshotTraceOutput(spine) });`,
+        );
+      }
+      lines.push(`${indent}}`, "");
+      continue;
+    }
+    lines.push(`${indent}// ${i + 1}. ${m.label}`);
+    lines.push(`${indent}${orchestratorInvokeLine(m, fn, "ts", !multi, inTs).trim()}`);
+    if (label) {
+      lines.push(`${indent}state[${JSON.stringify(label)}] = spine as ${outTs};`);
+      lines.push(
+        `${indent}lastRunTrace.push({ label: ${JSON.stringify(label)}, output: snapshotTraceOutput(spine) });`,
+      );
+    }
+    lines.push("");
+  }
+  return lines;
+}
+
 export function generateOrchestratorTs(project: Project, stepFnName: (m: PipelineModule, i: number) => string): string {
   const inputMods = orchestratorInputMods(project);
   const multi = inputMods.length > 1;
@@ -1325,29 +1477,14 @@ export function generateOrchestratorTs(project: Project, stepFnName: (m: Pipelin
     "",
   );
 
-  for (let i = 0; i < project.modules.length; i++) {
-    const m = project.modules[i]!;
-    const fn = stepFnName(m, i);
-    const label = labelAsStateKey(m.label);
-    const outTs = exportSpineOutTs(m, project, i);
-    const inTs = exportSpineInTs(m, project, i);
-    lines.push(`  // ${i + 1}. ${m.label}`);
-    lines.push(orchestratorInvokeLine(m, fn, "ts", !multi, inTs));
-    if (label) {
-      lines.push(`  state[${JSON.stringify(label)}] = spine as ${outTs};`);
-      lines.push(
-        `  lastRunTrace.push({ label: ${JSON.stringify(label)}, output: snapshotTraceOutput(spine) });`,
-      );
-    }
-    lines.push("");
-  }
+  const indexById = orchestratorIndexById(project);
+  lines.push(...emitTsOrchestratorWalk(project.modules, project, stepFnName, indexById, multi, "  "));
 
   lines.push("  return spine;", "}", "");
   return lines.join("\n");
 }
 
 export function generateOrchestratorPy(project: Project, stepFnName: (m: PipelineModule, i: number) => string): string {
-  // AI : TODO (allow-pipeline-non-linear-fork) — same Promise.all + join as generateOrchestratorTs.
   const inputMods = orchestratorInputMods(project);
   const multi = inputMods.length > 1;
   const lines: string[] = [
@@ -1372,28 +1509,64 @@ export function generateOrchestratorPy(project: Project, stepFnName: (m: Pipelin
     "",
   );
 
-  for (let i = 0; i < project.modules.length; i++) {
-    const m = project.modules[i]!;
-    const fn = stepFnName(m, i);
-    const label = labelAsStateKey(m.label);
-    const inTs = exportSpineInPy(m, project, i);
-    lines.push(`    # ${i + 1}. ${m.label}`);
-    lines.push(orchestratorInvokeLine(m, fn, "py", !multi, inTs));
-    if (label) {
-      lines.push(`    state[${JSON.stringify(label)}] = spine`);
-      lines.push(
-        `    last_run_trace.append({"label": ${JSON.stringify(label)}, "output": json.loads(json.dumps(spine, default=str))})`,
-      );
-    }
-    lines.push("");
-  }
+  const indexById = orchestratorIndexById(project);
+  lines.push(...emitPyOrchestratorWalk(project.modules, project, stepFnName, indexById, multi, "    "));
 
   lines.push("    return spine", "");
   return lines.join("\n");
 }
 
+function emitPyOrchestratorWalk(
+  modules: PipelineModule[],
+  project: Project,
+  stepFnName: (m: PipelineModule, i: number) => string,
+  indexById: Map<string, number>,
+  multi: boolean,
+  indent: string,
+): string[] {
+  const lines: string[] = [];
+  for (const m of modules) {
+    const i = indexById.get(m.id) ?? 0;
+    const fn = stepFnName(m, i);
+    const label = labelAsStateKey(m.label);
+    const inPy = exportSpineInPy(m, project, i);
+    if (m.kind === ModuleKind.Fork) {
+      const lanes = forkBranchesOf(m);
+      lines.push(`${indent}# ${i + 1}. ${m.label} (fork)`);
+      lines.push(`${indent}__fork_in = spine`);
+      for (let li = 0; li < lanes.length; li++) {
+        const b = lanes[li]!;
+        lines.push(`${indent}async def __lane_${li}():`);
+        lines.push(`${indent}    spine = __fork_in`);
+        lines.push(...emitPyOrchestratorWalk(b.modules, project, stepFnName, indexById, multi, indent + "    "));
+        lines.push(`${indent}    return spine`);
+      }
+      lines.push(`${indent}await asyncio.gather(${lanes.map((_, li) => `__lane_${li}()`).join(", ")})`);
+      lines.push(`${indent}spine = __fork_in`);
+      lines.push(`${indent}${orchestratorInvokeLine(m, fn, "py", !multi, inPy).trim()}`);
+      if (label) {
+        lines.push(`${indent}state[${JSON.stringify(label)}] = spine`);
+        lines.push(
+          `${indent}last_run_trace.append({"label": ${JSON.stringify(label)}, "output": json.loads(json.dumps(spine, default=str))})`,
+        );
+      }
+      lines.push("");
+      continue;
+    }
+    lines.push(`${indent}# ${i + 1}. ${m.label}`);
+    lines.push(`${indent}${orchestratorInvokeLine(m, fn, "py", !multi, inPy).trim()}`);
+    if (label) {
+      lines.push(`${indent}state[${JSON.stringify(label)}] = spine`);
+      lines.push(
+        `${indent}last_run_trace.append({"label": ${JSON.stringify(label)}, "output": json.loads(json.dumps(spine, default=str))})`,
+      );
+    }
+    lines.push("");
+  }
+  return lines;
+}
+
 // AI : async Rust orchestrator — spine as Value between steps for open typing.
-// AI : TODO (allow-pipeline-non-linear-fork) — tokio::join! / futures per lane then join (same as TS Promise.all).
 export function generateOrchestratorRust(project: Project, stepFnName: (m: PipelineModule, i: number) => string): string {
   const inputMods = orchestratorInputMods(project);
   const multi = inputMods.length > 1;
@@ -1407,29 +1580,56 @@ export function generateOrchestratorRust(project: Project, stepFnName: (m: Pipel
 
   lines.push("    let mut state: PipelineState = HashMap::new();", "    let mut spine: Value;", "");
 
-  for (let i = 0; i < project.modules.length; i++) {
-    const m = project.modules[i]!;
-    const fn = stepFnName(m, i);
-    const label = labelAsStateKey(m.label);
-    const inRust = exportSpineInRust(m, project, i);
-    lines.push(`    // ${i + 1}. ${m.label}`);
-    lines.push(orchestratorInvokeLine(m, fn, "rs", !multi, inRust));
-    if (label) {
-      if (m.kind === ModuleKind.Input) {
-        lines.push(`    state.insert(${JSON.stringify(label)}.to_string(), spine.clone());`);
-      } else {
-        lines.push(`    state.insert(${JSON.stringify(label)}.to_string(), spine.clone());`);
-      }
-    }
-    lines.push("");
-  }
+  const indexById = orchestratorIndexById(project);
+  lines.push(...emitRsOrchestratorWalk(project.modules, project, stepFnName, indexById, multi, "    "));
 
   lines.push("    Ok(spine)", "}", "");
   return lines.join("\n");
 }
 
+function emitRsOrchestratorWalk(
+  modules: PipelineModule[],
+  project: Project,
+  stepFnName: (m: PipelineModule, i: number) => string,
+  indexById: Map<string, number>,
+  multi: boolean,
+  indent: string,
+): string[] {
+  const lines: string[] = [];
+  for (const m of modules) {
+    const i = indexById.get(m.id) ?? 0;
+    const fn = stepFnName(m, i);
+    const label = labelAsStateKey(m.label);
+    const inRust = exportSpineInRust(m, project, i);
+    if (m.kind === ModuleKind.Fork) {
+      const forkIn = `${indent}let __fork_in = spine.clone();`;
+      lines.push(`${indent}// ${i + 1}. ${m.label} (fork lanes sequential in export)`);
+      lines.push(forkIn);
+      for (const b of forkBranchesOf(m)) {
+        lines.push(`${indent}{`);
+        lines.push(`${indent}    let mut spine = __fork_in.clone();`);
+        lines.push(...emitRsOrchestratorWalk(b.modules, project, stepFnName, indexById, multi, indent + "    "));
+        lines.push(`${indent}}`);
+      }
+      lines.push(`${indent}spine = __fork_in;`);
+      lines.push(`${indent}${orchestratorInvokeLine(m, fn, "rs", !multi, inRust).trim()}`);
+      if (label) {
+        lines.push(`${indent}state.insert(${JSON.stringify(label)}.to_string(), spine.clone());`);
+      }
+      lines.push("");
+      continue;
+    }
+    lines.push(`${indent}// ${i + 1}. ${m.label}`);
+    lines.push(`${indent}${orchestratorInvokeLine(m, fn, "rs", !multi, inRust).trim()}`);
+    if (label) {
+      lines.push(`${indent}state.insert(${JSON.stringify(label)}.to_string(), spine.clone());`);
+    }
+    lines.push("");
+  }
+  return lines;
+}
+
 // AI : Go orchestrator — spine as json.RawMessage between steps for open typing.
-// AI : TODO (allow-pipeline-non-linear-fork) — errgroup per lane then join (same as TS Promise.all).
 export function generateOrchestratorGo(project: Project, stepFnName: (m: PipelineModule, i: number) => string): string {
   const inputMods = orchestratorInputMods(project);
   const multi = inputMods.length > 1;
@@ -1443,11 +1643,33 @@ export function generateOrchestratorGo(project: Project, stepFnName: (m: Pipelin
 
   lines.push("    state := make(PipelineState)", "    var spine json.RawMessage", "    var err error", "");
 
-  for (let i = 0; i < project.modules.length; i++) {
-    const m = project.modules[i]!;
+  const indexById = orchestratorIndexById(project);
+  for (const m of project.modules) {
+    const i = indexById.get(m.id) ?? 0;
     const fn = stepFnName(m, i);
     const label = labelAsStateKey(m.label);
     const inGo = exportSpineInGo(m, project, i);
+    if (m.kind === ModuleKind.Fork) {
+      lines.push(`    // ${i + 1}. ${m.label} (fork lanes sequential in export)`);
+      lines.push("    forkIn := append(json.RawMessage(nil), spine...)");
+      for (const b of forkBranchesOf(m)) {
+        lines.push("    {");
+        lines.push("        spine = append(json.RawMessage(nil), forkIn...)");
+        for (const laneM of b.modules) {
+          const li = indexById.get(laneM.id) ?? 0;
+          const lfn = stepFnName(laneM, li);
+          const lLabel = labelAsStateKey(laneM.label);
+          const lIn = exportSpineInGo(laneM, project, li);
+          lines.push(`        // ${li + 1}. ${laneM.label}`);
+          lines.push(orchestratorInvokeLine(laneM, lfn, "go", !multi, lIn).split("\n").map((l) => "    " + l).join("\n"));
+          if (lLabel) {
+            lines.push(`        state[${JSON.stringify(lLabel)}] = append(json.RawMessage(nil), spine...)`);
+          }
+        }
+        lines.push("    }");
+      }
+      lines.push("    spine = forkIn");
+    }
     lines.push(`    // ${i + 1}. ${m.label}`);
     lines.push(orchestratorInvokeLine(m, fn, "go", !multi, inGo));
     if (label) {

@@ -84,6 +84,7 @@ export function zodSchemaForFieldExample(
       seenAliasNames: new Set(),
     }),
     f,
+    mergedModels,
   );
   if (f.optional) schema = schema.nullish();
   schema = applyFieldCardinalityConstraints(schema, f);

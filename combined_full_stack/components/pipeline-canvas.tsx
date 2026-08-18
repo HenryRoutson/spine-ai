@@ -12,9 +12,13 @@ import {
   blocksInsertBefore,
   insertAfterIndex,
   insertBeforeIndex,
+  modulesInSegment,
+  pipelineSegmentKey,
   segmentPipeline,
+  type PipelineInsertLoc,
   type PipelineSegment,
 } from "@/lib/pipeline-layout"
+import { forkJoinOf, pipelineHasFork } from "@/lib/fork-pipeline"
 import { isAutoQuoteStep } from "@/lib/quote-steps"
 import { inputTargetStructureId, isAutoDocToTextStep, isAutoStructureParseStep, isManagedLockedStep } from "@/lib/structure-parse-steps"
 import {
@@ -64,15 +68,17 @@ type PipelineCanvasProps = {
   testCoverage?: Map<ModuleId, PipelineTestCoverageStatus>
   invalid?: InvalidMap
   warnings?: Map<ModuleId, PipelineWarning[]>
-  renderInsertBefore?: (insertAt: number) => React.ReactNode
-  renderInsertAfter?: (insertAt: number, opts: { blocked?: boolean; connectionInvalid?: boolean }) => React.ReactNode
+  renderInsertBefore?: (insertAt: number, loc?: PipelineInsertLoc) => React.ReactNode
+  renderInsertAfter?: (
+    insertAt: number,
+    opts: { blocked?: boolean; connectionInvalid?: boolean; forkId?: string; branchId?: string },
+  ) => React.ReactNode
   renderBeforeEnd?: () => React.ReactNode
   renderFooter?: () => React.ReactNode
   className?: string
 }
 
 // AI : shared linear pipeline canvas — Logging (read-only) and Pipeline builder (edit + inserts).
-// AI : TODO (allow-pipeline-non-linear-fork) — fork segment: N columns of insert-slot lanes, join row; no open canvas.
 export function PipelineCanvas({
   modules,
   models,
@@ -95,8 +101,9 @@ export function PipelineCanvas({
     ? ioMismatchAtModuleIndex(modules, invalid, firstSeg.index)
     : false
 
+  const wide = pipelineHasFork(modules)
   return (
-    <div className={cn("mx-auto flex w-full max-w-xl flex-col items-stretch gap-0", className)}>
+    <div className={cn("mx-auto flex w-full flex-col items-stretch gap-0", wide ? "max-w-none" : "max-w-xl", className)}>
       <div className="mx-auto flex w-full flex-col items-center">
         <PipelineNode label="Start" subtle />
         {segments.length > 0 && renderInsertBefore?.(insertBeforeIndex(segments[0]))}
@@ -104,7 +111,7 @@ export function PipelineCanvas({
       </div>
       {segments.map((seg) => (
         <SegmentRow
-          key={seg.kind === "combine" ? seg.combine.id : seg.module.id}
+          key={pipelineSegmentKey(seg)}
           seg={seg}
           modules={modules}
           models={models}
@@ -128,6 +135,14 @@ export function PipelineCanvas({
   )
 }
 
+function modulesInForkSelected(
+  seg: Extract<PipelineSegment, { kind: "fork" }>,
+  selectedId?: ModuleId,
+): boolean {
+  if (!selectedId) return false
+  return modulesInSegment(seg).some((m) => m.id === selectedId)
+}
+
 function SegmentRow({
   seg,
   modules,
@@ -140,6 +155,7 @@ function SegmentRow({
   warnings,
   editMode,
   renderInsertAfter,
+  insertLoc,
 }: {
   seg: PipelineSegment
   modules: PipelineModule[]
@@ -151,11 +167,114 @@ function SegmentRow({
   invalid?: InvalidMap
   warnings?: Map<ModuleId, PipelineWarning[]>
   editMode: boolean
-  renderInsertAfter?: (insertAt: number, opts: { blocked?: boolean; connectionInvalid?: boolean }) => React.ReactNode
+  renderInsertAfter?: (
+    insertAt: number,
+    opts: { blocked?: boolean; connectionInvalid?: boolean; forkId?: string; branchId?: string },
+  ) => React.ReactNode
+  insertLoc?: PipelineInsertLoc
 }) {
   const insertAt = insertAfterIndex(seg)
   const blocked = blocksInsertBefore(modules, insertAt)
   const connectionInvalid = ioMismatchAtModuleIndex(modules, invalid, insertAt)
+  const afterOpts = {
+    blocked,
+    connectionInvalid,
+    forkId: insertLoc?.forkId,
+    branchId: insertLoc?.branchId,
+  }
+
+  if (seg.kind === "fork") {
+    const { fork, index, branches } = seg
+    const forkIssue = invalidForModule(invalid ?? new Map(), fork.id)
+    const forkInvalid = forkIssue && forkIssue.kind !== "io-mismatch" && forkIssue.kind !== "cardinality-mismatch"
+    const forkIoLinked = stepIoMismatchLinked(fork.id, modules, invalid)
+    const forkStatus = stepStatus?.get(fork.id)
+    const forkCoverage = testCoverage?.get(fork.id)
+    const laneSelected = modulesInForkSelected(seg, selectedId)
+    const join = forkJoinOf(fork)
+    return (
+      <div className="mx-auto flex w-full flex-col items-center">
+        <div
+          className={cn(
+            "w-full overflow-x-auto rounded-lg border-2 border-dashed px-3.5 py-3 transition-colors",
+            forkInvalid
+              ? "border-destructive/70 bg-destructive/5"
+              : forkIoLinked
+                ? "border-destructive/60 bg-destructive/[0.03]"
+                : testCoverageBorder(forkCoverage, selectedId === fork.id) ??
+                  statusBorder(forkStatus) ?? (
+                    laneSelected ? "border-primary bg-primary/5" : "border-chart-4/40 bg-chart-4/5"
+                  ),
+          )}
+        >
+          <StepButton
+            onClick={() => onSelect?.(fork.id)}
+            className="flex w-full items-start gap-2 text-left"
+            moduleId={fork.id}
+            label={fork.label}
+            kind={ModuleKind.Fork}
+            snippet={fork.note}
+          >
+            <StepIndex index={index} />
+            <KindIcon kind={ModuleKind.Fork} />
+            <StepBody
+              label={fork.label}
+              detail={
+                <>
+                  <StructureLink models={models} structureId={fork.inStructureId} fallback="pipeline" />
+                  <span className="text-muted-foreground/60"> → </span>
+                  <StructureLink models={models} structureId={fork.outStructureId} />
+                  <span className="text-muted-foreground/60"> · {join} join</span>
+                </>
+              }
+            />
+            {fork.cached && <Zap className="h-3.5 w-3.5 shrink-0 text-primary" />}
+            {forkCoverage && <TestCoverageBadge status={forkCoverage} />}
+            <StepTrailingIcon invalid={!!forkInvalid || forkIoLinked} status={forkStatus} editMode={editMode} />
+          </StepButton>
+          {fork.note && (
+            <p className="mt-1.5 font-mono text-[10px] leading-relaxed text-muted-foreground">{fork.note}</p>
+          )}
+          <div
+            className="mt-3 grid gap-3"
+            style={{ gridTemplateColumns: `repeat(${Math.max(1, branches.length)}, minmax(14rem, 1fr))` }}
+          >
+            {branches.map((b) => (
+              <div key={b.id} className="min-w-[14rem] rounded-md border border-border/60 bg-background/70 p-2">
+                <p className="mb-1 font-mono text-[10px] uppercase tracking-wide text-muted-foreground">{b.label}</p>
+                {editMode &&
+                  renderInsertAfter?.(0, { forkId: fork.id, branchId: b.id, blocked: false })}
+                {b.segments.map((inner) => (
+                  <SegmentRow
+                    key={pipelineSegmentKey(inner)}
+                    seg={inner}
+                    modules={b.modules}
+                    models={models}
+                    selectedId={selectedId}
+                    onSelect={onSelect}
+                    stepStatus={stepStatus}
+                    testCoverage={testCoverage}
+                    invalid={invalid}
+                    warnings={warnings}
+                    editMode={editMode}
+                    renderInsertAfter={renderInsertAfter}
+                    insertLoc={{ forkId: fork.id, branchId: b.id }}
+                  />
+                ))}
+              </div>
+            ))}
+          </div>
+        </div>
+        <InvalidMessage
+          show={!!forkInvalid}
+          message={forkInvalid ? invalidStepMessage(forkIssue!, models, modules) : undefined}
+          moduleId={fork.id}
+          label={fork.label}
+        />
+        {renderInsertAfter?.(insertAt, afterOpts) ?? <PipelineConnector invalid={connectionInvalid} />}
+      </div>
+    )
+  }
 
   if (seg.kind === "combine") {
     const { combine, input, convert, parse, index } = seg
@@ -325,7 +444,7 @@ function SegmentRow({
           moduleId={combine.id}
           label={combine.label}
         />
-        {renderInsertAfter?.(insertAt, { blocked, connectionInvalid }) ?? (
+        {renderInsertAfter?.(insertAt, afterOpts) ?? (
           <PipelineConnector invalid={connectionInvalid} />
         )}
       </div>
@@ -407,7 +526,7 @@ function SegmentRow({
           moduleId={m.id}
           label={m.label}
         />
-        {renderInsertAfter?.(insertAt, { blocked, connectionInvalid }) ?? (
+        {renderInsertAfter?.(insertAt, afterOpts) ?? (
           <PipelineConnector invalid={connectionInvalid} />
         )}
       </div>
@@ -500,7 +619,7 @@ function SegmentRow({
           ))}
         </div>
       ) : null}
-      {renderInsertAfter?.(insertAt, { blocked, connectionInvalid }) ?? (
+      {renderInsertAfter?.(insertAt, afterOpts) ?? (
         <PipelineConnector invalid={connectionInvalid} />
       )}
     </div>

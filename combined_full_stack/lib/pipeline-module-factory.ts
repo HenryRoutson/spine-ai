@@ -21,6 +21,7 @@ import {
 } from "@/lib/list-ops-steps"
 import { uid } from "@/lib/id"
 import { isLlmKind, kindAlwaysEmitsList, stepRequiresNote, usesPassthroughStructure } from "@/lib/module-kinds"
+import { defaultForkBranches } from "@/lib/fork-pipeline"
 import { migrateModuleSpineTypes, patchSpineOutList } from "@/lib/server/spine_types"
 import type { TypeExpr } from "@/lib/server/type_expr"
 
@@ -50,6 +51,8 @@ export type ModuleFactoryOpts = {
   mergeCustom?: string
   assembleBindings?: import("@/lib/types").PipelineModule["assembleBindings"]
   parallelBranches?: import("@/lib/types").PipelineModule["parallelBranches"]
+  forkBranches?: import("@/lib/types").PipelineModule["forkBranches"]
+  forkJoin?: import("@/lib/types").PipelineModule["forkJoin"]
   webhookMethod?: WebhookMethod
   webhookTimeoutMs?: number
   chatbotMode?: ChatbotMode
@@ -69,7 +72,6 @@ export function resolveModuleNote(
 }
 
 // AI : shared defaults for UI "add step" and pipeline-assistant materialization.
-// AI : TODO (allow-pipeline-non-linear-fork) — factory defaults for Fork (2 empty lanes + product join).
 export function createPipelineModule(
   opts: ModuleFactoryOpts,
   models: StructureModel[],
@@ -81,14 +83,14 @@ export function createPipelineModule(
   const defaultModel = models[0]?.id
   const outStructureId = isChatbot
     ? BUILTIN_CHATBOT_RESULT_ID
-    : kind === ModuleKind.Assemble || kind === ModuleKind.Parallel
+    : kind === ModuleKind.Assemble || kind === ModuleKind.Parallel || kind === ModuleKind.Fork
       ? opts.outStructureId
       : usesPassthroughStructure(kind)
         ? opts.outStructureId ?? opts.inStructureId ?? defaultModel
         : opts.outStructureId ?? defaultModel
   const inStructureId = isChatbot
     ? BUILTIN_CHATBOT_PROMPT_ID
-    : kind === ModuleKind.Assemble || kind === ModuleKind.Parallel
+    : kind === ModuleKind.Assemble || kind === ModuleKind.Parallel || kind === ModuleKind.Fork
       ? opts.inStructureId
       : kind !== ModuleKind.Input
         ? opts.inStructureId ?? defaultModel
@@ -121,8 +123,12 @@ export function createPipelineModule(
     inStructureId,
     outStructureId,
     ...(outType ? { outType } : {}),
-    assembleBindings: kind === ModuleKind.Assemble ? (opts.assembleBindings ?? {}) : undefined,
+    assembleBindings: kind === ModuleKind.Assemble || (kind === ModuleKind.Fork && opts.forkJoin === "assemble")
+      ? (opts.assembleBindings ?? {})
+      : undefined,
     parallelBranches: kind === ModuleKind.Parallel ? (opts.parallelBranches ?? []) : undefined,
+    forkBranches: kind === ModuleKind.Fork ? (opts.forkBranches ?? defaultForkBranches()) : undefined,
+    forkJoin: kind === ModuleKind.Fork ? (opts.forkJoin ?? "product") : undefined,
     prompt: isLlm
       ? opts.prompt ?? (kind === ModuleKind.ExampleSelect ? DEFAULT_EXAMPLE_SELECT_PROMPT : "")
       : undefined,
@@ -139,7 +145,10 @@ export function createPipelineModule(
     chunkSize: kind === ModuleKind.Chunk ? (opts.chunkSize ?? DEFAULT_CHUNK_SIZE) : undefined,
     chunkOverlap: kind === ModuleKind.Chunk ? (opts.chunkOverlap ?? 0) : undefined,
     chunkTextField: kind === ModuleKind.Chunk ? opts.chunkTextField : undefined,
-    mergePolicy: kind === ModuleKind.Merge ? (opts.mergePolicy ?? resolveMergePolicy({ kind } as PipelineModule)) : undefined,
+    mergePolicy:
+      kind === ModuleKind.Merge || (kind === ModuleKind.Fork && (opts.forkJoin ?? "product") === "merge")
+        ? (opts.mergePolicy ?? resolveMergePolicy({ kind: ModuleKind.Merge } as PipelineModule))
+        : undefined,
     mergeCustom: kind === ModuleKind.Merge ? opts.mergeCustom : undefined,
     model: isLlm || isChatbot ? opts.model ?? globalModel : undefined,
     costLimitCents:

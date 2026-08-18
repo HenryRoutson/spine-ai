@@ -263,6 +263,19 @@ const pipelineModulePatchSchema = z
       )
       .max(32)
       .optional(),
+    forkJoin: z.enum(["product", "assemble", "merge"]).optional(),
+    forkBranches: z
+      .array(
+        z
+          .object({
+            id: z.string().max(128),
+            label: z.string().max(200),
+            modules: z.array(z.any()).max(200),
+          })
+          .strict(),
+      )
+      .max(4)
+      .optional(),
     // AI : example-select — allowlisted on PUT so .strict() does not reject builder saves
     exampleContextLabel: z.string().max(200).optional(),
     exampleContextField: z.string().max(512).optional(),

@@ -91,6 +91,22 @@ describe("SpineSession React-like API", () => {
     expect(store.chat).toEqual([])
   })
 
+  it("does not copy orphan global chat onto a leftover blank project", () => {
+    const persist = createMemoryPersist({
+      ...emptySessionSnapshot(),
+      projects: [
+        { id: "p_blank" as ProjectId, name: "Untitled Pipeline", kind: "blank", createdAt: 3, lastOpenedAt: 3, models: [], modules: [], strategies: [] },
+      ],
+      activeProjectId: "p_blank",
+      chat: [
+        { role: "user", content: "invoice pipeline" },
+        { role: "assistant", content: "receipts" },
+      ],
+    })
+    const store = createSpineSession({ persist })
+    expect(store.chat).toEqual([])
+  })
+
   it("persists per-project chat across session instances", () => {
     const persist = createMemoryPersist()
     const a = createSpineSession({ persist })

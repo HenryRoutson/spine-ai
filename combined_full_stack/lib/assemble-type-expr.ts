@@ -304,16 +304,23 @@ export function syncAssembleModules(
   models: StructureModel[],
   typeAliases: TypeAlias[] = [],
 ): { modules: PipelineModule[]; models: StructureModel[] } {
-  // AI : TODO (allow-pipeline-non-linear-fork) — sync assemble/parallel inside fork lanes.
   let scratch = models
   const nextModules = modules.map((m, i) => {
+    const prev = i > 0 ? modules[i - 1] : undefined
+    if (m.kind === ModuleKind.Fork) {
+      const nested = (m.forkBranches ?? []).map((b) => {
+        const syncedLane = syncAssembleModules(b.modules, scratch, typeAliases)
+        scratch = syncedLane.models
+        return { ...b, modules: syncedLane.modules }
+      })
+      return { ...m, forkBranches: nested }
+    }
     if (m.kind !== ModuleKind.Assemble && m.kind !== ModuleKind.Parallel) return m
     if (m.kind === ModuleKind.Parallel) {
-      const synced = deriveParallelStepTypes(m, i > 0 ? modules[i - 1] : undefined, scratch)
+      const synced = deriveParallelStepTypes(m, prev, scratch)
       scratch = synced.models
       return synced.module
     }
-    const prev = i > 0 ? modules[i - 1] : undefined
     const synced = deriveAssembleStepTypes(m, prev, modules, i, scratch, typeAliases)
     scratch = synced.models
     return synced.module

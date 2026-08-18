@@ -1,8 +1,8 @@
 "use client"
 
 import { useMemo } from "react"
-import { segmentPipeline } from "@/lib/pipeline-layout"
-// AI : TODO (allow-pipeline-non-linear-fork) — progress % over flattened tree (lanes), not outer modules only.
+import { flattenPipelineModules } from "@/lib/fork-pipeline"
+import { segmentPipeline, type PipelineSegment } from "@/lib/pipeline-layout"
 import { formatRunErrorForDisplay, pipelineRunError } from "@/lib/run-errors"
 import { useCyclingWaitPhrase } from "@/lib/inference-wait-phrases"
 import type { StepUiState } from "@/lib/run-engine"
@@ -31,28 +31,17 @@ export function useRunProgressUi({
   const progressPct = useMemo(() => {
     if (phase === RunPhase.Idle) return 0
     if (phase === RunPhase.Done) return 100
-    const done = modules.filter((m) => {
+    const flat = flattenPipelineModules(modules)
+    const done = flat.filter((m) => {
       const s = stepStates.get(m.id)?.status
       return s !== undefined && s !== "idle" && s !== "running"
     }).length
-    return Math.round((done / Math.max(1, modules.length)) * 100)
+    return Math.round((done / Math.max(1, flat.length)) * 100)
   }, [phase, stepStates, modules])
 
   const runningHints = useMemo(() => {
     const hints: string[] = []
-    for (const seg of segmentPipeline(modules)) {
-      if (seg.kind === "combine") {
-        const combineUi = stepStates.get(seg.combine.id)
-        const inputUi = stepStates.get(seg.input.id)
-        const parseUi = seg.parse ? stepStates.get(seg.parse.id) : undefined
-        if (combineUi?.status === "running") hints.push(combineUi.sub?.label ?? seg.combine.label)
-        if (inputUi?.status === "running") hints.push(inputUi.sub?.label ?? seg.input.label)
-        if (seg.parse && parseUi?.status === "running") hints.push(parseUi.sub?.label ?? seg.parse.label)
-        continue
-      }
-      const moduleUi = stepStates.get(seg.module.id)
-      if (moduleUi?.status === "running") hints.push(moduleUi.sub?.label ?? seg.module.label)
-    }
+    collectRunningHints(segmentPipeline(modules), stepStates, hints)
     return hints
   }, [stepStates, modules])
 
@@ -76,5 +65,31 @@ export function useRunProgressUi({
     runErrorDisplay,
     runButtonBusy,
     runButtonLabel,
+  }
+}
+
+function collectRunningHints(
+  segments: PipelineSegment[],
+  stepStates: Map<ModuleId, StepUiState>,
+  hints: string[],
+): void {
+  for (const seg of segments) {
+    if (seg.kind === "combine") {
+      const combineUi = stepStates.get(seg.combine.id)
+      const inputUi = stepStates.get(seg.input.id)
+      const parseUi = seg.parse ? stepStates.get(seg.parse.id) : undefined
+      if (combineUi?.status === "running") hints.push(combineUi.sub?.label ?? seg.combine.label)
+      if (inputUi?.status === "running") hints.push(inputUi.sub?.label ?? seg.input.label)
+      if (seg.parse && parseUi?.status === "running") hints.push(parseUi.sub?.label ?? seg.parse.label)
+      continue
+    }
+    if (seg.kind === "fork") {
+      for (const b of seg.branches) collectRunningHints(b.segments, stepStates, hints)
+      const forkUi = stepStates.get(seg.fork.id)
+      if (forkUi?.status === "running") hints.push(forkUi.sub?.label ?? seg.fork.label)
+      continue
+    }
+    const moduleUi = stepStates.get(seg.module.id)
+    if (moduleUi?.status === "running") hints.push(moduleUi.sub?.label ?? seg.module.label)
   }
 }

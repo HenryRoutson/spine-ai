@@ -10,11 +10,13 @@ import {
   exampleReasonField,
   exampleSelectItems,
 } from "@/lib/example-select";
+import { flattenPipelineModules } from "@/lib/fork-pipeline";
+import { applyLookupEmbeds, autoFkEmbedSpecs } from "@/lib/lookup-embed";
 import { examplePromptColumns, projectExampleForPrompt } from "@/lib/sql-schema";
 import { buildExampleSelectVerdicts } from "@/lib/example-select-verdicts";
 import { labeledJsonPreviewItems } from "@/lib/step-response-preview";
 import { labelAsStateKey } from "../../pipeline_state";
-import type { PipelineModule } from "../../types";
+import type { PipelineModule, Project } from "../../types";
 import { llmCallBudget, materializeHints, materializeStepOutput, modelById, prevModuleFor } from "../helpers";
 import { requireLinearInput } from "../context";
 import type { ExecResult, RunCtx, RunLogger } from "../engine_types";
@@ -41,6 +43,25 @@ function formatExampleContext(value: unknown, fieldPath?: string): string {
   }
   if (typeof value === "string") return value;
   return JSON.stringify(value, null, 2);
+}
+
+function contextStep(project: Project, contextLabel: string): PipelineModule | undefined {
+  return flattenPipelineModules(project.modules).find((x) => labelAsStateKey(x.label) === contextLabel);
+}
+
+// AI : DONE (type-join) — expand context FKs that point at the candidate catalog (billed_items → WorkItem)
+// AI :   into the cached {description} prefix only. {example} and kept rows stay normalized catalog rows.
+function formatExampleContextForPrompt(
+  project: Project,
+  m: PipelineModule,
+  contextLabel: string,
+  contextValue: unknown,
+  lookupRows: unknown[],
+): string {
+  const ctxModelId = contextStep(project, contextLabel)?.outStructureId;
+  const specs = autoFkEmbedSpecs(project.models, ctxModelId, m.inStructureId);
+  const expanded = applyLookupEmbeds(contextValue, specs, lookupRows);
+  return formatExampleContext(expanded, m.exampleContextField);
 }
 
 function exampleSelectPrompt(m: PipelineModule, template: string, description: string, example: unknown): string {
@@ -81,13 +102,13 @@ export async function execExampleSelectStep(m: PipelineModule, ctx: RunCtx, log:
     throw new Error(`example-select step ${m.id}: no output for context label "${contextLabel}"`);
   }
 
-  const description = formatExampleContext(contextValue, m.exampleContextField);
   const template = m.prompt?.trim() || DEFAULT_EXAMPLE_SELECT_PROMPT;
   const reasonField = exampleReasonField(m);
   const stepModel = m.model ?? ctx.model;
 
   const data = requireLinearInput(m, ctx);
   let items = exampleSelectItems(data);
+  const description = formatExampleContextForPrompt(project, m, contextLabel, contextValue, items);
   const totalCandidates = items.length;
   if (m.examplePreFilterMax != null && m.examplePreFilterMax > 0) {
     items = items.slice(0, m.examplePreFilterMax);

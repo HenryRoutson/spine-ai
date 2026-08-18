@@ -1,4 +1,5 @@
 import { allModelsToRust } from "./pydantic";
+import { flattenPipelineModules } from "@/lib/fork-pipeline";
 import { emitStepBody } from "./pipeline_export_dispatch";
 import {
   exportFileMetaComments,
@@ -53,7 +54,7 @@ export function generatePipelineSourceRust(project: Project): string {
   const prepared = prepareExportProject(project);
   const sections: string[] = [];
   const stepFnName = makeUniqueStepFnName();
-  const stepFns = prepared.modules.map((m, i) => generateStepFn(m, prepared, i, stepFnName)).join("\n");
+  const stepFns = flattenPipelineModules(prepared.modules).map((m, i) => generateStepFn(m, prepared, i, stepFnName)).join("\n");
   const orchestrator = generateOrchestratorRust(prepared, stepFnName);
 
   sections.push(

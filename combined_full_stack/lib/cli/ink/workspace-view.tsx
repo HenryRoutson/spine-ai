@@ -114,6 +114,7 @@ function BuildPanel({
         return (
           <Text key={s.id} color={s.invalid.length ? "red" : "green"} inverse={active && pane === "steps"}>
             {active ? "> " : "  "}
+            {"  ".repeat(s.indent ?? 0)}
             {s.invalid.length ? "x " : "ok "}
             {s.label}
             <Text dimColor>  {s.kind}</Text>

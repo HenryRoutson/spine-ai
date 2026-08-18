@@ -1,0 +1,177 @@
+{
+  "id": "p_contract_diligence_fork",
+  "name": "Contract Diligence Fork",
+  "kind": "legal-diligence",
+  "models": [
+    {
+      "id": "m_company",
+      "name": "ParsedCompany",
+      "description": "Named parties and facility pulled from the filing.",
+      "fields": [
+        { "id": "f_borrower", "name": "borrower", "type": "text", "optional": false, "description": "Borrower legal name" },
+        { "id": "f_facility", "name": "facility", "type": "text", "optional": false, "description": "Facility description" }
+      ]
+    },
+    {
+      "id": "m_risks",
+      "name": "RiskFinding",
+      "description": "Material risks with quotes.",
+      "fields": [
+        { "id": "f_risk_summary", "name": "summary", "type": "text", "optional": false, "description": "Risk themes" },
+        { "id": "f_risk_quote", "name": "quote", "type": "text", "optional": false, "description": "Supporting quote" }
+      ]
+    },
+    {
+      "id": "m_people",
+      "name": "KeyPerson",
+      "description": "Named officers after title normalize.",
+      "fields": [
+        { "id": "f_person_name", "name": "name", "type": "text", "optional": false, "description": "Person name" },
+        { "id": "f_title", "name": "title", "type": "text", "optional": false, "description": "Normalized title" }
+      ]
+    },
+    {
+      "id": "m_covenant",
+      "name": "Covenant",
+      "description": "One financial or negative covenant.",
+      "fields": [
+        { "id": "f_cov_text", "name": "text", "type": "text", "optional": false, "description": "Covenant language" }
+      ]
+    },
+    {
+      "id": "m_memo",
+      "name": "DiligenceMemo",
+      "description": "Joined memo after the fork product.",
+      "fields": [
+        { "id": "f_memo_summary", "name": "summary", "type": "text", "optional": false, "description": "Executive memo" }
+      ]
+    }
+  ],
+  "modules": [
+    {
+      "id": "mod_in",
+      "kind": "input",
+      "label": "Filings",
+      "note": "Credit agreement or similar filing",
+      "inputType": "text",
+      "inputNameContains": "credit_agreement",
+      "outStructureId": "m_builtin_document",
+      "inputDescription": "Raw credit agreement or filing text"
+    },
+    {
+      "id": "mod_parse",
+      "kind": "llm",
+      "label": "Parse Company",
+      "note": "Extract borrower and facility from the filing",
+      "inStructureId": "m_builtin_document",
+      "outStructureId": "m_company",
+      "inputDescription": "Filing Document.content",
+      "prompt": "Extract borrower and facility from the filing text.",
+      "model": "deepseek-v4"
+    },
+    {
+      "id": "mod_fork",
+      "kind": "fork",
+      "label": "Diligence lanes",
+      "note": "Independent extractors then product join",
+      "forkJoin": "product",
+      "forkBranches": [
+        {
+          "id": "fbr_risks",
+          "label": "Risks",
+          "modules": [
+            {
+              "id": "mod_risks",
+              "kind": "llm",
+              "label": "Extract Risks",
+              "note": "Material risk themes",
+              "inStructureId": "m_company",
+              "outStructureId": "m_risks",
+              "inputDescription": "Parsed company + filing still in Document via state",
+              "prompt": "List material credit risks with a short quote.",
+              "model": "deepseek-v4"
+            },
+            {
+              "id": "mod_risks_assert",
+              "kind": "assert",
+              "label": "Assert Risks",
+              "note": "Risks object is present",
+              "inStructureId": "m_risks",
+              "outStructureId": "m_risks",
+              "fallbackList": [{ "typescript": "assert(input && input.summary)" }]
+            }
+          ]
+        },
+        {
+          "id": "fbr_people",
+          "label": "People",
+          "modules": [
+            {
+              "id": "mod_people",
+              "kind": "llm",
+              "label": "Extract People",
+              "note": "Key persons",
+              "inStructureId": "m_company",
+              "outStructureId": "m_people",
+              "inputDescription": "Parsed company",
+              "prompt": "Extract one key person (CEO/CFO/GC) with a normalized title.",
+              "model": "deepseek-v4"
+            },
+            {
+              "id": "mod_people_tx",
+              "kind": "transform",
+              "label": "Normalize Titles",
+              "note": "Passthrough title normalize",
+              "inStructureId": "m_people",
+              "outStructureId": "m_people"
+            }
+          ]
+        },
+        {
+          "id": "fbr_cov",
+          "label": "Covenants",
+          "modules": [
+            {
+              "id": "mod_cov",
+              "kind": "llm",
+              "label": "Extract Covenants",
+              "note": "Financial covenants",
+              "inStructureId": "m_company",
+              "outStructureId": "m_covenant",
+              "inputDescription": "Parsed company",
+              "prompt": "Extract the most important covenant as text.",
+              "model": "deepseek-v4"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "mod_memo",
+      "kind": "llm",
+      "label": "Write Memo",
+      "note": "Synthesize joined diligence lanes",
+      "inStructureId": "sm_fork_mod_fork",
+      "outStructureId": "m_memo",
+      "inputDescription": "Fork product { Risks, People, Covenants }",
+      "prompt": "Write a short diligence memo from the three lane objects.",
+      "model": "deepseek-v4"
+    },
+    {
+      "id": "mod_out",
+      "kind": "output",
+      "label": "Memo",
+      "inStructureId": "m_memo",
+      "outStructureId": "m_memo",
+      "inputDescription": "Final DiligenceMemo"
+    }
+  ],
+  "strategies": [
+    { "id": "s_single", "kind": "single-llm", "name": "Single LLM Call", "enabled": true, "model": "deepseek-v4", "accuracy": 78, "latencyMs": 3200, "costCents": 8, "passRate": 90 },
+    { "id": "s_agent", "kind": "claude-code", "name": "Agent (Frontier)", "enabled": true, "model": "deepseek-v4", "accuracy": 92, "latencyMs": 28000, "costCents": 160, "passRate": 97 },
+    { "id": "s_cheap", "kind": "cheap-agent", "name": "Agent (Cheap Model)", "enabled": true, "model": "deepseek-v4", "accuracy": 82, "latencyMs": 18000, "costCents": 12, "passRate": 89 }
+  ],
+  "docs": [
+    { "name": "credit_agreement.md", "type": "text", "label": "inference", "file": "contract_diligence_fork/credit_agreement.md" }
+  ]
+}

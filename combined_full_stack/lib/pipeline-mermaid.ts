@@ -1,4 +1,5 @@
-import { combineGroupAt, segmentPipeline } from "@/lib/pipeline-layout"
+import { combineGroupAt, segmentPipeline, type PipelineSegment } from "@/lib/pipeline-layout"
+import { flattenPipelineModules } from "@/lib/fork-pipeline"
 import { formatModuleSpineIn, formatModuleSpineOut } from "@/lib/spine-type"
 import { ModuleKind, type PipelineModule, type StructureModel } from "@/lib/types"
 
@@ -10,7 +11,7 @@ function mermaidEscape(text: string): string {
 }
 
 function nodeId(modules: PipelineModule[], moduleId: string): string {
-  const i = modules.findIndex((m) => m.id === moduleId)
+  const i = flattenPipelineModules(modules).findIndex((m) => m.id === moduleId)
   return i >= 0 ? `n${i}` : `n_${moduleId.replace(/\W/g, "_")}`
 }
 
@@ -88,7 +89,6 @@ function themeClassDefs(theme: PipelineMermaidTheme): string[] {
 }
 
 // AI : flowchart LR mirrors the pipeline canvas — spine plus dashed side feeds into combine steps.
-// AI : TODO (allow-pipeline-non-linear-fork) — mermaid subgraph per lane; join node after parallel edges.
 export function derivePipelineMermaid(
   modules: PipelineModule[],
   models: StructureModel[],
@@ -103,24 +103,70 @@ export function derivePipelineMermaid(
     ].join("\n")
   }
 
-  const segments = segmentPipeline(modules)
   const nodeDefs: string[] = []
   const edges: string[] = []
-  let prevMainId: string | undefined
+  walkMermaidSegments(segmentPipeline(modules), modules, models, nodeDefs, edges, undefined)
 
+  return [
+    ...themeFrontmatter(theme),
+    "flowchart LR",
+    ...themeClassDefs(theme),
+    ...nodeDefs,
+    ...edges,
+  ].join("\n")
+}
+
+function walkMermaidSegments(
+  segments: PipelineSegment[],
+  modules: PipelineModule[],
+  models: StructureModel[],
+  nodeDefs: string[],
+  edges: string[],
+  prevMainId: string | undefined,
+): string | undefined {
+  let prev = prevMainId
+  const flat = flattenPipelineModules(modules)
   for (const seg of segments) {
     if (seg.kind === "step") {
-      nodeDefs.push(defineNode(modules, seg.module, seg.index + 1, models))
+      nodeDefs.push(defineNode(modules, seg.module, flat.findIndex((m) => m.id === seg.module.id) + 1, models))
       const nid = nodeId(modules, seg.module.id)
-      if (prevMainId) edges.push(`  ${prevMainId} --> ${nid}`)
-      prevMainId = nid
+      if (prev) edges.push(`  ${prev} --> ${nid}`)
+      prev = nid
+      continue
+    }
+    if (seg.kind === "fork") {
+      const forkNid = nodeId(modules, seg.fork.id)
+      nodeDefs.push(defineNode(modules, seg.fork, flat.findIndex((m) => m.id === seg.fork.id) + 1, models))
+      for (const b of seg.branches) {
+        const subId = `lane_${b.id.replace(/\W/g, "_")}`
+        nodeDefs.push(`  subgraph ${subId}["${mermaidEscape(b.label)}"]`)
+        const first = b.segments[0]
+        const last = walkMermaidSegments(b.segments, modules, models, nodeDefs, edges, undefined)
+        nodeDefs.push("  end")
+        if (prev && first) {
+          const firstId =
+            first.kind === "step"
+              ? nodeId(modules, first.module.id)
+              : first.kind === "combine"
+                ? nodeId(modules, first.combine.id)
+                : nodeId(modules, first.fork.id)
+          edges.push(`  ${prev} --> ${firstId}`)
+        } else if (prev) {
+          edges.push(`  ${prev} --> ${forkNid}`)
+        }
+        if (last) edges.push(`  ${last} --> ${forkNid}`)
+      }
+      if (prev && seg.branches.every((b) => b.segments.length === 0)) {
+        edges.push(`  ${prev} --> ${forkNid}`)
+      }
+      prev = forkNid
       continue
     }
 
     const { combine, input, parse, index } = seg
-    nodeDefs.push(defineNode(modules, input, modules.findIndex((m) => m.id === input.id) + 1, models))
+    nodeDefs.push(defineNode(modules, input, flat.findIndex((m) => m.id === input.id) + 1, models))
     if (parse) {
-      nodeDefs.push(defineNode(modules, parse, modules.findIndex((m) => m.id === parse.id) + 1, models))
+      nodeDefs.push(defineNode(modules, parse, flat.findIndex((m) => m.id === parse.id) + 1, models))
     }
     nodeDefs.push(defineNode(modules, combine, index + 1, models))
 
@@ -131,17 +177,10 @@ export function derivePipelineMermaid(
 
     if (parseNid) edges.push(`  ${inputNid} --> ${parseNid}`)
     edges.push(`  ${sideTail} -. "side input" .-> ${combineNid}`)
-    if (prevMainId) edges.push(`  ${prevMainId} --> ${combineNid}`)
-    prevMainId = combineNid
+    if (prev) edges.push(`  ${prev} --> ${combineNid}`)
+    prev = combineNid
   }
-
-  return [
-    ...themeFrontmatter(theme),
-    "flowchart LR",
-    ...themeClassDefs(theme),
-    ...nodeDefs,
-    ...edges,
-  ].join("\n")
+  return prev
 }
 
 // AI : sanity check for combine side feeds when building the graph.

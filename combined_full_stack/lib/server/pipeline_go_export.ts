@@ -1,4 +1,5 @@
 import { allModelsToGo } from "./pydantic";
+import { flattenPipelineModules } from "@/lib/fork-pipeline";
 import { emitStepBody } from "./pipeline_export_dispatch";
 import {
   exportFileMetaComments,
@@ -84,7 +85,7 @@ export function generatePipelineSourceGo(project: Project): string {
   const needs = analyzeExportRuntimeNeeds(prepared);
   const sections: string[] = [];
   const stepFnName = makeUniqueStepFnName();
-  const stepFns = prepared.modules.map((m, i) => generateStepFnGo(m, prepared, i, stepFnName)).join("\n");
+  const stepFns = flattenPipelineModules(prepared.modules).map((m, i) => generateStepFnGo(m, prepared, i, stepFnName)).join("\n");
   const orchestrator = generateOrchestratorGo(prepared, stepFnName);
 
   sections.push(

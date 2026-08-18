@@ -92,7 +92,7 @@ const assembleBindingsSchema = z.record(
   ]),
 );
 
-// AI : TODO (allow-pipeline-non-linear-fork) — moduleSpecSchema nested forkBranches; materialize lane modules.
+// AI : moduleSpecSchema nested forkBranches; materialize lane modules via expandModuleSpecs.
 const moduleSpecSchema = z
   .object({
     kind: z.enum(MODULE_KINDS),
@@ -146,6 +146,21 @@ const moduleSpecSchema = z
       .max(32)
       .optional()
       .describe("parallel only — each branch: product field name, prompt, and structureOut model name"),
+    forkJoin: z
+      .enum(["product", "assemble", "merge"])
+      .optional()
+      .describe("fork only — product (auto field per lane), assemble (bindings), or merge"),
+    forkBranches: z
+      .array(
+        z.object({
+          label: z.string(),
+          modules: z.array(z.any()).max(50),
+        }),
+      )
+      .min(2)
+      .max(4)
+      .optional()
+      .describe("fork only — 2–4 linear lanes that share the previous spine, then join"),
   })
   .superRefine((spec, ctx) => {
     if (stepRequiresNote(spec.kind) && !spec.note?.trim()) {
@@ -203,12 +218,12 @@ const moduleSpecSchema = z
         path: ["assembleBindings"],
       });
     }
-    if (spec.kind === ModuleKind.Parallel) {
-      if (!spec.parallelBranches?.length) {
+    if (spec.kind === ModuleKind.Fork) {
+      if (!spec.forkBranches || spec.forkBranches.length < 2) {
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
-          message: "parallel requires parallelBranches (at least one)",
-          path: ["parallelBranches"],
+          message: "fork requires forkBranches (2–4 linear lanes)",
+          path: ["forkBranches"],
         });
       }
     }
@@ -260,7 +275,7 @@ const assistantResponseSchema = z.object({
   modules: z
     .array(moduleSpecSchema)
     .nullable()
-    .describe("FULL pipeline replacement when restructuring; null when using modulePatch or no pipeline change"),
+    .describe("FULL pipeline replacement when restructuring; null when using modulePatch or no pipeline change (prefer modulePatch for small edits to existing steps)"),
   modulePatch: z
     .array(modulePatchEntrySchema)
     .nullable()
@@ -383,6 +398,19 @@ function makeModuleFromSpec(
         })
       : undefined;
 
+  const forkBranches =
+    spec.kind === ModuleKind.Fork
+      ? (spec.forkBranches ?? []).map((b) => ({
+          id: uid("fbr_"),
+          label: b.label,
+          modules: expandModuleSpecs(
+            (Array.isArray(b.modules) ? b.modules : []) as PipelineAssistantModuleSpec[],
+            models,
+            globalModel,
+          ),
+        }))
+      : undefined;
+
   let mod = createPipelineModule(
     {
       id: existingId ?? uid<ModuleId>(),
@@ -394,25 +422,34 @@ function makeModuleFromSpec(
       inputDescription: spec.inputDescription,
       inputMinCount: spec.inputMinCount,
       inStructureId:
-        spec.kind !== "input" && spec.kind !== ModuleKind.Assemble && spec.kind !== ModuleKind.Parallel
+        spec.kind !== "input" &&
+        spec.kind !== ModuleKind.Assemble &&
+        spec.kind !== ModuleKind.Parallel &&
+        spec.kind !== ModuleKind.Fork
           ? inId
           : undefined,
-      // AI : assemble/parallel without structureOut → auto-derive product on sync
+      // AI : assemble/parallel/fork without structureOut → auto-derive product on sync
       outStructureId:
-        (spec.kind === ModuleKind.Assemble || spec.kind === ModuleKind.Parallel) && !outHint
+        (spec.kind === ModuleKind.Assemble || spec.kind === ModuleKind.Parallel || spec.kind === ModuleKind.Fork) &&
+        !outHint
           ? undefined
           : outId,
       emitsList,
       prompt: spec.prompt,
       code: spec.code,
       model: modelId,
-      assembleBindings: spec.kind === ModuleKind.Assemble ? spec.assembleBindings : undefined,
+      assembleBindings:
+        spec.kind === ModuleKind.Assemble || (spec.kind === ModuleKind.Fork && spec.forkJoin === "assemble")
+          ? spec.assembleBindings
+          : undefined,
       chatbotMode:
         spec.kind === ModuleKind.Chatbot
           ? (spec.chatbotMode === "single" ? ChatbotMode.Single : ChatbotMode.UntilExit)
           : undefined,
       maxTurns: spec.kind === ModuleKind.Chatbot ? spec.maxTurns : undefined,
       parallelBranches,
+      forkJoin: spec.kind === ModuleKind.Fork ? (spec.forkJoin ?? "product") : undefined,
+      forkBranches,
     },
     models,
     globalModel,
@@ -623,12 +660,11 @@ function alignInputTypesToSyntheticDocs(
 }
 
 function buildThinkingSystemPrompt(hasValidationErrors: boolean): string {
-  // AI : TODO (allow-pipeline-non-linear-fork) — reasoner: Fork when independent lanes share one input.
   return `You are the Agent for "Spine" — structures, pipeline steps, and inference test documents.
 
 ${hasValidationErrors
     ? "The live project has pipeline validation errors — diagnose each listed mismatch (structure name vs list[structure] cardinality). Plan exact structureOut/list[...] fixes per step. Do not propose a greenfield architecture."
-    : "Reason step-by-step: (1) structures needed, (2) linear spine chain with single vs list at each hop, (3) many same-kind files → list[Document] + llm-batch (NOT one llm), (4) two different doc kinds: process first on spine, then either combine (raw side upload immediately before combine) OR assemble after both are parsed — never a third upload, (5) synthetic test docs. Flag where validation would fail if list-ness is wrong."}
+    : "Reason step-by-step: (1) structures needed, (2) series-parallel spine with single vs list at each hop, (3) many same-kind files → list[Document] + llm-batch (NOT one llm), (4) two different doc kinds: process first on spine, then either combine (raw side upload immediately before combine) OR assemble after both are parsed — never a third upload, (5) independent mixed-kind sub-pipelines that share one input → Fork (lanes + join), not Parallel (LLM-only) and not serialize, (6) synthetic test docs. Flag where validation would fail if list-ness is wrong."}
 Plain text only — no JSON, no markdown headings. Be concise (roughly 150–300 words).`;
 }
 

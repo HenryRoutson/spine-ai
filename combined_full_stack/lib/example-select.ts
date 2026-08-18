@@ -9,6 +9,7 @@ export { examplePromptColumns, projectExampleForPrompt }
 // AI :   add the dual for {example} (examplePromptFields). {passthrough} is not a template var.
 // AI : TODO (example-select-view) — billed_work Select Relevant Jobs: prompt only title + work_description;
 // AI :   billed_items WI-xxxxx add uncached tokens and no pass-1 signal. Pass 2 {example} is a catalog row — leave it.
+// AI : DONE (type-join) — pass 2 {description} lookup-embeds billed_items → WorkItem; kept rows stay catalog rows.
 
 export const DEFAULT_EXAMPLE_SELECT_PROMPT = `Find useful examples to help with this task.
 

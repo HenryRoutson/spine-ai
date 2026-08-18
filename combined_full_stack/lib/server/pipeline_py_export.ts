@@ -1,4 +1,5 @@
 import { allModelsToPydantic } from "./pydantic";
+import { flattenPipelineModules } from "@/lib/fork-pipeline";
 import { emitStepBody } from "./pipeline_export_dispatch";
 import {
   exportFileMetaComments,
@@ -50,10 +51,11 @@ export function generatePipelineSourcePy(project: Project): string {
   const needs = analyzeExportRuntimeNeeds(prepared);
   const runtimeImport = exportRuntimeImportPy({
     ...needs,
-    llmBatch: prepared.modules.some((m) => m.kind === ModuleKind.LlmBatch),
+    llmBatch: flattenPipelineModules(prepared.modules).some((m) => m.kind === ModuleKind.LlmBatch),
   });
   const sections: string[] = [];
-  const stepFns = prepared.modules.map((m, i) => generateStepFn(m, prepared, i)).join("\n");
+  const flat = flattenPipelineModules(prepared.modules);
+  const stepFns = flat.map((m, i) => generateStepFn(m, prepared, i)).join("\n");
   const orchestrator = generateOrchestratorPy(prepared, stepFnNameFromLabel);
 
   sections.push(
@@ -63,6 +65,7 @@ export function generatePipelineSourcePy(project: Project): string {
     "from __future__ import annotations",
     "",
     "import json",
+    "import asyncio",
     "from typing import Any, TypedDict, cast",
     "",
     "from pydantic import BaseModel, Field",

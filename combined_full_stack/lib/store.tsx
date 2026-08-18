@@ -915,7 +915,7 @@ export function StoreProvider({
       refreshEarnings().catch(console.error)
       warmSettingsTeams().catch(console.error)
       warmSettingsAccount().catch(console.error)
-      warmMarketplaceListings().catch(console.error)
+      if (mode !== StoreMode.Demo) warmMarketplaceListings().catch(console.error)
     }
 
     let alive = true

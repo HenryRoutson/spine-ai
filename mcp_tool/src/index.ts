@@ -24,6 +24,7 @@ import {
   deriveStepPrompt,
   describePipelineSteps,
   exportPydanticProject,
+  inspectIdsFromSeed,
   lintPipelineFromInput,
   validatePipelineWiring,
   validateStepOutputValue,
@@ -41,6 +42,7 @@ import {
   deleteProjectFromSession,
   getProjectFromSession,
   importSeedFromSession,
+  inspectIdsFromSession,
   openProjectFromSession,
   renameProjectFromSession,
   runSessionAction,
@@ -162,8 +164,7 @@ server.tool(
 
 server.tool(
   "validate_pipeline_wiring",
-  // AI : TODO (allow-pipeline-non-linear-fork) — description: tree I/O (lanes), not only linear spine.
-  "Check linear spine I/O validity across all steps — same computeInvalid rules as the pipeline editor.",
+  "Check series-parallel spine I/O validity across all steps (including Fork lanes) — same computeInvalid rules as the pipeline editor.",
   {
     projectSeedPath: z.string(),
   },
@@ -183,12 +184,47 @@ server.tool(
 
 server.tool(
   "export_pydantic",
-  "Export all structure models as pydantic Python plus generated per-step pipeline signatures.",
+  "Export all structure models as pydantic Python plus generated per-step pipeline signatures, schema.sql, and branded id types.",
   {
     projectSeedPath: z.string(),
     includePipelineSignatures: z.boolean().optional().describe("Include generated step function stubs (default true)"),
   },
   async (args) => textContent(exportPydanticProject(args, REPO_ROOT)),
+)
+
+server.tool(
+  "inspect_ids",
+  "Load JSON/Excel docs into the project's SQL schema and list branded row ids (missing pk, unused pk, duplicate pk). Seed path or session path — not both required.",
+  {
+    projectSeedPath: z.string().optional().describe("Path to seeds/*.json"),
+    sessionPath: z.string().optional(),
+    idType: z.string().optional().describe("work_item_id_string or WorkItem.id"),
+    docName: z.string().optional(),
+    filter: z.enum(["all", "missing", "unused", "duplicate"]).optional(),
+  },
+  async (args) => {
+    if (args.projectSeedPath) {
+      return textContent(
+        inspectIdsFromSeed(
+          {
+            projectSeedPath: args.projectSeedPath,
+            idType: args.idType,
+            docName: args.docName,
+            filter: args.filter,
+          },
+          REPO_ROOT,
+        ),
+      )
+    }
+    return textContent(
+      inspectIdsFromSession({
+        sessionPath: args.sessionPath,
+        idType: args.idType,
+        docName: args.docName,
+        filter: args.filter,
+      }),
+    )
+  },
 )
 
 server.tool(
@@ -256,7 +292,7 @@ server.tool(
 
 server.tool(
   "session_action",
-  "Dispatch a GUI button id (data-spine-id) against the session file. Prefer named tools when they exist. Extra ids: structure.add-field/remove-field/add-alias, pipeline.configure-step/remove-step/assign-structure, assistant.reject, billing.refresh, earnings.refresh, cache.refresh, logging.errors-only.",
+  "Dispatch a GUI button id (data-spine-id) against the session file. Prefer named tools when they exist. Extra ids: structure.add-field/remove-field/set-relation/add-alias, pipeline.configure-step/remove-step/assign-structure, assistant.reject, billing.refresh, earnings.refresh, cache.refresh, logging.errors-only.",
   {
     id: z.string().describe("Parity catalog id, e.g. project.add, testing.run, assistant.send"),
     sessionPath: z.string().optional(),
@@ -281,6 +317,7 @@ server.tool(
     proposalJson: z.string().optional(),
     testDocName: z.string().optional(),
     testing: z.boolean().optional(),
+    relation: z.string().optional().describe("structure.set-relation: pk | none | WorkItem.id"),
   },
   async (args) => textContent(await runSessionAction(args)),
 )
@@ -343,10 +380,12 @@ server.tool(
   "Insert a pipeline step (press s in the TUI).",
   {
     sessionPath: z.string().optional(),
-    kind: z.string().describe("llm | input | combine | chunk | …"),
+    kind: z.string().describe("llm | input | combine | fork | chunk | …"),
     label: z.string().optional(),
+    forkId: z.string().optional().describe("Fork step id when inserting into a lane"),
+    branchId: z.string().optional().describe("Lane id or label when inserting into a Fork"),
   },
-  async (args) => textContent(addStepFromSession(args.kind, args.label, args.sessionPath)),
+  async (args) => textContent(addStepFromSession(args.kind, args.label, args.sessionPath, { forkId: args.forkId, branchId: args.branchId })),
 )
 
 server.tool(

@@ -5,7 +5,7 @@
 // AI : TODO (arch-validity-split) — this file still mixes graph I/O, n8n, canRunStep, billedCents notes.
 // AI :   Keep computeInvalid as the graph checker; move n8n/canRunStep to own modules (messages already split).
 // AI : TODO (spec) — derive dependency graph from step() refs in custom code; flag unused/isolated steps (linear spine only today).
-// AI : TODO (allow-pipeline-non-linear-fork) — computeInvalid walks Fork lanes with synthetic predecessor; join product is next spine.
+// AI : DONE (allow-pipeline-non-linear-fork) — computeInvalid walks Fork lanes with synthetic predecessor; join product is next spine.
 // AI : TODO security — runs.data is user-writable via RLS; billedCents in JSON can be forged for display.
 // AI : Split billing fields to server-only columns or restrict data updates with a trigger.
 import type {
@@ -29,7 +29,7 @@ import {
   listFieldForAutoUnwrap,
   isBuiltinDocumentModel,
 } from "./structure";
-import { withSharedModels } from "./builtin_models";
+import { isLockedStructureModel, withSharedModels } from "./builtin_models";
 import { parseSqlSelect } from "@/lib/sql-schema";
 import {
   cardinalityMismatch,
@@ -40,9 +40,21 @@ import {
   stepSpineOutType,
   typeExprEqual,
   typeExprItemRef,
+  TypeExprKind,
   type TypeExpr,
 } from "./type_expr";
 import { typeExprAssignable, validateAssembleBindings } from "@/lib/assemble-type-expr";
+import {
+  FORK_MAX_BRANCHES,
+  FORK_MIN_BRANCHES,
+  flattenPipelineModules,
+  forkBranchesOf,
+  forkContainsNestedFork,
+  forkJoinOf,
+  forkProductField,
+  locatePipelineModule,
+  validateForkAssembleJoin,
+} from "@/lib/fork-pipeline";
 import { exampleSelectAcceptsWrapper } from "@/lib/example-select";
 import {
   stepEmits,
@@ -548,6 +560,9 @@ export type ComputeInvalidOpts = {
   typeAliases?: TypeAlias[];
   inferenceDocs?: { name: string; type: string }[];
   assignedDocTypes?: Partial<Record<ModuleId, string[]>>;
+  startPrev?: PipelineModule;
+  // AI : Fork lanes — join consumes the last module of each lane (product/assemble/merge).
+  laneJoinConsumesLast?: boolean;
 };
 
 function modulesForStructure(modelId: StructureModelId, modules: PipelineModule[]): ModuleId[] {
@@ -590,6 +605,9 @@ function pipelineReachableModelIds(
   for (const m of modules) {
     if (m.inStructureId) seeds.add(m.inStructureId);
     if (m.outStructureId) seeds.add(m.outStructureId);
+    for (const b of m.parallelBranches ?? []) {
+      if (b.outStructureId) seeds.add(b.outStructureId);
+    }
   }
   const reachable = new Set<StructureModelId>(seeds);
   const queue = [...seeds];
@@ -805,8 +823,101 @@ function computeWebhookInvalid(modules: PipelineModule[]): InvalidMap {
 // AI : TODO (n8n-stage-A-api) — computeN8nInvalid: require n8nNodeType in catalog; reject trigger-only nodes;
 // AI :   require credential env when description.credentials required (see lib/server/n8n-roadmap.ts).
 
-// AI : canonical I/O-validity check — strictly linear except combine (pipeline state + side doc).
-// AI : TODO (allow-pipeline-non-linear-fork) — tree walk: outer spine + per-lane computeInvalid + join outType.
+function computeForkInvalid(
+  modules: PipelineModule[],
+  models: StructureModel[],
+  typeAliases: TypeAlias[] = [],
+): InvalidMap {
+  const invalid: InvalidMap = new Map();
+  for (const m of flattenPipelineModules(modules)) {
+    if (m.kind !== ModuleKind.Fork) continue;
+    const branches = forkBranchesOf(m);
+    if (branches.length < FORK_MIN_BRANCHES) {
+      pushInvalid(invalid, {
+        moduleId: m.id,
+        kind: InvalidKind.StructureField,
+        structureMessage: `fork needs at least ${FORK_MIN_BRANCHES} lanes`,
+      });
+    }
+    if (branches.length > FORK_MAX_BRANCHES) {
+      pushInvalid(invalid, {
+        moduleId: m.id,
+        kind: InvalidKind.StructureField,
+        structureMessage: `fork is capped at ${FORK_MAX_BRANCHES} lanes`,
+      });
+    }
+    const fields = new Set<string>();
+    const labels = new Set<string>();
+    for (const b of branches) {
+      const label = b.label.trim();
+      if (!label) {
+        pushInvalid(invalid, {
+          moduleId: m.id,
+          kind: InvalidKind.StructureField,
+          structureMessage: "each fork lane needs a label",
+        });
+      } else if (labels.has(label)) {
+        pushInvalid(invalid, {
+          moduleId: m.id,
+          kind: InvalidKind.StructureField,
+          structureMessage: `duplicate fork lane "${label}"`,
+        });
+      } else labels.add(label);
+      const field = forkProductField(b);
+      if (fields.has(field)) {
+        pushInvalid(invalid, {
+          moduleId: m.id,
+          kind: InvalidKind.StructureField,
+          structureMessage: `duplicate fork product field "${field}"`,
+        });
+      } else fields.add(field);
+      if (!b.modules.length) {
+        pushInvalid(invalid, {
+          moduleId: m.id,
+          kind: InvalidKind.StructureField,
+          structureMessage: `lane "${label || b.id}" is empty — add at least one step`,
+        });
+      }
+    }
+    if (forkContainsNestedFork(m)) {
+      pushInvalid(invalid, {
+        moduleId: m.id,
+        kind: InvalidKind.StructureField,
+        structureMessage: "flatten nested forks first — v1 canvas is one nesting level",
+      });
+    }
+    const join = forkJoinOf(m);
+    if (join === "assemble") {
+      const loc = locatePipelineModule(modules, m.id);
+      if (loc) {
+        for (const issue of validateForkAssembleJoin(m, loc, models, typeAliases)) {
+          if (issue.missingLabel) {
+            pushInvalid(invalid, {
+              moduleId: m.id,
+              kind: InvalidKind.StateKeyMissing,
+              missingLabel: issue.missingLabel,
+            });
+          } else {
+            pushInvalid(invalid, {
+              moduleId: m.id,
+              kind: InvalidKind.StructureField,
+              structureMessage: issue.message,
+            });
+          }
+        }
+      }
+    }
+  }
+  return invalid;
+}
+
+function mergeInvalid(into: InvalidMap, from: InvalidMap): void {
+  for (const [, issues] of from) {
+    for (const issue of issues) pushInvalid(into, issue);
+  }
+}
+
+// AI : canonical I/O-validity check — linear spine plus Fork lanes (series-parallel).
 export function computeInvalid(
   modules: PipelineModule[],
   models: StructureModel[] = [],
@@ -814,50 +925,21 @@ export function computeInvalid(
 ): InvalidMap {
   // AI : project JSON stores user models only — shared Document must count for I/O + field refs.
   models = withSharedModels(models);
-  const invalid = computeLabelInvalid(modules);
-  for (const [moduleId, issues] of computeNoteInvalid(modules)) {
-    const list = invalid.get(moduleId) ?? [];
-    list.push(...issues);
-    invalid.set(moduleId, list);
-  }
-  for (const [moduleId, issues] of computeWebhookInvalid(modules)) {
-    const list = invalid.get(moduleId) ?? [];
-    list.push(...issues);
-    invalid.set(moduleId, list);
-  }
-  for (const [moduleId, issues] of computeExampleSelectInvalid(modules, models)) {
-    const list = invalid.get(moduleId) ?? [];
-    list.push(...issues);
-    invalid.set(moduleId, list);
-  }
-  for (const [moduleId, issues] of computeMergeStateInvalid(modules, models)) {
-    const list = invalid.get(moduleId) ?? [];
-    list.push(...issues);
-    invalid.set(moduleId, list);
-  }
-  for (const [moduleId, issues] of computeAssembleInvalid(modules, models, opts?.typeAliases ?? [])) {
-    const list = invalid.get(moduleId) ?? [];
-    list.push(...issues);
-    invalid.set(moduleId, list);
-  }
-  for (const [moduleId, issues] of computeParallelInvalid(modules, models)) {
-    const list = invalid.get(moduleId) ?? [];
-    list.push(...issues);
-    invalid.set(moduleId, list);
-  }
-  for (const [moduleId, issues] of computeMissingCombineBeforeInputInvalid(modules)) {
-    const list = invalid.get(moduleId) ?? [];
-    list.push(...issues);
-    invalid.set(moduleId, list);
-  }
+  const flat = flattenPipelineModules(modules);
+  const invalid = computeLabelInvalid(flat);
+  mergeInvalid(invalid, computeNoteInvalid(flat));
+  mergeInvalid(invalid, computeWebhookInvalid(flat));
+  mergeInvalid(invalid, computeExampleSelectInvalid(flat, models));
+  mergeInvalid(invalid, computeMergeStateInvalid(flat, models));
+  mergeInvalid(invalid, computeAssembleInvalid(flat, models, opts?.typeAliases ?? []));
+  mergeInvalid(invalid, computeParallelInvalid(flat, models));
+  mergeInvalid(invalid, computeMissingCombineBeforeInputInvalid(flat));
+  mergeInvalid(invalid, computeForkInvalid(modules, models, opts?.typeAliases ?? []));
   if (opts?.requireInputDescriptions) {
-    for (const [moduleId, issues] of computeInputDescriptionInvalid(modules)) {
-      const list = invalid.get(moduleId) ?? [];
-      list.push(...issues);
-      invalid.set(moduleId, list);
-    }
+    mergeInvalid(invalid, computeInputDescriptionInvalid(flat));
   }
-  for (const m of modules) {
+  for (const m of flat) {
+    if (m.kind === ModuleKind.Fork) continue;
     if (usesPassthroughStructure(m.kind)) {
       if (!m.inStructureId) pushInvalid(invalid, { moduleId: m.id, kind: InvalidKind.NoOutput });
       continue;
@@ -865,13 +947,14 @@ export function computeInvalid(
     if (!m.outStructureId) pushInvalid(invalid, { moduleId: m.id, kind: InvalidKind.NoOutput });
   }
 
-  let flowType: TypeExpr | undefined;
-  let flowId: StructureModelId | undefined;
+  let flowType: TypeExpr | undefined = opts?.startPrev ? stepSpineOutType(opts.startPrev) : undefined;
+  let flowId: StructureModelId | undefined = opts?.startPrev?.outStructureId;
   const byModel = new Set<StructureModelId>();
+  if (flowId) byModel.add(flowId);
 
   for (let i = 0; i < modules.length; i++) {
     const m = modules[i]!;
-    const prev = i > 0 ? modules[i - 1] : undefined;
+    const prev = i > 0 ? modules[i - 1] : opts?.startPrev;
 
     if (m.kind === ModuleKind.Input) {
       if (inputFeedsCombine(modules, i)) continue;
@@ -906,6 +989,23 @@ export function computeInvalid(
 
     // AI : assemble zips spine + state["Label"] — leftover structureIn (e.g. Resume from combine) is not a linear hop.
     if (m.kind === ModuleKind.Assemble) {
+      if (m.outStructureId) {
+        flowId = m.outStructureId;
+        flowType = stepSpineOutType(m);
+        byModel.add(m.outStructureId);
+      }
+      continue;
+    }
+
+    if (m.kind === ModuleKind.Fork) {
+      const upstreamType = (prev && stepSpineOutType(prev)) ?? flowType;
+      const expected = stepSpineInType(m) ?? upstreamType;
+      if (expected && upstreamType && !stepAcceptsSpineType(m, expected, upstreamType, models, opts?.typeAliases ?? [])) {
+        pushInvalid(invalid, spineMismatchIssue(m.id, expected, upstreamType, models));
+      }
+      for (const b of forkBranchesOf(m)) {
+        mergeInvalid(invalid, computeInvalid(b.modules, models, { ...opts, startPrev: prev, laneJoinConsumesLast: true }));
+      }
       if (m.outStructureId) {
         flowId = m.outStructureId;
         flowType = stepSpineOutType(m);
@@ -974,7 +1074,7 @@ export function computeInvalid(
     if (flattenIssue) pushInvalid(invalid, flattenIssue);
   }
 
-  for (const [id, issues] of computeUnusedOutputInvalid(modules, models)) {
+  for (const [id, issues] of computeUnusedOutputInvalid(modules, models, opts?.laneJoinConsumesLast)) {
     for (const issue of issues) {
       if (!invalidIssuesForModule(invalid, id).some((x) => x.kind === issue.kind)) {
         pushInvalid(invalid, issue);
@@ -1035,8 +1135,8 @@ export function computeInvalid(
 // AI : middle steps must feed a downstream inStructureId, assemble state["Label"], or the next combine/assemble.
 function assembleStateLabels(modules: PipelineModule[]): Set<string> {
   const labels = new Set<string>();
-  for (const m of modules) {
-    if (m.kind !== ModuleKind.Assemble) continue;
+  for (const m of flattenPipelineModules(modules)) {
+    if (m.kind !== ModuleKind.Assemble && !(m.kind === ModuleKind.Fork && forkJoinOf(m) === "assemble")) continue;
     for (const src of Object.values(m.assembleBindings ?? {})) {
       if (src.kind === "state" && src.label.trim()) labels.add(src.label.trim());
       if (src.kind === "path" && typeof src.from === "object" && src.from.label.trim()) {
@@ -1047,15 +1147,20 @@ function assembleStateLabels(modules: PipelineModule[]): Set<string> {
   return labels;
 }
 
-function computeUnusedOutputInvalid(modules: PipelineModule[], models: StructureModel[]): InvalidMap {
+function computeUnusedOutputInvalid(
+  modules: PipelineModule[],
+  models: StructureModel[],
+  laneJoinConsumesLast?: boolean,
+): InvalidMap {
   const invalid: InvalidMap = new Map();
   const assembleLabels = assembleStateLabels(modules);
   for (let i = 0; i < modules.length; i++) {
     const m = modules[i]!;
     const emitted = stepEmits(m);
     if (!emitted || m.kind === ModuleKind.Input || usesPassthroughStructure(m.kind)) continue;
+    if (laneJoinConsumesLast && i === modules.length - 1) continue;
     // AI : a combine consumes the previous step's output as its newDocument regardless of inStructureId.
-    if (modules[i + 1]?.kind === ModuleKind.Combine || modules[i + 1]?.kind === ModuleKind.Assemble) continue;
+    if (modules[i + 1]?.kind === ModuleKind.Combine || modules[i + 1]?.kind === ModuleKind.Assemble || modules[i + 1]?.kind === ModuleKind.Fork) continue;
     if (assembleLabels.has(m.label.trim())) continue;
     // AI : Link Quotes is a managed follower — assemble binding the LLM still consumes the quote step.
     if (isAutoQuoteStep(m) && i > 0 && assembleLabels.has(modules[i - 1]!.label.trim())) continue;
@@ -1122,6 +1227,16 @@ function llmPromptQuoteMismatch(prompt: string, model: StructureModel): string |
   return null;
 }
 
+function llmPromptWantsExplodeList(prompt: string): boolean {
+  return /\breturn(?:s|ed)? (?:them |it )?(?:as )?(?:a )?list\b|\bas a list of json\b|\bone (?:spreadsheet )?row per\b|\ball action items\b/i.test(
+    prompt,
+  );
+}
+
+function modelHasListField(model: StructureModel): boolean {
+  return model.fields.some((f) => fieldToTypeExpr(f).kind === TypeExprKind.List);
+}
+
 export function computeWarnings(
   modules: PipelineModule[],
   models: StructureModel[] = [],
@@ -1134,6 +1249,20 @@ export function computeWarnings(
     warnings.set(moduleId, list);
   };
 
+  const reachable = pipelineReachableModelIds(modules, models);
+  const anchorId = modules[0]?.id;
+  if (anchorId) {
+    for (const model of models) {
+      if (isLockedStructureModel(model)) continue;
+      if (reachable.has(model.id)) continue;
+      add(anchorId, {
+        moduleId: anchorId,
+        kind: PipelineWarningKind.UnusedModel,
+        detail: `${model.name} is never used by any step — omit clones of Document`,
+      });
+    }
+  }
+
   for (let i = 0; i < modules.length; i++) {
     const m = modules[i];
     if (isLlmKind(m.kind) && !m.prompt?.trim()) {
@@ -1144,6 +1273,13 @@ export function computeWarnings(
       const mismatch = out ? llmPromptQuoteMismatch(m.prompt, out) : null;
       if (mismatch) {
         add(m.id, { moduleId: m.id, kind: PipelineWarningKind.PromptQuoteMismatch, detail: mismatch });
+      }
+      if (m.kind === ModuleKind.LlmBatch && out && llmPromptWantsExplodeList(m.prompt) && !modelHasListField(out)) {
+        add(m.id, {
+          moduleId: m.id,
+          kind: PipelineWarningKind.PromptListVsItem,
+          detail: `${out.name} is one object per file but the prompt asks for a list of rows — wrap in list[...] then flatten`,
+        });
       }
     }
     if (m.kind === ModuleKind.Quote && !isAutoQuoteStep(m) && m.outStructureId) {

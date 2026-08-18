@@ -1,7 +1,6 @@
 "use client"
 
 // AI : one scroll — each pipeline segment row stays horizontally aligned with its test config.
-// AI : TODO (allow-pipeline-non-linear-fork) — fork row with N test columns (still one vertical scroll).
 
 import { useCallback, useMemo, useRef, type ReactNode } from "react"
 import {
@@ -10,7 +9,7 @@ import {
   PipelineCanvasSegment,
   PipelineCanvasStart,
 } from "@/components/pipeline-canvas"
-import { segmentPipeline, modulesInSegment } from "@/lib/pipeline-layout"
+import { segmentPipeline, modulesInSegment, pipelineSegmentKey } from "@/lib/pipeline-layout"
 import {
   TESTING_PIPELINE_MAX,
   TESTING_PIPELINE_MIN,
@@ -148,24 +147,61 @@ export function TestingPipelineAlignView({
           />
 
           {segments.flatMap((seg) => {
-            const rowKey: align_row_key = seg.kind === "combine" ? seg.combine.id : seg.module.id
+            const rowKey: align_row_key = pipelineSegmentKey(seg)
             const moduleIds = modulesInSegment(seg).map((m) => m.id)
-            const testCell = (
-              <div className="space-y-3">
-                {modulesInSegment(seg).map((m) => (
+            const testCell =
+              seg.kind === "fork" ? (
+                <div className="space-y-3">
                   <div
-                    key={m.id}
+                    className="grid gap-2"
+                    style={{
+                      gridTemplateColumns: `repeat(${Math.max(1, seg.branches.length)}, minmax(0, 1fr))`,
+                    }}
+                  >
+                    {seg.branches.map((b) => (
+                      <div key={b.id} className="min-w-0 space-y-2">
+                        <p className="font-mono text-[10px] uppercase text-muted-foreground">{b.label}</p>
+                        {b.segments.flatMap(modulesInSegment).map((m) => (
+                          <div
+                            key={m.id}
+                            className={cn(
+                              "rounded-lg transition-shadow",
+                              selectedModuleId === m.id && "ring-1 ring-primary/40",
+                            )}
+                            onClick={() => onSelectModule(m.id)}
+                          >
+                            {renderTestStep(m, trackStatusForModule(alignment, m.id))}
+                          </div>
+                        ))}
+                      </div>
+                    ))}
+                  </div>
+                  <div
                     className={cn(
                       "rounded-lg transition-shadow",
-                      selectedModuleId === m.id && "ring-1 ring-primary/40",
+                      selectedModuleId === seg.fork.id && "ring-1 ring-primary/40",
                     )}
-                    onClick={() => onSelectModule(m.id)}
+                    onClick={() => onSelectModule(seg.fork.id)}
                   >
-                    {renderTestStep(m, trackStatusForModule(alignment, m.id))}
+                    {renderTestStep(seg.fork, trackStatusForModule(alignment, seg.fork.id))}
                   </div>
-                ))}
-              </div>
-            )
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {modulesInSegment(seg).map((m) => (
+                    <div
+                      key={m.id}
+                      className={cn(
+                        "rounded-lg transition-shadow",
+                        selectedModuleId === m.id && "ring-1 ring-primary/40",
+                      )}
+                      onClick={() => onSelectModule(m.id)}
+                    >
+                      {renderTestStep(m, trackStatusForModule(alignment, m.id))}
+                    </div>
+                  ))}
+                </div>
+              )
             return [
               <AlignRow
                 key={rowKey}

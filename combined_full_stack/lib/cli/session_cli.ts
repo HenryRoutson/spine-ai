@@ -39,8 +39,10 @@ import {
   patchStep,
   removeModelField,
   removeStep,
+  setModelFieldRelation,
   validateSessionTests,
 } from "@/lib/cli/workspace_edits"
+import { inspectCatalogDocs } from "@/lib/sql-id-index"
 
 export const SPINE_SESSION_HELP = `session — headless workspace (same method names as useStore)
 
@@ -52,6 +54,8 @@ Usage:
   spine session set-docs --text <markdown>
   spine session add-model --name <Name> [--params T]
   spine session add-field --model <Name> --name <field> --type <text|int|T|list[Foo]|...> [--optional]
+  spine session set-relation --model <Name> --field <field> --pk | --fk WorkItem.id | --none
+  spine session ids [--type work_item_id] [--filter missing|unused|duplicate]
   spine session remove-field --model <Name> --name <field>
   spine session add-alias --name <Name> --expr <TypeExpr> [--params A,B]
   spine session add-step --kind <llm|input|...> [--label <Label>]
@@ -213,6 +217,35 @@ async function runSessionCommandInner(
     if (!model || !name || !typeRaw) return usage("session add-field requires --model --name --type")
     addModelField(session, model, name, typeRaw, { optional: flags.optional === true })
     return ok("session add-field", { action: "applyProjectChanges", structure: toStructureView(session.getSnapshot()) })
+  }
+
+  if (sub === "set-relation") {
+    const model = flagString(flags, "model")
+    const field = flagString(flags, "field") ?? flagString(flags, "name")
+    if (!model || !field) return usage("session set-relation requires --model --field")
+    const spec = flags.pk === true ? "pk" : flags.none === true ? "none" : flagString(flags, "fk")
+    if (!spec) return usage("session set-relation requires --pk, --fk Model.field, or --none")
+    setModelFieldRelation(session, model, field, spec)
+    return ok("session set-relation", { action: "applyProjectChanges", structure: toStructureView(session.getSnapshot()) })
+  }
+
+  if (sub === "ids") {
+    const snap = session.getSnapshot()
+    const docs = snap.docs
+      .map((d) => {
+        const content = snap.docContents[d.id]
+        return content ? { name: d.name, type: d.type, content, id: d.id } : undefined
+      })
+      .filter((d): d is NonNullable<typeof d> => !!d)
+    const filterRaw = flagString(flags, "filter")
+    const filter =
+      filterRaw === "missing" || filterRaw === "unused" || filterRaw === "duplicate" ? filterRaw : "all"
+    const report = inspectCatalogDocs(session.models, docs, {
+      idType: flagString(flags, "type"),
+      filter,
+      typeAliases: session.project?.typeAliases,
+    })
+    return ok("session ids", report)
   }
 
   if (sub === "remove-field") {

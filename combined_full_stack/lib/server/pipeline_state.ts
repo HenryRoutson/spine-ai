@@ -1,6 +1,7 @@
 import { z, type ZodType } from "zod";
 import type { PipelineModule, Project, StructureModel, TypeAlias } from "./types";
 import type { PipelineState, StepLabel } from "../run-types";
+import { flattenPipelineModules } from "@/lib/fork-pipeline";
 import { formatTypeExpr, labelToPyKey, stepSpineOutType, typeExprToGo, typeExprToRust, typeExprToTs, typeExprToZod, zodFromModel } from "./type_expr";
 
 export type { PipelineState, StepLabel };
@@ -8,6 +9,7 @@ export type { PipelineState, StepLabel };
 // AI : state stays flat StepLabel → value; Assemble zips labels into one product (see assemble-type-expr.ts).
 // AI : PipelineState can be annotated as named tables (step label = table or view)
 // AI :   even while values stay JSON. Export = schema.sql + optional .sqlite dump.
+// AI : TODO (sql-id-ref) — slice C: run state labels are catalog tables for inspect_ids.
 
 export function emptyPipelineState(): PipelineState {
   return {};
@@ -18,8 +20,7 @@ export function labelAsStateKey(label: string): StepLabel {
 }
 
 export function labelsForModules(modules: PipelineModule[]): StepLabel[] {
-  // AI : TODO (allow-pipeline-non-linear-fork) — include nested forkBranches labels (unique across tree).
-  return modules.map((m) => labelAsStateKey(m.label)).filter(Boolean);
+  return flattenPipelineModules(modules).map((m) => labelAsStateKey(m.label)).filter(Boolean);
 }
 
 export type PipelineStateField = {
@@ -34,7 +35,7 @@ export function pipelineStateFields(project: {
   models: StructureModel[];
 }): PipelineStateField[] {
   const fields: PipelineStateField[] = [];
-  for (const m of project.modules) {
+  for (const m of flattenPipelineModules(project.modules)) {
     const label = labelAsStateKey(m.label);
     if (!label) continue;
     const spine = stepSpineOutType(m);

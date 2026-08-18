@@ -71,6 +71,7 @@ function llmModelToZod(
         seenAliasNames: new Set(),
       }),
       f,
+      models,
     );
     base = applyFieldCardinalityConstraints(base, f);
     shape[f.name] = f.optional ? base.optional() : base;
@@ -106,6 +107,7 @@ export function llmSchemaJson(
   isList: boolean,
   typeAliases: TypeAlias[] = [],
 ): string {
+  // AI : DONE (sql-id-ref) — fieldDescribe adds FK → Model.field. Allowed ids in llmSchema is slice C.
   return JSON.stringify(z.toJSONSchema(llmSchema(model, models, isList, typeAliases)), null, 2);
 }
 
@@ -426,6 +428,7 @@ export function validate(
   models: StructureModel[] = [],
   typeAliases: TypeAlias[] = [],
 ): ValidationResult {
+  // AI : shape only. Instance fk checks: sql-id-index / inspect_ids. validate_step_output checkRefs is slice C.
   const parsed = zodFromModel(model, models, typeAliases).safeParse(value);
   return parsed.success
     ? { ok: true, value: parsed.data }

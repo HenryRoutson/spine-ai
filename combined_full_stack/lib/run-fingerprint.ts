@@ -1,5 +1,5 @@
 // AI : pure run fingerprint payload — shared by server dedup and step-cache keying.
-// AI : TODO (allow-pipeline-non-linear-fork) — hash flattened tree including nested forkBranches.
+// AI : DONE (allow-pipeline-non-linear-fork) — hash flattened tree including nested forkBranches.
 // AI : TODO refactor — vitest target: fingerprint stability (pairs with lib/server/run_fingerprint.ts).
 import { orderedInputModules } from "@/lib/inference-input"
 import { isAutoQuoteStep } from "@/lib/quote-steps"
@@ -19,7 +19,30 @@ import {
 } from "@/lib/types"
 
 // AI : derived quote steps are re-generated from upstream LLM config — exclude from the hash.
-function moduleForFingerprint(m: PipelineModule) {
+type ModuleFingerprint = {
+  id: string
+  kind: string
+  inStructureId: string | null
+  outStructureId: string | null
+  inputType: PipelineModule["inputType"] | null
+  inputNameContains: string | null
+  inputDescription: string | null
+  checkInputDescription: boolean | null
+  inputMinCount: number | null
+  prompt: string | null
+  code: string | null
+  fallbackList: PipelineModule["fallbackList"] | null
+  model: string | null
+  useOcr: boolean | null
+  note: string | null
+  inType: PipelineModule["inType"] | null
+  outType: PipelineModule["outType"] | null
+  lookupEmbed?: 1
+  forkJoin?: string | null
+  forkBranches?: { id: string; label: string; modules: Array<ModuleFingerprint | null> }[] | null
+}
+
+function moduleForFingerprint(m: PipelineModule): ModuleFingerprint | null {
   if (isAutoQuoteStep(m)) return null
   return {
     id: m.id,
@@ -39,6 +62,18 @@ function moduleForFingerprint(m: PipelineModule) {
     note: m.note ?? null,
     inType: m.inType ?? null,
     outType: m.outType ?? null,
+    // AI : DONE (type-join) — bump example-select cache when context FK lookup-embed lands.
+    ...(m.kind === "example-select" ? { lookupEmbed: 1 as const } : {}),
+    ...(m.kind === "fork"
+      ? {
+          forkJoin: m.forkJoin ?? null,
+          forkBranches: m.forkBranches?.map((b) => ({
+            id: b.id,
+            label: b.label,
+            modules: b.modules.map(moduleForFingerprint),
+          })) ?? null,
+        }
+      : {}),
   }
 }
 

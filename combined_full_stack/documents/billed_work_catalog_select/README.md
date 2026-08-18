@@ -11,9 +11,8 @@ You have ~100+ billable work items (scaling to 10k) and past jobs that billed a 
 ## Approach
 
 1. **Pass 1 — filter past jobs** — cached prefix with `{description}` from Work Description.content; each job is `{example}` (`title` + `work_description` via `examplePromptView`). Opaque `billed_items` (`WI-xxxxx`) stay on the spine for pass 2 / draft.
-2. **Assemble Item Filter** — `{ description, selected_examples }` becomes the per-run cached block for pass 2.
-   - TODO (type-join): denormalize billed lines here (lookup-embed `work_item_id` → `WorkItem`), not inside pass 1 candidates.
-3. **Pass 2 — filter catalog** — same relevance schema; only each `WorkItem` row changes per call. Combine Catalog is required because pass 1 sits between the job library and catalog inputs; example-select unwraps `items` from the combine product.
+2. **Assemble Item Filter** — `{ description, selected_examples }` becomes the per-run cached block for pass 2. Spine `billed_items` stay `{ work_item_id, quantity }`.
+3. **Pass 2 — filter catalog** — same relevance schema; only each `WorkItem` row changes per call. The cached `{description}` prefix lookup-embeds catalog code/trade/unit/description onto past-job `billed_items` (prompt only). Combine Catalog is required because pass 1 sits between the job library and catalog inputs; example-select unwraps `items` from the combine product. Kept rows are still normalized catalog rows.
 4. **Draft Billed Work** — final LLM picks quantities from filtered items using `selection_reason` on kept rows.
 
 Excluded candidates are auditable: each example-select step stores `exampleSelectVerdicts` on the run step (kept + excluded, each with `chain_of_thought`). Browse **excluded** in Logging → Step trace → Relevance verdicts.

@@ -109,6 +109,12 @@ export function warningStepMessage(
     const name = modelName(models, m?.outStructureId) ?? "output";
     return `upstream list → ${name} only auto-unwraps one item — add a list field or custom TS if batch size may exceed 1`;
   }
+  if (issue.kind === PipelineWarningKind.UnusedModel) {
+    return issue.detail ?? "structure is never used by any step";
+  }
+  if (issue.kind === PipelineWarningKind.PromptListVsItem) {
+    return issue.detail ?? "prompt asks for a list of rows but this step emits one object per input — use a wrapper + flatten";
+  }
   return "warning";
 }
 

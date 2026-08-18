@@ -1,6 +1,7 @@
 import { allModelsToPydantic, allModelsToDts } from "./pydantic";
 import { allModelsToSql } from "@/lib/sql-schema";
 // AI : TODO (linter-first) — add generatePipelineTypesRust + pipeline_types.rs; typecheck via cargo check, not TS.
+// AI : DONE (sql-id-ref) — branded aliases in allModelsToDts / allModelsToPydantic; schemaSql already emitted.
 import {
   pipelineStatePyTypedDict,
   pipelineStateFields,

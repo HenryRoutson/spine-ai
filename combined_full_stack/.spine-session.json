@@ -1,80 +1,67 @@
 {
   "projects": [
     {
-      "id": "p_64e3ab8303ed483db5d78653",
-      "name": "Receipt Spreadsheet",
+      "id": "p_77ef971e033b457e9eaea2e8",
+      "name": "Meeting Note Action Extractor",
       "kind": "blank",
-      "createdAt": 1786677060922,
-      "lastOpenedAt": 1786677060922,
+      "createdAt": 1787027671426,
+      "lastOpenedAt": 1787027671426,
       "models": [
         {
-          "id": "6c439960fa674629a1b7f56a",
-          "name": "ReceiptRow",
-          "description": "Structured fields extracted from one receipt with source quotes.",
+          "id": "dec3f886a25e4c31bd0a3e01",
+          "name": "MeetingNote",
+          "description": "Single meeting note document containing action items.",
           "fields": [
             {
-              "id": "c497b4bf57244807b39d31d7",
-              "name": "merchant",
+              "id": "87db5538712e4569ab1864b9",
+              "name": "content",
               "optional": false,
-              "description": "Vendor name with source quote",
-              "type": "tuple[text,quote]"
+              "description": "Raw meeting note text",
+              "type": "text"
+            }
+          ]
+        },
+        {
+          "id": "b46b4505496841d786ede42a",
+          "name": "ActionItem",
+          "description": "One extracted action item from meeting notes.",
+          "fields": [
+            {
+              "id": "dee1a55f6c7d4768b5699024",
+              "name": "task",
+              "optional": false,
+              "description": "The action to be completed",
+              "type": "text"
             },
             {
-              "id": "dfa399fadbf042558c4d0252",
-              "name": "date",
+              "id": "4682da1cee2646529de1d0c4",
+              "name": "owner",
               "optional": false,
-              "description": "Transaction date with source quote",
-              "type": "tuple[text,quote]"
+              "description": "Person responsible for the task",
+              "type": "text"
             },
             {
-              "id": "38713a0a02f94d69968327f7",
-              "name": "amount",
-              "optional": false,
-              "description": "Total amount with source quote",
-              "type": "tuple[text,quote]"
-            },
-            {
-              "id": "efd2fedd8fb3476bbfed1b0c",
-              "name": "currency",
-              "optional": false,
-              "description": "Currency code with source quote",
-              "type": "tuple[text,quote]"
-            },
-            {
-              "id": "fa71850728af4afaaef5a378",
-              "name": "category",
-              "optional": false,
-              "description": "Expense category with source quote",
-              "type": "tuple[text,quote]"
-            },
-            {
-              "id": "1ccedc0367054f10b477d4e3",
-              "name": "tax",
-              "optional": false,
-              "description": "Tax amount with source quote",
-              "type": "tuple[text,quote]"
-            },
-            {
-              "id": "00cf77d749d74008bc58bd24",
-              "name": "source_file",
-              "optional": false,
-              "description": "Original receipt document",
-              "type": "document"
+              "id": "61c8433ceffb46b3aa81cb8e",
+              "name": "due_date",
+              "optional": true,
+              "description": "Due date if mentioned (text format)",
+              "type": "text"
             }
           ]
         }
       ],
       "modules": [
         {
-          "id": "75b56f0bc9b843c0bd38c0f5",
+          "id": "7e36f18ab5274f12a0cc5533",
           "kind": "input",
-          "label": "Receipt Uploads",
-          "note": "Batch upload of PDF receipts for processing.",
+          "label": "Meeting Notes Upload",
+          "note": "Upload multiple meeting note text files",
           "cached": true,
           "avgMs": 0,
           "avgCostCents": 0,
-          "inputType": "pdf",
-          "inputDescription": "PDF receipts — one upload per receipt",
+          "inputType": "text",
+          "inputNameContains": "meeting",
+          "inputDescription": "Text files containing meeting notes with action items",
           "inputMinCount": 1,
           "outStructureId": "m_builtin_document",
           "outType": {
@@ -86,24 +73,24 @@
           }
         },
         {
-          "id": "c55dba68b38941e9acc76ab9",
+          "id": "fc1ab71b3f6240d5bae6945c",
           "kind": "llm-batch",
-          "label": "Extract Receipt Fields",
-          "note": "Extract structured fields from each receipt with source quotes.",
+          "label": "Extract Action Items",
+          "note": "Extract structured action items from each meeting note",
           "cached": true,
           "avgMs": 0,
           "avgCostCents": 0,
-          "inputDescription": "List of Document objects — one PDF receipt each",
+          "inputDescription": "List of meeting note Documents",
           "inStructureId": "m_builtin_document",
-          "outStructureId": "6c439960fa674629a1b7f56a",
+          "outStructureId": "b46b4505496841d786ede42a",
           "outType": {
             "kind": "list",
             "item": {
               "kind": "ref",
-              "modelId": "6c439960fa674629a1b7f56a"
+              "modelId": "b46b4505496841d786ede42a"
             }
           },
-          "prompt": "Extract merchant name, date, amount, currency, category, and tax from this receipt. For each field, include the exact text quote from the document.",
+          "prompt": "Extract all action items from these meeting notes. For each, identify: 1) the task, 2) person responsible (owner), and 3) due date if mentioned. Return as a list of JSON objects.",
           "model": "openrouter:deepseek-v4",
           "costLimitCents": 100,
           "inType": {
@@ -115,273 +102,156 @@
           }
         },
         {
-          "id": "mod_quote_c55dba68b38941e9acc76ab9",
-          "kind": "quote",
-          "label": "Link Quotes",
-          "auto": true,
-          "note": "Auto · ReceiptRow → ReceiptRow · links LLM quote strings to source spans.",
-          "inStructureId": "6c439960fa674629a1b7f56a",
-          "outStructureId": "6c439960fa674629a1b7f56a",
-          "outType": {
-            "kind": "list",
-            "item": {
-              "kind": "ref",
-              "modelId": "6c439960fa674629a1b7f56a"
-            }
-          },
-          "cached": true,
-          "avgMs": 12,
-          "avgCostCents": 0,
-          "inType": {
-            "kind": "ref",
-            "modelId": "6c439960fa674629a1b7f56a"
-          }
-        },
-        {
-          "id": "67a53b32578f4974871bcb19",
+          "id": "439afbe8eecb44f3bbd99b4f",
           "kind": "output",
-          "label": "Receipt Rows Output",
+          "label": "Action Items Output",
           "note": "",
           "cached": true,
           "avgMs": 0,
           "avgCostCents": 0,
-          "inputDescription": "List of ReceiptRow objects — all extracted fields with source quotes",
-          "inStructureId": "6c439960fa674629a1b7f56a",
-          "outStructureId": "6c439960fa674629a1b7f56a",
+          "inputDescription": "List of extracted ActionItem objects",
+          "inStructureId": "b46b4505496841d786ede42a",
+          "outStructureId": "b46b4505496841d786ede42a",
           "outType": {
             "kind": "ref",
-            "modelId": "6c439960fa674629a1b7f56a"
+            "modelId": "b46b4505496841d786ede42a"
           },
           "inType": {
             "kind": "ref",
-            "modelId": "6c439960fa674629a1b7f56a"
+            "modelId": "b46b4505496841d786ede42a"
           }
         }
       ],
       "strategies": [],
-      "documentation": "# Receipt Spreadsheet\n\nBatch upload PDF receipts → extract structured fields with source quotes → output as spreadsheet rows."
+      "documentation": "# Meeting Note Action Extractor\n\nUpload multiple meeting note text files → batch extract action items → output as spreadsheet-ready rows.\n\nEach action item includes:\n- Task description\n- Owner (person responsible)\n- Optional due date if mentioned\n\nThe output list is directly exportable to CSV/XLSX from the UI."
     },
     {
-      "id": "p_5b017bac17fb4d6eaf480dc5",
-      "name": "Resume Skill Matcher",
+      "id": "p_596fda01b12149038d2bf277",
+      "name": "Homework Grader",
       "kind": "blank",
-      "createdAt": 1787021155736,
-      "lastOpenedAt": 1787021155736,
+      "createdAt": 1787027947118,
+      "lastOpenedAt": 1787027947118,
       "models": [
         {
-          "id": "73e8692e0f44478496755c0d",
-          "name": "Resume",
-          "description": "Extracted fields from one candidate resume.",
+          "id": "da767da4fa854e09a6c32fee",
+          "name": "Rubric",
+          "description": "Grading rubric with questions and max scores.",
           "fields": [
             {
-              "id": "1df3f08917a24eebb684223e",
-              "name": "name",
+              "id": "cbf1ae47477346b882be6e60",
+              "name": "questions",
               "optional": false,
-              "description": "Candidate name with source quote",
-              "type": "tuple[text,quote]"
-            },
-            {
-              "id": "271d491c90fc44168c5abad0",
-              "name": "years_exp",
-              "optional": false,
-              "description": "Years of experience",
-              "type": "float"
-            },
-            {
-              "id": "203381eb3c0b443581b8df76",
-              "name": "email",
-              "optional": true,
-              "description": "Candidate email if present",
-              "type": "tuple[text,quote]"
-            },
-            {
-              "id": "20e38e751ab549348226b6c9",
-              "name": "fit_score",
-              "optional": false,
-              "description": "1-5 fit score for the role",
-              "type": "float"
-            },
-            {
-              "id": "ed66248c00d84c46ac8e8a68",
-              "name": "skills",
-              "optional": false,
-              "description": "List of skills with source quotes",
-              "type": "list[tuple[text,quote]]"
-            }
-          ]
-        },
-        {
-          "id": "ab433352d7c3459798c9983b",
-          "name": "JobDescription",
-          "description": "Required skills from the job posting.",
-          "fields": [
-            {
-              "id": "fd352ac2126141d7b4b860d9",
-              "name": "text",
-              "optional": false,
-              "description": "Full job description text",
-              "type": "text"
-            },
-            {
-              "id": "61f5abf4657c49dda4fab3ef",
-              "name": "required_skills",
-              "optional": false,
-              "description": "List of required skills",
+              "description": "List of rubric questions",
               "type": "list[text]"
+            },
+            {
+              "id": "56269ca191ef468abbfe0dd3",
+              "name": "max_scores",
+              "optional": false,
+              "description": "Max scores for each question",
+              "type": "json",
+              "typeExpr": {
+                "kind": "list",
+                "item": {
+                  "kind": "prim",
+                  "name": "int"
+                }
+              }
             }
           ]
         },
         {
-          "id": "0f63e4abb2294a118ea3a2d2",
-          "name": "ResumeBatch",
-          "description": "Combined input - resumes plus job description.",
+          "id": "06559d15816143d08f0df4e0",
+          "name": "Homework",
+          "description": "Student homework submission.",
           "fields": [
             {
-              "id": "93ad8919a49a4825958dcfd2",
-              "name": "resumes",
+              "id": "074e057fd29a47b987923b13",
+              "name": "student_name",
               "optional": false,
-              "description": "Candidate resumes",
-              "type": "list[model]",
-              "ref": "73e8692e0f44478496755c0d"
+              "description": "Student name",
+              "type": "text"
             },
             {
-              "id": "a2176920ae574de29fc78c08",
-              "name": "job_desc",
+              "id": "92c1009813ac4c1bbb814006",
+              "name": "content",
               "optional": false,
-              "description": "Job description",
+              "description": "Homework content",
+              "type": "text"
+            }
+          ]
+        },
+        {
+          "id": "6e7499df272742a68114a91c",
+          "name": "GradedRow",
+          "description": "One graded rubric item per student.",
+          "fields": [
+            {
+              "id": "8454b6430dc646df86487f92",
+              "name": "student_name",
+              "optional": false,
+              "description": "Student name",
+              "type": "text"
+            },
+            {
+              "id": "98cf9357032946d58c1dff17",
+              "name": "question",
+              "optional": false,
+              "description": "Rubric question",
+              "type": "text"
+            },
+            {
+              "id": "a5488d09a0f348f790c12358",
+              "name": "score",
+              "optional": false,
+              "description": "Assigned score",
+              "type": "int"
+            },
+            {
+              "id": "bdb3ccae94ea4ca0ab59b594",
+              "name": "comment",
+              "optional": false,
+              "description": "Grading comment",
+              "type": "text"
+            }
+          ]
+        },
+        {
+          "id": "022dbe6353b040a8b0cef2c2",
+          "name": "GradingInput",
+          "description": "Combined rubric and homework for grading.",
+          "fields": [
+            {
+              "id": "02ee841650f04bfb85db4a41",
+              "name": "rubric",
+              "optional": false,
+              "description": "Parsed rubric",
               "type": "model",
-              "ref": "ab433352d7c3459798c9983b"
-            }
-          ]
-        },
-        {
-          "id": "b131e29eb9bb4e179aa812c2",
-          "name": "SkillMatch",
-          "description": "One skill match result.",
-          "fields": [
-            {
-              "id": "d7dba2e4042a4968a1e283e3",
-              "name": "candidate_name",
-              "optional": false,
-              "description": "From resume name field",
-              "type": "text"
+              "ref": "da767da4fa854e09a6c32fee"
             },
             {
-              "id": "9dd2d9c4b51144369656399b",
-              "name": "skill",
+              "id": "8edb5ffb1589406487ba827e",
+              "name": "homework",
               "optional": false,
-              "description": "Skill text",
-              "type": "text"
-            },
-            {
-              "id": "ce7a9da471f2450e8432fee9",
-              "name": "matched",
-              "optional": false,
-              "description": "True if skill is in job requirements",
-              "type": "bool"
-            },
-            {
-              "id": "e36128fe95904bb0892bf81f",
-              "name": "years_exp",
-              "optional": false,
-              "description": "From resume",
-              "type": "float"
-            },
-            {
-              "id": "5d50158896954a0d89c8b038",
-              "name": "fit_score",
-              "optional": false,
-              "description": "From resume",
-              "type": "float"
+              "description": "Student homework",
+              "type": "model",
+              "ref": "06559d15816143d08f0df4e0"
             }
           ]
         }
       ],
       "modules": [
         {
-          "id": "15c4bb4909694bdc86f076b8",
+          "id": "0cb379ca6a48481aa1d8c7c5",
           "kind": "input",
-          "label": "Resume Uploads",
-          "note": "Many candidate resumes in text format.",
+          "label": "Rubric Input",
+          "note": "Single rubric file with questions and max scores.",
           "cached": true,
           "avgMs": 0,
           "avgCostCents": 0,
           "inputType": "text",
-          "inputNameContains": "resume",
-          "inputDescription": "Plain-text candidate resumes — one upload per candidate",
-          "inputMinCount": 1,
-          "outStructureId": "m_builtin_document",
-          "outType": {
-            "kind": "list",
-            "item": {
-              "kind": "ref",
-              "modelId": "m_builtin_document"
-            }
-          }
-        },
-        {
-          "id": "c0ad74c679ef4f84b1ad7d10",
-          "kind": "llm-batch",
-          "label": "Extract Resume Fields",
-          "note": "One structured Resume per uploaded Document.",
-          "cached": true,
-          "avgMs": 0,
-          "avgCostCents": 0,
-          "inputDescription": "List of Document objects — one resume file each",
-          "inStructureId": "m_builtin_document",
-          "outStructureId": "73e8692e0f44478496755c0d",
-          "outType": {
-            "kind": "list",
-            "item": {
-              "kind": "ref",
-              "modelId": "73e8692e0f44478496755c0d"
-            }
-          },
-          "prompt": "Extract name (with quote), years of experience (number), optional email (with quote if present), 1-5 fit score (number), and list of skills (each with quote).",
-          "model": "openrouter:deepseek-v4",
-          "costLimitCents": 100,
-          "inType": {
-            "kind": "list",
-            "item": {
-              "kind": "ref",
-              "modelId": "m_builtin_document"
-            }
-          }
-        },
-        {
-          "id": "mod_quote_c0ad74c679ef4f84b1ad7d10",
-          "kind": "quote",
-          "label": "Link Quotes",
-          "auto": true,
-          "note": "Auto · Resume → Resume · links LLM quote strings to source spans.",
-          "inStructureId": "73e8692e0f44478496755c0d",
-          "outStructureId": "73e8692e0f44478496755c0d",
-          "outType": {
-            "kind": "list",
-            "item": {
-              "kind": "ref",
-              "modelId": "73e8692e0f44478496755c0d"
-            }
-          },
-          "cached": true,
-          "avgMs": 12,
-          "avgCostCents": 0,
-          "inType": {
-            "kind": "ref",
-            "modelId": "73e8692e0f44478496755c0d"
-          }
-        },
-        {
-          "id": "b183bbe564764809ae560d03",
-          "kind": "input",
-          "label": "Job Description",
-          "note": "Single job description text file.",
-          "cached": true,
-          "avgMs": 0,
-          "avgCostCents": 0,
-          "inputType": "text",
-          "inputNameContains": "job_desc",
-          "inputDescription": "Plain-text job description with required skills",
+          "inputNameContains": "rubric",
+          "inputDescription": "Text file with rubric questions and max scores",
           "outStructureId": "m_builtin_document",
           "outType": {
             "kind": "ref",
@@ -389,287 +259,286 @@
           }
         },
         {
-          "id": "0d651f7aa85444cda1c66c6d",
-          "kind": "llm",
-          "label": "Parse Job Requirements",
-          "note": "Extract required skills from job description.",
-          "cached": true,
-          "avgMs": 0,
-          "avgCostCents": 0,
-          "inputDescription": "Job description Document text",
-          "inStructureId": "m_builtin_document",
-          "outStructureId": "ab433352d7c3459798c9983b",
-          "outType": {
-            "kind": "ref",
-            "modelId": "ab433352d7c3459798c9983b"
-          },
-          "prompt": "List all required technical skills from this job description. Return as a list in required_skills.",
-          "model": "openrouter:deepseek-v4",
-          "costLimitCents": 100,
-          "inType": {
-            "kind": "ref",
-            "modelId": "m_builtin_document"
-          }
-        },
-        {
-          "id": "007767d0089a4b85a9f2e034",
-          "kind": "assemble",
-          "label": "Merge Resume Batch",
-          "note": "Combine resume batch (from state) with parsed job description.",
-          "cached": true,
-          "avgMs": 0,
-          "avgCostCents": 0,
-          "inputDescription": "Resume list from Extract plus job description from Parse",
-          "inStructureId": "73e8692e0f44478496755c0d",
-          "outStructureId": "0f63e4abb2294a118ea3a2d2",
-          "outType": {
-            "kind": "ref",
-            "modelId": "0f63e4abb2294a118ea3a2d2"
-          },
-          "assembleBindings": {
-            "resumes": {
-              "kind": "state",
-              "label": "Extract Resume Fields"
-            },
-            "job_desc": {
-              "kind": "spine"
-            }
-          },
-          "inType": {
-            "kind": "ref",
-            "modelId": "73e8692e0f44478496755c0d"
-          }
-        },
-        {
-          "id": "36458ef9b798463d975f693d",
+          "id": "27f053512eba4141ac8ab91c",
           "kind": "custom-code",
-          "label": "Flatten Skill Matches",
-          "note": "ResumeBatch → list[SkillMatch] for spreadsheet output.",
+          "label": "Parse Rubric",
+          "note": "Convert rubric text to structured Rubric model.",
           "cached": true,
           "avgMs": 0,
           "avgCostCents": 0,
-          "inputDescription": "Combined ResumeBatch with resumes and job_desc",
-          "inStructureId": "0f63e4abb2294a118ea3a2d2",
-          "outStructureId": "b131e29eb9bb4e179aa812c2",
+          "inputDescription": "Document with rubric text",
+          "inStructureId": "m_builtin_document",
+          "outStructureId": "da767da4fa854e09a6c32fee",
           "outType": {
-            "kind": "list",
-            "item": {
-              "kind": "ref",
-              "modelId": "b131e29eb9bb4e179aa812c2"
-            }
+            "kind": "ref",
+            "modelId": "da767da4fa854e09a6c32fee"
           },
           "fallbackList": [
             {
-              "typescript": "(batch) => batch.resumes.flatMap(resume => resume.skills.map(skill => ({ candidate_name: resume.name[0], skill: skill[0], matched: batch.job_desc.required_skills.includes(skill[0]), years_exp: resume.years_exp, fit_score: resume.fit_score })))"
+              "typescript": "(doc) => {\n  const lines = doc.content.split('\\n').filter(l => l.trim());\n  const questions = lines.map(l => l.split('(')[0].trim());\n  const maxScores = lines.map(l => parseInt(l.match(/\\(max (\\d+)/)?.[1] || '0'));\n  return { questions, max_scores: maxScores };\n}"
             }
           ],
           "maxRunMs": 60000,
           "inType": {
             "kind": "ref",
-            "modelId": "0f63e4abb2294a118ea3a2d2"
+            "modelId": "m_builtin_document"
           }
         },
         {
-          "id": "b3c9143fe84f45588c394b35",
-          "kind": "output",
-          "label": "Skill Matches Output",
-          "note": "Final spreadsheet output.",
+          "id": "6a76aaaa5daa4a97bc423d54",
+          "kind": "input",
+          "label": "Homework Uploads",
+          "note": "Many student homework files uploaded into one slot.",
           "cached": true,
           "avgMs": 0,
           "avgCostCents": 0,
-          "inputDescription": "List of SkillMatch objects — one row per skill mention",
-          "inStructureId": "b131e29eb9bb4e179aa812c2",
-          "outStructureId": "b131e29eb9bb4e179aa812c2",
+          "inputType": "text",
+          "inputNameContains": "homework",
+          "inputDescription": "Text files with student homework submissions",
+          "inputMinCount": 1,
+          "outStructureId": "m_builtin_document",
+          "outType": {
+            "kind": "list",
+            "item": {
+              "kind": "ref",
+              "modelId": "m_builtin_document"
+            }
+          }
+        },
+        {
+          "id": "906c3ba1c9b740d4a789058e",
+          "kind": "custom-code",
+          "label": "Parse Homeworks",
+          "note": "Convert homework documents to structured Homework models.",
+          "cached": true,
+          "avgMs": 0,
+          "avgCostCents": 0,
+          "inputDescription": "List of Document objects - one homework file each",
+          "inStructureId": "m_builtin_document",
+          "outStructureId": "06559d15816143d08f0df4e0",
+          "outType": {
+            "kind": "list",
+            "item": {
+              "kind": "ref",
+              "modelId": "06559d15816143d08f0df4e0"
+            }
+          },
+          "fallbackList": [
+            {
+              "typescript": "(docs) => docs.map(doc => {\n  const content = doc.content;\n  const nameMatch = content.match(/Student:\\s*(.+)/);\n  return {\n    student_name: nameMatch?.[1]?.trim() || 'Unknown',\n    content: content\n  };\n})"
+            }
+          ],
+          "maxRunMs": 60000,
+          "inType": {
+            "kind": "ref",
+            "modelId": "m_builtin_document"
+          }
+        },
+        {
+          "id": "0e588759992347eaa06a69fb",
+          "kind": "llm-batch",
+          "label": "Grade Homeworks",
+          "note": "Grade each homework against the rubric.",
+          "cached": true,
+          "avgMs": 0,
+          "avgCostCents": 0,
+          "inputDescription": "Homework objects to grade against rubric",
+          "inStructureId": "06559d15816143d08f0df4e0",
+          "outStructureId": "6e7499df272742a68114a91c",
+          "outType": {
+            "kind": "list",
+            "item": {
+              "kind": "ref",
+              "modelId": "6e7499df272742a68114a91c"
+            }
+          },
+          "prompt": "Grade this homework against the rubric. For each rubric question, assign a score (0 to max) and write a brief comment. Output one GradedRow per rubric question.\n\nRubric questions: {state.Rubric.questions}\nMax scores: {state.Rubric.max_scores}",
+          "model": "openrouter:deepseek-v4",
+          "costLimitCents": 100,
+          "inType": {
+            "kind": "list",
+            "item": {
+              "kind": "ref",
+              "modelId": "06559d15816143d08f0df4e0"
+            }
+          }
+        },
+        {
+          "id": "34891f1614ec42419358dfa9",
+          "kind": "output",
+          "label": "Grades Output",
+          "note": "Final graded results.",
+          "cached": true,
+          "avgMs": 0,
+          "avgCostCents": 0,
+          "inputDescription": "List of GradedRow objects - one per student per question",
+          "inStructureId": "6e7499df272742a68114a91c",
+          "outStructureId": "6e7499df272742a68114a91c",
           "outType": {
             "kind": "ref",
-            "modelId": "b131e29eb9bb4e179aa812c2"
+            "modelId": "6e7499df272742a68114a91c"
           },
           "inType": {
             "kind": "ref",
-            "modelId": "b131e29eb9bb4e179aa812c2"
+            "modelId": "6e7499df272742a68114a91c"
           }
         }
       ],
       "strategies": [],
-      "documentation": "# Resume Skill Matcher\n\n1. Upload many candidate resumes (text files)\n2. Upload one job description\n3. Pipeline extracts resume fields with source quotes\n4. Parses required skills from job description\n5. Assembles inputs and checks skill matches\n6. Outputs spreadsheet with one row per skill mention\n\nFields:\n- Quoted: name, email, skills\n- Numbers: years_exp, fit_score\n- Boolean: matched (skill in requirements)"
+      "documentation": "# Homework Grader\n\n1. Upload rubric (single text file)\n2. Upload student homeworks (many text files)\n3. Pipeline parses both\n4. Grades each homework against rubric\n5. Outputs spreadsheet with one row per student-question\n\nExport results as CSV/XLSX from the viewer."
+    },
+    {
+      "id": "p_f45568e37fb040bd92c0c414",
+      "name": "Untitled Pipeline",
+      "kind": "blank",
+      "createdAt": 1787028144917,
+      "lastOpenedAt": 1787028144917,
+      "models": [],
+      "modules": [
+        {
+          "id": "mod_blank_in_p_f45568e37fb040bd92c0c414",
+          "kind": "input",
+          "label": "Input",
+          "note": "Pipeline input document",
+          "inputType": "text",
+          "cached": true,
+          "avgMs": 80,
+          "avgCostCents": 0
+        },
+        {
+          "id": "mod_blank_out_p_f45568e37fb040bd92c0c414",
+          "kind": "output",
+          "label": "Output",
+          "note": "",
+          "cached": true,
+          "avgMs": 40,
+          "avgCostCents": 0
+        }
+      ],
+      "strategies": []
     }
   ],
   "docs": [
     {
-      "id": "sha_504621569078cd8e",
-      "name": "sample_document.txt",
+      "id": "sha_deacff9923d40d67",
+      "name": "meeting_notes_1.txt",
       "type": "text",
       "label": "inference",
       "sizeKb": 1,
-      "uploadedAt": 1786628504752,
-      "preview": "The quick brown fox jumps over the lazy dog. This well-known sentence contains all the letters in the English alphabet. It is often used for typing practice and"
+      "uploadedAt": 1787027887627,
+      "preview": "Team sync 2024-03-15\n- John to research pricing models by next Friday\n- Sarah will draft the client proposal (due March 22)\n- All: Review Q2 goals before next m"
     },
     {
-      "id": "sha_519407778e9dd198",
-      "name": "sample_receipt_1.txt",
+      "id": "sha_7b3ea702b79e7c55",
+      "name": "meeting_notes_2.txt",
       "type": "text",
       "label": "inference",
       "sizeKb": 1,
-      "uploadedAt": 1786983541734,
-      "preview": "COFFEE SHOP\nDate: 2024-03-01\nTotal: $4.50\nTax: $0.45\nCategory: Meals"
+      "uploadedAt": 1787027887628,
+      "preview": "Design review notes\nACTION ITEMS:\n1. Mike - update logo mockups (priority)\n2. Lisa needs to gather feedback from stakeholders\n3. Final approval needed by April "
     },
     {
-      "id": "sha_13685db6b86a4d0b",
-      "name": "sample_receipt_2.txt",
+      "id": "sha_1151fd3c1a81a5f1",
+      "name": "rubric.txt",
       "type": "text",
       "label": "inference",
       "sizeKb": 1,
-      "uploadedAt": 1786983541734,
-      "preview": "TAXI SERVICE\nDate: 2024-03-02\nTotal: $18.00\nTax: $1.80\nCategory: Transportation"
+      "uploadedAt": 1787028123135,
+      "preview": "1. Thesis clarity (max 5 points)\n2. Evidence quality (max 10 points)\n3. Grammar (max 3 points)"
     },
     {
-      "id": "sha_0efdcc16b06c9da6",
-      "name": "sample_resume_1.txt",
+      "id": "sha_3af87fb3459dc4d1",
+      "name": "homework1.txt",
       "type": "text",
       "label": "inference",
       "sizeKb": 1,
-      "uploadedAt": 1787023613092,
-      "preview": "John Doe\n5 years experience\nEmail: john@example.com\nSkills: Python, SQL, Data Analysis\nFit: 4"
+      "uploadedAt": 1787028123135,
+      "preview": "Student: Alex Chen\nThis essay argues that renewable energy is essential. I provide three studies showing solar efficiency gains. There are some minor grammatica"
     },
     {
-      "id": "sha_53b7e0c1de2c6720",
-      "name": "sample_resume_2.txt",
+      "id": "sha_66bdf8b4ea6a0261",
+      "name": "homework2.txt",
       "type": "text",
       "label": "inference",
       "sizeKb": 1,
-      "uploadedAt": 1787023613096,
-      "preview": "Jane Smith\n8 years experience\nSkills: Python, Machine Learning, Cloud\nFit: 5"
-    },
-    {
-      "id": "sha_6cf87812c4ff13dc",
-      "name": "sample_job_desc.txt",
-      "type": "text",
-      "label": "inference",
-      "sizeKb": 1,
-      "uploadedAt": 1787023613096,
-      "preview": "Data Scientist\nRequired skills: Python, Machine Learning, SQL"
-    },
-    {
-      "id": "sha_3eb6fdb2727971cb",
-      "name": "resume_john.txt",
-      "type": "text",
-      "label": "inference",
-      "sizeKb": 1,
-      "uploadedAt": 1787026040128,
-      "preview": "John Doe\n5 years experience\njohn@example.com\nSkills: Python, SQL, AWS"
-    },
-    {
-      "id": "sha_9e5cf7691e882c79",
-      "name": "resume_jane.txt",
-      "type": "text",
-      "label": "inference",
-      "sizeKb": 1,
-      "uploadedAt": 1787026040128,
-      "preview": "Jane Smith\n3 years experience\njane@example.com\nSkills: JavaScript, React, Node.js"
-    },
-    {
-      "id": "sha_89bea3b2876e309f",
-      "name": "job_description.txt",
-      "type": "text",
-      "label": "inference",
-      "sizeKb": 1,
-      "uploadedAt": 1787026040130,
-      "preview": "We're hiring a Full Stack Developer. Required skills: JavaScript, React, Node.js, Python"
+      "uploadedAt": 1787028123137,
+      "preview": "Student: Jamie Rivera\nMy paper discusses urban planning challenges. The arguments lack strong data backing. Several run-on sentences present."
     }
   ],
   "docContents": {
-    "sha_504621569078cd8e": "The quick brown fox jumps over the lazy dog. This well-known sentence contains all the letters in the English alphabet. It is often used for typing practice and testing fonts. The earliest known use of this phrase dates back to the late 19th century.",
-    "sha_519407778e9dd198": "COFFEE SHOP\nDate: 2024-03-01\nTotal: $4.50\nTax: $0.45\nCategory: Meals",
-    "sha_13685db6b86a4d0b": "TAXI SERVICE\nDate: 2024-03-02\nTotal: $18.00\nTax: $1.80\nCategory: Transportation",
-    "sha_0efdcc16b06c9da6": "John Doe\n5 years experience\nEmail: john@example.com\nSkills: Python, SQL, Data Analysis\nFit: 4",
-    "sha_53b7e0c1de2c6720": "Jane Smith\n8 years experience\nSkills: Python, Machine Learning, Cloud\nFit: 5",
-    "sha_6cf87812c4ff13dc": "Data Scientist\nRequired skills: Python, Machine Learning, SQL",
-    "sha_3eb6fdb2727971cb": "John Doe\n5 years experience\njohn@example.com\nSkills: Python, SQL, AWS",
-    "sha_9e5cf7691e882c79": "Jane Smith\n3 years experience\njane@example.com\nSkills: JavaScript, React, Node.js",
-    "sha_89bea3b2876e309f": "We're hiring a Full Stack Developer. Required skills: JavaScript, React, Node.js, Python"
+    "sha_deacff9923d40d67": "Team sync 2024-03-15\n- John to research pricing models by next Friday\n- Sarah will draft the client proposal (due March 22)\n- All: Review Q2 goals before next meeting",
+    "sha_7b3ea702b79e7c55": "Design review notes\nACTION ITEMS:\n1. Mike - update logo mockups (priority)\n2. Lisa needs to gather feedback from stakeholders\n3. Final approval needed by April 5",
+    "sha_1151fd3c1a81a5f1": "1. Thesis clarity (max 5 points)\n2. Evidence quality (max 10 points)\n3. Grammar (max 3 points)",
+    "sha_3af87fb3459dc4d1": "Student: Alex Chen\nThis essay argues that renewable energy is essential. I provide three studies showing solar efficiency gains. There are some minor grammatical issues.",
+    "sha_66bdf8b4ea6a0261": "Student: Jamie Rivera\nMy paper discusses urban planning challenges. The arguments lack strong data backing. Several run-on sentences present."
   },
   "runs": [],
-  "activeProjectId": "p_5b017bac17fb4d6eaf480dc5",
+  "activeProjectId": "p_f45568e37fb040bd92c0c414",
   "model": "openrouter:deepseek-v4",
-  "inferenceInputDocIds": {
-    "75b56f0bc9b843c0bd38c0f5": "sha_519407778e9dd198"
-  },
+  "inferenceInputDocIds": {},
   "pendingCreates": [
     {
-      "id": "p_64e3ab8303ed483db5d78653",
-      "name": "Receipt Spreadsheet",
+      "id": "p_77ef971e033b457e9eaea2e8",
+      "name": "Meeting Note Action Extractor",
       "kind": "blank",
-      "createdAt": 1786677060922,
-      "lastOpenedAt": 1786677060922,
+      "createdAt": 1787027671426,
+      "lastOpenedAt": 1787027671426,
       "models": [
         {
-          "id": "6c439960fa674629a1b7f56a",
-          "name": "ReceiptRow",
-          "description": "Structured fields extracted from one receipt with source quotes.",
+          "id": "dec3f886a25e4c31bd0a3e01",
+          "name": "MeetingNote",
+          "description": "Single meeting note document containing action items.",
           "fields": [
             {
-              "id": "c497b4bf57244807b39d31d7",
-              "name": "merchant",
+              "id": "87db5538712e4569ab1864b9",
+              "name": "content",
               "optional": false,
-              "description": "Vendor name with source quote",
-              "type": "tuple[text,quote]"
+              "description": "Raw meeting note text",
+              "type": "text"
+            }
+          ]
+        },
+        {
+          "id": "b46b4505496841d786ede42a",
+          "name": "ActionItem",
+          "description": "One extracted action item from meeting notes.",
+          "fields": [
+            {
+              "id": "dee1a55f6c7d4768b5699024",
+              "name": "task",
+              "optional": false,
+              "description": "The action to be completed",
+              "type": "text"
             },
             {
-              "id": "dfa399fadbf042558c4d0252",
-              "name": "date",
+              "id": "4682da1cee2646529de1d0c4",
+              "name": "owner",
               "optional": false,
-              "description": "Transaction date with source quote",
-              "type": "tuple[text,quote]"
+              "description": "Person responsible for the task",
+              "type": "text"
             },
             {
-              "id": "38713a0a02f94d69968327f7",
-              "name": "amount",
-              "optional": false,
-              "description": "Total amount with source quote",
-              "type": "tuple[text,quote]"
-            },
-            {
-              "id": "efd2fedd8fb3476bbfed1b0c",
-              "name": "currency",
-              "optional": false,
-              "description": "Currency code with source quote",
-              "type": "tuple[text,quote]"
-            },
-            {
-              "id": "fa71850728af4afaaef5a378",
-              "name": "category",
-              "optional": false,
-              "description": "Expense category with source quote",
-              "type": "tuple[text,quote]"
-            },
-            {
-              "id": "1ccedc0367054f10b477d4e3",
-              "name": "tax",
-              "optional": false,
-              "description": "Tax amount with source quote",
-              "type": "tuple[text,quote]"
-            },
-            {
-              "id": "00cf77d749d74008bc58bd24",
-              "name": "source_file",
-              "optional": false,
-              "description": "Original receipt document",
-              "type": "document"
+              "id": "61c8433ceffb46b3aa81cb8e",
+              "name": "due_date",
+              "optional": true,
+              "description": "Due date if mentioned (text format)",
+              "type": "text"
             }
           ]
         }
       ],
       "modules": [
         {
-          "id": "75b56f0bc9b843c0bd38c0f5",
+          "id": "7e36f18ab5274f12a0cc5533",
           "kind": "input",
-          "label": "Receipt Uploads",
-          "note": "Batch upload of PDF receipts for processing.",
+          "label": "Meeting Notes Upload",
+          "note": "Upload multiple meeting note text files",
           "cached": true,
           "avgMs": 0,
           "avgCostCents": 0,
-          "inputType": "pdf",
-          "inputDescription": "PDF receipts — one upload per receipt",
+          "inputType": "text",
+          "inputNameContains": "meeting",
+          "inputDescription": "Text files containing meeting notes with action items",
           "inputMinCount": 1,
           "outStructureId": "m_builtin_document",
           "outType": {
@@ -681,24 +550,24 @@
           }
         },
         {
-          "id": "c55dba68b38941e9acc76ab9",
+          "id": "fc1ab71b3f6240d5bae6945c",
           "kind": "llm-batch",
-          "label": "Extract Receipt Fields",
-          "note": "Extract structured fields from each receipt with source quotes.",
+          "label": "Extract Action Items",
+          "note": "Extract structured action items from each meeting note",
           "cached": true,
           "avgMs": 0,
           "avgCostCents": 0,
-          "inputDescription": "List of Document objects — one PDF receipt each",
+          "inputDescription": "List of meeting note Documents",
           "inStructureId": "m_builtin_document",
-          "outStructureId": "6c439960fa674629a1b7f56a",
+          "outStructureId": "b46b4505496841d786ede42a",
           "outType": {
             "kind": "list",
             "item": {
               "kind": "ref",
-              "modelId": "6c439960fa674629a1b7f56a"
+              "modelId": "b46b4505496841d786ede42a"
             }
           },
-          "prompt": "Extract merchant name, date, amount, currency, category, and tax from this receipt. For each field, include the exact text quote from the document.",
+          "prompt": "Extract all action items from these meeting notes. For each, identify: 1) the task, 2) person responsible (owner), and 3) due date if mentioned. Return as a list of JSON objects.",
           "model": "openrouter:deepseek-v4",
           "costLimitCents": 100,
           "inType": {
@@ -710,273 +579,156 @@
           }
         },
         {
-          "id": "mod_quote_c55dba68b38941e9acc76ab9",
-          "kind": "quote",
-          "label": "Link Quotes",
-          "auto": true,
-          "note": "Auto · ReceiptRow → ReceiptRow · links LLM quote strings to source spans.",
-          "inStructureId": "6c439960fa674629a1b7f56a",
-          "outStructureId": "6c439960fa674629a1b7f56a",
-          "outType": {
-            "kind": "list",
-            "item": {
-              "kind": "ref",
-              "modelId": "6c439960fa674629a1b7f56a"
-            }
-          },
-          "cached": true,
-          "avgMs": 12,
-          "avgCostCents": 0,
-          "inType": {
-            "kind": "ref",
-            "modelId": "6c439960fa674629a1b7f56a"
-          }
-        },
-        {
-          "id": "67a53b32578f4974871bcb19",
+          "id": "439afbe8eecb44f3bbd99b4f",
           "kind": "output",
-          "label": "Receipt Rows Output",
+          "label": "Action Items Output",
           "note": "",
           "cached": true,
           "avgMs": 0,
           "avgCostCents": 0,
-          "inputDescription": "List of ReceiptRow objects — all extracted fields with source quotes",
-          "inStructureId": "6c439960fa674629a1b7f56a",
-          "outStructureId": "6c439960fa674629a1b7f56a",
+          "inputDescription": "List of extracted ActionItem objects",
+          "inStructureId": "b46b4505496841d786ede42a",
+          "outStructureId": "b46b4505496841d786ede42a",
           "outType": {
             "kind": "ref",
-            "modelId": "6c439960fa674629a1b7f56a"
+            "modelId": "b46b4505496841d786ede42a"
           },
           "inType": {
             "kind": "ref",
-            "modelId": "6c439960fa674629a1b7f56a"
+            "modelId": "b46b4505496841d786ede42a"
           }
         }
       ],
       "strategies": [],
-      "documentation": "# Receipt Spreadsheet\n\nBatch upload PDF receipts → extract structured fields with source quotes → output as spreadsheet rows."
+      "documentation": "# Meeting Note Action Extractor\n\nUpload multiple meeting note text files → batch extract action items → output as spreadsheet-ready rows.\n\nEach action item includes:\n- Task description\n- Owner (person responsible)\n- Optional due date if mentioned\n\nThe output list is directly exportable to CSV/XLSX from the UI."
     },
     {
-      "id": "p_5b017bac17fb4d6eaf480dc5",
-      "name": "Resume Skill Matcher",
+      "id": "p_596fda01b12149038d2bf277",
+      "name": "Homework Grader",
       "kind": "blank",
-      "createdAt": 1787021155736,
-      "lastOpenedAt": 1787021155736,
+      "createdAt": 1787027947118,
+      "lastOpenedAt": 1787027947118,
       "models": [
         {
-          "id": "73e8692e0f44478496755c0d",
-          "name": "Resume",
-          "description": "Extracted fields from one candidate resume.",
+          "id": "da767da4fa854e09a6c32fee",
+          "name": "Rubric",
+          "description": "Grading rubric with questions and max scores.",
           "fields": [
             {
-              "id": "1df3f08917a24eebb684223e",
-              "name": "name",
+              "id": "cbf1ae47477346b882be6e60",
+              "name": "questions",
               "optional": false,
-              "description": "Candidate name with source quote",
-              "type": "tuple[text,quote]"
-            },
-            {
-              "id": "271d491c90fc44168c5abad0",
-              "name": "years_exp",
-              "optional": false,
-              "description": "Years of experience",
-              "type": "float"
-            },
-            {
-              "id": "203381eb3c0b443581b8df76",
-              "name": "email",
-              "optional": true,
-              "description": "Candidate email if present",
-              "type": "tuple[text,quote]"
-            },
-            {
-              "id": "20e38e751ab549348226b6c9",
-              "name": "fit_score",
-              "optional": false,
-              "description": "1-5 fit score for the role",
-              "type": "float"
-            },
-            {
-              "id": "ed66248c00d84c46ac8e8a68",
-              "name": "skills",
-              "optional": false,
-              "description": "List of skills with source quotes",
-              "type": "list[tuple[text,quote]]"
-            }
-          ]
-        },
-        {
-          "id": "ab433352d7c3459798c9983b",
-          "name": "JobDescription",
-          "description": "Required skills from the job posting.",
-          "fields": [
-            {
-              "id": "fd352ac2126141d7b4b860d9",
-              "name": "text",
-              "optional": false,
-              "description": "Full job description text",
-              "type": "text"
-            },
-            {
-              "id": "61f5abf4657c49dda4fab3ef",
-              "name": "required_skills",
-              "optional": false,
-              "description": "List of required skills",
+              "description": "List of rubric questions",
               "type": "list[text]"
+            },
+            {
+              "id": "56269ca191ef468abbfe0dd3",
+              "name": "max_scores",
+              "optional": false,
+              "description": "Max scores for each question",
+              "type": "json",
+              "typeExpr": {
+                "kind": "list",
+                "item": {
+                  "kind": "prim",
+                  "name": "int"
+                }
+              }
             }
           ]
         },
         {
-          "id": "0f63e4abb2294a118ea3a2d2",
-          "name": "ResumeBatch",
-          "description": "Combined input - resumes plus job description.",
+          "id": "06559d15816143d08f0df4e0",
+          "name": "Homework",
+          "description": "Student homework submission.",
           "fields": [
             {
-              "id": "93ad8919a49a4825958dcfd2",
-              "name": "resumes",
+              "id": "074e057fd29a47b987923b13",
+              "name": "student_name",
               "optional": false,
-              "description": "Candidate resumes",
-              "type": "list[model]",
-              "ref": "73e8692e0f44478496755c0d"
+              "description": "Student name",
+              "type": "text"
             },
             {
-              "id": "a2176920ae574de29fc78c08",
-              "name": "job_desc",
+              "id": "92c1009813ac4c1bbb814006",
+              "name": "content",
               "optional": false,
-              "description": "Job description",
+              "description": "Homework content",
+              "type": "text"
+            }
+          ]
+        },
+        {
+          "id": "6e7499df272742a68114a91c",
+          "name": "GradedRow",
+          "description": "One graded rubric item per student.",
+          "fields": [
+            {
+              "id": "8454b6430dc646df86487f92",
+              "name": "student_name",
+              "optional": false,
+              "description": "Student name",
+              "type": "text"
+            },
+            {
+              "id": "98cf9357032946d58c1dff17",
+              "name": "question",
+              "optional": false,
+              "description": "Rubric question",
+              "type": "text"
+            },
+            {
+              "id": "a5488d09a0f348f790c12358",
+              "name": "score",
+              "optional": false,
+              "description": "Assigned score",
+              "type": "int"
+            },
+            {
+              "id": "bdb3ccae94ea4ca0ab59b594",
+              "name": "comment",
+              "optional": false,
+              "description": "Grading comment",
+              "type": "text"
+            }
+          ]
+        },
+        {
+          "id": "022dbe6353b040a8b0cef2c2",
+          "name": "GradingInput",
+          "description": "Combined rubric and homework for grading.",
+          "fields": [
+            {
+              "id": "02ee841650f04bfb85db4a41",
+              "name": "rubric",
+              "optional": false,
+              "description": "Parsed rubric",
               "type": "model",
-              "ref": "ab433352d7c3459798c9983b"
-            }
-          ]
-        },
-        {
-          "id": "b131e29eb9bb4e179aa812c2",
-          "name": "SkillMatch",
-          "description": "One skill match result.",
-          "fields": [
-            {
-              "id": "d7dba2e4042a4968a1e283e3",
-              "name": "candidate_name",
-              "optional": false,
-              "description": "From resume name field",
-              "type": "text"
+              "ref": "da767da4fa854e09a6c32fee"
             },
             {
-              "id": "9dd2d9c4b51144369656399b",
-              "name": "skill",
+              "id": "8edb5ffb1589406487ba827e",
+              "name": "homework",
               "optional": false,
-              "description": "Skill text",
-              "type": "text"
-            },
-            {
-              "id": "ce7a9da471f2450e8432fee9",
-              "name": "matched",
-              "optional": false,
-              "description": "True if skill is in job requirements",
-              "type": "bool"
-            },
-            {
-              "id": "e36128fe95904bb0892bf81f",
-              "name": "years_exp",
-              "optional": false,
-              "description": "From resume",
-              "type": "float"
-            },
-            {
-              "id": "5d50158896954a0d89c8b038",
-              "name": "fit_score",
-              "optional": false,
-              "description": "From resume",
-              "type": "float"
+              "description": "Student homework",
+              "type": "model",
+              "ref": "06559d15816143d08f0df4e0"
             }
           ]
         }
       ],
       "modules": [
         {
-          "id": "15c4bb4909694bdc86f076b8",
+          "id": "0cb379ca6a48481aa1d8c7c5",
           "kind": "input",
-          "label": "Resume Uploads",
-          "note": "Many candidate resumes in text format.",
+          "label": "Rubric Input",
+          "note": "Single rubric file with questions and max scores.",
           "cached": true,
           "avgMs": 0,
           "avgCostCents": 0,
           "inputType": "text",
-          "inputNameContains": "resume",
-          "inputDescription": "Plain-text candidate resumes — one upload per candidate",
-          "inputMinCount": 1,
-          "outStructureId": "m_builtin_document",
-          "outType": {
-            "kind": "list",
-            "item": {
-              "kind": "ref",
-              "modelId": "m_builtin_document"
-            }
-          }
-        },
-        {
-          "id": "c0ad74c679ef4f84b1ad7d10",
-          "kind": "llm-batch",
-          "label": "Extract Resume Fields",
-          "note": "One structured Resume per uploaded Document.",
-          "cached": true,
-          "avgMs": 0,
-          "avgCostCents": 0,
-          "inputDescription": "List of Document objects — one resume file each",
-          "inStructureId": "m_builtin_document",
-          "outStructureId": "73e8692e0f44478496755c0d",
-          "outType": {
-            "kind": "list",
-            "item": {
-              "kind": "ref",
-              "modelId": "73e8692e0f44478496755c0d"
-            }
-          },
-          "prompt": "Extract name (with quote), years of experience (number), optional email (with quote if present), 1-5 fit score (number), and list of skills (each with quote).",
-          "model": "openrouter:deepseek-v4",
-          "costLimitCents": 100,
-          "inType": {
-            "kind": "list",
-            "item": {
-              "kind": "ref",
-              "modelId": "m_builtin_document"
-            }
-          }
-        },
-        {
-          "id": "mod_quote_c0ad74c679ef4f84b1ad7d10",
-          "kind": "quote",
-          "label": "Link Quotes",
-          "auto": true,
-          "note": "Auto · Resume → Resume · links LLM quote strings to source spans.",
-          "inStructureId": "73e8692e0f44478496755c0d",
-          "outStructureId": "73e8692e0f44478496755c0d",
-          "outType": {
-            "kind": "list",
-            "item": {
-              "kind": "ref",
-              "modelId": "73e8692e0f44478496755c0d"
-            }
-          },
-          "cached": true,
-          "avgMs": 12,
-          "avgCostCents": 0,
-          "inType": {
-            "kind": "ref",
-            "modelId": "73e8692e0f44478496755c0d"
-          }
-        },
-        {
-          "id": "b183bbe564764809ae560d03",
-          "kind": "input",
-          "label": "Job Description",
-          "note": "Single job description text file.",
-          "cached": true,
-          "avgMs": 0,
-          "avgCostCents": 0,
-          "inputType": "text",
-          "inputNameContains": "job_desc",
-          "inputDescription": "Plain-text job description with required skills",
+          "inputNameContains": "rubric",
+          "inputDescription": "Text file with rubric questions and max scores",
           "outStructureId": "m_builtin_document",
           "outType": {
             "kind": "ref",
@@ -984,200 +736,374 @@
           }
         },
         {
-          "id": "0d651f7aa85444cda1c66c6d",
-          "kind": "llm",
-          "label": "Parse Job Requirements",
-          "note": "Extract required skills from job description.",
-          "cached": true,
-          "avgMs": 0,
-          "avgCostCents": 0,
-          "inputDescription": "Job description Document text",
-          "inStructureId": "m_builtin_document",
-          "outStructureId": "ab433352d7c3459798c9983b",
-          "outType": {
-            "kind": "ref",
-            "modelId": "ab433352d7c3459798c9983b"
-          },
-          "prompt": "List all required technical skills from this job description. Return as a list in required_skills.",
-          "model": "openrouter:deepseek-v4",
-          "costLimitCents": 100,
-          "inType": {
-            "kind": "ref",
-            "modelId": "m_builtin_document"
-          }
-        },
-        {
-          "id": "007767d0089a4b85a9f2e034",
-          "kind": "assemble",
-          "label": "Merge Resume Batch",
-          "note": "Combine resume batch (from state) with parsed job description.",
-          "cached": true,
-          "avgMs": 0,
-          "avgCostCents": 0,
-          "inputDescription": "Resume list from Extract plus job description from Parse",
-          "inStructureId": "73e8692e0f44478496755c0d",
-          "outStructureId": "0f63e4abb2294a118ea3a2d2",
-          "outType": {
-            "kind": "ref",
-            "modelId": "0f63e4abb2294a118ea3a2d2"
-          },
-          "assembleBindings": {
-            "resumes": {
-              "kind": "state",
-              "label": "Extract Resume Fields"
-            },
-            "job_desc": {
-              "kind": "spine"
-            }
-          },
-          "inType": {
-            "kind": "ref",
-            "modelId": "73e8692e0f44478496755c0d"
-          }
-        },
-        {
-          "id": "36458ef9b798463d975f693d",
+          "id": "27f053512eba4141ac8ab91c",
           "kind": "custom-code",
-          "label": "Flatten Skill Matches",
-          "note": "ResumeBatch → list[SkillMatch] for spreadsheet output.",
+          "label": "Parse Rubric",
+          "note": "Convert rubric text to structured Rubric model.",
           "cached": true,
           "avgMs": 0,
           "avgCostCents": 0,
-          "inputDescription": "Combined ResumeBatch with resumes and job_desc",
-          "inStructureId": "0f63e4abb2294a118ea3a2d2",
-          "outStructureId": "b131e29eb9bb4e179aa812c2",
+          "inputDescription": "Document with rubric text",
+          "inStructureId": "m_builtin_document",
+          "outStructureId": "da767da4fa854e09a6c32fee",
           "outType": {
-            "kind": "list",
-            "item": {
-              "kind": "ref",
-              "modelId": "b131e29eb9bb4e179aa812c2"
-            }
+            "kind": "ref",
+            "modelId": "da767da4fa854e09a6c32fee"
           },
           "fallbackList": [
             {
-              "typescript": "(batch) => batch.resumes.flatMap(resume => resume.skills.map(skill => ({ candidate_name: resume.name[0], skill: skill[0], matched: batch.job_desc.required_skills.includes(skill[0]), years_exp: resume.years_exp, fit_score: resume.fit_score })))"
+              "typescript": "(doc) => {\n  const lines = doc.content.split('\\n').filter(l => l.trim());\n  const questions = lines.map(l => l.split('(')[0].trim());\n  const maxScores = lines.map(l => parseInt(l.match(/\\(max (\\d+)/)?.[1] || '0'));\n  return { questions, max_scores: maxScores };\n}"
             }
           ],
           "maxRunMs": 60000,
           "inType": {
             "kind": "ref",
-            "modelId": "0f63e4abb2294a118ea3a2d2"
+            "modelId": "m_builtin_document"
           }
         },
         {
-          "id": "b3c9143fe84f45588c394b35",
-          "kind": "output",
-          "label": "Skill Matches Output",
-          "note": "Final spreadsheet output.",
+          "id": "6a76aaaa5daa4a97bc423d54",
+          "kind": "input",
+          "label": "Homework Uploads",
+          "note": "Many student homework files uploaded into one slot.",
           "cached": true,
           "avgMs": 0,
           "avgCostCents": 0,
-          "inputDescription": "List of SkillMatch objects — one row per skill mention",
-          "inStructureId": "b131e29eb9bb4e179aa812c2",
-          "outStructureId": "b131e29eb9bb4e179aa812c2",
+          "inputType": "text",
+          "inputNameContains": "homework",
+          "inputDescription": "Text files with student homework submissions",
+          "inputMinCount": 1,
+          "outStructureId": "m_builtin_document",
+          "outType": {
+            "kind": "list",
+            "item": {
+              "kind": "ref",
+              "modelId": "m_builtin_document"
+            }
+          }
+        },
+        {
+          "id": "906c3ba1c9b740d4a789058e",
+          "kind": "custom-code",
+          "label": "Parse Homeworks",
+          "note": "Convert homework documents to structured Homework models.",
+          "cached": true,
+          "avgMs": 0,
+          "avgCostCents": 0,
+          "inputDescription": "List of Document objects - one homework file each",
+          "inStructureId": "m_builtin_document",
+          "outStructureId": "06559d15816143d08f0df4e0",
+          "outType": {
+            "kind": "list",
+            "item": {
+              "kind": "ref",
+              "modelId": "06559d15816143d08f0df4e0"
+            }
+          },
+          "fallbackList": [
+            {
+              "typescript": "(docs) => docs.map(doc => {\n  const content = doc.content;\n  const nameMatch = content.match(/Student:\\s*(.+)/);\n  return {\n    student_name: nameMatch?.[1]?.trim() || 'Unknown',\n    content: content\n  };\n})"
+            }
+          ],
+          "maxRunMs": 60000,
+          "inType": {
+            "kind": "ref",
+            "modelId": "m_builtin_document"
+          }
+        },
+        {
+          "id": "0e588759992347eaa06a69fb",
+          "kind": "llm-batch",
+          "label": "Grade Homeworks",
+          "note": "Grade each homework against the rubric.",
+          "cached": true,
+          "avgMs": 0,
+          "avgCostCents": 0,
+          "inputDescription": "Homework objects to grade against rubric",
+          "inStructureId": "06559d15816143d08f0df4e0",
+          "outStructureId": "6e7499df272742a68114a91c",
+          "outType": {
+            "kind": "list",
+            "item": {
+              "kind": "ref",
+              "modelId": "6e7499df272742a68114a91c"
+            }
+          },
+          "prompt": "Grade this homework against the rubric. For each rubric question, assign a score (0 to max) and write a brief comment. Output one GradedRow per rubric question.\n\nRubric questions: {state.Rubric.questions}\nMax scores: {state.Rubric.max_scores}",
+          "model": "openrouter:deepseek-v4",
+          "costLimitCents": 100,
+          "inType": {
+            "kind": "list",
+            "item": {
+              "kind": "ref",
+              "modelId": "06559d15816143d08f0df4e0"
+            }
+          }
+        },
+        {
+          "id": "34891f1614ec42419358dfa9",
+          "kind": "output",
+          "label": "Grades Output",
+          "note": "Final graded results.",
+          "cached": true,
+          "avgMs": 0,
+          "avgCostCents": 0,
+          "inputDescription": "List of GradedRow objects - one per student per question",
+          "inStructureId": "6e7499df272742a68114a91c",
+          "outStructureId": "6e7499df272742a68114a91c",
           "outType": {
             "kind": "ref",
-            "modelId": "b131e29eb9bb4e179aa812c2"
+            "modelId": "6e7499df272742a68114a91c"
           },
           "inType": {
             "kind": "ref",
-            "modelId": "b131e29eb9bb4e179aa812c2"
+            "modelId": "6e7499df272742a68114a91c"
           }
         }
       ],
       "strategies": [],
-      "documentation": "# Resume Skill Matcher\n\n1. Upload many candidate resumes (text files)\n2. Upload one job description\n3. Pipeline extracts resume fields with source quotes\n4. Parses required skills from job description\n5. Assembles inputs and checks skill matches\n6. Outputs spreadsheet with one row per skill mention\n\nFields:\n- Quoted: name, email, skills\n- Numbers: years_exp, fit_score\n- Boolean: matched (skill in requirements)"
+      "documentation": "# Homework Grader\n\n1. Upload rubric (single text file)\n2. Upload student homeworks (many text files)\n3. Pipeline parses both\n4. Grades each homework against rubric\n5. Outputs spreadsheet with one row per student-question\n\nExport results as CSV/XLSX from the viewer."
+    },
+    {
+      "id": "p_f45568e37fb040bd92c0c414",
+      "name": "Untitled Pipeline",
+      "kind": "blank",
+      "createdAt": 1787028144917,
+      "lastOpenedAt": 1787028144917,
+      "models": [],
+      "modules": [
+        {
+          "id": "mod_blank_in_p_f45568e37fb040bd92c0c414",
+          "kind": "input",
+          "label": "Input",
+          "note": "Pipeline input document",
+          "inputType": "text",
+          "cached": true,
+          "avgMs": 80,
+          "avgCostCents": 0
+        },
+        {
+          "id": "mod_blank_out_p_f45568e37fb040bd92c0c414",
+          "kind": "output",
+          "label": "Output",
+          "note": "",
+          "cached": true,
+          "avgMs": 40,
+          "avgCostCents": 0
+        }
+      ],
+      "strategies": []
     }
   ],
   "deletedProjectIds": [
     "p_847505af14944a7f8ccad718",
     "p_71d5f3db3a754f54a9ebe5ea",
     "p_bc1d7e7768864696b142b8da",
-    "p_5932d2d53bcc4fd287ad77f0"
+    "p_5932d2d53bcc4fd287ad77f0",
+    "p_5b017bac17fb4d6eaf480dc5",
+    "p_64e3ab8303ed483db5d78653"
   ],
   "chat": [
     {
       "role": "user",
-      "content": "please create a project to summarise a list of documents in a single paragraph."
+      "content": "From one uploaded contract text file, extract three things independently: a list of risks (quoted from the contract), a list of parties (quoted), and a list of key dates (quoted). Then write a one-paragraph diligence memo that uses all three lists. Include a short sample contract so I can run it."
     },
     {
       "role": "assistant",
-      "content": "I'll create a document summarizer pipeline that takes text documents and produces concise one-paragraph summaries. The pipeline will have 3 steps: input → LLM summarization → output."
-    },
-    {
-      "role": "user",
-      "content": "Build a pipeline for accounts payable: users upload many PDF receipts at once (hundreds). For each receipt extract merchant, date, amount, currency, category, and tax. Every extracted field that comes from the document should be quote-linked back to the source. Output one spreadsheet of all receipt rows. Rename the project to Receipt Spreadsheet."
-    },
-    {
-      "role": "assistant",
-      "content": "Pipeline: PDF batch upload → per-receipt field extraction → spreadsheet output. All fields include source quotes."
-    },
-    {
-      "role": "user",
-      "content": "Fix the receipt spreadsheet so amount and tax are numbers I can sum, not quoted text. Category is a guess (meals, travel) — don't quote it. Currency is often missing, so make it optional plain text. Don't put the original file on each row; that's already the upload. I already uploaded sample_receipt_1.txt and sample_receipt_2.txt — make sure I can actually run with those files."
-    },
-    {
-      "role": "assistant",
-      "content": "Updated receipt pipeline: numeric amounts, optional currency, plain category, and removed file reference. Ready to test with your uploaded receipts."
-    },
-    {
-      "role": "user",
-      "content": "I still cannot run with sample_receipt_1.txt and sample_receipt_2.txt — Inference says the slot wants PDFs. Switch the upload slot to plain text so those files work. Also the extract prompt still tells the model to quote amount and tax, but those fields are numbers now — stop asking for quotes on numeric fields. Keep the existing steps; this is a small fix, not a rebuild."
-    },
-    {
-      "role": "assistant",
-      "content": "Fixed: input accepts text files now, and extract prompt only quotes merchant/date. Amount/tax are plain numbers, currency optional."
-    },
-    {
-      "role": "user",
-      "content": "Build a finance pipeline for our team. We upload many vendor invoices (PDF or photos) each week plus one company travel policy. Extract vendor, invoice date, total, currency, and each line item with quotes back to the invoice text. Flag any line that looks like it violates the travel policy. Output a spreadsheet of all lines with pass/fail plus a short reason. Include a couple of sample invoices and a sample policy so we can try it immediately."
-    },
-    {
-      "role": "assistant",
-      "content": "Fixed pipeline: invoice batch → policy → combine → compliance check → output. Added sample invoices and policy for testing."
-    },
-    {
-      "role": "user",
-      "content": "Build a finance pipeline for our team. We upload many vendor invoices (PDF or photos) each week plus one company travel policy. Extract vendor, invoice date, total, currency, and each line item with quotes back to the invoice text. Flag any line that looks like it violates the travel policy. Output a spreadsheet of all lines with pass/fail plus a short reason. Include a couple of sample invoices and a sample policy so we can try it immediately. Use text stand-in files (not PDF inputType) so the samples actually run."
-    },
-    {
-      "role": "assistant",
-      "content": "Fixed pipeline: invoice batch → policy → combine → compliance check → output. Added sample invoices and policy for testing."
-    },
-    {
-      "role": "user",
-      "content": "The pending pipeline is still invalid: Check Policy Compliance is llm-batch so it expects list[AuditInput], but Merge for Validation (combine) emits a single AuditInput. Change that step to a single llm (not llm-batch). Also explode to a spreadsheet of LineItem rows (one row per line) rather than nested Invoice objects. Do not add Convert to text / Parse to structure / Link Quotes yourself."
-    },
-    {
-      "role": "assistant",
-      "content": "Fixed pipeline: combine now feeds single llm (not batch), and added transform to flatten line items for spreadsheet output. Ready to test with your invoice and policy files."
-    },
-    {
-      "role": "user",
-      "content": "This is a NEW blank project — ignore any earlier chat about receipts or invoices.\n\nBuild a recruiting screen pipeline.\n- Users upload many candidate resumes (plain text files) plus one job description.\n- For each resume extract: candidate name (quoted from the resume), years of experience (a number), email (quoted if present, otherwise optional), a 1–5 fit score (inferred, not quoted), and each listed skill as quoted text.\n- Then check which skills match the job description.\n- Output a spreadsheet of one row per skill mention: candidate name, skill, matched true/false, years of experience, fit score.\n- Include 2 sample resumes and 1 job description so we can run immediately. Use text files, not PDFs. Do not emit Convert to text, Parse to structure, or Link Quotes yourself."
-    },
-    {
-      "role": "assistant",
-      "content": "Pipeline: batch resume upload → extract fields → parse job → combine → flatten matches → spreadsheet output. Includes sample resumes and job description for testing."
-    },
-    {
-      "role": "user",
-      "content": "The pipeline is invalid — fix the validation errors. Goal stays the same: many candidate resumes + one job description → spreadsheet of skill matches (one row per skill mention, with matched against JD required skills). Do not add a third upload slot. Keep quoted name/email/skills, numeric years_exp/fit_score, boolean matched."
-    },
-    {
-      "role": "assistant",
-      "content": "Fixed validation errors by: 1) Moving job description input before combine, 2) Ensuring JobDescription is consumed by combine, 3) Properly sequencing inputs to avoid state drops."
-    },
-    {
-      "role": "user",
-      "content": "Replace Combine Inputs (and the extra \"Combine Inputs Document\" upload) with an assemble step. Correct spine:\n1) Resume Uploads list[Document] → Extract Resume Fields (llm-batch) → Link Quotes (auto)\n2) Job Description Document → Parse Job Requirements (llm) so JobDescription is on the spine\n3) assemble: resumes from state[\"Extract Resume Fields\"] or state[\"Link Quotes\"], job_desc from spine → ResumeBatch\n4) custom-code flatten to list[SkillMatch] using .text on quoted fields, never [0]\n5) output\nDo not emit a third input. Do not use combine. Two uploads only: resumes + job_desc."
-    },
-    {
-      "role": "assistant",
-      "content": "Fixed validation errors by: 1) Moving job description processing before assemble, 2) Properly sequencing inputs to avoid state drops, 3) Aligning assemble bindings to use resume state and job spine"
+      "content": "Pipeline: contract upload → structured extraction → memo synthesis. Sample contract included for testing."
     }
   ],
-  "pendingProposal": null,
+  "pendingProposal": {
+    "modules": [
+      {
+        "id": "08b23d66714744f9ba3b4728",
+        "kind": "input",
+        "label": "Contract Upload",
+        "note": "Single contract text file input.",
+        "cached": true,
+        "avgMs": 0,
+        "avgCostCents": 0,
+        "inputType": "text",
+        "inputDescription": "Contract text document",
+        "outStructureId": "m_builtin_document",
+        "outType": {
+          "kind": "ref",
+          "modelId": "m_builtin_document"
+        }
+      },
+      {
+        "id": "e6a87129a37d474299738148",
+        "kind": "llm",
+        "label": "Extract Contract Data",
+        "note": "Extract risks, parties, and dates with source quotes.",
+        "cached": true,
+        "avgMs": 0,
+        "avgCostCents": 0,
+        "inputDescription": "Contract Document text",
+        "inStructureId": "m_builtin_document",
+        "outStructureId": "8f2b60447bf84e6ea29cac2c",
+        "outType": {
+          "kind": "ref",
+          "modelId": "8f2b60447bf84e6ea29cac2c"
+        },
+        "prompt": "From this contract text, extract: 1) List of risks (include direct quotes) 2) List of parties (include direct quotes) 3) List of key dates (include direct quotes). Return as structured ExtractedData.",
+        "model": "openrouter:deepseek-v4",
+        "costLimitCents": 100,
+        "inType": {
+          "kind": "ref",
+          "modelId": "m_builtin_document"
+        }
+      },
+      {
+        "id": "mod_quote_e6a87129a37d474299738148",
+        "kind": "quote",
+        "label": "Link Quotes",
+        "auto": true,
+        "note": "Auto · ExtractedData → ExtractedData · links LLM quote strings to source spans.",
+        "inStructureId": "8f2b60447bf84e6ea29cac2c",
+        "outStructureId": "8f2b60447bf84e6ea29cac2c",
+        "outType": {
+          "kind": "ref",
+          "modelId": "8f2b60447bf84e6ea29cac2c"
+        },
+        "cached": true,
+        "avgMs": 12,
+        "avgCostCents": 0,
+        "inType": {
+          "kind": "ref",
+          "modelId": "8f2b60447bf84e6ea29cac2c"
+        }
+      },
+      {
+        "id": "5e609acc9ced40d3adcba1e3",
+        "kind": "llm",
+        "label": "Synthesize Memo",
+        "note": "Generate one-paragraph diligence memo from extractions.",
+        "cached": true,
+        "avgMs": 0,
+        "avgCostCents": 0,
+        "inputDescription": "ExtractedData with risks, parties, and dates",
+        "inStructureId": "8f2b60447bf84e6ea29cac2c",
+        "outStructureId": "a32e0de59ed94a98baa1a373",
+        "outType": {
+          "kind": "ref",
+          "modelId": "a32e0de59ed94a98baa1a373"
+        },
+        "prompt": "Write a one-paragraph diligence memo using these extracted elements: Risks: {risks}, Parties: {parties}, Dates: {dates}",
+        "model": "openrouter:deepseek-v4",
+        "costLimitCents": 100,
+        "inType": {
+          "kind": "ref",
+          "modelId": "8f2b60447bf84e6ea29cac2c"
+        }
+      },
+      {
+        "id": "e3716667ce454f2abca0842f",
+        "kind": "output",
+        "label": "Memo Output",
+        "note": "",
+        "cached": true,
+        "avgMs": 0,
+        "avgCostCents": 0,
+        "inputDescription": "Final DiligenceMemo content",
+        "inStructureId": "a32e0de59ed94a98baa1a373",
+        "outStructureId": "a32e0de59ed94a98baa1a373",
+        "outType": {
+          "kind": "ref",
+          "modelId": "a32e0de59ed94a98baa1a373"
+        },
+        "inType": {
+          "kind": "ref",
+          "modelId": "a32e0de59ed94a98baa1a373"
+        }
+      }
+    ],
+    "models": [
+      {
+        "id": "cc6ce963d0db45b7a4706815",
+        "name": "ContractText",
+        "description": "Uploaded contract text document.",
+        "fields": [
+          {
+            "id": "48578ea1b89246c99718ff00",
+            "name": "content",
+            "optional": false,
+            "description": "Full contract text",
+            "type": "text"
+          },
+          {
+            "id": "85c1a319df014ad0a4bb0da3",
+            "name": "filename",
+            "optional": false,
+            "description": "Original filename",
+            "type": "text"
+          }
+        ]
+      },
+      {
+        "id": "8f2b60447bf84e6ea29cac2c",
+        "name": "ExtractedData",
+        "description": "Structured extractions from contract text.",
+        "fields": [
+          {
+            "id": "becca41c0be1445f99639eb6",
+            "name": "risks",
+            "optional": false,
+            "description": "List of risk clauses with source quotes",
+            "type": "list[tuple[text,quote]]"
+          },
+          {
+            "id": "511b471a98a94d9f9f85749b",
+            "name": "parties",
+            "optional": false,
+            "description": "List of parties with source quotes",
+            "type": "list[tuple[text,quote]]"
+          },
+          {
+            "id": "4477aa7632f843c6bd44a73b",
+            "name": "dates",
+            "optional": false,
+            "description": "List of key dates with source quotes",
+            "type": "list[tuple[text,quote]]"
+          }
+        ]
+      },
+      {
+        "id": "a32e0de59ed94a98baa1a373",
+        "name": "DiligenceMemo",
+        "description": "Final synthesized memo.",
+        "fields": [
+          {
+            "id": "b0a05ffaaaca4dd880a8b7ac",
+            "name": "content",
+            "optional": false,
+            "description": "One-paragraph memo summarizing risks, parties, and dates",
+            "type": "text"
+          }
+        ]
+      }
+    ],
+    "typeAliases": [],
+    "docs": [
+      {
+        "name": "sample_contract.txt",
+        "type": "text",
+        "content": "AGREEMENT dated 2024-03-15 between Acme Corp ('Company') and Beta LLC ('Vendor').\n\nSection 5: 'Supplier bears all risk of loss during transport.'\n\nSection 8: 'Term begins 2024-04-01, ends 2025-03-31. Late delivery incurs 2% daily penalty.'\n\nNotices to: John Doe (Vendor), Jane Smith (Company).\n\nForce majeure applies if delay exceeds 30 days.",
+        "label": "inference"
+      }
+    ],
+    "documentation": "# Contract Diligence Analyzer\n\n1. Upload contract text\n2. Extract risks, parties, and dates with source quotes\n3. Synthesize one-paragraph memo\n\nOutput is a text memo summarizing key contract elements.",
+    "projectName": "Contract Diligence Analyzer",
+    "changed": {
+      "modules": true,
+      "models": true,
+      "typeAliases": false,
+      "docs": true,
+      "documentation": true,
+      "name": true,
+      "actions": false
+    }
+  },
   "modelOptions": [],
   "billingRuns": [],
   "billingAccount": null,
@@ -1186,5 +1112,11 @@
   "saveError": null,
   "shareLinkIds": [],
   "hostedApiIds": [],
-  "docProjectIds": {}
+  "docProjectIds": {},
+  "chatByProjectId": {
+    "p_77ef971e033b457e9eaea2e8": [],
+    "p_596fda01b12149038d2bf277": [],
+    "p_f45568e37fb040bd92c0c414": []
+  },
+  "assistantInFlight": null
 }

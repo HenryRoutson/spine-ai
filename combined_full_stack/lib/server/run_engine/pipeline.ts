@@ -11,6 +11,7 @@ import {
   orderedInputModules,
 } from "../../inference-input";
 import { unknownProject } from "../api-errors";
+import { flattenPipelineModules, findPipelineModule, forkBranchesOf, laneLastModule, locatePipelineModule } from "@/lib/fork-pipeline";
 import { dataDir } from "../config";
 import { fileWriteHelper } from "../file_write_helper";
 import { collectLogsDuring, withStepModuleContext } from "../job_log_sink";
@@ -52,6 +53,7 @@ import { persistArtifacts, persistCustomCodeArtifacts } from "./artifacts";
 import { restoreCtx } from "./context";
 import { createWriteLive } from "./live";
 import { runLinearStepsFrom } from "./linear";
+import { execForkJoin } from "./steps/fork";
 import { buildAssertResult, buildClientResult, buildHumanReviewResult, buildChatbotResult, buildLlmClientResult, failedStepResult } from "./results";
 import type { ClientStepResume, RunCtx, RunOptions } from "./engine_types";
 
@@ -154,7 +156,6 @@ export async function runPipeline(
   });
 
   const writeLive = createWriteLive(project, model, steps, opts.liveHtml ?? persist);
-  // AI : TODO (allow-pipeline-non-linear-fork) — walk outer spine; Fork → Promise.all lanes then join (not a flat index loop).
   await runLinearStepsFrom(
     {
       project,
@@ -221,7 +222,7 @@ export async function runPipeline(
   if (persist) {
     log.info(`persisting artifacts`, { artifactCount: artifacts.length });
     persistArtifacts(runId, inputDocId, store, artifacts, project.modules, project.models);
-    for (const m of project.modules) persistCustomCodeArtifacts(runId, m);
+    for (const m of flattenPipelineModules(project.modules)) persistCustomCodeArtifacts(runId, m);
     fileWriteHelper(join(dataDir(), "runs", runId), "run_high_level", "html", runToHtml(run));
     store.addRun(projectId, run);
   }
@@ -270,12 +271,14 @@ export async function resumeRunPipeline(
     .flatMap((s) => {
       const value = ctx.outputs.get(s.moduleId);
       if (value === undefined) return [];
-      const m = project.modules.find((x) => x.id === s.moduleId);
+      const m = findPipelineModule(project.modules, s.moduleId);
       const structId = m?.outStructureId ?? (m?.kind === "output" || m?.kind === "assert" || m?.kind === "human-review" ? m.inStructureId : undefined);
       return [{ moduleId: s.moduleId, structure: modelById(project.models, structId), value }];
     });
 
-  const m = project.modules[checkpoint.stepIndex];
+  const m =
+    findPipelineModule(project.modules, checkpoint.clientStep.moduleId) ??
+    project.modules[checkpoint.stepIndex];
   if (!m) throw new Error(`resume: invalid step index ${checkpoint.stepIndex}`);
 
   const writeLive = createWriteLive(project, model, steps, opts.liveHtml ?? persist);
@@ -441,28 +444,61 @@ export async function resumeRunPipeline(
     return run;
   }
 
-  // AI : TODO (allow-pipeline-non-linear-fork) — resume must restore branchId and continue that lane.
-  await runLinearStepsFrom(
-    {
-      project,
-      projectId: checkpoint.projectId,
-      model,
-      cacheOwnerId,
-      ctx,
-      steps,
-      artifacts,
-      ledger,
-      log,
-      opts,
-      writeLive,
-      runId: checkpoint.runId,
-      startedAt: checkpoint.startedAt,
-      inputDocId: checkpoint.inputDocId,
-      fingerprintInputDocIds,
-      savedCentsAcc,
-    },
-    checkpoint.stepIndex + 1,
-  );
+  const loc = locatePipelineModule(project.modules, m.id)
+  const linearParams = {
+    project,
+    projectId: checkpoint.projectId,
+    model,
+    cacheOwnerId,
+    ctx,
+    steps,
+    artifacts,
+    ledger,
+    log,
+    opts,
+    writeLive,
+    runId: checkpoint.runId,
+    startedAt: checkpoint.startedAt,
+    inputDocId: checkpoint.inputDocId,
+    fingerprintInputDocIds,
+    savedCentsAcc,
+  }
+  if (loc?.parentFork && loc.branchId) {
+    await runLinearStepsFrom(
+      { ...linearParams, modules: loc.siblings, forkId: loc.parentFork.id, branchId: loc.branchId },
+      loc.index + 1,
+    )
+    const forkPrev = locatePipelineModule(project.modules, loc.parentFork.id)?.predecessor?.id
+    await Promise.all(
+      forkBranchesOf(loc.parentFork).map(async (b) => {
+        if (b.id === loc.branchId) return
+        const last = laneLastModule(b)
+        if (last && ctx.outputs.has(last.id)) return
+        const status = await runLinearStepsFrom(
+          {
+            ...linearParams,
+            ctx: { ...ctx, prevModuleId: forkPrev },
+            modules: b.modules,
+            forkId: loc.parentFork!.id,
+            branchId: b.id,
+          },
+          0,
+        )
+        if (status === "error") throw new Error(`fork lane "${b.label}" failed`)
+      }),
+    )
+    ctx.prevModuleId = forkPrev
+    const join = await execForkJoin(loc.parentFork, ctx, log)
+    ctx.outputs.set(loc.parentFork.id, join.value)
+    ctx.byLabel[loc.parentFork.label.trim()] = join.value
+    ctx.prevModuleId = loc.parentFork.id
+    const forkLoc = locatePipelineModule(project.modules, loc.parentFork.id)
+    if (forkLoc) {
+      await runLinearStepsFrom({ ...linearParams, modules: forkLoc.siblings }, forkLoc.index + 1)
+    }
+  } else {
+    await runLinearStepsFrom({ ...linearParams, modules: loc?.siblings ?? project.modules }, (loc?.index ?? checkpoint.stepIndex) + 1)
+  }
 
   const { totalMs, billedCents } = finalizeRunMetrics(steps, checkpoint.startedAt);
   const savedCents = +savedCentsAcc.value.toFixed(4);
@@ -492,7 +528,7 @@ export async function resumeRunPipeline(
   writeLive(-1);
   if (persist) {
     persistArtifacts(checkpoint.runId, checkpoint.inputDocId, store, artifacts, project.modules, project.models);
-    for (const mod of project.modules) persistCustomCodeArtifacts(checkpoint.runId, mod);
+    for (const mod of flattenPipelineModules(project.modules)) persistCustomCodeArtifacts(checkpoint.runId, mod);
     fileWriteHelper(join(dataDir(), "runs", checkpoint.runId), "run_high_level", "html", runToHtml(run));
     store.addRun(checkpoint.projectId, run);
   }

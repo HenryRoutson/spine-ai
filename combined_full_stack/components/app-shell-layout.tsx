@@ -46,6 +46,7 @@ import { ProjectAssistantDockToggle } from "@/components/project-assistant-dock"
 import { DiagnosisAgentHub } from "@/components/diagnosis-agents/diagnosis-agent-hub"
 import { uiContextTargetProps } from "@/lib/ui-context-dom"
 import { RunningJobsHub } from "@/components/running-jobs-hub"
+import { RunJobsProvider } from "@/lib/run-jobs-context"
 import { TooltipProvider } from "@/components/ui/tooltip"
 import { isPreviewOnly } from "@/lib/demo-mode"
 import { ActivityTracker } from "@/components/activity-tracker"
@@ -255,10 +256,13 @@ function useSyncPrimarySectionReady(section: AppPrimarySection) {
 }
 
 export function AppShellLayout({ variant = "default" }: { variant?: "default" | "embed" }) {
+  // AI : provider lives here so / and /demo (landing live preview) both get a jobs registry.
   return (
-    <PrimarySectionOpeningProvider>
-      <AppShellLayoutInner variant={variant} />
-    </PrimarySectionOpeningProvider>
+    <RunJobsProvider>
+      <PrimarySectionOpeningProvider>
+        <AppShellLayoutInner variant={variant} />
+      </PrimarySectionOpeningProvider>
+    </RunJobsProvider>
   )
 }
 
@@ -401,7 +405,7 @@ function ConsumerShellLayoutInner({ variant = "default" }: { variant?: "default"
             <CachedShellWindowPanels
               activeWindow={consumerWindow}
               panelIds={CONSUMER_PANEL_IDS}
-              eagerPanelIds={EAGER_ACCOUNT_PANEL_IDS}
+              eagerPanelIds={embed ? [] : EAGER_ACCOUNT_PANEL_IDS}
             />
           </div>
         </main>
@@ -538,7 +542,7 @@ function BuilderShellLayoutInner({ variant = "default" }: { variant?: "default" 
               <CachedShellWindowPanels
                 activeWindow={activeWindow}
                 panelIds={BUILDER_PANEL_IDS}
-                eagerPanelIds={EAGER_ACCOUNT_PANEL_IDS}
+                eagerPanelIds={embed ? [] : EAGER_ACCOUNT_PANEL_IDS}
               />
             </div>
             <BackgroundPrefetchBar />
@@ -551,7 +555,7 @@ function BuilderShellLayoutInner({ variant = "default" }: { variant?: "default" 
                 <CachedShellWindowPanels
                 activeWindow={activeWindow}
                 panelIds={BUILDER_PANEL_IDS}
-                eagerPanelIds={EAGER_ACCOUNT_PANEL_IDS}
+                eagerPanelIds={embed ? [] : EAGER_ACCOUNT_PANEL_IDS}
               />
               </div>
               <BackgroundPrefetchBar />

@@ -18,7 +18,7 @@
 // AI :   for local mutations. React keeps hydration, debounce save, billing caches (parity.md §8.5).
 // AI : TODO (arch-gui-viewmodels) — React pipeline/docs panels should consume toPipelineView /
 // AI :   toDocsView so CLI and GUI cannot drift (parity.md §8.5).
-// AI : TODO (allow-pipeline-non-linear-fork) — series-parallel Fork step (nested linear lanes + join).
+// AI : DONE (allow-pipeline-non-linear-fork) — series-parallel Fork step (nested linear lanes + join).
 // AI :   Not React Flow. See lib/server/fork-roadmap.ts. Linear spine + Parallel/Combine/Assemble stay.
 // AI : TODO (arch-module-union) — PipelineModule is a god object; discriminated union per ModuleKind.
 // AI : TODO (arch-store-async) — Store is sync + write-behind RAM; make methods async (JsonStore vs
@@ -65,5 +65,18 @@
 // AI : TODO (arch-parser-cache) — JsonStore parser/vision cache should use parser_vision_cache_index + fs adapter.
 // AI : TODO (opt-browser-tui) — optional GUI terminal mode (not required). DOM skin of Ink ViewModels
 // AI :   + extracted controller; never Ink-in-browser or a PTY. lib/cli/ink/browser-tui-roadmap.ts.
+// AI : DONE (vibe-fewshot-explode) — Example 1c wrapper + flatten; PromptListVsItem warning.
+// AI : DONE (vibe-fewshot-parallel) — Example 5 parallel lanes then memo.
+// AI : DONE (vibe-fewshot-assemble) — greenfield names assemble; Example 4 kept.
+// AI : DONE (vibe-mustache) — prompts are not templates; incremental user message repeats it.
+// AI : DONE (vibe-document-clone) — structure rules: do not clone Document.
+// AI : DONE (vibe-module-patch) — incremental turns prefer modulePatch in the user message.
+// AI : DONE (vibe-unused-model) — PipelineWarningKind.UnusedModel.
+// AI : DONE (session-chat-isolate) — never copy orphan global chat; chatForActiveProject uses bag only.
+// AI : DONE (mcp-ask-timeout) — ask_agent returns inFlight; poll get_project.
+// AI : DONE (arch-pending-creates) — persist pendingCreateIds; extras-only pendingCreates.
+// AI : DONE (sql-id-ref) — slices A–B: Key column, branded ids, catalog, inspector, inspect_ids.
+// AI : TODO (sql-id-ref) — slice C: run JSON tables, allowed-id LLM hints, near-match, checkRefs.
+// AI :   Distinct from field.ref (embed) and type-join (lookup-embed). lib/sql-id-roadmap.ts.
 
 export {}

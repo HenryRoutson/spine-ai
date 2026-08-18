@@ -14,6 +14,7 @@ import type { AssistantChatMessage } from "@/components/assistant-chat"
 import { UiContextSelectOverlay } from "@/components/ui-context-select-overlay"
 import { API_ROUTES } from "@/lib/api-routes"
 import { JSON_HEADERS, apiJson } from "@/lib/api-client"
+import { isDemoMode } from "@/lib/demo-mode"
 import type { AssistantStreamingDraft } from "@/lib/assistant-chat-types"
 import type { ProjectProposal } from "@/lib/project-assistant-types"
 import {
@@ -308,12 +309,41 @@ export function ProjectAssistantProvider({ children }: { children: ReactNode }) 
     return merged.sort((a, b) => b.updatedAt - a.updatedAt)
   }
 
+  const seedLocalChat = useCallback((projectId: string, initialMessage: string) => {
+    const localId = `${projectId}-local-${Date.now()}`
+    setChatsByProject((prev) => ({
+      ...prev,
+      [projectId]: [
+        optimisticChatSummary(localId, projectId, "Current chat", 1),
+        ...(prev[projectId] ?? []),
+      ],
+    }))
+    setActiveChatByProject((prev) => {
+      if (prev[projectId]) return prev
+      return { ...prev, [projectId]: localId }
+    })
+    setOpenChatIdsByProject((prev) => {
+      if ((prev[projectId] ?? []).length > 0) return prev
+      return { ...prev, [projectId]: [localId] }
+    })
+    setMessagesByChat((prev) => ({
+      ...prev,
+      [localId]: prev[localId] ?? defaultMessages(localId, initialMessage),
+    }))
+  }, [])
+
   const ensureProjectChats = useCallback(
     async (projectId: string, initialMessage: string) => {
       if (loadStarted.current.has(projectId)) return
       loadStarted.current.add(projectId)
       initialMessageByProject.current.set(projectId, initialMessage)
       setLoadingByProject((prev) => ({ ...prev, [projectId]: true }))
+      // AI : public /demo has no session — skip chats API (401) and keep a local thread.
+      if (isDemoMode()) {
+        seedLocalChat(projectId, initialMessage)
+        setLoadingByProject((prev) => ({ ...prev, [projectId]: false }))
+        return
+      }
       try {
         const { chats } = await apiJson<{ chats: AssistantChatSummary[] }>(
           `${API_ROUTES.assistantChats}?projectId=${encodeURIComponent(projectId)}`,
@@ -370,31 +400,12 @@ export function ProjectAssistantProvider({ children }: { children: ReactNode }) 
           return { ...prev, [projectId]: [activeId!] }
         })
       } catch {
-        const localId = `${projectId}-local-${Date.now()}`
-        setChatsByProject((prev) => ({
-          ...prev,
-          [projectId]: [
-            optimisticChatSummary(localId, projectId, "Current chat", 1),
-            ...(prev[projectId] ?? []),
-          ],
-        }))
-        setActiveChatByProject((prev) => {
-          if (prev[projectId]) return prev
-          return { ...prev, [projectId]: localId }
-        })
-        setOpenChatIdsByProject((prev) => {
-          if ((prev[projectId] ?? []).length > 0) return prev
-          return { ...prev, [projectId]: [localId] }
-        })
-        setMessagesByChat((prev) => ({
-          ...prev,
-          [localId]: prev[localId] ?? defaultMessages(localId, initialMessage),
-        }))
+        seedLocalChat(projectId, initialMessage)
       } finally {
         setLoadingByProject((prev) => ({ ...prev, [projectId]: false }))
       }
     },
-    [],
+    [seedLocalChat],
   )
 
   const selectChat = useCallback(

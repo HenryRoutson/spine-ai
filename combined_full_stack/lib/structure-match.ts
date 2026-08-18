@@ -1,4 +1,5 @@
 import { validate } from "@/lib/structure"
+// AI : DONE (sql-id-ref) — shape match is bind input for sql-catalog; this file stays shape-only (no fk walk).
 import type { StructureModel, StructureModelId, TypeAlias } from "@/lib/types"
 
 export type StructureMatchKind = "object" | "list"
