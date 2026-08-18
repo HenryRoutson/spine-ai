@@ -589,9 +589,9 @@ export function compactProposalReview(proposal: ProjectProposal) {
       .filter(([, v]) => v)
       .map(([k]) => k),
     ...(proposal.projectName ? { projectName: proposal.projectName } : {}),
-    models: mcpModelReview(proposal.models),
-    steps: mcpStepReview(proposal.modules, proposal.models),
-    docs: proposal.docs.map((d) => ({ name: d.name, type: d.type, label: d.label })),
+    models: proposal.models.map((m) => m.name),
+    steps: proposal.modules.map((m) => ({ kind: m.kind, label: m.label })),
+    docs: proposal.docs.map((d) => d.name),
   }
 }
 
@@ -612,18 +612,19 @@ export function toMcpProjectReview(snap: SessionSnapshot) {
     : []
   const pendingDocs = (pending?.docs ?? []).map((d) => ({ name: d.name, type: d.type, label: d.label }))
   return {
-    id: viewed.id,
-    name: viewed.name,
-    kind: viewed.kind,
+    ok: validation.ok,
     issues: validation.issues.map((i) => `${i.where}: ${i.message}`),
     pendingChanged,
     assistantInFlight: snap.assistantInFlight,
+    pendingProposal: pending ? compactProposalReview(pending) : null,
+    id: viewed.id,
+    name: viewed.name,
+    kind: viewed.kind,
     models: mcpModelReview(viewed.models),
     steps: mcpStepReview(viewed.modules, viewed.models),
     docs: mergeDocsByName(
       snap.docs.map((d) => ({ name: d.name, type: d.type, label: d.label })),
       pendingDocs,
     ),
-    pendingProposal: pending ? compactProposalReview(pending) : null,
   }
 }

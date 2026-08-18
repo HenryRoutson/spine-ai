@@ -48,6 +48,7 @@ import {
   formatPipelineValidationErrors,
   syncManagedPipelineSteps,
 } from "./validity";
+import { isAutoQuoteStep } from "./validity-sync";
 import { UsageLedger } from "./usage";
 import { createPipelineModule } from "@/lib/pipeline-module-factory";
 import { migrateModuleSpineTypes, patchSpineOutList } from "./spine_types";
@@ -77,6 +78,19 @@ import {
 const MODULE_KINDS = USER_ADDABLE_MODULE_KINDS;
 
 const INPUT_TYPE_VALUES = INPUT_TYPES.map((t) => t.value);
+
+const assembleBindingsSchema = z.record(
+  z.string(),
+  z.discriminatedUnion("kind", [
+    z.object({ kind: z.literal("spine") }),
+    z.object({ kind: z.literal("state"), label: z.string() }),
+    z.object({
+      kind: z.literal("path"),
+      from: z.union([z.literal("spine"), z.object({ label: z.string() })]),
+      path: z.string(),
+    }),
+  ]),
+);
 
 // AI : TODO (allow-pipeline-non-linear-fork) — moduleSpecSchema nested forkBranches; materialize lane modules.
 const moduleSpecSchema = z
@@ -113,19 +127,7 @@ const moduleSpecSchema = z
       .describe("custom-code only — TypeScript arrow expression e.g. (rows) => rows.map(...)"),
     model: z.string().optional(),
     inputMinCount: z.number().int().min(1).optional(),
-    assembleBindings: z
-      .record(
-        z.string(),
-        z.discriminatedUnion("kind", [
-          z.object({ kind: z.literal("spine") }),
-          z.object({ kind: z.literal("state"), label: z.string() }),
-          z.object({
-            kind: z.literal("path"),
-            from: z.union([z.literal("spine"), z.object({ label: z.string() })]),
-            path: z.string(),
-          }),
-        ]),
-      )
+    assembleBindings: assembleBindingsSchema
       .optional()
       .describe(
         "assemble only — field → spine | { kind: state, label } | { kind: path, from: spine|{label}, path: dotted }",
@@ -227,6 +229,7 @@ const modulePatchEntrySchema = z.object({
   code: z.string().optional(),
   model: z.string().optional(),
   inputMinCount: z.number().int().min(1).optional(),
+  assembleBindings: assembleBindingsSchema.optional(),
 });
 
 const modelSpecSchema = structureModelSpecSchema;
@@ -390,7 +393,10 @@ function makeModuleFromSpec(
       inputNameContains: spec.inputNameContains,
       inputDescription: spec.inputDescription,
       inputMinCount: spec.inputMinCount,
-      inStructureId: spec.kind !== "input" ? inId : undefined,
+      inStructureId:
+        spec.kind !== "input" && spec.kind !== ModuleKind.Assemble && spec.kind !== ModuleKind.Parallel
+          ? inId
+          : undefined,
       // AI : assemble/parallel without structureOut → auto-derive product on sync
       outStructureId:
         (spec.kind === ModuleKind.Assemble || spec.kind === ModuleKind.Parallel) && !outHint
@@ -489,6 +495,42 @@ function expandModuleSpecs(
   return out;
 }
 
+// AI : assemble consumes the previous spine via bindings — never models[0] leftover from combine structureIn.
+function wireAssembleSpineIn(modules: PipelineModule[]): PipelineModule[] {
+  return modules.map((m, i) => {
+    if (m.kind !== ModuleKind.Assemble) return m;
+    const prevOut = i > 0 ? modules[i - 1]?.outStructureId : undefined;
+    if (!prevOut) return migrateModuleSpineTypes({ ...m, inStructureId: undefined });
+    if (m.inStructureId === prevOut) return m;
+    return migrateModuleSpineTypes({ ...m, inStructureId: prevOut });
+  });
+}
+
+// AI : quoted llm-batch is followed by auto Link Quotes — state["Extract …"] should read the linked list.
+function wireAssembleQuoteLabels(modules: PipelineModule[]): PipelineModule[] {
+  return modules.map((m) => {
+    if (m.kind !== ModuleKind.Assemble || !m.assembleBindings) return m;
+    let changed = false;
+    const assembleBindings = Object.fromEntries(
+      Object.entries(m.assembleBindings).map(([field, src]) => {
+        const label =
+          src.kind === "state" ? src.label : src.kind === "path" && typeof src.from === "object" ? src.from.label : null;
+        if (!label) return [field, src];
+        const idx = modules.findIndex((x) => x.label.trim() === label.trim());
+        const next = idx >= 0 ? modules[idx + 1] : undefined;
+        if (!next || !isAutoQuoteStep(next)) return [field, src];
+        changed = true;
+        if (src.kind === "state") return [field, { ...src, label: next.label }];
+        if (src.kind === "path" && typeof src.from === "object") {
+          return [field, { ...src, from: { label: next.label } }];
+        }
+        return [field, src];
+      }),
+    );
+    return changed ? { ...m, assembleBindings } : m;
+  });
+}
+
 function materializeModels(
   specs: PipelineAssistantModelSpec[] | null | undefined,
   existing: StructureModel[],
@@ -524,6 +566,7 @@ function applyModulePatch(
     ...(patch.code !== undefined ? { code: patch.code } : {}),
     ...(modelId !== undefined ? { model: modelId } : {}),
     ...(patch.inputMinCount !== undefined ? { inputMinCount: patch.inputMinCount } : {}),
+    ...(patch.assembleBindings !== undefined ? { assembleBindings: patch.assembleBindings } : {}),
   };
   if (outHint) {
     next = { ...next, ...patchSpineOutList(next, kindAlwaysEmitsList(existing.kind) || outHint.isList) };
@@ -585,7 +628,7 @@ function buildThinkingSystemPrompt(hasValidationErrors: boolean): string {
 
 ${hasValidationErrors
     ? "The live project has pipeline validation errors — diagnose each listed mismatch (structure name vs list[structure] cardinality). Plan exact structureOut/list[...] fixes per step. Do not propose a greenfield architecture."
-    : "Reason step-by-step: (1) structures needed, (2) linear spine chain with single vs list at each hop, (3) many same-kind files → list[Document] + llm-batch (NOT one llm), (4) two different doc kinds → combine after first doc is processed on spine, (5) synthetic test docs. Flag where validation would fail if list-ness is wrong."}
+    : "Reason step-by-step: (1) structures needed, (2) linear spine chain with single vs list at each hop, (3) many same-kind files → list[Document] + llm-batch (NOT one llm), (4) two different doc kinds: process first on spine, then either combine (raw side upload immediately before combine) OR assemble after both are parsed — never a third upload, (5) synthetic test docs. Flag where validation would fail if list-ness is wrong."}
 Plain text only — no JSON, no markdown headings. Be concise (roughly 150–300 words).`;
 }
 
@@ -744,6 +787,9 @@ export function materializeProposal(
   }
   if (hasPipelineChange || shouldAlign) {
     modules = syncManagedPipelineSteps(modules, models, globalModel) ?? modules;
+  }
+  if (hasPipelineChange) {
+    modules = wireAssembleQuoteLabels(wireAssembleSpineIn(modules));
   }
   return {
     modules: modules ?? [],

@@ -185,6 +185,104 @@ describe("pipeline assistant materialize", () => {
     expect(proposal!.modules.some((m) => m.label === "Combine Inputs Document")).toBe(false)
   })
 
+  it("assemble after two parses is valid even if structureIn is leftover Resume", () => {
+    const session = createSpineSession()
+    session.addProject({ open: true })
+    const raw = receiptMapRaw()
+    raw.models = [
+      {
+        name: "Resume",
+        description: "Extracted resume.",
+        fields: [{ name: "name", type: "tuple[text,quote]", optional: false, description: "Name" }],
+      },
+      {
+        name: "JobDescription",
+        description: "Parsed job.",
+        fields: [{ name: "required_skills", type: "list[text]", optional: false, description: "Skills" }],
+      },
+      {
+        name: "ResumeBatch",
+        description: "Merged.",
+        fields: [
+          { name: "resumes", type: "list[model]", optional: false, description: "Resumes", ref: "Resume" },
+          { name: "job_desc", type: "model", optional: false, description: "Job", ref: "JobDescription" },
+        ],
+      },
+    ]
+    raw.modules = [
+      {
+        kind: ModuleKind.Input,
+        label: "Resume Uploads",
+        note: "Many resumes.",
+        structureOut: "list[Document]",
+        inputType: "text",
+        inputDescription: "resumes",
+      },
+      {
+        kind: ModuleKind.LlmBatch,
+        label: "Extract Resume Fields",
+        note: "One Resume per Document. Link Quotes is auto-inserted.",
+        structureIn: "Document",
+        structureOut: "Resume",
+        prompt: "Extract name.",
+        inputDescription: "docs",
+      },
+      {
+        kind: ModuleKind.Input,
+        label: "Job Description",
+        note: "One job posting.",
+        structureOut: "Document",
+        inputType: "text",
+        inputDescription: "job",
+      },
+      {
+        kind: ModuleKind.Llm,
+        label: "Parse Job Requirements",
+        note: "Parse required skills.",
+        structureIn: "Document",
+        structureOut: "JobDescription",
+        prompt: "List skills.",
+        inputDescription: "job doc",
+      },
+      {
+        kind: ModuleKind.Assemble,
+        label: "Join Resume and Job",
+        note: "Zip quoted resumes with parsed job.",
+        structureIn: "Resume",
+        structureOut: "ResumeBatch",
+        assembleBindings: {
+          resumes: { kind: "state", label: "Extract Resume Fields" },
+          job_desc: { kind: "spine" },
+        },
+        inputDescription: "job on spine plus resumes in state",
+      },
+      {
+        kind: ModuleKind.Output,
+        label: "Out",
+        structureIn: "ResumeBatch",
+        structureOut: "ResumeBatch",
+        inputDescription: "out",
+      },
+    ]
+    const proposal = materializeProposal(raw, session.project!, DEFAULT_MODEL)
+    expect(proposal).toBeTruthy()
+    expect(proposal!.modules.filter((m) => m.kind === ModuleKind.Input).map((m) => m.label)).toEqual([
+      "Resume Uploads",
+      "Job Description",
+    ])
+    const assemble = proposal!.modules.find((m) => m.kind === ModuleKind.Assemble)!
+    const jobId = proposal!.models.find((m) => m.name === "JobDescription")?.id
+    expect(assemble.inStructureId).toBe(jobId)
+    expect(assemble.assembleBindings?.resumes).toEqual({ kind: "state", label: "Link Quotes" })
+    expect(formatPipelineValidationErrors(proposal!.modules, proposal!.models, proposal!.typeAliases)).toBe("")
+
+    const resumeId = proposal!.models.find((m) => m.name === "Resume")?.id
+    const leftover = proposal!.modules.map((m) =>
+      m.kind === ModuleKind.Assemble ? { ...m, inStructureId: resumeId } : m,
+    )
+    expect(formatPipelineValidationErrors(leftover, proposal!.models, proposal!.typeAliases)).toBe("")
+  })
+
   it("flags combine output with no side-document field", () => {
     const session = createSpineSession()
     session.addProject({ open: true })

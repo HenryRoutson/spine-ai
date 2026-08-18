@@ -299,7 +299,7 @@
       ],
       "modules": [
         {
-          "id": "8b825c45a81741f4ba6a7a8e",
+          "id": "15c4bb4909694bdc86f076b8",
           "kind": "input",
           "label": "Resume Uploads",
           "note": "Many candidate resumes in text format.",
@@ -320,7 +320,7 @@
           }
         },
         {
-          "id": "4b66e10874254acbbddfe1a4",
+          "id": "c0ad74c679ef4f84b1ad7d10",
           "kind": "llm-batch",
           "label": "Extract Resume Fields",
           "note": "One structured Resume per uploaded Document.",
@@ -349,7 +349,7 @@
           }
         },
         {
-          "id": "mod_quote_4b66e10874254acbbddfe1a4",
+          "id": "mod_quote_c0ad74c679ef4f84b1ad7d10",
           "kind": "quote",
           "label": "Link Quotes",
           "auto": true,
@@ -372,7 +372,7 @@
           }
         },
         {
-          "id": "e10ec267770b498384f305cc",
+          "id": "b183bbe564764809ae560d03",
           "kind": "input",
           "label": "Job Description",
           "note": "Single job description text file.",
@@ -389,7 +389,7 @@
           }
         },
         {
-          "id": "f2c8f0b1ea28476f805a1255",
+          "id": "0d651f7aa85444cda1c66c6d",
           "kind": "llm",
           "label": "Parse Job Requirements",
           "note": "Extract required skills from job description.",
@@ -412,26 +412,10 @@
           }
         },
         {
-          "id": "f522254320ed470cb99d03dd",
-          "kind": "input",
-          "label": "Combine Inputs Document",
-          "note": "Merge parsed resumes (pipeline state) with job description.",
-          "cached": true,
-          "avgMs": 0,
-          "avgCostCents": 0,
-          "inputType": "text",
-          "inputDescription": "Resume list from Extract plus job description from Parse",
-          "outStructureId": "m_builtin_document",
-          "outType": {
-            "kind": "ref",
-            "modelId": "m_builtin_document"
-          }
-        },
-        {
-          "id": "2d9bfb1d3c7442c8871fddfe",
-          "kind": "combine",
-          "label": "Combine Inputs",
-          "note": "Merge parsed resumes (pipeline state) with job description.",
+          "id": "007767d0089a4b85a9f2e034",
+          "kind": "assemble",
+          "label": "Merge Resume Batch",
+          "note": "Combine resume batch (from state) with parsed job description.",
           "cached": true,
           "avgMs": 0,
           "avgCostCents": 0,
@@ -442,13 +426,22 @@
             "kind": "ref",
             "modelId": "0f63e4abb2294a118ea3a2d2"
           },
+          "assembleBindings": {
+            "resumes": {
+              "kind": "state",
+              "label": "Extract Resume Fields"
+            },
+            "job_desc": {
+              "kind": "spine"
+            }
+          },
           "inType": {
             "kind": "ref",
             "modelId": "73e8692e0f44478496755c0d"
           }
         },
         {
-          "id": "6e5df4159b6f4264be1121d0",
+          "id": "36458ef9b798463d975f693d",
           "kind": "custom-code",
           "label": "Flatten Skill Matches",
           "note": "ResumeBatch → list[SkillMatch] for spreadsheet output.",
@@ -477,7 +470,7 @@
           }
         },
         {
-          "id": "7c2ba8a91d2044d0b2acd215",
+          "id": "b3c9143fe84f45588c394b35",
           "kind": "output",
           "label": "Skill Matches Output",
           "note": "Final spreadsheet output.",
@@ -498,7 +491,7 @@
         }
       ],
       "strategies": [],
-      "documentation": "# Resume Skill Matcher\n\n1. Upload many candidate resumes (text files)\n2. Upload one job description\n3. Pipeline extracts resume fields with source quotes\n4. Parses required skills from job description\n5. Combines inputs and checks skill matches\n6. Outputs spreadsheet with one row per skill mention\n\nFields:\n- Quoted: name, email, skills\n- Numbers: years_exp, fit_score\n- Boolean: matched (skill in requirements)"
+      "documentation": "# Resume Skill Matcher\n\n1. Upload many candidate resumes (text files)\n2. Upload one job description\n3. Pipeline extracts resume fields with source quotes\n4. Parses required skills from job description\n5. Assembles inputs and checks skill matches\n6. Outputs spreadsheet with one row per skill mention\n\nFields:\n- Quoted: name, email, skills\n- Numbers: years_exp, fit_score\n- Boolean: matched (skill in requirements)"
     }
   ],
   "docs": [
@@ -555,6 +548,33 @@
       "sizeKb": 1,
       "uploadedAt": 1787023613096,
       "preview": "Data Scientist\nRequired skills: Python, Machine Learning, SQL"
+    },
+    {
+      "id": "sha_3eb6fdb2727971cb",
+      "name": "resume_john.txt",
+      "type": "text",
+      "label": "inference",
+      "sizeKb": 1,
+      "uploadedAt": 1787026040128,
+      "preview": "John Doe\n5 years experience\njohn@example.com\nSkills: Python, SQL, AWS"
+    },
+    {
+      "id": "sha_9e5cf7691e882c79",
+      "name": "resume_jane.txt",
+      "type": "text",
+      "label": "inference",
+      "sizeKb": 1,
+      "uploadedAt": 1787026040128,
+      "preview": "Jane Smith\n3 years experience\njane@example.com\nSkills: JavaScript, React, Node.js"
+    },
+    {
+      "id": "sha_89bea3b2876e309f",
+      "name": "job_description.txt",
+      "type": "text",
+      "label": "inference",
+      "sizeKb": 1,
+      "uploadedAt": 1787026040130,
+      "preview": "We're hiring a Full Stack Developer. Required skills: JavaScript, React, Node.js, Python"
     }
   ],
   "docContents": {
@@ -563,7 +583,10 @@
     "sha_13685db6b86a4d0b": "TAXI SERVICE\nDate: 2024-03-02\nTotal: $18.00\nTax: $1.80\nCategory: Transportation",
     "sha_0efdcc16b06c9da6": "John Doe\n5 years experience\nEmail: john@example.com\nSkills: Python, SQL, Data Analysis\nFit: 4",
     "sha_53b7e0c1de2c6720": "Jane Smith\n8 years experience\nSkills: Python, Machine Learning, Cloud\nFit: 5",
-    "sha_6cf87812c4ff13dc": "Data Scientist\nRequired skills: Python, Machine Learning, SQL"
+    "sha_6cf87812c4ff13dc": "Data Scientist\nRequired skills: Python, Machine Learning, SQL",
+    "sha_3eb6fdb2727971cb": "John Doe\n5 years experience\njohn@example.com\nSkills: Python, SQL, AWS",
+    "sha_9e5cf7691e882c79": "Jane Smith\n3 years experience\njane@example.com\nSkills: JavaScript, React, Node.js",
+    "sha_89bea3b2876e309f": "We're hiring a Full Stack Developer. Required skills: JavaScript, React, Node.js, Python"
   },
   "runs": [],
   "activeProjectId": "p_5b017bac17fb4d6eaf480dc5",
@@ -871,7 +894,7 @@
       ],
       "modules": [
         {
-          "id": "8b825c45a81741f4ba6a7a8e",
+          "id": "15c4bb4909694bdc86f076b8",
           "kind": "input",
           "label": "Resume Uploads",
           "note": "Many candidate resumes in text format.",
@@ -892,7 +915,7 @@
           }
         },
         {
-          "id": "4b66e10874254acbbddfe1a4",
+          "id": "c0ad74c679ef4f84b1ad7d10",
           "kind": "llm-batch",
           "label": "Extract Resume Fields",
           "note": "One structured Resume per uploaded Document.",
@@ -921,7 +944,7 @@
           }
         },
         {
-          "id": "mod_quote_4b66e10874254acbbddfe1a4",
+          "id": "mod_quote_c0ad74c679ef4f84b1ad7d10",
           "kind": "quote",
           "label": "Link Quotes",
           "auto": true,
@@ -944,7 +967,7 @@
           }
         },
         {
-          "id": "e10ec267770b498384f305cc",
+          "id": "b183bbe564764809ae560d03",
           "kind": "input",
           "label": "Job Description",
           "note": "Single job description text file.",
@@ -961,7 +984,7 @@
           }
         },
         {
-          "id": "f2c8f0b1ea28476f805a1255",
+          "id": "0d651f7aa85444cda1c66c6d",
           "kind": "llm",
           "label": "Parse Job Requirements",
           "note": "Extract required skills from job description.",
@@ -984,26 +1007,10 @@
           }
         },
         {
-          "id": "f522254320ed470cb99d03dd",
-          "kind": "input",
-          "label": "Combine Inputs Document",
-          "note": "Merge parsed resumes (pipeline state) with job description.",
-          "cached": true,
-          "avgMs": 0,
-          "avgCostCents": 0,
-          "inputType": "text",
-          "inputDescription": "Resume list from Extract plus job description from Parse",
-          "outStructureId": "m_builtin_document",
-          "outType": {
-            "kind": "ref",
-            "modelId": "m_builtin_document"
-          }
-        },
-        {
-          "id": "2d9bfb1d3c7442c8871fddfe",
-          "kind": "combine",
-          "label": "Combine Inputs",
-          "note": "Merge parsed resumes (pipeline state) with job description.",
+          "id": "007767d0089a4b85a9f2e034",
+          "kind": "assemble",
+          "label": "Merge Resume Batch",
+          "note": "Combine resume batch (from state) with parsed job description.",
           "cached": true,
           "avgMs": 0,
           "avgCostCents": 0,
@@ -1014,13 +1021,22 @@
             "kind": "ref",
             "modelId": "0f63e4abb2294a118ea3a2d2"
           },
+          "assembleBindings": {
+            "resumes": {
+              "kind": "state",
+              "label": "Extract Resume Fields"
+            },
+            "job_desc": {
+              "kind": "spine"
+            }
+          },
           "inType": {
             "kind": "ref",
             "modelId": "73e8692e0f44478496755c0d"
           }
         },
         {
-          "id": "6e5df4159b6f4264be1121d0",
+          "id": "36458ef9b798463d975f693d",
           "kind": "custom-code",
           "label": "Flatten Skill Matches",
           "note": "ResumeBatch → list[SkillMatch] for spreadsheet output.",
@@ -1049,7 +1065,7 @@
           }
         },
         {
-          "id": "7c2ba8a91d2044d0b2acd215",
+          "id": "b3c9143fe84f45588c394b35",
           "kind": "output",
           "label": "Skill Matches Output",
           "note": "Final spreadsheet output.",
@@ -1070,7 +1086,7 @@
         }
       ],
       "strategies": [],
-      "documentation": "# Resume Skill Matcher\n\n1. Upload many candidate resumes (text files)\n2. Upload one job description\n3. Pipeline extracts resume fields with source quotes\n4. Parses required skills from job description\n5. Combines inputs and checks skill matches\n6. Outputs spreadsheet with one row per skill mention\n\nFields:\n- Quoted: name, email, skills\n- Numbers: years_exp, fit_score\n- Boolean: matched (skill in requirements)"
+      "documentation": "# Resume Skill Matcher\n\n1. Upload many candidate resumes (text files)\n2. Upload one job description\n3. Pipeline extracts resume fields with source quotes\n4. Parses required skills from job description\n5. Assembles inputs and checks skill matches\n6. Outputs spreadsheet with one row per skill mention\n\nFields:\n- Quoted: name, email, skills\n- Numbers: years_exp, fit_score\n- Boolean: matched (skill in requirements)"
     }
   ],
   "deletedProjectIds": [
@@ -1143,6 +1159,22 @@
     {
       "role": "assistant",
       "content": "Pipeline: batch resume upload → extract fields → parse job → combine → flatten matches → spreadsheet output. Includes sample resumes and job description for testing."
+    },
+    {
+      "role": "user",
+      "content": "The pipeline is invalid — fix the validation errors. Goal stays the same: many candidate resumes + one job description → spreadsheet of skill matches (one row per skill mention, with matched against JD required skills). Do not add a third upload slot. Keep quoted name/email/skills, numeric years_exp/fit_score, boolean matched."
+    },
+    {
+      "role": "assistant",
+      "content": "Fixed validation errors by: 1) Moving job description input before combine, 2) Ensuring JobDescription is consumed by combine, 3) Properly sequencing inputs to avoid state drops."
+    },
+    {
+      "role": "user",
+      "content": "Replace Combine Inputs (and the extra \"Combine Inputs Document\" upload) with an assemble step. Correct spine:\n1) Resume Uploads list[Document] → Extract Resume Fields (llm-batch) → Link Quotes (auto)\n2) Job Description Document → Parse Job Requirements (llm) so JobDescription is on the spine\n3) assemble: resumes from state[\"Extract Resume Fields\"] or state[\"Link Quotes\"], job_desc from spine → ResumeBatch\n4) custom-code flatten to list[SkillMatch] using .text on quoted fields, never [0]\n5) output\nDo not emit a third input. Do not use combine. Two uploads only: resumes + job_desc."
+    },
+    {
+      "role": "assistant",
+      "content": "Fixed validation errors by: 1) Moving job description processing before assemble, 2) Properly sequencing inputs to avoid state drops, 3) Aligning assemble bindings to use resume state and job spine"
     }
   ],
   "pendingProposal": null,

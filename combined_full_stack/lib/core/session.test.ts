@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest"
-import { FieldType, InputType, DocLabel } from "@/lib/types"
-import { createSpineSession, createMemoryPersist } from "@/lib/core/session"
+import { FieldType, InputType, DocLabel, type ProjectId } from "@/lib/types"
+import { createSpineSession, createMemoryPersist, emptySessionSnapshot } from "@/lib/core/session"
 import { createThrowingEgress, EgressBlockedError } from "@/lib/core/transport"
 import { toPipelineView, toSessionSummary } from "@/lib/core/view"
 import { SESSION_ACTION_IDS, addProjectAction } from "@/lib/core/actions"
@@ -70,6 +70,38 @@ describe("SpineSession React-like API", () => {
     store.openProject(first.id)
     expect(store.chat.map((t) => t.content)).toEqual(["invoice pipeline"])
     expect(second.id).not.toBe(first.id)
+  })
+
+  it("does not dump mixed global chat onto the active project when several projects exist", () => {
+    const persist = createMemoryPersist({
+      ...emptySessionSnapshot(),
+      projects: [
+        { id: "p_receipts" as ProjectId, name: "Receipts", kind: "blank", createdAt: 1, lastOpenedAt: 1, models: [], modules: [], strategies: [] },
+        { id: "p_resumes" as ProjectId, name: "Resumes", kind: "blank", createdAt: 2, lastOpenedAt: 2, models: [], modules: [], strategies: [] },
+      ],
+      activeProjectId: "p_resumes",
+      chat: [
+        { role: "user", content: "invoice pipeline" },
+        { role: "user", content: "resume pipeline" },
+      ],
+    })
+    const store = createSpineSession({ persist })
+    expect(store.chat).toEqual([])
+    store.openProject("p_receipts")
+    expect(store.chat).toEqual([])
+  })
+
+  it("persists per-project chat across session instances", () => {
+    const persist = createMemoryPersist()
+    const a = createSpineSession({ persist })
+    const first = a.addProject({ open: true })
+    a.appendChat({ role: "user", content: "invoice pipeline" })
+    a.addProject({ open: true })
+    a.appendChat({ role: "user", content: "resume pipeline" })
+    const b = createSpineSession({ persist })
+    expect(b.chat.map((t) => t.content)).toEqual(["resume pipeline"])
+    b.openProject(first.id)
+    expect(b.chat.map((t) => t.content)).toEqual(["invoice pipeline"])
   })
 
   it("addDocContent hashes locally and linkQuotes never needs the network", () => {

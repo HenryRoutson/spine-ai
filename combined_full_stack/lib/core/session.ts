@@ -66,10 +66,21 @@ export function migrateSessionChat(raw: Partial<SessionSnapshot>): {
   chatByProjectId: Record<string, SessionChatTurn[]>
 } {
   const byId: Record<string, SessionChatTurn[]> = { ...(raw.chatByProjectId ?? {}) }
+  const projectIds = [
+    ...new Set(
+      [...(raw.projects ?? []), ...(raw.pendingCreates ?? [])]
+        .map((p) => p.id)
+        .filter(Boolean),
+    ),
+  ]
+  // AI : orphan global chat can only be attributed when a single project exists — otherwise invoice history leaks into a new recruiting project.
   if (Object.keys(byId).length === 0 && (raw.chat?.length ?? 0) > 0 && raw.activeProjectId) {
-    byId[raw.activeProjectId] = raw.chat ?? []
+    if (projectIds.length <= 1) byId[raw.activeProjectId] = raw.chat ?? []
   }
-  const chat = (raw.activeProjectId && byId[raw.activeProjectId]) || raw.chat || []
+  for (const id of projectIds) {
+    if (!byId[id]) byId[id] = []
+  }
+  const chat = (raw.activeProjectId && byId[raw.activeProjectId]) || []
   return { chat, chatByProjectId: byId }
 }
 
@@ -145,6 +156,18 @@ function nextNumberedCloneName(baseName: string, existingNames: Iterable<string>
   let n = 1
   while (names.has(`${baseName} ${n}`)) n += 1
   return `${baseName} ${n}`
+}
+
+function nextChatForNewProject(
+  snap: SessionSnapshot,
+  projectId: string,
+  open: boolean,
+): Pick<SessionSnapshot, "chat" | "chatByProjectId" | "activeProjectId"> {
+  return {
+    chatByProjectId: { ...snap.chatByProjectId, [projectId]: [] },
+    activeProjectId: open ? projectId : snap.activeProjectId,
+    chat: open ? [] : snap.chat,
+  }
 }
 
 export class SpineSession {
@@ -273,8 +296,7 @@ export class SpineSession {
       projects,
       pendingCreates,
       deletedProjectIds,
-      activeProjectId: open ? fresh.id : this.snap.activeProjectId,
-      chat: open ? [] : this.snap.chat,
+      ...nextChatForNewProject(this.snap, fresh.id, open),
     })
     return fresh
   }
@@ -299,7 +321,7 @@ export class SpineSession {
       ...this.snap,
       projects: overlayOptimisticProjects([...this.snap.projects, fresh], pendingCreates, this.snap.deletedProjectIds),
       pendingCreates,
-      activeProjectId: open ? fresh.id : this.snap.activeProjectId,
+      ...nextChatForNewProject(this.snap, id, open),
     })
     return fresh
   }
@@ -322,7 +344,7 @@ export class SpineSession {
       ...this.snap,
       projects: overlayOptimisticProjects([...this.snap.projects, fresh], pendingCreates, this.snap.deletedProjectIds),
       pendingCreates,
-      activeProjectId: open ? fresh.id : this.snap.activeProjectId,
+      ...nextChatForNewProject(this.snap, id, open),
     })
     return fresh
   }
@@ -348,7 +370,16 @@ export class SpineSession {
     const projects = this.snap.projects.filter((p) => p.id !== id)
     const pendingCreates = this.snap.pendingCreates.filter((p) => p.id !== id)
     const activeProjectId = this.snap.activeProjectId === id ? (projects[0]?.id ?? "") : this.snap.activeProjectId
-    this.commit({ ...this.snap, projects, pendingCreates, deletedProjectIds, activeProjectId })
+    const { [id]: _dropped, ...chatByProjectId } = this.snap.chatByProjectId
+    this.commit({
+      ...this.snap,
+      projects,
+      pendingCreates,
+      deletedProjectIds,
+      activeProjectId,
+      chatByProjectId,
+      chat: (activeProjectId && chatByProjectId[activeProjectId]) || [],
+    })
   }
 
   patchProject(patch: Partial<Project>): void {

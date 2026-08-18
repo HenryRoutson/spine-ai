@@ -88,9 +88,11 @@ export function createPipelineModule(
         : opts.outStructureId ?? defaultModel
   const inStructureId = isChatbot
     ? BUILTIN_CHATBOT_PROMPT_ID
-    : kind !== ModuleKind.Input
-      ? opts.inStructureId ?? defaultModel
-      : undefined
+    : kind === ModuleKind.Assemble || kind === ModuleKind.Parallel
+      ? opts.inStructureId
+      : kind !== ModuleKind.Input
+        ? opts.inStructureId ?? defaultModel
+        : undefined
   const spineList = kindAlwaysEmitsList(kind)
     ? true
     : opts.outType != null

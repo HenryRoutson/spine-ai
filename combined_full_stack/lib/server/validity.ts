@@ -904,6 +904,16 @@ export function computeInvalid(
       continue;
     }
 
+    // AI : assemble zips spine + state["Label"] — leftover structureIn (e.g. Resume from combine) is not a linear hop.
+    if (m.kind === ModuleKind.Assemble) {
+      if (m.outStructureId) {
+        flowId = m.outStructureId;
+        flowType = stepSpineOutType(m);
+        byModel.add(m.outStructureId);
+      }
+      continue;
+    }
+
     // AI : combine-side parse llm converts the side input's document — it feeds the combine's
     // AI : newDocument, not the spine, so skip flow/byModel updates (in/out are sync-managed).
     if (isCombineSideParseStep(modules, i)) continue;
@@ -1022,15 +1032,33 @@ export function computeInvalid(
   return invalid;
 }
 
-// AI : middle steps must feed a downstream inStructureId (combine counts via inStructureId).
+// AI : middle steps must feed a downstream inStructureId, assemble state["Label"], or the next combine/assemble.
+function assembleStateLabels(modules: PipelineModule[]): Set<string> {
+  const labels = new Set<string>();
+  for (const m of modules) {
+    if (m.kind !== ModuleKind.Assemble) continue;
+    for (const src of Object.values(m.assembleBindings ?? {})) {
+      if (src.kind === "state" && src.label.trim()) labels.add(src.label.trim());
+      if (src.kind === "path" && typeof src.from === "object" && src.from.label.trim()) {
+        labels.add(src.from.label.trim());
+      }
+    }
+  }
+  return labels;
+}
+
 function computeUnusedOutputInvalid(modules: PipelineModule[], models: StructureModel[]): InvalidMap {
   const invalid: InvalidMap = new Map();
+  const assembleLabels = assembleStateLabels(modules);
   for (let i = 0; i < modules.length; i++) {
     const m = modules[i]!;
     const emitted = stepEmits(m);
     if (!emitted || m.kind === ModuleKind.Input || usesPassthroughStructure(m.kind)) continue;
     // AI : a combine consumes the previous step's output as its newDocument regardless of inStructureId.
     if (modules[i + 1]?.kind === ModuleKind.Combine || modules[i + 1]?.kind === ModuleKind.Assemble) continue;
+    if (assembleLabels.has(m.label.trim())) continue;
+    // AI : Link Quotes is a managed follower — assemble binding the LLM still consumes the quote step.
+    if (isAutoQuoteStep(m) && i > 0 && assembleLabels.has(modules[i - 1]!.label.trim())) continue;
     const used = modules.slice(i + 1).some((down) => {
       if (down.inStructureId === emitted) return true;
       const expected = stepSpineInType(down);

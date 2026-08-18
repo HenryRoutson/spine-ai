@@ -133,6 +133,8 @@ Validation error messages and how to fix them:
 - "code does not compile" — custom-code must be a TypeScript arrow expression, not Python.
 - "pipeline state has no …" on combine — no upstream step has emitted that structure name yet; add an earlier step with that structureOut label chain.
 - "combine output Foo has no field for the side input" — structureOut needs a document field (or a field whose ref matches the previous step). Do not put a parsed model in the side slot unless that model is what the previous step emits. If both documents are already parsed, use assemble instead of combine.
+- "prior pipeline state is dropped on the spine" — a second input appeared after processing without a join. Use combine (raw side Document immediately before combine) or assemble (zip two parsed outputs). Never add a third upload named "… Document".
+- "input expects Foo, upstream emits Bar" on assemble — assemble is not a linear hop; omit structureIn and set assembleBindings (spine + state["Label"]). Do not copy combine's structureIn onto assemble.
 
 Before returning modules, mentally verify spineExpects/spineEmits on each adjacent pair in the current pipeline JSON.`;
 }
@@ -173,7 +175,7 @@ Common mistakes that fail validation:
 6. Input structureOut set to a parsed model — input only ever emits Document; parsing belongs in the next custom-code or llm step.
 7. structureIn/structureOut names not in models array — every referenced structure must be defined in models.
 8. custom-code without list output after a list-emitting step — downstream llm-batch then fails with "expects list[X], upstream emits X".
-9. input → processing → second input without combine — the spine only carries the last step's output; prior input state is dropped unless you merge with combine (side input immediately before combine). Validation error: "prior pipeline state is dropped on the spine".
+9. input → processing → second input without combine/assemble — the spine only carries the last step's output; prior input state is dropped unless you merge. Raw side file: combine (side input immediately before combine). Both kinds already parsed: assemble (zip spine + state[label]) — never a third upload. Validation error: "prior pipeline state is dropped on the spine".
 
 Before returning modules, walk the chain: for each adjacent pair, confirm previous emits exactly what next expects. If the user prompt lists validation errors, fix every listed mismatch.`;
 }
@@ -282,7 +284,7 @@ export function buildPipelineRulesPromptBlock(globalModel: ModelId): string {
   // AI : Assemble zips state labels → flat product (not Combine); dynamic N → llm-batch; avoid zip∘zip.
   // AI : TODO (allow-pipeline-non-linear-fork) — drop "strictly linear"; teach Fork lanes + join vs Parallel.
   return `Pipeline rules:
-- Pipelines are strictly linear. Each step must consume ONLY the previous step's output — never an earlier structure with the same model name. combine is the exception: it reads pipeline state (by structure name) plus the document input immediately before it. assemble is the other exception: it zips spine + state["Label"] (or path) bindings into one flat structure (no LLM). parallel runs fixed LLM branches on the same spine input concurrently and joins into one structure.
+- Pipelines are strictly linear. Each step must consume ONLY the previous step's output — never an earlier structure with the same model name. combine is the exception: it reads pipeline state (by structure name) plus the document input immediately before it. assemble is the other exception: it zips spine + state["Label"] (or path) bindings into one flat structure (no LLM) — use it when both document kinds are already parsed; do not add a third upload. parallel runs fixed LLM branches on the same spine input concurrently and joins into one structure.
 - Prefer assemble over custom-code when joining two prior LLM outputs into one object. Prefer N-way assemble over nesting assemble steps. Prefer parallel when independent LLM extractions share one input and wall-clock matters. Dynamic N same-schema calls → llm-batch, not assemble/parallel.
 - Every step needs an output structure (structureOut). Input steps only need structureOut.
 
@@ -825,10 +827,10 @@ Spine: list[Document] → list[Resume] (state) ; Document → JobDescription (sp
     {
       "kind": "assemble",
       "label": "Join Resume and Job",
-      "note": "Zip list[Resume] from Extract with JobDescription on the spine.",
+      "note": "Zip list[Resume] from Link Quotes with JobDescription on the spine.",
       "structureOut": "ResumeBatch",
       "assembleBindings": {
-        "resumes": { "kind": "state", "label": "Extract Resume Fields" },
+        "resumes": { "kind": "state", "label": "Link Quotes" },
         "job_desc": { "kind": "spine" }
       },
       "inputDescription": "JobDescription on the spine plus extracted resumes in state"
@@ -868,7 +870,7 @@ Key patterns all examples demonstrate:
 - custom-code code is TypeScript arrow syntax — never Python. After Link Quotes, quoted fields are { text, quote } — use .text, never [0].
 - Every structureIn/structureOut name is defined in models.
 - Two document kinds: first input + spine processing → explicit side input → combine (structureIn = state structure) — see Example 3.
-- Two already-parsed outputs: assemble (zip spine + state[label]) — see Example 4. Do not combine after parsing both.
+- Two already-parsed outputs: assemble (zip spine + state[label]) — see Example 4. Bind quoted lists to "Link Quotes" (auto-inserted after the extract llm), not the pre-quote LLM label. Do not combine after parsing both. Never emit a third input named "… Document".
 - One llm over merged compact JSON is fine AFTER combine; never one llm over many raw uploads — use llm-batch instead.`;
 }
 
