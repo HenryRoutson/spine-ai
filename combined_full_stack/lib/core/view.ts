@@ -5,7 +5,7 @@
 import { computeInvalid, invalidIssuesForModule } from "@/lib/validity"
 import { computeStructureIssues, structureIssueMessage } from "@/lib/structure-validity"
 import { invalidStepMessage } from "@/lib/server/validity-messages"
-import { withSharedModels } from "@/lib/structure"
+import { withSharedModels, formatTypeExpr, stepSpineInType, stepSpineOutType } from "@/lib/structure"
 import { quoteHref, type QuoteMatch } from "@/lib/quotes"
 import { isTestingFileName, lastTestRunVerdictForDoc, testReportPassed } from "@/lib/testing-files"
 import { derivePipelineMermaid } from "@/lib/pipeline-mermaid"
@@ -23,6 +23,7 @@ import { compactPreview, PREVIEW_STEP_IO_CHARS } from "@/lib/text-preview"
 import { DocLabel, RunStepStatus, type DocRef, type ModuleId, type PipelineModule, type StructureModel } from "@/lib/types"
 import type { SessionChatTurn, SessionSnapshot } from "@/lib/core/types"
 import type { ProjectProposal } from "@/lib/project-assistant-types"
+import { mergeDocsByName, overlayProposalOnProject } from "@/lib/project-proposal-overlay"
 import { AppWindowId } from "@/lib/app-window-id"
 import {
   AppArea,
@@ -74,7 +75,10 @@ export function toPipelineView(snap: SessionSnapshot): PipelineView | null {
   // AI : TODO (allow-pipeline-non-linear-fork) — steps tree with indent / parentForkId, not a flat map.
   const project = snap.projects.find((p) => p.id === snap.activeProjectId) ?? snap.projects[0]
   if (!project) return null
-  const invalid = computeInvalid(project.modules, project.models, { typeAliases: project.typeAliases ?? [] })
+  const invalid = computeInvalid(project.modules, project.models, {
+    typeAliases: project.typeAliases ?? [],
+    ...snapDocInvalidOpts(snap),
+  })
   const models = withSharedModels(project.models)
   return {
     title: project.name,
@@ -562,15 +566,18 @@ function mcpModelReview(models: StructureModel[]): McpModelReview[] {
 
 function mcpStepReview(modules: PipelineModule[], models: StructureModel[]): McpStepReview[] {
   const named = withSharedModels(models)
-  const nameOf = (id: string | undefined) => (id ? named.find((m) => m.id === id)?.name ?? id : undefined)
-  return modules.map((m) => ({
-    id: m.id,
-    kind: m.kind,
-    label: m.label,
-    ...(m.inputType ? { inputType: m.inputType } : {}),
-    ...(m.inStructureId ? { structureIn: nameOf(m.inStructureId) } : {}),
-    ...(m.outStructureId ? { structureOut: nameOf(m.outStructureId) } : {}),
-  }))
+  return modules.map((m) => {
+    const structureIn = stepSpineInType(m)
+    const structureOut = stepSpineOutType(m)
+    return {
+      id: m.id,
+      kind: m.kind,
+      label: m.label,
+      ...(m.inputType ? { inputType: m.inputType } : {}),
+      ...(structureIn ? { structureIn: formatTypeExpr(structureIn, named) } : {}),
+      ...(structureOut ? { structureOut: formatTypeExpr(structureOut, named) } : {}),
+    }
+  })
 }
 
 export function compactProposalReview(proposal: ProjectProposal) {
@@ -588,22 +595,31 @@ export function compactProposalReview(proposal: ProjectProposal) {
 export function toMcpProjectReview(snap: SessionSnapshot) {
   const project = snap.projects.find((p) => p.id === snap.activeProjectId) ?? snap.projects[0]
   if (!project) throw new Error("no active project — session add-project first")
-  const validation = toValidationView(snap)
   const pending = snap.pendingProposal
+  const viewed = overlayProposalOnProject(project, pending)
+  const snapForView: SessionSnapshot = {
+    ...snap,
+    projects: snap.projects.map((p) => (p.id === project.id ? viewed : p)),
+  }
+  const validation = toValidationView(snapForView)
   const pendingChanged = pending
     ? (Object.entries(pending.changed) as [string, boolean | undefined][])
         .filter(([, v]) => v)
         .map(([k]) => k)
     : []
+  const pendingDocs = (pending?.docs ?? []).map((d) => ({ name: d.name, type: d.type, label: d.label }))
   return {
-    id: project.id,
-    name: project.name,
-    kind: project.kind,
+    id: viewed.id,
+    name: viewed.name,
+    kind: viewed.kind,
     issues: validation.issues.map((i) => `${i.where}: ${i.message}`),
     pendingChanged,
-    models: mcpModelReview(project.models),
-    steps: mcpStepReview(project.modules, project.models),
-    docs: snap.docs.map((d) => ({ name: d.name, type: d.type, label: d.label })),
+    models: mcpModelReview(viewed.models),
+    steps: mcpStepReview(viewed.modules, viewed.models),
+    docs: mergeDocsByName(
+      snap.docs.map((d) => ({ name: d.name, type: d.type, label: d.label })),
+      pendingDocs,
+    ),
     pendingProposal: pending ? compactProposalReview(pending) : null,
   }
 }

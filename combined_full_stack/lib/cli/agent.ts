@@ -13,7 +13,8 @@ import { generateTestFile } from "@/lib/server/testing_assistant"
 import { diagnoseRunStream } from "@/lib/server/diagnosis_assistant"
 import type { CliCommandResult } from "@/lib/cli/types"
 import { compactProposalReview } from "@/lib/core/view"
-import { mergePendingProposals, overlayProposalOnProject } from "@/lib/project-proposal-overlay"
+import { mergeDocsByName, mergePendingProposals, overlayProposalOnProject } from "@/lib/project-proposal-overlay"
+import type { AssistantTestDocCatalogEntry } from "@/lib/server/assistant-prompt"
 
 export type AgentKind = "vibe" | "structure" | "testing" | "diagnosis"
 
@@ -59,6 +60,31 @@ function changedKeys(proposal: ProjectProposal): string[] {
   return (Object.entries(proposal.changed) as [string, boolean | undefined][])
     .filter(([, v]) => v)
     .map(([k]) => k)
+}
+
+const TEST_DOC_PREVIEW_CHARS = 200
+
+function testDocsCatalogFromSession(session: SpineSession): AssistantTestDocCatalogEntry[] {
+  const snap = session.getSnapshot()
+  const live = snap.docs
+    .filter((d) => d.label === DocLabel.Inference)
+    .map((d) => ({
+      id: d.id,
+      name: d.name,
+      type: d.type,
+      label: d.label,
+      sizeKb: d.sizeKb,
+      preview: (d.preview ?? snap.docContents[d.id] ?? "").slice(0, TEST_DOC_PREVIEW_CHARS),
+    }))
+  const pending = (snap.pendingProposal?.docs ?? []).map((d) => ({
+    id: `pending:${d.name}`,
+    name: d.name,
+    type: d.type,
+    label: d.label,
+    sizeKb: Math.max(1, Math.ceil((d.content?.length ?? 0) / 1024)),
+    preview: (d.content ?? "").slice(0, TEST_DOC_PREVIEW_CHARS),
+  }))
+  return mergeDocsByName(live, pending)
 }
 
 export async function askAgent(
@@ -112,7 +138,14 @@ async function askVibeAgent(
         issues: [{ level: "error", where: "session", message: "no active project — session add-project first" }],
       }
     }
-    const propose = opts.propose ?? defaultAgentPropose
+    const propose =
+      opts.propose ??
+      ((project, message, history, model) =>
+        proposePipelineChange(project, message, history, model as ModelId, {
+          humanSurface: "vibe",
+          testDocsCatalog: testDocsCatalogFromSession(session),
+          recentRuns: [],
+        }))
     const prevPending = session.pendingProposal
     const result = await propose(
       overlayProposalOnProject(live, prevPending),
@@ -120,11 +153,13 @@ async function askVibeAgent(
       history,
       session.model,
     )
+    const stillInvalid = (result.invalidCount ?? 0) > 0
     session.appendChat({ role: "assistant", content: result.message })
     const proposal = result.proposal ? toProjectProposal(result.proposal) : null
     const actions = proposal?.proposedActions ?? []
-    if (proposal) {
-      session.setPendingProposal(mergePendingProposals(prevPending, proposal))
+    const merged = proposal ? mergePendingProposals(prevPending, proposal) : null
+    if (merged) {
+      session.setPendingProposal(merged)
       if (opts.apply) session.applyPendingProposal()
     }
     let ran = 0
@@ -134,21 +169,25 @@ async function askVibeAgent(
     return {
       ok: true,
       command: "agent ask",
-      issues: [],
+      issues: stillInvalid
+        ? [{ level: "error", where: "proposal", message: result.validationErrors ?? "proposal still invalid" }]
+        : [],
       data: {
         message: result.message,
-        applied: Boolean(opts.apply && proposal),
+        applied: Boolean(opts.apply && merged),
         pending: Boolean(session.pendingProposal),
-        changed: proposal ? changedKeys(proposal) : [],
+        changed: merged ? changedKeys(merged) : [],
         proposedActions: actions.map((a) => a.type),
         ran,
         invalidCount: result.invalidCount,
+        validationErrors: result.validationErrors,
         usageCents: result.usageCents,
-        proposal: proposal ? compactProposalReview(proposal) : null,
+        proposal: merged ? compactProposalReview(merged) : null,
         human: [
           result.message,
-          proposal ? `changed: ${changedKeys(proposal).join(", ") || "(none)"}` : "no proposal",
-          opts.apply ? "applied" : proposal ? "pending — spine agent apply" : "",
+          merged ? `changed: ${changedKeys(merged).join(", ") || "(none)"}` : "no proposal",
+          stillInvalid ? "still invalid — not ready to apply" : "",
+          opts.apply ? "applied" : merged ? "pending — spine agent apply" : "",
           actions.length
             ? opts.run
               ? `proposedActions ran: ${actions.map((a) => a.type).join(", ")}`

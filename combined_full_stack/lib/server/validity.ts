@@ -26,6 +26,7 @@ import {
   canAutoWrapListIntoOutputStructure,
   hasQuoteField,
   listFieldsForWrap,
+  listFieldForAutoUnwrap,
   isBuiltinDocumentModel,
 } from "./structure";
 import { withSharedModels } from "./builtin_models";
@@ -38,6 +39,7 @@ import {
   stepSpineInType,
   stepSpineOutType,
   typeExprEqual,
+  typeExprItemRef,
   type TypeExpr,
 } from "./type_expr";
 import { typeExprAssignable, validateAssembleBindings } from "@/lib/assemble-type-expr";
@@ -194,8 +196,14 @@ function stepAcceptsSpineType(
 ): boolean {
   // AI : TODO (linter-first) — delete when spine compat is cargo/pyright on generated orchestrator only.
   if (typeExprAssignable(expected, actual, typeAliases, models) || typeExprEqual(expected, actual)) return true;
-  // AI : passthrough steps read pipeline state by label — spine type at this index is not their contract.
-  if (m.kind === ModuleKind.Output || m.kind === ModuleKind.Assert || m.kind === ModuleKind.HumanReview) return true;
+  // AI : assert steps read pipeline state by label — spine type at this index is not their contract.
+  if (m.kind === ModuleKind.Assert) return true;
+  // AI : output / human-review snapshot the spine value — item type must match; list vs single is inherited.
+  if (m.kind === ModuleKind.Output || m.kind === ModuleKind.HumanReview) {
+    const e = typeExprItemRef(expected);
+    const a = typeExprItemRef(actual);
+    return e != null && e === a;
+  }
   // AI : example-select unwraps the sole list[T] field on a combine (or similar) wrapper struct.
   if (m.kind === ModuleKind.ExampleSelect && exampleSelectAcceptsWrapper(expected, actual, models)) return true;
   if (!cardinalityMismatch(expected, actual)) return false;
@@ -300,6 +308,32 @@ export function transformListWrapInvalid(
   if (m.inStructureId === m.outStructureId) return undefined;
   if (listFieldsForWrap(out).length > 0) return undefined;
   return { moduleId: m.id, kind: InvalidKind.TransformListWrap, expects: m.inStructureId, upstreamEmits: m.outStructureId };
+}
+
+function transformListFlattenInvalid(
+  m: PipelineModule,
+  prev: PipelineModule | undefined,
+  models: StructureModel[],
+): InvalidStep | undefined {
+  if (m.kind !== ModuleKind.Transform || m.code?.trim() || !stepEmitsList(m) || !m.outStructureId) return undefined;
+  if (stepEmitsList(prev)) {
+    if (m.inStructureId === m.outStructureId) return undefined;
+    return {
+      moduleId: m.id,
+      kind: InvalidKind.StructureField,
+      structureMessage: `bare transform cannot map list → list[${models.find((x) => x.id === m.outStructureId)?.name ?? "item"}] — use custom-code`,
+    };
+  }
+  const input = models.find((x) => x.id === m.inStructureId);
+  if (!input) return undefined;
+  if (listFieldForAutoUnwrap(input, m.outStructureId)) return undefined;
+  const inName = input.name;
+  const outName = models.find((x) => x.id === m.outStructureId)?.name ?? "item";
+  return {
+    moduleId: m.id,
+    kind: InvalidKind.StructureField,
+    structureMessage: `bare transform ${inName} → list[${outName}] needs a list[model] field on ${inName} (ref ${outName}), or custom-code`,
+  };
 }
 
 function computeLabelInvalid(modules: PipelineModule[]): InvalidMap {
@@ -891,6 +925,8 @@ export function computeInvalid(
 
     const transformIssue = transformListWrapInvalid(m, prev, models);
     if (transformIssue) pushInvalid(invalid, transformIssue);
+    const flattenIssue = transformListFlattenInvalid(m, prev, models);
+    if (flattenIssue) pushInvalid(invalid, flattenIssue);
   }
 
   for (const [id, issues] of computeUnusedOutputInvalid(modules, models)) {

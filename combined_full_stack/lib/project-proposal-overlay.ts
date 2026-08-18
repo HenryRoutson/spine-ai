@@ -3,6 +3,14 @@ import type { ProjectProposal } from "@/lib/project-assistant-types"
 
 export type ProposalChanged = ProjectProposal["changed"]
 
+// AI : follow-up Vibe turns replace docs by name, not the whole catalog.
+export function mergeDocsByName<T extends { name: string }>(prev: readonly T[], next: readonly T[]): T[] {
+  const byName = new Map<string, T>()
+  for (const d of prev) byName.set(d.name, d)
+  for (const d of next) byName.set(d.name, d)
+  return [...byName.values()]
+}
+
 export function overlayProposalOnProject(
   project: Project,
   proposal: ProjectProposal | null | undefined,
@@ -36,7 +44,7 @@ export function mergePendingProposals(
     modules: next.changed.modules ? next.modules : prev.modules,
     models: next.changed.models ? next.models : prev.models,
     typeAliases: next.changed.typeAliases ? next.typeAliases : prev.typeAliases,
-    docs: next.changed.docs ? next.docs : prev.docs,
+    docs: next.changed.docs ? mergeDocsByName(prev.docs, next.docs) : prev.docs,
     documentation: next.changed.documentation ? next.documentation : prev.documentation,
     projectName: next.changed.name ? next.projectName : prev.projectName,
     proposedActions: next.changed.actions ? next.proposedActions : prev.proposedActions,

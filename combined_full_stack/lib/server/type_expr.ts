@@ -314,10 +314,14 @@ export function inputFileType(m: PipelineModule): TypeExpr | undefined {
   return types.length ? { kind: TypeExprKind.File, inputTypes: types } : undefined;
 }
 
-function innerRef(expr: TypeExpr): StructureModelId | undefined {
+export function typeExprItemRef(expr: TypeExpr): StructureModelId | undefined {
   if (expr.kind === TypeExprKind.Ref) return expr.modelId;
   if (expr.kind === TypeExprKind.List && expr.item.kind === TypeExprKind.Ref) return expr.item.modelId;
   return undefined;
+}
+
+function innerRef(expr: TypeExpr): StructureModelId | undefined {
+  return typeExprItemRef(expr);
 }
 
 export function isListRoot(expr: TypeExpr): expr is Extract<TypeExpr, { kind: typeof TypeExprKind.List }> {

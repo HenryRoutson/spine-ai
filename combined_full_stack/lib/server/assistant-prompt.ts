@@ -124,6 +124,8 @@ Validation error messages and how to fix them:
 - "input expects list[Foo], upstream emits Foo" — previous step emits a single object but this step needs a list; set previous structureOut to list[Foo] or insert custom-code that returns an array.
 - "input expects Foo, upstream emits list[Bar]" — downstream wants single but upstream emits list; use custom-code fold, transform with a list[model] field, or set this step's structureIn to match the list item type and keep list output.
 - "list[Foo] → Bar needs a list field…" — bare transform cannot fold a list into a single object; add list[model] field on Bar or use custom-code.
+- "bare transform Foo → list[Bar] needs a list[model] field…" — flatten only works when Foo has list[model] ref Bar; otherwise custom-code.
+- "input expects list[Foo], upstream emits Foo" after combine — combine emits one object; use llm (not llm-batch) or explode to a list first.
 - "references missing structure …" — structureIn/structureOut names a model not in your models array.
 - "annotation / purpose is required" — set note on input, combine, llm, and llm-batch steps.
 - "code does not compile" — custom-code must be a TypeScript arrow expression, not Python.
@@ -164,7 +166,7 @@ Common mistakes that fail validation:
 2. Wrong item type on a list — e.g. upstream emits list[Document] but batch expects list[ChunkItem]. Fix: align structureOut on the upstream step.
 3. list → single object without a reshape — e.g. list[ExtractedRow] → SummaryRow needs custom-code, or a SummaryRow model with a list[model] field + transform, not a bare transform.
 4. Map-reduce on paper but linear types not wired — design the spine chain first: Document → list[Chunk] → list[Candidate] → list[Extracted] → Summary.
-5. LLM with list output followed by a bare transform — if the output structure has a list[model] field (ref = input structure or upstream list item type), bare transform auto-wraps list[T] → { field: T[] }. Otherwise use custom-code with explicit fold logic, or keep list[T] on the spine via list[structureOut] on the transform.
+5. LLM with list output followed by a bare transform — if the output structure has a list[model] field (ref = input structure or upstream list item type), bare transform auto-wraps list[T] → { field: T[] }. Bare transform Foo → list[Bar] flattens Foo's list[model] field (ref Bar). Otherwise use custom-code, or keep list[T] on the spine via list[structureOut] on the transform.
 6. Input structureOut set to a parsed model — input only ever emits Document; parsing belongs in the next custom-code or llm step.
 7. structureIn/structureOut names not in models array — every referenced structure must be defined in models.
 8. custom-code without list output after a list-emitting step — downstream llm-batch then fails with "expects list[X], upstream emits X".
@@ -209,6 +211,8 @@ How to emit combine in your modules array:
 - structureIn (REQUIRED): structure NAME already produced upstream (e.g. TableRow, RubricQuestion) — what combine pulls from pipeline state, NOT list[TableRow].
 - structureOut (REQUIRED): name a model you include in models — typically a document field for the side upload plus a list[model] field for the state structure. The proposal path does not invent this model. Do not mark it auto:true.
 - The step AFTER combine must structureIn that same structureOut name — not the state item type (TableRow).
+- After combine the spine is ONE merged object. The next step must be llm / transform / custom-code — not llm-batch (that expects a list). To check each row: custom-code explode to list[Row] then llm-batch, or one llm that writes the full list into a field on the merged object (do not emit a single item type that drops the list).
+- Bare transform Foo → list[Bar] flattens Foo's list[model] field (ref Bar) onto the spine. If Foo has no such field, use custom-code. Do not emit a second Link Quotes after a later llm unless that llm introduced new quote fields from a new source document.
 - note + inputDescription on combine: describe the MERGED payload (pipeline state fields + side document), not just the side file.
 
 Side document input — pick ONE pattern:
@@ -246,7 +250,7 @@ Avoid a SINGLE llm call when:
 - Each row/line/student needs its own extraction or grade → llm-batch; never "in one prompt, loop over all files".
 - You have a library of reference examples and need only the relevant ones for a new case → example-select (list[Example] in, cached-prefix prompt with {description} from a prior step, per-item is_relevant + chain_of_thought) — prefer over embedding RAG when interpretability matters; optional examplePreFilterMax caps candidates before LLM calls.
 - Output is a table of many rows → end pipeline at list[Row] → output (CSV/XLSX export is built-in); do not ask one llm to emit a giant CSV string.
-- Two document types must be read together → process first doc on spine, combine with second doc, THEN llm on the compact merged object — not one llm with both raw files pasted in.
+- Two document types must be read together → process first doc on spine, combine with second doc, THEN llm on the compact merged object — not one llm with both raw files pasted in. That llm's structureOut must keep any lists (same wrapper, or flatten with transform/custom-code) — never collapse list[Invoice] into one Invoice.
 
 A SINGLE llm call fits when:
 - One short document or a small merged JSON after combine/custom-code.
@@ -331,6 +335,7 @@ export function buildDocumentRulesPromptBlock(): string {
 - Cannot create binary formats (PDF, Word, Excel, images) — use plain-text stand-ins and set inputType to text, or tell the user to upload binaries manually.
 - If you emit docs of type text/json, every input those docs fill MUST use a matching inputType (text, not pdf/word/image). Never pair a binary inputType with text stand-ins in the same proposal.
 - When no test docs are needed, set docs to null.
+- If the catalog already lists files for this task, set docs to null rather than replacing them — follow-up turns merge new names into the pending catalog.
 - The user prompt lists current inference/test documents (name/type/label/preview). Use @ / Select UI pins for full file bytes when needed.`;
 }
 

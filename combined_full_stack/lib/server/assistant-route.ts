@@ -32,7 +32,7 @@ import type { BillingUserKey } from "./billing_account"
 import { UnknownModelError, parseRequestModel } from "./model_catalog"
 import { ensureModelOptionsFresh } from "./openrouter_models"
 import type { ProjectProposal } from "@/lib/project-assistant-types"
-import { mergePendingProposals, overlayProposalOnProject } from "@/lib/project-proposal-overlay"
+import { mergePendingProposals, overlayProposalOnProject, mergeDocsByName } from "@/lib/project-proposal-overlay"
 import { DEFAULT_MODEL, type ModelId, type Project, ProjectId } from "./types"
 import type { Store } from "./store"
 
@@ -56,8 +56,12 @@ export type AssistantRequestBody = {
 const MAX_TEST_DOC_PREVIEW_CHARS = 200
 
 // AI : Testing-tab visibility for the agent (same catalog on Vibe and Build).
-function buildTestDocsCatalog(store: Store, project: Project): AssistantTestDocCatalogEntry[] {
-  return docsForProject(store.docs(), project).map((d) => ({
+function buildTestDocsCatalog(
+  store: Store,
+  project: Project,
+  pending?: ProjectProposal | null,
+): AssistantTestDocCatalogEntry[] {
+  const live = docsForProject(store.docs(), project).map((d) => ({
     id: d.id,
     name: d.name,
     type: d.type,
@@ -65,6 +69,15 @@ function buildTestDocsCatalog(store: Store, project: Project): AssistantTestDocC
     sizeKb: d.sizeKb,
     preview: (d.preview ?? "").slice(0, MAX_TEST_DOC_PREVIEW_CHARS),
   }))
+  const pendingDocs = (pending?.docs ?? []).map((d) => ({
+    id: `pending:${d.name}`,
+    name: d.name,
+    type: d.type,
+    label: d.label,
+    sizeKb: Math.max(1, Math.ceil((d.content?.length ?? 0) / 1024)),
+    preview: (d.content ?? "").slice(0, MAX_TEST_DOC_PREVIEW_CHARS),
+  }))
+  return mergeDocsByName(live, pendingDocs)
 }
 
 function buildObserveOpts(
@@ -160,7 +173,7 @@ export async function runBilledProjectAssistant(
     ...(restOpts.uiContext?.length
       ? { uiContext: enrichUiContextRefs(store, base, restOpts.uiContext) }
       : {}),
-    testDocsCatalog: restOpts.testDocsCatalog ?? buildTestDocsCatalog(store, base),
+    testDocsCatalog: restOpts.testDocsCatalog ?? buildTestDocsCatalog(store, base, pendingProposal),
     recentRuns: restOpts.recentRuns ?? observe.recentRuns,
     lastFailedRun: restOpts.lastFailedRun ?? observe.lastFailedRun,
     store: restOpts.store ?? store,

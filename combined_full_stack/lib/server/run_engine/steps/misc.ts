@@ -2,7 +2,7 @@ import { invariant } from "@/lib/assert";
 import { customCodeEntriesForModule } from "@/lib/custom_code_entries";
 import { assertEntriesForModule } from "@/lib/assert_steps";
 import { ClientStepPendingError, HumanReviewPendingError } from "../../run_checkpoint";
-import { wrapListForOutputStructure } from "../../structure";
+import { wrapListForOutputStructure, unwrapListFieldFromStructure } from "../../structure";
 import { documentContentFrom, documentDocIdFrom, documentFilenameFrom, documentValueFrom } from "../../document_value";
 import { collectQuotes, resolveQuotesValue } from "../../quotation";
 import { stepEmits } from "../../validity";
@@ -78,6 +78,18 @@ export async function execTransformStep(m: PipelineModule, ctx: RunCtx, log: Run
         moduleId: m.id,
         structure: out.name,
         count: input.length,
+      });
+    }
+  } else if (out && stepEmitsList(m) && input != null && !Array.isArray(input) && m.outStructureId) {
+    const inModel = modelById(project.models, m.inStructureId);
+    const unwrapped = inModel
+      ? unwrapListFieldFromStructure(input, inModel, m.outStructureId)
+      : undefined;
+    if (unwrapped) {
+      value = unwrapped;
+      log.debug(`transform unwrapped list field onto spine`, {
+        moduleId: m.id,
+        count: unwrapped.length,
       });
     }
   }

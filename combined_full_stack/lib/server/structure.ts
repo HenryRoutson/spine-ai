@@ -378,6 +378,25 @@ export function canAutoWrapListIntoOutputStructure(
   return !!listFieldForAutoWrap(out, listItemStructureId, inStructureId);
 }
 
+// AI : inverse of wrap — bare transform Foo → list[Bar] reads Foo's list[model] field (ref Bar).
+export function listFieldForAutoUnwrap(
+  input: StructureModel,
+  listItemStructureId: StructureModelId,
+): ModelField | undefined {
+  return input.fields.find((f) => isListFieldType(f.type) && f.ref === listItemStructureId);
+}
+
+export function unwrapListFieldFromStructure(
+  value: unknown,
+  input: StructureModel,
+  listItemStructureId: StructureModelId,
+): unknown[] | undefined {
+  const field = listFieldForAutoUnwrap(input, listItemStructureId);
+  if (!field || value == null || typeof value !== "object" || Array.isArray(value)) return undefined;
+  const raw = (value as Record<string, unknown>)[field.name];
+  return Array.isArray(raw) ? raw : undefined;
+}
+
 // AI : llm-batch emits a bare array; a single-object output needs that list in a list field.
 export function wrapListForOutputStructure(
   list: unknown[],

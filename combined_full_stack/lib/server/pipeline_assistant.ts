@@ -1031,8 +1031,12 @@ export async function proposePipelineChange(
         : null;
 
     const tokens = ledger.tokenTotals();
+    const message =
+      invalidCount > 0 && validationErrors
+        ? `${raw.message}\n\nStill invalid after retries:\n${validationErrors}`
+        : raw.message;
     return {
-      message: raw.message,
+      message,
       proposal,
       invalidCount,
       validationErrors,
