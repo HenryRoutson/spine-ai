@@ -2,33 +2,164 @@
   "projects": [
     {
       "id": "p_64e3ab8303ed483db5d78653",
-      "name": "Untitled Pipeline",
+      "name": "Receipt Spreadsheet",
       "kind": "blank",
       "createdAt": 1786677060922,
       "lastOpenedAt": 1786677060922,
-      "models": [],
-      "modules": [
+      "models": [
         {
-          "id": "mod_blank_in_p_64e3ab8303ed483db5d78653",
-          "kind": "input",
-          "label": "Input",
-          "note": "Pipeline input document",
-          "inputType": "text",
-          "cached": true,
-          "avgMs": 80,
-          "avgCostCents": 0
-        },
-        {
-          "id": "mod_blank_out_p_64e3ab8303ed483db5d78653",
-          "kind": "output",
-          "label": "Output",
-          "note": "",
-          "cached": true,
-          "avgMs": 40,
-          "avgCostCents": 0
+          "id": "6c439960fa674629a1b7f56a",
+          "name": "ReceiptRow",
+          "description": "Structured fields extracted from one receipt with source quotes.",
+          "fields": [
+            {
+              "id": "c497b4bf57244807b39d31d7",
+              "name": "merchant",
+              "optional": false,
+              "description": "Vendor name with source quote",
+              "type": "tuple[text,quote]"
+            },
+            {
+              "id": "dfa399fadbf042558c4d0252",
+              "name": "date",
+              "optional": false,
+              "description": "Transaction date with source quote",
+              "type": "tuple[text,quote]"
+            },
+            {
+              "id": "38713a0a02f94d69968327f7",
+              "name": "amount",
+              "optional": false,
+              "description": "Total amount with source quote",
+              "type": "tuple[text,quote]"
+            },
+            {
+              "id": "efd2fedd8fb3476bbfed1b0c",
+              "name": "currency",
+              "optional": false,
+              "description": "Currency code with source quote",
+              "type": "tuple[text,quote]"
+            },
+            {
+              "id": "fa71850728af4afaaef5a378",
+              "name": "category",
+              "optional": false,
+              "description": "Expense category with source quote",
+              "type": "tuple[text,quote]"
+            },
+            {
+              "id": "1ccedc0367054f10b477d4e3",
+              "name": "tax",
+              "optional": false,
+              "description": "Tax amount with source quote",
+              "type": "tuple[text,quote]"
+            },
+            {
+              "id": "00cf77d749d74008bc58bd24",
+              "name": "source_file",
+              "optional": false,
+              "description": "Original receipt document",
+              "type": "document"
+            }
+          ]
         }
       ],
-      "strategies": []
+      "modules": [
+        {
+          "id": "75b56f0bc9b843c0bd38c0f5",
+          "kind": "input",
+          "label": "Receipt Uploads",
+          "note": "Batch upload of PDF receipts for processing.",
+          "cached": true,
+          "avgMs": 0,
+          "avgCostCents": 0,
+          "inputType": "pdf",
+          "inputDescription": "PDF receipts — one upload per receipt",
+          "inputMinCount": 1,
+          "outStructureId": "m_builtin_document",
+          "outType": {
+            "kind": "list",
+            "item": {
+              "kind": "ref",
+              "modelId": "m_builtin_document"
+            }
+          }
+        },
+        {
+          "id": "c55dba68b38941e9acc76ab9",
+          "kind": "llm-batch",
+          "label": "Extract Receipt Fields",
+          "note": "Extract structured fields from each receipt with source quotes.",
+          "cached": true,
+          "avgMs": 0,
+          "avgCostCents": 0,
+          "inputDescription": "List of Document objects — one PDF receipt each",
+          "inStructureId": "m_builtin_document",
+          "outStructureId": "6c439960fa674629a1b7f56a",
+          "outType": {
+            "kind": "list",
+            "item": {
+              "kind": "ref",
+              "modelId": "6c439960fa674629a1b7f56a"
+            }
+          },
+          "prompt": "Extract merchant name, date, amount, currency, category, and tax from this receipt. For each field, include the exact text quote from the document.",
+          "model": "openrouter:deepseek-v4",
+          "costLimitCents": 100,
+          "inType": {
+            "kind": "list",
+            "item": {
+              "kind": "ref",
+              "modelId": "m_builtin_document"
+            }
+          }
+        },
+        {
+          "id": "mod_quote_c55dba68b38941e9acc76ab9",
+          "kind": "quote",
+          "label": "Link Quotes",
+          "auto": true,
+          "note": "Auto · ReceiptRow → ReceiptRow · links LLM quote strings to source spans.",
+          "inStructureId": "6c439960fa674629a1b7f56a",
+          "outStructureId": "6c439960fa674629a1b7f56a",
+          "outType": {
+            "kind": "list",
+            "item": {
+              "kind": "ref",
+              "modelId": "6c439960fa674629a1b7f56a"
+            }
+          },
+          "cached": true,
+          "avgMs": 12,
+          "avgCostCents": 0,
+          "inType": {
+            "kind": "ref",
+            "modelId": "6c439960fa674629a1b7f56a"
+          }
+        },
+        {
+          "id": "67a53b32578f4974871bcb19",
+          "kind": "output",
+          "label": "Receipt Rows Output",
+          "note": "",
+          "cached": true,
+          "avgMs": 0,
+          "avgCostCents": 0,
+          "inputDescription": "List of ReceiptRow objects — all extracted fields with source quotes",
+          "inStructureId": "6c439960fa674629a1b7f56a",
+          "outStructureId": "6c439960fa674629a1b7f56a",
+          "outType": {
+            "kind": "ref",
+            "modelId": "6c439960fa674629a1b7f56a"
+          },
+          "inType": {
+            "kind": "ref",
+            "modelId": "6c439960fa674629a1b7f56a"
+          }
+        }
+      ],
+      "strategies": [],
+      "documentation": "# Receipt Spreadsheet\n\nBatch upload PDF receipts → extract structured fields with source quotes → output as spreadsheet rows."
     }
   ],
   "docs": [
@@ -40,45 +171,198 @@
       "sizeKb": 1,
       "uploadedAt": 1786628504752,
       "preview": "The quick brown fox jumps over the lazy dog. This well-known sentence contains all the letters in the English alphabet. It is often used for typing practice and"
+    },
+    {
+      "id": "sha_519407778e9dd198",
+      "name": "sample_receipt_1.txt",
+      "type": "text",
+      "label": "inference",
+      "sizeKb": 1,
+      "uploadedAt": 1786983541734,
+      "preview": "COFFEE SHOP\nDate: 2024-03-01\nTotal: $4.50\nTax: $0.45\nCategory: Meals"
+    },
+    {
+      "id": "sha_13685db6b86a4d0b",
+      "name": "sample_receipt_2.txt",
+      "type": "text",
+      "label": "inference",
+      "sizeKb": 1,
+      "uploadedAt": 1786983541734,
+      "preview": "TAXI SERVICE\nDate: 2024-03-02\nTotal: $18.00\nTax: $1.80\nCategory: Transportation"
     }
   ],
   "docContents": {
-    "sha_504621569078cd8e": "The quick brown fox jumps over the lazy dog. This well-known sentence contains all the letters in the English alphabet. It is often used for typing practice and testing fonts. The earliest known use of this phrase dates back to the late 19th century."
+    "sha_504621569078cd8e": "The quick brown fox jumps over the lazy dog. This well-known sentence contains all the letters in the English alphabet. It is often used for typing practice and testing fonts. The earliest known use of this phrase dates back to the late 19th century.",
+    "sha_519407778e9dd198": "COFFEE SHOP\nDate: 2024-03-01\nTotal: $4.50\nTax: $0.45\nCategory: Meals",
+    "sha_13685db6b86a4d0b": "TAXI SERVICE\nDate: 2024-03-02\nTotal: $18.00\nTax: $1.80\nCategory: Transportation"
   },
   "runs": [],
   "activeProjectId": "p_64e3ab8303ed483db5d78653",
   "model": "openrouter:deepseek-v4",
-  "inferenceInputDocIds": {},
+  "inferenceInputDocIds": {
+    "75b56f0bc9b843c0bd38c0f5": "sha_519407778e9dd198"
+  },
   "pendingCreates": [
     {
       "id": "p_64e3ab8303ed483db5d78653",
-      "name": "Untitled Pipeline",
+      "name": "Receipt Spreadsheet",
       "kind": "blank",
       "createdAt": 1786677060922,
       "lastOpenedAt": 1786677060922,
-      "models": [],
-      "modules": [
+      "models": [
         {
-          "id": "mod_blank_in_p_64e3ab8303ed483db5d78653",
-          "kind": "input",
-          "label": "Input",
-          "note": "Pipeline input document",
-          "inputType": "text",
-          "cached": true,
-          "avgMs": 80,
-          "avgCostCents": 0
-        },
-        {
-          "id": "mod_blank_out_p_64e3ab8303ed483db5d78653",
-          "kind": "output",
-          "label": "Output",
-          "note": "",
-          "cached": true,
-          "avgMs": 40,
-          "avgCostCents": 0
+          "id": "6c439960fa674629a1b7f56a",
+          "name": "ReceiptRow",
+          "description": "Structured fields extracted from one receipt with source quotes.",
+          "fields": [
+            {
+              "id": "c497b4bf57244807b39d31d7",
+              "name": "merchant",
+              "optional": false,
+              "description": "Vendor name with source quote",
+              "type": "tuple[text,quote]"
+            },
+            {
+              "id": "dfa399fadbf042558c4d0252",
+              "name": "date",
+              "optional": false,
+              "description": "Transaction date with source quote",
+              "type": "tuple[text,quote]"
+            },
+            {
+              "id": "38713a0a02f94d69968327f7",
+              "name": "amount",
+              "optional": false,
+              "description": "Total amount with source quote",
+              "type": "tuple[text,quote]"
+            },
+            {
+              "id": "efd2fedd8fb3476bbfed1b0c",
+              "name": "currency",
+              "optional": false,
+              "description": "Currency code with source quote",
+              "type": "tuple[text,quote]"
+            },
+            {
+              "id": "fa71850728af4afaaef5a378",
+              "name": "category",
+              "optional": false,
+              "description": "Expense category with source quote",
+              "type": "tuple[text,quote]"
+            },
+            {
+              "id": "1ccedc0367054f10b477d4e3",
+              "name": "tax",
+              "optional": false,
+              "description": "Tax amount with source quote",
+              "type": "tuple[text,quote]"
+            },
+            {
+              "id": "00cf77d749d74008bc58bd24",
+              "name": "source_file",
+              "optional": false,
+              "description": "Original receipt document",
+              "type": "document"
+            }
+          ]
         }
       ],
-      "strategies": []
+      "modules": [
+        {
+          "id": "75b56f0bc9b843c0bd38c0f5",
+          "kind": "input",
+          "label": "Receipt Uploads",
+          "note": "Batch upload of PDF receipts for processing.",
+          "cached": true,
+          "avgMs": 0,
+          "avgCostCents": 0,
+          "inputType": "pdf",
+          "inputDescription": "PDF receipts — one upload per receipt",
+          "inputMinCount": 1,
+          "outStructureId": "m_builtin_document",
+          "outType": {
+            "kind": "list",
+            "item": {
+              "kind": "ref",
+              "modelId": "m_builtin_document"
+            }
+          }
+        },
+        {
+          "id": "c55dba68b38941e9acc76ab9",
+          "kind": "llm-batch",
+          "label": "Extract Receipt Fields",
+          "note": "Extract structured fields from each receipt with source quotes.",
+          "cached": true,
+          "avgMs": 0,
+          "avgCostCents": 0,
+          "inputDescription": "List of Document objects — one PDF receipt each",
+          "inStructureId": "m_builtin_document",
+          "outStructureId": "6c439960fa674629a1b7f56a",
+          "outType": {
+            "kind": "list",
+            "item": {
+              "kind": "ref",
+              "modelId": "6c439960fa674629a1b7f56a"
+            }
+          },
+          "prompt": "Extract merchant name, date, amount, currency, category, and tax from this receipt. For each field, include the exact text quote from the document.",
+          "model": "openrouter:deepseek-v4",
+          "costLimitCents": 100,
+          "inType": {
+            "kind": "list",
+            "item": {
+              "kind": "ref",
+              "modelId": "m_builtin_document"
+            }
+          }
+        },
+        {
+          "id": "mod_quote_c55dba68b38941e9acc76ab9",
+          "kind": "quote",
+          "label": "Link Quotes",
+          "auto": true,
+          "note": "Auto · ReceiptRow → ReceiptRow · links LLM quote strings to source spans.",
+          "inStructureId": "6c439960fa674629a1b7f56a",
+          "outStructureId": "6c439960fa674629a1b7f56a",
+          "outType": {
+            "kind": "list",
+            "item": {
+              "kind": "ref",
+              "modelId": "6c439960fa674629a1b7f56a"
+            }
+          },
+          "cached": true,
+          "avgMs": 12,
+          "avgCostCents": 0,
+          "inType": {
+            "kind": "ref",
+            "modelId": "6c439960fa674629a1b7f56a"
+          }
+        },
+        {
+          "id": "67a53b32578f4974871bcb19",
+          "kind": "output",
+          "label": "Receipt Rows Output",
+          "note": "",
+          "cached": true,
+          "avgMs": 0,
+          "avgCostCents": 0,
+          "inputDescription": "List of ReceiptRow objects — all extracted fields with source quotes",
+          "inStructureId": "6c439960fa674629a1b7f56a",
+          "outStructureId": "6c439960fa674629a1b7f56a",
+          "outType": {
+            "kind": "ref",
+            "modelId": "6c439960fa674629a1b7f56a"
+          },
+          "inType": {
+            "kind": "ref",
+            "modelId": "6c439960fa674629a1b7f56a"
+          }
+        }
+      ],
+      "strategies": [],
+      "documentation": "# Receipt Spreadsheet\n\nBatch upload PDF receipts → extract structured fields with source quotes → output as spreadsheet rows."
     }
   ],
   "deletedProjectIds": [
@@ -95,6 +379,14 @@
     {
       "role": "assistant",
       "content": "I'll create a document summarizer pipeline that takes text documents and produces concise one-paragraph summaries. The pipeline will have 3 steps: input → LLM summarization → output."
+    },
+    {
+      "role": "user",
+      "content": "Build a pipeline for accounts payable: users upload many PDF receipts at once (hundreds). For each receipt extract merchant, date, amount, currency, category, and tax. Every extracted field that comes from the document should be quote-linked back to the source. Output one spreadsheet of all receipt rows. Rename the project to Receipt Spreadsheet."
+    },
+    {
+      "role": "assistant",
+      "content": "Pipeline: PDF batch upload → per-receipt field extraction → spreadsheet output. All fields include source quotes."
     }
   ],
   "pendingProposal": null,

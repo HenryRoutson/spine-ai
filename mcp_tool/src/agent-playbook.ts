@@ -10,9 +10,9 @@ WORKSPACES — never mix:
 - Signed-in GUI uses Supabase via cookies. pullRemoteState / flushPendingSave exist on SpineSession but are not MCP tools yet.
 
 DEFAULT LOOP (vibe like clicking the UI):
-1. get_project — handle only (id, name, step list). Not a full graph dump.
+1. get_project — compact review (id, kind, field types, inputType, docs, pendingProposal). Not a full graph dump.
 2. validate_project — same computeInvalid as the pipeline editor.
-3. Change the project: ask_agent (kind vibe|structure|testing|diagnosis) then apply_project_changes, OR edit with add_step / add_model / add_doc / assign_input / set_docs.
+3. Change the project: ask_agent (kind vibe|structure|testing|diagnosis) — read data.proposal — then apply_project_changes, OR edit with add_step / add_model / add_doc / assign_input / set_docs.
 4. run_test or start_run (needs SPINE_API_URL). Returns {id,status} immediately — there is no wait_for_run yet.
 5. With a finished run JSON: pinpoint_failure(projectSeedPath, testFilePath, runJson|runPath).
 
@@ -38,7 +38,7 @@ export function registerSpinePrompts(server: McpServer): void {
     },
     ({ goal }) =>
       userMessage(
-        `Goal: ${goal}\n\nFollow Spine MCP instructions. Loop: get_project → validate_project → ask_agent (kind=vibe unless this is clearly structure/testing/diagnosis) → read the proposal → apply_project_changes (or session_action assistant.reject) → validate_project again → run_test if SPINE_API_URL is set. Use session tools only (not seed lint) unless pinpointing a finished run against seeds/*.json.`,
+        `Goal: ${goal}\n\nFollow Spine MCP instructions. Loop: get_project → validate_project → ask_agent (kind=vibe unless this is clearly structure/testing/diagnosis) → read data.proposal → apply_project_changes (or session_action assistant.reject) → validate_project again → run_test if SPINE_API_URL is set. Use session tools only (not seed lint) unless pinpointing a finished run against seeds/*.json.`,
       ),
   )
 

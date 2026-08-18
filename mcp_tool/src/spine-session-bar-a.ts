@@ -1,9 +1,9 @@
 // AI : MCP Bar A — session file + HTTP, same SpineSession methods as CLI/Vibe (not seed-only).
-// AI : Goal is GUI-equivalent *actions*. get_project is a handle, not a live UI dump.
+// AI : Goal is GUI-equivalent *actions*. get_project is a compact review, not a live UI dump.
 
 import { createSpineSession } from "@/lib/core/session"
 import { createApiEgress, createThrowingEgress, SPINE_API_TOKEN_ENV, SPINE_API_URL_ENV } from "@/lib/core/transport"
-import { toBillingView, toCacheView, toSettingsView, toShareView, toValidationView } from "@/lib/core/view"
+import { toBillingView, toCacheView, toMcpProjectReview, toSettingsView, toShareView, toValidationView } from "@/lib/core/view"
 import { createFilePersist, resolveSessionPath } from "@/lib/cli/session_persist"
 import {
   addModelField,
@@ -20,6 +20,7 @@ import {
 import { askAgent } from "@/lib/cli/agent"
 import type { ProjectProposal } from "@/lib/project-assistant-types"
 import { filterRunsByErrorStatus } from "@/lib/run-error-log"
+import { exclusionReasonForInputModule, exclusionReasonLabel } from "@/lib/inference-input-picker"
 // AI : import enums from server/types — tsx ESM drops named values through lib/types `export *`.
 import { DocLabel, InputType, type Project } from "@/lib/server/types"
 
@@ -34,18 +35,10 @@ export function openMcpSession(sessionPath?: string, offline = false) {
   return createSpineSession({ persist, egress })
 }
 
-// AI : TODO (mcp-capability) — session describe/export if agents need prompts/fields without a seed path.
-// AI :   Do not thicken this payload for "eyes"; named tools + session_action are the edit surface.
+// AI : compact graph so MCP can review Vibe proposals (inputType, fields, docs, pendingProposal).
 export function getProjectFromSession(sessionPath?: string) {
   const session = openMcpSession(sessionPath, true)
-  const project = session.project
-  if (!project) throw new Error("no active project — session add-project first")
-  return {
-    id: project.id,
-    name: project.name,
-    models: project.models.map((m) => m.name),
-    steps: project.modules.map((m) => ({ id: m.id, kind: m.kind, label: m.label })),
-  }
+  return toMcpProjectReview(session.getSnapshot())
 }
 
 export function validateProjectFromSession(sessionPath?: string) {
@@ -89,6 +82,7 @@ export function sessionLogs(sessionPath?: string, errorsOnly = false) {
     runs,
     cache: session.getSnapshot().cacheEntries,
     tests: session.docs.filter((d) => d.name.endsWith("_testing.json")).map((d) => d.name),
+    docs: session.docs.map((d) => ({ name: d.name, type: d.type, label: d.label })),
   }
 }
 
@@ -222,6 +216,8 @@ export function assignInputFromSession(moduleKey: string, docKey: string, sessio
   const doc = session.docs.find((d) => d.id === docKey || d.name === docKey)
   if (!mod) throw new Error(`unknown module: ${moduleKey}`)
   if (!doc) throw new Error(`unknown doc: ${docKey}`)
+  const reason = exclusionReasonForInputModule(doc, mod)
+  if (reason) throw new Error(`${doc.name}: ${exclusionReasonLabel(reason, mod)}`)
   session.setInferenceInputDocIds({ ...session.getSnapshot().inferenceInputDocIds, [mod.id]: doc.id })
   return { moduleId: mod.id, docId: doc.id }
 }

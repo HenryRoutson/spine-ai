@@ -15,7 +15,7 @@ import type {
   StructureModelId,
   TypeAlias,
 } from "./types";
-import { ModuleKind } from "./types";
+import { ModuleKind, FieldType } from "./types";
 import { customCodeEntriesForModule } from "@/lib/custom_code_entries";
 import { tryCompileCustomCodeEntry } from "@/lib/custom_code";
 import { usesPassthroughStructure, isLlmKind, isMergeModuleKind, stepRequiresNote } from "@/lib/module-kinds";
@@ -365,6 +365,29 @@ function computeMissingStructureInvalid(
         pushInvalid(invalid, { moduleId: m.id, kind: InvalidKind.MissingStructure, expects: sid });
       }
     }
+  }
+  return invalid;
+}
+
+function computeLlmDocumentFieldInvalid(
+  modules: PipelineModule[],
+  models: StructureModel[],
+): InvalidMap {
+  const invalid: InvalidMap = new Map();
+  const allModels = withSharedModels(models);
+  for (const m of modules) {
+    if (!isLlmKind(m.kind) || !m.outStructureId) continue;
+    const model = allModels.find((x) => x.id === m.outStructureId);
+    if (!model) continue;
+    const docField = model.fields.find(
+      (f) => f.type === FieldType.Document || f.type === FieldType.ListDocument,
+    );
+    if (!docField) continue;
+    pushInvalid(invalid, {
+      moduleId: m.id,
+      kind: InvalidKind.StructureField,
+      structureMessage: `${model.name}.${docField.name} is type document — llm/llm-batch cannot emit Document (filename lives on the input). Use combine for document fields.`,
+    });
   }
   return invalid;
 }
@@ -855,6 +878,11 @@ export function computeInvalid(
     }
   }
   for (const [id, issues] of computeJsonInputMismatchInvalid(modules, models)) {
+    for (const issue of issues) {
+      pushInvalid(invalid, issue);
+    }
+  }
+  for (const [id, issues] of computeLlmDocumentFieldInvalid(modules, models)) {
     for (const issue of issues) {
       pushInvalid(invalid, issue);
     }

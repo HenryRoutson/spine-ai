@@ -468,6 +468,7 @@ export function syncAutoQuoteSteps(
           : autoQuoteStepLabel(m, taken);
     taken.add(label);
     const upstreamList = m.kind === "llm-batch" || stepEmitsList(m);
+    const quoteSpine = structureSpineType(m.outStructureId, upstreamList);
     out.push({
       id: (existing?.id ?? (`mod_quote_${m.id}` as ModuleId)) as ModuleId,
       kind: ModuleKind.Quote,
@@ -476,7 +477,8 @@ export function syncAutoQuoteSteps(
       note: `Auto · ${outModel.name} → ${outModel.name} · links LLM quote strings to source spans.`,
       inStructureId: m.outStructureId,
       outStructureId: m.outStructureId,
-      outType: structureSpineType(m.outStructureId, upstreamList),
+      inType: quoteSpine,
+      outType: quoteSpine,
       cached: true,
       avgMs: existing?.avgMs ?? 12,
       avgCostCents: 0,

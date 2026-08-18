@@ -13,6 +13,7 @@ import { proposeStructureChange } from "@/lib/server/structure_assistant"
 import { generateTestFile } from "@/lib/server/testing_assistant"
 import { diagnoseRunStream } from "@/lib/server/diagnosis_assistant"
 import type { CliCommandResult } from "@/lib/cli/types"
+import { compactProposalReview } from "@/lib/core/view"
 
 export type AgentKind = "vibe" | "structure" | "testing" | "diagnosis"
 
@@ -129,6 +130,7 @@ async function askVibeAgent(
         ran,
         invalidCount: result.invalidCount,
         usageCents: result.usageCents,
+        proposal: proposal ? compactProposalReview(proposal) : null,
         human: [
           result.message,
           proposal ? `changed: ${changedKeys(proposal).join(", ") || "(none)"}` : "no proposal",

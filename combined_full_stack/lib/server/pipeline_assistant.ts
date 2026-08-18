@@ -53,7 +53,7 @@ import { createPipelineModule } from "@/lib/pipeline-module-factory";
 import { migrateModuleSpineTypes, patchSpineOutList } from "./spine_types";
 import { stepEmitsList } from "./type_expr";
 import { uid } from "@/lib/id";
-import { inputTypesAreAllJsonNative } from "@/lib/inference-input-core";
+import { inputTypesAreAllJsonNative, inputTypesForModule, isDocToTextInputType } from "@/lib/inference-input-core";
 import { USER_ADDABLE_MODULE_KINDS, kindAlwaysEmitsList, stepRequiresNote } from "@/lib/module-kinds";
 import { attachAssistantUsage } from "./assistant_billing";
 import { isUnnamedProjectName } from "@/lib/project-assistant-types";
@@ -526,6 +526,20 @@ function materializeDocs(
   }));
 }
 
+function alignInputTypesToSyntheticDocs(
+  modules: PipelineModule[],
+  docs: ProjectAssistantDocSpec[],
+): PipelineModule[] {
+  if (!docs.length) return modules;
+  const jsonOnly = docs.every((d) => d.type === InputType.Json);
+  const standInType = jsonOnly ? InputType.Json : InputType.Text;
+  return modules.map((m) => {
+    if (m.kind !== ModuleKind.Input) return m;
+    if (!inputTypesForModule(m).some(isDocToTextInputType)) return m;
+    return { ...m, inputType: standInType };
+  });
+}
+
 function buildThinkingSystemPrompt(hasValidationErrors: boolean): string {
   return `You are the Agent for "Spine" — structures, pipeline steps, and inference test documents.
 
@@ -671,13 +685,19 @@ export function materializeProposal(
       : (project.typeAliases ?? []);
   let modules: PipelineModule[];
   if (hasPipelineRewrite) {
-    modules = syncManagedPipelineSteps(expandModuleSpecs(raw.modules ?? [], models, globalModel), models, globalModel) ?? [];
+    modules = expandModuleSpecs(raw.modules ?? [], models, globalModel);
   } else if (hasPipelinePatch) {
-    modules = syncManagedPipelineSteps(applyModulePatches(project.modules, raw.modulePatch!, models), models, globalModel) ?? project.modules;
+    modules = applyModulePatches(project.modules, raw.modulePatch!, models);
   } else {
     modules = project.modules;
   }
   const docs = materializeDocs(raw.docs);
+  if (hasDocChange && docs.length) {
+    modules = alignInputTypesToSyntheticDocs(modules, docs);
+  }
+  if (hasPipelineChange || (hasDocChange && docs.length)) {
+    modules = syncManagedPipelineSteps(modules, models, globalModel) ?? modules;
+  }
   return {
     modules: modules ?? [],
     models,

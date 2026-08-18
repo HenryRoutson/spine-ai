@@ -21,6 +21,7 @@ import {
   toTestingView,
   toValidationView,
 } from "@/lib/core/view"
+import { exclusionReasonForInputModule, exclusionReasonLabel } from "@/lib/inference-input-picker"
 import { SESSION_ACTION_IDS } from "@/lib/core/actions"
 import type { CliCommandResult } from "@/lib/cli/types"
 import { openCliSession } from "@/lib/cli/session_open"
@@ -354,6 +355,8 @@ async function runSessionCommandInner(
     const doc = session.docs.find((d) => d.id === docKey || d.name === docKey)
     if (!mod) return usage(`unknown module: ${moduleKey}`)
     if (!doc) return usage(`unknown doc: ${docKey}`)
+    const reason = exclusionReasonForInputModule(doc, mod)
+    if (reason) return usage(`${doc.name}: ${exclusionReasonLabel(reason, mod)}`)
     session.setInferenceInputDocIds({ ...session.getSnapshot().inferenceInputDocIds, [mod.id]: doc.id })
     return ok("session assign-input", { inference: toInferenceView(session.getSnapshot()) })
   }

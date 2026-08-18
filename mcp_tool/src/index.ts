@@ -192,7 +192,7 @@ server.tool(
 
 server.tool(
   "get_project",
-  "Session handle: active project id, name, and step list (not a full graph). Same SpineSession as CLI. For validity use validate_project; for edits use named tools or session_action.",
+  "Active session project review: kind, field types, inputType, docs, pendingProposal. Same SpineSession as CLI.",
   {
     sessionPath: z.string().optional().describe("Path to .spine-session.json (or SPINE_SESSION_PATH)"),
   },
@@ -246,7 +246,7 @@ server.tool(
 
 server.tool(
   "session_logs",
-  "List local session runs, cache entries, and *_testing.json docs.",
+  "List local session runs, cache entries, inference docs, and *_testing.json files.",
   {
     sessionPath: z.string().optional(),
   },
@@ -368,7 +368,7 @@ server.tool(
 
 server.tool(
   "assign_input",
-  "Assign a document to an Input step — same as Inference slot picker.",
+  "Assign a document to an Input step — same as Inference slot picker. Rejects wrong type / name mismatch.",
   {
     sessionPath: z.string().optional(),
     module: z.string(),
@@ -379,7 +379,7 @@ server.tool(
 
 server.tool(
   "ask_agent",
-  "GUI Send: Vibe/structure/testing/diagnosis. Same proposePipelineChange path. Then apply_project_changes to Approve (or session_action assistant.reject).",
+  "GUI Send: Vibe/structure/testing/diagnosis. Returns data.proposal (fields, inputType, docs). Then apply_project_changes to Approve (or session_action assistant.reject).",
   {
     sessionPath: z.string().optional(),
     message: z.string(),

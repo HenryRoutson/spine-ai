@@ -44,6 +44,7 @@ import type {
   ModelOptionPublic,
 } from "@/lib/types"
 import { DEFAULT_MODEL } from "@/lib/types"
+import { AUTHORED_PROJECT_KIND } from "@/lib/project-assistant-types"
 import {
   apiJson,
   apiPut,
@@ -1514,10 +1515,12 @@ export function StoreProvider({
           ? syncManagedPipelineSteps(project.modules, modelsForSync, model)
           : undefined
 
+      const leaveBlank = project.kind === "blank" && nextModels.length > 0
       patchProject({
         ...(changes.models ? { models: nextModels } : {}),
         ...(changes.typeAliases ? { typeAliases: stripBuiltinTypeAliases(changes.typeAliases) } : {}),
         ...(nextModules !== undefined ? { modules: nextModules } : {}),
+        ...(leaveBlank ? { kind: AUTHORED_PROJECT_KIND } : {}),
       })
     },
     [patchProject, project, model],

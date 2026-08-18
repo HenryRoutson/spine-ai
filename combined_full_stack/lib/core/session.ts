@@ -4,7 +4,7 @@
 
 import { createHash } from "node:crypto"
 import { uid } from "@/lib/id"
-import { UNNAMED_PROJECT_NAME } from "@/lib/project-assistant-types"
+import { UNNAMED_PROJECT_NAME, AUTHORED_PROJECT_KIND } from "@/lib/project-assistant-types"
 import { findQuote } from "@/lib/quotes"
 import { stripBuiltinTypeAliases, stripSharedModels, withBuiltinTypeAliases, withSharedModels } from "@/lib/structure"
 import { syncManagedPipelineSteps } from "@/lib/structure-parse-steps"
@@ -30,6 +30,11 @@ import {
   type TeamRealtimeHandlers,
 } from "@/lib/core/realtime"
 import { toQuoteView, toValidationView, type QuoteView, type ValidationView } from "@/lib/core/view"
+import {
+  inferenceInputIssueMessage,
+  issuesForSavedInferenceAssignment,
+} from "@/lib/inference-validity"
+import { orderedInputModules } from "@/lib/inference-input-core"
 import type { ProjectProposal } from "@/lib/project-assistant-types"
 import type {
   AddDocContentInput,
@@ -358,12 +363,14 @@ export class SpineSession {
       : changes.models
         ? syncManagedPipelineSteps(project.modules, modelsForSync, this.snap.model)
         : undefined
+    const leaveBlank = project.kind === "blank" && nextModels.length > 0
     this.patchProject({
       ...(changes.models ? { models: nextModels } : {}),
       ...(changes.typeAliases ? { typeAliases: stripBuiltinTypeAliases(changes.typeAliases) } : {}),
       ...(nextModules !== undefined ? { modules: nextModules } : {}),
       ...(changes.documentation !== undefined ? { documentation: changes.documentation || undefined } : {}),
       ...(changes.name ? { name: changes.name } : {}),
+      ...(leaveBlank ? { kind: AUTHORED_PROJECT_KIND } : {}),
     })
   }
 
@@ -566,6 +573,15 @@ export class SpineSession {
   async startRun(opts?: { source?: RunSource; testDocName?: string }): Promise<PipelineRun> {
     const project = this.requireProject()
     const source = opts?.source ?? RunSource.App
+    const slotIssues = issuesForSavedInferenceAssignment(
+      project,
+      this.snap.docs,
+      this.snap.inferenceInputDocIds,
+      this.snap.docContents,
+    )
+    if (slotIssues.length) {
+      throw new Error(inferenceInputIssueMessage(slotIssues, orderedInputModules(project.modules)))
+    }
     const res = await this.requestRemote("/api/runs", {
       method: "POST",
       headers: { "content-type": "application/json" },

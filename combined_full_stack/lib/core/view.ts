@@ -16,11 +16,13 @@ import { timeAgo } from "@/lib/time-ago"
 import { runBilledCents, runSavedCents, runTotalMs } from "@/lib/run-metrics"
 import { runHasErrors } from "@/lib/run-error-log"
 import { formatRunErrorForDisplay } from "@/lib/run-errors"
-import { orderedInputModules } from "@/lib/inference-input-core"
+import { inputMinCountForModule, orderedInputModules } from "@/lib/inference-input-core"
+import { docMatchesInputModule } from "@/lib/inference-input-picker"
 import { runInputDocsSummary } from "@/lib/inference-input-assignment"
 import { compactPreview, PREVIEW_STEP_IO_CHARS } from "@/lib/text-preview"
-import { RunStepStatus, type ModuleId } from "@/lib/types"
+import { RunStepStatus, type DocRef, type ModuleId, type PipelineModule, type StructureModel } from "@/lib/types"
 import type { SessionChatTurn, SessionSnapshot } from "@/lib/core/types"
+import type { ProjectProposal } from "@/lib/project-assistant-types"
 import { AppWindowId } from "@/lib/app-window-id"
 import {
   AppArea,
@@ -427,12 +429,18 @@ export function toInferenceView(snap: SessionSnapshot): InferenceView {
     const raw = snap.inferenceInputDocIds[mod.id as ModuleId]
     const docIds = Array.isArray(raw) ? raw : raw ? [raw] : []
     const docNames = docIds.map((id) => snap.docs.find((d) => d.id === id)?.name ?? id)
+    const input = inputs.find((m) => m.id === mod.id)
+    const assigned = docIds
+      .map((id) => snap.docs.find((d) => d.id === id))
+      .filter((d): d is DocRef => Boolean(d))
+    const typeOk = input ? assigned.every((d) => docMatchesInputModule(d, input)) : assigned.length > 0
+    const countOk = input ? assigned.length >= inputMinCountForModule(input) : docIds.length > 0
     return {
       moduleId: mod.id,
       moduleLabel: mod.label,
       docIds,
       docNames,
-      ready: docIds.length > 0,
+      ready: typeOk && countOk,
     }
   })
   return { assignments, ready: assignments.length > 0 && assignments.every((a) => a.ready) }
@@ -514,5 +522,61 @@ export function toSessionSummary(snap: SessionSnapshot): {
     deletedProjectIds: snap.deletedProjectIds,
     chatTurns: snap.chat.length,
     hasPendingProposal: snap.pendingProposal != null,
+  }
+}
+
+export type McpModelReview = { name: string; fields: string[] }
+export type McpStepReview = {
+  id: string
+  kind: string
+  label: string
+  inputType?: string | string[]
+  structureIn?: string
+  structureOut?: string
+}
+
+function mcpModelReview(models: StructureModel[]): McpModelReview[] {
+  return models.map((m) => ({
+    name: m.name,
+    fields: m.fields.map((f) => `${f.name}:${f.type}${f.optional ? "?" : ""}`),
+  }))
+}
+
+function mcpStepReview(modules: PipelineModule[], models: StructureModel[]): McpStepReview[] {
+  const named = withSharedModels(models)
+  const nameOf = (id: string | undefined) => (id ? named.find((m) => m.id === id)?.name ?? id : undefined)
+  return modules.map((m) => ({
+    id: m.id,
+    kind: m.kind,
+    label: m.label,
+    ...(m.inputType ? { inputType: m.inputType } : {}),
+    ...(m.inStructureId ? { structureIn: nameOf(m.inStructureId) } : {}),
+    ...(m.outStructureId ? { structureOut: nameOf(m.outStructureId) } : {}),
+  }))
+}
+
+export function compactProposalReview(proposal: ProjectProposal) {
+  return {
+    changed: (Object.entries(proposal.changed) as [string, boolean | undefined][])
+      .filter(([, v]) => v)
+      .map(([k]) => k),
+    ...(proposal.projectName ? { projectName: proposal.projectName } : {}),
+    models: mcpModelReview(proposal.models),
+    steps: mcpStepReview(proposal.modules, proposal.models),
+    docs: proposal.docs.map((d) => ({ name: d.name, type: d.type, label: d.label })),
+  }
+}
+
+export function toMcpProjectReview(snap: SessionSnapshot) {
+  const project = snap.projects.find((p) => p.id === snap.activeProjectId) ?? snap.projects[0]
+  if (!project) throw new Error("no active project — session add-project first")
+  return {
+    id: project.id,
+    name: project.name,
+    kind: project.kind,
+    models: mcpModelReview(project.models),
+    steps: mcpStepReview(project.modules, project.models),
+    docs: snap.docs.map((d) => ({ name: d.name, type: d.type, label: d.label })),
+    pendingProposal: snap.pendingProposal ? compactProposalReview(snap.pendingProposal) : null,
   }
 }

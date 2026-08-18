@@ -1,6 +1,6 @@
 import { captureThrownError, formatErrorForClipboard } from "./error-copy";
 import { InputType } from "./types";
-import type { DocRef, ModuleId, PipelineModule, StructureModel, TypeAlias } from "./types";
+import type { DocId, DocRef, ModuleId, PipelineModule, Project, StructureModel, TypeAlias } from "./types";
 import { isUnavailableSeedDoc, looksLikeUnavailableSeedDoc } from "./seed-doc";
 import { isBuiltinDocumentModel } from "@/lib/server/builtin_models";
 import { stepOutputTypeName, validateStepOutput } from "@/lib/server/structure";
@@ -10,7 +10,9 @@ import {
   inputNameRestrictionLabel,
   inputTypeLabel,
   inputTypesForModule,
+  orderedInputModules,
   type InputDocExclusionReason,
+  type InputDocsAssignment,
 } from "./inference-input";
 
 export interface InferenceInputIssue {
@@ -168,6 +170,39 @@ export function collectInferenceInputIssues(
     }
   }
   return issues;
+}
+
+export function assignmentFromSavedDocIds(
+  docs: DocRef[],
+  savedDocIds: Partial<Record<ModuleId, DocId | DocId[]>>,
+): InputDocsAssignment {
+  const out: InputDocsAssignment = {};
+  for (const [moduleId, raw] of Object.entries(savedDocIds)) {
+    if (!raw) continue;
+    const ids = Array.isArray(raw) ? raw : [raw];
+    const resolved = ids.flatMap((id) => {
+      const doc = docs.find((d) => d.id === id);
+      return doc ? [doc] : [];
+    });
+    if (!resolved.length) continue;
+    out[moduleId as ModuleId] = resolved.length === 1 ? resolved[0]! : resolved;
+  }
+  return out;
+}
+
+export function issuesForSavedInferenceAssignment(
+  project: Project,
+  docs: DocRef[],
+  savedDocIds: Partial<Record<ModuleId, DocId | DocId[]>>,
+  contentByDocId: Partial<Record<string, string>> = {},
+): InferenceInputIssue[] {
+  return collectInferenceInputIssues(
+    orderedInputModules(project.modules),
+    {},
+    contentByDocId,
+    assignmentFromSavedDocIds(docs, savedDocIds),
+    { models: project.models, typeAliases: project.typeAliases ?? [] },
+  );
 }
 
 function issueWhereLabel(issue: InferenceInputIssue, inputModules?: PipelineModule[]): string {

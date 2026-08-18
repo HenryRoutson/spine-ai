@@ -580,7 +580,7 @@ export function typeExprToZod(
     case TypeExprKind.Quote:
       return opts.llmQuotes ? z.string() : QuoteSchema;
     case TypeExprKind.TextQuote:
-      return llmQuotes ? z.string() : TextQuoteSchema;
+      return opts.llmQuotes ? z.string() : TextQuoteSchema;
     case TypeExprKind.List:
       return z.array(typeExprToZod(expr.item, models, opts));
     case TypeExprKind.Ref:

@@ -1,6 +1,8 @@
 import type { DocLabel, InputType, PipelineModule, StructureModel, TypeAlias } from "@/lib/types"
 
 export const UNNAMED_PROJECT_NAME = "Untitled Pipeline" as const
+export const BLANK_PROJECT_KIND = "blank" as const
+export const AUTHORED_PROJECT_KIND = "custom" as const
 
 export function isUnnamedProjectName(name: string): boolean {
   return name.trim() === UNNAMED_PROJECT_NAME

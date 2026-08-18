@@ -98,7 +98,9 @@ export function buildStructureRulesPromptBlock(): string {
 - Instantiation: field typeExpr "TreeNode[Section]" or ref TreeNode with type args — do not clone TreeNode per payload type.
 - Use "text" for strings (not "str"). Use "tuple[text,quote]" when extracted text must link back to a source span; quote offsets are resolved downstream — never ask for doc_id/start/end in the schema.
 - Use "model" / "list[model]" with ref set to another structure's exact name when nesting.
-- Use "document" for the shared Document structure ({ content, filename }).
+- Use "document" for the shared Document structure ({ content, filename }) on combine / side-input models only. Do NOT put type "document" on structures emitted by llm or llm-batch — filename already lives on the input Document; the LLM cannot emit a real Document.
+- tuple[text,quote] only for values copied from the source. Inferred fields (category) and values often absent on the page (currency) must be optional or plain text.
+- Spreadsheet amounts, counts, and tax: type "float" (or int), not tuple[text,quote]. Optional separate quote field if you also need a span.
 - Prefer preset field types from the Field types list; use type alias names or typeExpr for complex shapes (see Reusable type aliases).
 - Every field needs a description string (use "" if nothing to add).
 - Optional fields: set optional true.
@@ -324,6 +326,7 @@ export function buildDocumentRulesPromptBlock(): string {
 - Match inputNameContains on input steps when you create docs for specific slots (e.g. input expects "vendor_a" → name file vendor_a_terms.txt).
 - Keep each doc under ~8k characters; prefer 1–3 representative samples over large corpora.
 - Cannot create binary formats (PDF, Word, Excel, images) — use plain-text stand-ins and set inputType to text, or tell the user to upload binaries manually.
+- If you emit docs of type text/json, every input those docs fill MUST use a matching inputType (text, not pdf/word/image). Never pair a binary inputType with text stand-ins in the same proposal.
 - When no test docs are needed, set docs to null.
 - The user prompt lists current inference/test documents (name/type/label/preview). Use @ / Select UI pins for full file bytes when needed.`;
 }
@@ -374,9 +377,8 @@ ${JSON.stringify(catalog, null, 2)}
 }
 
 /** AI : blank / placeholder-only projects — landing + first app message share greenfield user prompt. */
-export function isGreenfieldProject(project: Project, history: ChatTurn[] = []): boolean {
-  if (history.length > 0) return false;
-  if (project.kind !== "blank") return false;
+export function isGreenfieldProject(project: Project, _history: ChatTurn[] = []): boolean {
+  // AI : graph-only — leftover chat on a still-blank pipeline must still get the greenfield wrapper.
   if (project.models.length > 0) return false;
   const mods = project.modules;
   if (mods.length === 0) return true;
@@ -471,6 +473,63 @@ Spine: list[Document] → list[ReceiptRow] → output
   "documentationUpdate": "# Receipt to Spreadsheet\\n\\nUpload many receipt .txt files; batch-extract rows. Download the list as CSV/XLSX from the viewer.",
   "modulePatch": null,
   "message": "Pipeline: multi-upload → batch extract → output (list is CSV/XLSX-exportable)."
+}
+
+Example 1b — same map-reduce with quote-linked copied spans (not inferred fields, not document, not binary input)
+Task: "Extract merchant and date from receipts with quotes; amount as a number"
+Spine: list[Document] → list[ReceiptRow] → output
+{
+  "projectNameUpdate": "Receipt Quotes",
+  "models": [
+    {
+      "name": "ReceiptRow",
+      "description": "Quoted merchant/date plus numeric total.",
+      "fields": [
+        { "name": "merchant", "type": "tuple[text,quote]", "optional": false, "description": "Vendor name copied from the receipt" },
+        { "name": "date", "type": "tuple[text,quote]", "optional": false, "description": "Date copied from the receipt" },
+        { "name": "amount", "type": "float", "optional": false, "description": "Total amount" },
+        { "name": "category", "type": "text", "optional": true, "description": "Inferred category — not quoted" }
+      ]
+    }
+  ],
+  "modules": [
+    {
+      "kind": "input",
+      "label": "Receipt Uploads",
+      "note": "Text stand-ins for receipts (binaries uploaded later).",
+      "structureOut": "list[Document]",
+      "inputType": "text",
+      "inputMinCount": 2,
+      "inputDescription": "Plain-text receipt files"
+    },
+    {
+      "kind": "llm-batch",
+      "label": "Extract Each Receipt",
+      "note": "One ReceiptRow per Document. Link Quotes is auto-inserted.",
+      "structureIn": "Document",
+      "structureOut": "ReceiptRow",
+      "prompt": "Extract merchant and date as source quotes. Amount is a number. Category is optional inferred text — do not quote it.",
+      "inputDescription": "List of Document objects"
+    },
+    {
+      "kind": "output",
+      "label": "Receipt Rows Output",
+      "structureIn": "ReceiptRow",
+      "structureOut": "ReceiptRow",
+      "inputDescription": "List of ReceiptRow objects"
+    }
+  ],
+  "typeAliases": null,
+  "docs": [
+    {
+      "name": "receipt_coffee.txt",
+      "type": "text",
+      "content": "COFFEE SHOP\\n2024-03-01\\nTotal: $4.50"
+    }
+  ],
+  "documentationUpdate": "# Receipt Quotes\\n\\nText receipts → quoted merchant/date + numeric amount. Do not emit Convert to text or Link Quotes.",
+  "modulePatch": null,
+  "message": "Quoted spans on copied fields; amount stays float; inputType text so stand-in .txt files run."
 }
 
 Example 2 — single document → per-item batch → single report
