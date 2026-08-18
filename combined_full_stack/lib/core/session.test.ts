@@ -59,6 +59,19 @@ describe("SpineSession React-like API", () => {
     expect(store.documentation).toBe("updated")
   })
 
+  it("scopes vibe chat to the active project", () => {
+    const store = createSpineSession()
+    const first = store.addProject({ open: true })
+    store.appendChat({ role: "user", content: "invoice pipeline" })
+    const second = store.addProject({ open: true })
+    expect(store.chat).toEqual([])
+    store.appendChat({ role: "user", content: "resume pipeline" })
+    expect(store.chat.map((t) => t.content)).toEqual(["resume pipeline"])
+    store.openProject(first.id)
+    expect(store.chat.map((t) => t.content)).toEqual(["invoice pipeline"])
+    expect(second.id).not.toBe(first.id)
+  })
+
   it("addDocContent hashes locally and linkQuotes never needs the network", () => {
     const store = createSpineSession({ egress: createThrowingEgress() })
     store.addProject({ open: true })

@@ -4,7 +4,7 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs"
 import { dirname } from "node:path"
 import type { PersistPort, SessionSnapshot } from "@/lib/core/types"
-import { emptySessionSnapshot } from "@/lib/core/session"
+import { emptySessionSnapshot, migrateSessionChat } from "@/lib/core/session"
 
 export const SPINE_SESSION_ENV = "SPINE_SESSION_PATH"
 export const DEFAULT_SESSION_FILE = ".spine-session.json"
@@ -27,8 +27,9 @@ export function createFilePersist(path: string): PersistPort {
         runs: raw.runs ?? [],
         pendingCreates: raw.pendingCreates ?? [],
         deletedProjectIds: raw.deletedProjectIds ?? [],
-        chat: raw.chat ?? [],
+        ...migrateSessionChat(raw),
         pendingProposal: raw.pendingProposal ?? null,
+        assistantInFlight: raw.assistantInFlight ?? null,
         modelOptions: raw.modelOptions ?? [],
         billingRuns: raw.billingRuns ?? [],
         billingAccount: raw.billingAccount ?? null,

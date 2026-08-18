@@ -74,6 +74,17 @@ export function inputFeedsCombine(modules: PipelineModule[], i: number): boolean
   return modules[indexAfterInputManaged(modules, i)]?.kind === ModuleKind.Combine;
 }
 
+// AI : second upload may be parsed then zipped via assemble (not combine). Allow one llm + auto quote.
+export function inputFeedsAssemble(modules: PipelineModule[], i: number): boolean {
+  if (modules[i]?.kind !== ModuleKind.Input) return false;
+  let j = indexAfterInputManaged(modules, i);
+  if (modules[j] && isLlmKind(modules[j]!.kind)) {
+    j++;
+    if (modules[j] && isAutoQuoteStep(modules[j]!)) j++;
+  }
+  return modules[j]?.kind === ModuleKind.Assemble;
+}
+
 export function isCombineSideParseStep(modules: PipelineModule[], i: number): boolean {
   const m = modules[i];
   if (!m || !isAutoStructureParseStep(m) || modules[i + 1]?.kind !== ModuleKind.Combine) return false;

@@ -92,6 +92,24 @@ describe("spine agent CLI", () => {
     expect(session.pendingProposal).toBeNull()
   })
 
+  it("does not start a second vibe ask while one is in flight", async () => {
+    const session = createSpineSession()
+    session.addProject({ open: true })
+    session.setAssistantInFlight({
+      projectId: session.activeProjectId,
+      message: "Add a Finding structure",
+      startedAt: Date.now(),
+    })
+    const result = await askAgent(session, "Add a Finding structure", {
+      propose: async () => {
+        throw new Error("should not run while in flight")
+      },
+    })
+    expect(result.ok).toBe(true)
+    expect(result.data?.inFlight).toBe(true)
+    expect(session.chat).toEqual([])
+  })
+
   it("CLI apply-file mutates the session like Vibe approve", async () => {
     const dir = mkdtempSync(join(tmpdir(), "spine-agent-"))
     const sessionPath = join(dir, "session.json")

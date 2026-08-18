@@ -456,9 +456,11 @@ function expandModuleSpecs(
     if ((spec as { kind?: string }).kind === ModuleKind.DocToText) continue;
     if (spec.kind === "combine") {
       // AI : skip auto side input when agent already emitted an input step immediately before combine.
+      // AI : also skip when 2+ inputs already exist — inserting another Document slot is a phantom third upload.
       const sideInputPresent = out[out.length - 1]?.kind === ModuleKind.Input;
-      if (!sideInputPresent) {
-        const sideSpec = {
+      const existingInputs = out.filter((m) => m.kind === ModuleKind.Input).length;
+      if (!sideInputPresent && existingInputs < 2) {
+        const sideSpec: PipelineAssistantModuleSpec = {
           kind: ModuleKind.Input,
           label: spec.label?.trim() ? `${spec.label} Document` : "Document Input",
           note: spec.note?.trim() || `Side document for "${spec.label}"`,

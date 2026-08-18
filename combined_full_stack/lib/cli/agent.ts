@@ -15,6 +15,7 @@ import type { CliCommandResult } from "@/lib/cli/types"
 import { compactProposalReview } from "@/lib/core/view"
 import { mergeDocsByName, mergePendingProposals, overlayProposalOnProject } from "@/lib/project-proposal-overlay"
 import type { AssistantTestDocCatalogEntry } from "@/lib/server/assistant-prompt"
+import { lastFailedRunForAssistant, recentRunsForAssistant } from "@/lib/assistant-observe"
 
 export type AgentKind = "vibe" | "structure" | "testing" | "diagnosis"
 
@@ -127,7 +128,34 @@ async function askVibeAgent(
     }
   }
 
+  const inflight = session.assistantInFlight
+  if (inflight && inflight.projectId === session.activeProjectId) {
+    if (inflight.message === trimmed) {
+      return {
+        ok: true,
+        command: "agent ask",
+        issues: [],
+        data: {
+          inFlight: true,
+          pending: Boolean(session.pendingProposal),
+          message: "vibe still running — poll get_project",
+          human: "vibe still running — poll get_project",
+        },
+      }
+    }
+    return {
+      ok: false,
+      command: "agent ask",
+      issues: [{ level: "error", where: "agent", message: "vibe already running — poll get_project" }],
+    }
+  }
+
   const history = session.chat
+  session.setAssistantInFlight({
+    projectId: session.activeProjectId,
+    message: trimmed,
+    startedAt: Date.now(),
+  })
   session.appendChat({ role: "user", content: trimmed })
   try {
     const live = session.project
@@ -144,7 +172,8 @@ async function askVibeAgent(
         proposePipelineChange(project, message, history, model as ModelId, {
           humanSurface: "vibe",
           testDocsCatalog: testDocsCatalogFromSession(session),
-          recentRuns: [],
+          recentRuns: recentRunsForAssistant(session.runs),
+          lastFailedRun: lastFailedRunForAssistant(session.runs),
         }))
     const prevPending = session.pendingProposal
     const result = await propose(
@@ -206,6 +235,8 @@ async function askVibeAgent(
       command: "agent ask",
       issues: [{ level: "error", where: "agent", message: msg }],
     }
+  } finally {
+    session.setAssistantInFlight(null)
   }
 }
 

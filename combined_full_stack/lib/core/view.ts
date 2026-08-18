@@ -24,6 +24,7 @@ import { DocLabel, RunStepStatus, type DocRef, type ModuleId, type PipelineModul
 import type { SessionChatTurn, SessionSnapshot } from "@/lib/core/types"
 import type { ProjectProposal } from "@/lib/project-assistant-types"
 import { mergeDocsByName, overlayProposalOnProject } from "@/lib/project-proposal-overlay"
+import { chatForActiveProject } from "@/lib/core/types"
 import { AppWindowId } from "@/lib/app-window-id"
 import {
   AppArea,
@@ -116,16 +117,17 @@ function snapDocInvalidOpts(snap: SessionSnapshot) {
 export function toValidationView(snap: SessionSnapshot): ValidationView {
   const project = snap.projects.find((p) => p.id === snap.activeProjectId) ?? snap.projects[0]
   if (!project) return { ok: true, issues: [] }
-  const models = project.models
-  const typeAliases = project.typeAliases ?? []
+  const viewed = overlayProposalOnProject(project, snap.pendingProposal)
+  const models = viewed.models
+  const typeAliases = viewed.typeAliases ?? []
   const issues: ValidationIssueView[] = computeStructureIssues(models, typeAliases).map((issue) => ({
     level: "error",
     where: issue.modelId ?? "structure",
     message: structureIssueMessage(issue, models),
   }))
-  const invalid = computeInvalid(project.modules, models, { typeAliases, ...snapDocInvalidOpts(snap) })
+  const invalid = computeInvalid(viewed.modules, models, { typeAliases, ...snapDocInvalidOpts(snap) })
   const modelsForMessages = withSharedModels(models)
-  for (const m of project.modules) {
+  for (const m of viewed.modules) {
     for (const issue of invalidIssuesForModule(invalid, m.id)) {
       issues.push({
         level: "error",
@@ -133,7 +135,7 @@ export function toValidationView(snap: SessionSnapshot): ValidationView {
         message:
           issue.kind === "structure-field"
             ? (issue.structureMessage ?? "structure field error")
-            : invalidStepMessage(issue, modelsForMessages, project.modules),
+            : invalidStepMessage(issue, modelsForMessages, viewed.modules),
       })
     }
   }
@@ -376,9 +378,10 @@ export function toAgentView(snap: SessionSnapshot): AgentView {
         .filter(([, v]) => v)
         .map(([k]) => k)
     : []
-  const last = [...snap.chat].reverse().find((t) => t.role === "assistant")
+  const turns = chatForActiveProject(snap)
+  const last = [...turns].reverse().find((t) => t.role === "assistant")
   return {
-    turns: snap.chat,
+    turns,
     pendingChanged,
     pendingName: pending?.projectName,
     lastMessage: last?.content ?? "",
@@ -542,7 +545,7 @@ export function toSessionSummary(snap: SessionSnapshot): {
     runCount: snap.runs.length,
     pendingCreates: snap.pendingCreates.length,
     deletedProjectIds: snap.deletedProjectIds,
-    chatTurns: snap.chat.length,
+    chatTurns: chatForActiveProject(snap).length,
     hasPendingProposal: snap.pendingProposal != null,
   }
 }
@@ -614,6 +617,7 @@ export function toMcpProjectReview(snap: SessionSnapshot) {
     kind: viewed.kind,
     issues: validation.issues.map((i) => `${i.where}: ${i.message}`),
     pendingChanged,
+    assistantInFlight: snap.assistantInFlight,
     models: mcpModelReview(viewed.models),
     steps: mcpStepReview(viewed.modules, viewed.models),
     docs: mergeDocsByName(

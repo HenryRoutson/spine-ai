@@ -163,33 +163,342 @@
     },
     {
       "id": "p_5b017bac17fb4d6eaf480dc5",
-      "name": "Untitled Pipeline",
+      "name": "Resume Skill Matcher",
       "kind": "blank",
       "createdAt": 1787021155736,
       "lastOpenedAt": 1787021155736,
-      "models": [],
-      "modules": [
+      "models": [
         {
-          "id": "mod_blank_in_p_5b017bac17fb4d6eaf480dc5",
-          "kind": "input",
-          "label": "Input",
-          "note": "Pipeline input document",
-          "inputType": "text",
-          "cached": true,
-          "avgMs": 80,
-          "avgCostCents": 0
+          "id": "73e8692e0f44478496755c0d",
+          "name": "Resume",
+          "description": "Extracted fields from one candidate resume.",
+          "fields": [
+            {
+              "id": "1df3f08917a24eebb684223e",
+              "name": "name",
+              "optional": false,
+              "description": "Candidate name with source quote",
+              "type": "tuple[text,quote]"
+            },
+            {
+              "id": "271d491c90fc44168c5abad0",
+              "name": "years_exp",
+              "optional": false,
+              "description": "Years of experience",
+              "type": "float"
+            },
+            {
+              "id": "203381eb3c0b443581b8df76",
+              "name": "email",
+              "optional": true,
+              "description": "Candidate email if present",
+              "type": "tuple[text,quote]"
+            },
+            {
+              "id": "20e38e751ab549348226b6c9",
+              "name": "fit_score",
+              "optional": false,
+              "description": "1-5 fit score for the role",
+              "type": "float"
+            },
+            {
+              "id": "ed66248c00d84c46ac8e8a68",
+              "name": "skills",
+              "optional": false,
+              "description": "List of skills with source quotes",
+              "type": "list[tuple[text,quote]]"
+            }
+          ]
         },
         {
-          "id": "mod_blank_out_p_5b017bac17fb4d6eaf480dc5",
-          "kind": "output",
-          "label": "Output",
-          "note": "",
-          "cached": true,
-          "avgMs": 40,
-          "avgCostCents": 0
+          "id": "ab433352d7c3459798c9983b",
+          "name": "JobDescription",
+          "description": "Required skills from the job posting.",
+          "fields": [
+            {
+              "id": "fd352ac2126141d7b4b860d9",
+              "name": "text",
+              "optional": false,
+              "description": "Full job description text",
+              "type": "text"
+            },
+            {
+              "id": "61f5abf4657c49dda4fab3ef",
+              "name": "required_skills",
+              "optional": false,
+              "description": "List of required skills",
+              "type": "list[text]"
+            }
+          ]
+        },
+        {
+          "id": "0f63e4abb2294a118ea3a2d2",
+          "name": "ResumeBatch",
+          "description": "Combined input - resumes plus job description.",
+          "fields": [
+            {
+              "id": "93ad8919a49a4825958dcfd2",
+              "name": "resumes",
+              "optional": false,
+              "description": "Candidate resumes",
+              "type": "list[model]",
+              "ref": "73e8692e0f44478496755c0d"
+            },
+            {
+              "id": "a2176920ae574de29fc78c08",
+              "name": "job_desc",
+              "optional": false,
+              "description": "Job description",
+              "type": "model",
+              "ref": "ab433352d7c3459798c9983b"
+            }
+          ]
+        },
+        {
+          "id": "b131e29eb9bb4e179aa812c2",
+          "name": "SkillMatch",
+          "description": "One skill match result.",
+          "fields": [
+            {
+              "id": "d7dba2e4042a4968a1e283e3",
+              "name": "candidate_name",
+              "optional": false,
+              "description": "From resume name field",
+              "type": "text"
+            },
+            {
+              "id": "9dd2d9c4b51144369656399b",
+              "name": "skill",
+              "optional": false,
+              "description": "Skill text",
+              "type": "text"
+            },
+            {
+              "id": "ce7a9da471f2450e8432fee9",
+              "name": "matched",
+              "optional": false,
+              "description": "True if skill is in job requirements",
+              "type": "bool"
+            },
+            {
+              "id": "e36128fe95904bb0892bf81f",
+              "name": "years_exp",
+              "optional": false,
+              "description": "From resume",
+              "type": "float"
+            },
+            {
+              "id": "5d50158896954a0d89c8b038",
+              "name": "fit_score",
+              "optional": false,
+              "description": "From resume",
+              "type": "float"
+            }
+          ]
         }
       ],
-      "strategies": []
+      "modules": [
+        {
+          "id": "8b825c45a81741f4ba6a7a8e",
+          "kind": "input",
+          "label": "Resume Uploads",
+          "note": "Many candidate resumes in text format.",
+          "cached": true,
+          "avgMs": 0,
+          "avgCostCents": 0,
+          "inputType": "text",
+          "inputNameContains": "resume",
+          "inputDescription": "Plain-text candidate resumes — one upload per candidate",
+          "inputMinCount": 1,
+          "outStructureId": "m_builtin_document",
+          "outType": {
+            "kind": "list",
+            "item": {
+              "kind": "ref",
+              "modelId": "m_builtin_document"
+            }
+          }
+        },
+        {
+          "id": "4b66e10874254acbbddfe1a4",
+          "kind": "llm-batch",
+          "label": "Extract Resume Fields",
+          "note": "One structured Resume per uploaded Document.",
+          "cached": true,
+          "avgMs": 0,
+          "avgCostCents": 0,
+          "inputDescription": "List of Document objects — one resume file each",
+          "inStructureId": "m_builtin_document",
+          "outStructureId": "73e8692e0f44478496755c0d",
+          "outType": {
+            "kind": "list",
+            "item": {
+              "kind": "ref",
+              "modelId": "73e8692e0f44478496755c0d"
+            }
+          },
+          "prompt": "Extract name (with quote), years of experience (number), optional email (with quote if present), 1-5 fit score (number), and list of skills (each with quote).",
+          "model": "openrouter:deepseek-v4",
+          "costLimitCents": 100,
+          "inType": {
+            "kind": "list",
+            "item": {
+              "kind": "ref",
+              "modelId": "m_builtin_document"
+            }
+          }
+        },
+        {
+          "id": "mod_quote_4b66e10874254acbbddfe1a4",
+          "kind": "quote",
+          "label": "Link Quotes",
+          "auto": true,
+          "note": "Auto · Resume → Resume · links LLM quote strings to source spans.",
+          "inStructureId": "73e8692e0f44478496755c0d",
+          "outStructureId": "73e8692e0f44478496755c0d",
+          "outType": {
+            "kind": "list",
+            "item": {
+              "kind": "ref",
+              "modelId": "73e8692e0f44478496755c0d"
+            }
+          },
+          "cached": true,
+          "avgMs": 12,
+          "avgCostCents": 0,
+          "inType": {
+            "kind": "ref",
+            "modelId": "73e8692e0f44478496755c0d"
+          }
+        },
+        {
+          "id": "e10ec267770b498384f305cc",
+          "kind": "input",
+          "label": "Job Description",
+          "note": "Single job description text file.",
+          "cached": true,
+          "avgMs": 0,
+          "avgCostCents": 0,
+          "inputType": "text",
+          "inputNameContains": "job_desc",
+          "inputDescription": "Plain-text job description with required skills",
+          "outStructureId": "m_builtin_document",
+          "outType": {
+            "kind": "ref",
+            "modelId": "m_builtin_document"
+          }
+        },
+        {
+          "id": "f2c8f0b1ea28476f805a1255",
+          "kind": "llm",
+          "label": "Parse Job Requirements",
+          "note": "Extract required skills from job description.",
+          "cached": true,
+          "avgMs": 0,
+          "avgCostCents": 0,
+          "inputDescription": "Job description Document text",
+          "inStructureId": "m_builtin_document",
+          "outStructureId": "ab433352d7c3459798c9983b",
+          "outType": {
+            "kind": "ref",
+            "modelId": "ab433352d7c3459798c9983b"
+          },
+          "prompt": "List all required technical skills from this job description. Return as a list in required_skills.",
+          "model": "openrouter:deepseek-v4",
+          "costLimitCents": 100,
+          "inType": {
+            "kind": "ref",
+            "modelId": "m_builtin_document"
+          }
+        },
+        {
+          "id": "f522254320ed470cb99d03dd",
+          "kind": "input",
+          "label": "Combine Inputs Document",
+          "note": "Merge parsed resumes (pipeline state) with job description.",
+          "cached": true,
+          "avgMs": 0,
+          "avgCostCents": 0,
+          "inputType": "text",
+          "inputDescription": "Resume list from Extract plus job description from Parse",
+          "outStructureId": "m_builtin_document",
+          "outType": {
+            "kind": "ref",
+            "modelId": "m_builtin_document"
+          }
+        },
+        {
+          "id": "2d9bfb1d3c7442c8871fddfe",
+          "kind": "combine",
+          "label": "Combine Inputs",
+          "note": "Merge parsed resumes (pipeline state) with job description.",
+          "cached": true,
+          "avgMs": 0,
+          "avgCostCents": 0,
+          "inputDescription": "Resume list from Extract plus job description from Parse",
+          "inStructureId": "73e8692e0f44478496755c0d",
+          "outStructureId": "0f63e4abb2294a118ea3a2d2",
+          "outType": {
+            "kind": "ref",
+            "modelId": "0f63e4abb2294a118ea3a2d2"
+          },
+          "inType": {
+            "kind": "ref",
+            "modelId": "73e8692e0f44478496755c0d"
+          }
+        },
+        {
+          "id": "6e5df4159b6f4264be1121d0",
+          "kind": "custom-code",
+          "label": "Flatten Skill Matches",
+          "note": "ResumeBatch → list[SkillMatch] for spreadsheet output.",
+          "cached": true,
+          "avgMs": 0,
+          "avgCostCents": 0,
+          "inputDescription": "Combined ResumeBatch with resumes and job_desc",
+          "inStructureId": "0f63e4abb2294a118ea3a2d2",
+          "outStructureId": "b131e29eb9bb4e179aa812c2",
+          "outType": {
+            "kind": "list",
+            "item": {
+              "kind": "ref",
+              "modelId": "b131e29eb9bb4e179aa812c2"
+            }
+          },
+          "fallbackList": [
+            {
+              "typescript": "(batch) => batch.resumes.flatMap(resume => resume.skills.map(skill => ({ candidate_name: resume.name[0], skill: skill[0], matched: batch.job_desc.required_skills.includes(skill[0]), years_exp: resume.years_exp, fit_score: resume.fit_score })))"
+            }
+          ],
+          "maxRunMs": 60000,
+          "inType": {
+            "kind": "ref",
+            "modelId": "0f63e4abb2294a118ea3a2d2"
+          }
+        },
+        {
+          "id": "7c2ba8a91d2044d0b2acd215",
+          "kind": "output",
+          "label": "Skill Matches Output",
+          "note": "Final spreadsheet output.",
+          "cached": true,
+          "avgMs": 0,
+          "avgCostCents": 0,
+          "inputDescription": "List of SkillMatch objects — one row per skill mention",
+          "inStructureId": "b131e29eb9bb4e179aa812c2",
+          "outStructureId": "b131e29eb9bb4e179aa812c2",
+          "outType": {
+            "kind": "ref",
+            "modelId": "b131e29eb9bb4e179aa812c2"
+          },
+          "inType": {
+            "kind": "ref",
+            "modelId": "b131e29eb9bb4e179aa812c2"
+          }
+        }
+      ],
+      "strategies": [],
+      "documentation": "# Resume Skill Matcher\n\n1. Upload many candidate resumes (text files)\n2. Upload one job description\n3. Pipeline extracts resume fields with source quotes\n4. Parses required skills from job description\n5. Combines inputs and checks skill matches\n6. Outputs spreadsheet with one row per skill mention\n\nFields:\n- Quoted: name, email, skills\n- Numbers: years_exp, fit_score\n- Boolean: matched (skill in requirements)"
     }
   ],
   "docs": [
@@ -219,12 +528,42 @@
       "sizeKb": 1,
       "uploadedAt": 1786983541734,
       "preview": "TAXI SERVICE\nDate: 2024-03-02\nTotal: $18.00\nTax: $1.80\nCategory: Transportation"
+    },
+    {
+      "id": "sha_0efdcc16b06c9da6",
+      "name": "sample_resume_1.txt",
+      "type": "text",
+      "label": "inference",
+      "sizeKb": 1,
+      "uploadedAt": 1787023613092,
+      "preview": "John Doe\n5 years experience\nEmail: john@example.com\nSkills: Python, SQL, Data Analysis\nFit: 4"
+    },
+    {
+      "id": "sha_53b7e0c1de2c6720",
+      "name": "sample_resume_2.txt",
+      "type": "text",
+      "label": "inference",
+      "sizeKb": 1,
+      "uploadedAt": 1787023613096,
+      "preview": "Jane Smith\n8 years experience\nSkills: Python, Machine Learning, Cloud\nFit: 5"
+    },
+    {
+      "id": "sha_6cf87812c4ff13dc",
+      "name": "sample_job_desc.txt",
+      "type": "text",
+      "label": "inference",
+      "sizeKb": 1,
+      "uploadedAt": 1787023613096,
+      "preview": "Data Scientist\nRequired skills: Python, Machine Learning, SQL"
     }
   ],
   "docContents": {
     "sha_504621569078cd8e": "The quick brown fox jumps over the lazy dog. This well-known sentence contains all the letters in the English alphabet. It is often used for typing practice and testing fonts. The earliest known use of this phrase dates back to the late 19th century.",
     "sha_519407778e9dd198": "COFFEE SHOP\nDate: 2024-03-01\nTotal: $4.50\nTax: $0.45\nCategory: Meals",
-    "sha_13685db6b86a4d0b": "TAXI SERVICE\nDate: 2024-03-02\nTotal: $18.00\nTax: $1.80\nCategory: Transportation"
+    "sha_13685db6b86a4d0b": "TAXI SERVICE\nDate: 2024-03-02\nTotal: $18.00\nTax: $1.80\nCategory: Transportation",
+    "sha_0efdcc16b06c9da6": "John Doe\n5 years experience\nEmail: john@example.com\nSkills: Python, SQL, Data Analysis\nFit: 4",
+    "sha_53b7e0c1de2c6720": "Jane Smith\n8 years experience\nSkills: Python, Machine Learning, Cloud\nFit: 5",
+    "sha_6cf87812c4ff13dc": "Data Scientist\nRequired skills: Python, Machine Learning, SQL"
   },
   "runs": [],
   "activeProjectId": "p_5b017bac17fb4d6eaf480dc5",
@@ -396,33 +735,342 @@
     },
     {
       "id": "p_5b017bac17fb4d6eaf480dc5",
-      "name": "Untitled Pipeline",
+      "name": "Resume Skill Matcher",
       "kind": "blank",
       "createdAt": 1787021155736,
       "lastOpenedAt": 1787021155736,
-      "models": [],
-      "modules": [
+      "models": [
         {
-          "id": "mod_blank_in_p_5b017bac17fb4d6eaf480dc5",
-          "kind": "input",
-          "label": "Input",
-          "note": "Pipeline input document",
-          "inputType": "text",
-          "cached": true,
-          "avgMs": 80,
-          "avgCostCents": 0
+          "id": "73e8692e0f44478496755c0d",
+          "name": "Resume",
+          "description": "Extracted fields from one candidate resume.",
+          "fields": [
+            {
+              "id": "1df3f08917a24eebb684223e",
+              "name": "name",
+              "optional": false,
+              "description": "Candidate name with source quote",
+              "type": "tuple[text,quote]"
+            },
+            {
+              "id": "271d491c90fc44168c5abad0",
+              "name": "years_exp",
+              "optional": false,
+              "description": "Years of experience",
+              "type": "float"
+            },
+            {
+              "id": "203381eb3c0b443581b8df76",
+              "name": "email",
+              "optional": true,
+              "description": "Candidate email if present",
+              "type": "tuple[text,quote]"
+            },
+            {
+              "id": "20e38e751ab549348226b6c9",
+              "name": "fit_score",
+              "optional": false,
+              "description": "1-5 fit score for the role",
+              "type": "float"
+            },
+            {
+              "id": "ed66248c00d84c46ac8e8a68",
+              "name": "skills",
+              "optional": false,
+              "description": "List of skills with source quotes",
+              "type": "list[tuple[text,quote]]"
+            }
+          ]
         },
         {
-          "id": "mod_blank_out_p_5b017bac17fb4d6eaf480dc5",
-          "kind": "output",
-          "label": "Output",
-          "note": "",
-          "cached": true,
-          "avgMs": 40,
-          "avgCostCents": 0
+          "id": "ab433352d7c3459798c9983b",
+          "name": "JobDescription",
+          "description": "Required skills from the job posting.",
+          "fields": [
+            {
+              "id": "fd352ac2126141d7b4b860d9",
+              "name": "text",
+              "optional": false,
+              "description": "Full job description text",
+              "type": "text"
+            },
+            {
+              "id": "61f5abf4657c49dda4fab3ef",
+              "name": "required_skills",
+              "optional": false,
+              "description": "List of required skills",
+              "type": "list[text]"
+            }
+          ]
+        },
+        {
+          "id": "0f63e4abb2294a118ea3a2d2",
+          "name": "ResumeBatch",
+          "description": "Combined input - resumes plus job description.",
+          "fields": [
+            {
+              "id": "93ad8919a49a4825958dcfd2",
+              "name": "resumes",
+              "optional": false,
+              "description": "Candidate resumes",
+              "type": "list[model]",
+              "ref": "73e8692e0f44478496755c0d"
+            },
+            {
+              "id": "a2176920ae574de29fc78c08",
+              "name": "job_desc",
+              "optional": false,
+              "description": "Job description",
+              "type": "model",
+              "ref": "ab433352d7c3459798c9983b"
+            }
+          ]
+        },
+        {
+          "id": "b131e29eb9bb4e179aa812c2",
+          "name": "SkillMatch",
+          "description": "One skill match result.",
+          "fields": [
+            {
+              "id": "d7dba2e4042a4968a1e283e3",
+              "name": "candidate_name",
+              "optional": false,
+              "description": "From resume name field",
+              "type": "text"
+            },
+            {
+              "id": "9dd2d9c4b51144369656399b",
+              "name": "skill",
+              "optional": false,
+              "description": "Skill text",
+              "type": "text"
+            },
+            {
+              "id": "ce7a9da471f2450e8432fee9",
+              "name": "matched",
+              "optional": false,
+              "description": "True if skill is in job requirements",
+              "type": "bool"
+            },
+            {
+              "id": "e36128fe95904bb0892bf81f",
+              "name": "years_exp",
+              "optional": false,
+              "description": "From resume",
+              "type": "float"
+            },
+            {
+              "id": "5d50158896954a0d89c8b038",
+              "name": "fit_score",
+              "optional": false,
+              "description": "From resume",
+              "type": "float"
+            }
+          ]
         }
       ],
-      "strategies": []
+      "modules": [
+        {
+          "id": "8b825c45a81741f4ba6a7a8e",
+          "kind": "input",
+          "label": "Resume Uploads",
+          "note": "Many candidate resumes in text format.",
+          "cached": true,
+          "avgMs": 0,
+          "avgCostCents": 0,
+          "inputType": "text",
+          "inputNameContains": "resume",
+          "inputDescription": "Plain-text candidate resumes — one upload per candidate",
+          "inputMinCount": 1,
+          "outStructureId": "m_builtin_document",
+          "outType": {
+            "kind": "list",
+            "item": {
+              "kind": "ref",
+              "modelId": "m_builtin_document"
+            }
+          }
+        },
+        {
+          "id": "4b66e10874254acbbddfe1a4",
+          "kind": "llm-batch",
+          "label": "Extract Resume Fields",
+          "note": "One structured Resume per uploaded Document.",
+          "cached": true,
+          "avgMs": 0,
+          "avgCostCents": 0,
+          "inputDescription": "List of Document objects — one resume file each",
+          "inStructureId": "m_builtin_document",
+          "outStructureId": "73e8692e0f44478496755c0d",
+          "outType": {
+            "kind": "list",
+            "item": {
+              "kind": "ref",
+              "modelId": "73e8692e0f44478496755c0d"
+            }
+          },
+          "prompt": "Extract name (with quote), years of experience (number), optional email (with quote if present), 1-5 fit score (number), and list of skills (each with quote).",
+          "model": "openrouter:deepseek-v4",
+          "costLimitCents": 100,
+          "inType": {
+            "kind": "list",
+            "item": {
+              "kind": "ref",
+              "modelId": "m_builtin_document"
+            }
+          }
+        },
+        {
+          "id": "mod_quote_4b66e10874254acbbddfe1a4",
+          "kind": "quote",
+          "label": "Link Quotes",
+          "auto": true,
+          "note": "Auto · Resume → Resume · links LLM quote strings to source spans.",
+          "inStructureId": "73e8692e0f44478496755c0d",
+          "outStructureId": "73e8692e0f44478496755c0d",
+          "outType": {
+            "kind": "list",
+            "item": {
+              "kind": "ref",
+              "modelId": "73e8692e0f44478496755c0d"
+            }
+          },
+          "cached": true,
+          "avgMs": 12,
+          "avgCostCents": 0,
+          "inType": {
+            "kind": "ref",
+            "modelId": "73e8692e0f44478496755c0d"
+          }
+        },
+        {
+          "id": "e10ec267770b498384f305cc",
+          "kind": "input",
+          "label": "Job Description",
+          "note": "Single job description text file.",
+          "cached": true,
+          "avgMs": 0,
+          "avgCostCents": 0,
+          "inputType": "text",
+          "inputNameContains": "job_desc",
+          "inputDescription": "Plain-text job description with required skills",
+          "outStructureId": "m_builtin_document",
+          "outType": {
+            "kind": "ref",
+            "modelId": "m_builtin_document"
+          }
+        },
+        {
+          "id": "f2c8f0b1ea28476f805a1255",
+          "kind": "llm",
+          "label": "Parse Job Requirements",
+          "note": "Extract required skills from job description.",
+          "cached": true,
+          "avgMs": 0,
+          "avgCostCents": 0,
+          "inputDescription": "Job description Document text",
+          "inStructureId": "m_builtin_document",
+          "outStructureId": "ab433352d7c3459798c9983b",
+          "outType": {
+            "kind": "ref",
+            "modelId": "ab433352d7c3459798c9983b"
+          },
+          "prompt": "List all required technical skills from this job description. Return as a list in required_skills.",
+          "model": "openrouter:deepseek-v4",
+          "costLimitCents": 100,
+          "inType": {
+            "kind": "ref",
+            "modelId": "m_builtin_document"
+          }
+        },
+        {
+          "id": "f522254320ed470cb99d03dd",
+          "kind": "input",
+          "label": "Combine Inputs Document",
+          "note": "Merge parsed resumes (pipeline state) with job description.",
+          "cached": true,
+          "avgMs": 0,
+          "avgCostCents": 0,
+          "inputType": "text",
+          "inputDescription": "Resume list from Extract plus job description from Parse",
+          "outStructureId": "m_builtin_document",
+          "outType": {
+            "kind": "ref",
+            "modelId": "m_builtin_document"
+          }
+        },
+        {
+          "id": "2d9bfb1d3c7442c8871fddfe",
+          "kind": "combine",
+          "label": "Combine Inputs",
+          "note": "Merge parsed resumes (pipeline state) with job description.",
+          "cached": true,
+          "avgMs": 0,
+          "avgCostCents": 0,
+          "inputDescription": "Resume list from Extract plus job description from Parse",
+          "inStructureId": "73e8692e0f44478496755c0d",
+          "outStructureId": "0f63e4abb2294a118ea3a2d2",
+          "outType": {
+            "kind": "ref",
+            "modelId": "0f63e4abb2294a118ea3a2d2"
+          },
+          "inType": {
+            "kind": "ref",
+            "modelId": "73e8692e0f44478496755c0d"
+          }
+        },
+        {
+          "id": "6e5df4159b6f4264be1121d0",
+          "kind": "custom-code",
+          "label": "Flatten Skill Matches",
+          "note": "ResumeBatch → list[SkillMatch] for spreadsheet output.",
+          "cached": true,
+          "avgMs": 0,
+          "avgCostCents": 0,
+          "inputDescription": "Combined ResumeBatch with resumes and job_desc",
+          "inStructureId": "0f63e4abb2294a118ea3a2d2",
+          "outStructureId": "b131e29eb9bb4e179aa812c2",
+          "outType": {
+            "kind": "list",
+            "item": {
+              "kind": "ref",
+              "modelId": "b131e29eb9bb4e179aa812c2"
+            }
+          },
+          "fallbackList": [
+            {
+              "typescript": "(batch) => batch.resumes.flatMap(resume => resume.skills.map(skill => ({ candidate_name: resume.name[0], skill: skill[0], matched: batch.job_desc.required_skills.includes(skill[0]), years_exp: resume.years_exp, fit_score: resume.fit_score })))"
+            }
+          ],
+          "maxRunMs": 60000,
+          "inType": {
+            "kind": "ref",
+            "modelId": "0f63e4abb2294a118ea3a2d2"
+          }
+        },
+        {
+          "id": "7c2ba8a91d2044d0b2acd215",
+          "kind": "output",
+          "label": "Skill Matches Output",
+          "note": "Final spreadsheet output.",
+          "cached": true,
+          "avgMs": 0,
+          "avgCostCents": 0,
+          "inputDescription": "List of SkillMatch objects — one row per skill mention",
+          "inStructureId": "b131e29eb9bb4e179aa812c2",
+          "outStructureId": "b131e29eb9bb4e179aa812c2",
+          "outType": {
+            "kind": "ref",
+            "modelId": "b131e29eb9bb4e179aa812c2"
+          },
+          "inType": {
+            "kind": "ref",
+            "modelId": "b131e29eb9bb4e179aa812c2"
+          }
+        }
+      ],
+      "strategies": [],
+      "documentation": "# Resume Skill Matcher\n\n1. Upload many candidate resumes (text files)\n2. Upload one job description\n3. Pipeline extracts resume fields with source quotes\n4. Parses required skills from job description\n5. Combines inputs and checks skill matches\n6. Outputs spreadsheet with one row per skill mention\n\nFields:\n- Quoted: name, email, skills\n- Numbers: years_exp, fit_score\n- Boolean: matched (skill in requirements)"
     }
   ],
   "deletedProjectIds": [
@@ -487,339 +1135,17 @@
     {
       "role": "assistant",
       "content": "Fixed pipeline: combine now feeds single llm (not batch), and added transform to flatten line items for spreadsheet output. Ready to test with your invoice and policy files."
+    },
+    {
+      "role": "user",
+      "content": "This is a NEW blank project — ignore any earlier chat about receipts or invoices.\n\nBuild a recruiting screen pipeline.\n- Users upload many candidate resumes (plain text files) plus one job description.\n- For each resume extract: candidate name (quoted from the resume), years of experience (a number), email (quoted if present, otherwise optional), a 1–5 fit score (inferred, not quoted), and each listed skill as quoted text.\n- Then check which skills match the job description.\n- Output a spreadsheet of one row per skill mention: candidate name, skill, matched true/false, years of experience, fit score.\n- Include 2 sample resumes and 1 job description so we can run immediately. Use text files, not PDFs. Do not emit Convert to text, Parse to structure, or Link Quotes yourself."
+    },
+    {
+      "role": "assistant",
+      "content": "Pipeline: batch resume upload → extract fields → parse job → combine → flatten matches → spreadsheet output. Includes sample resumes and job description for testing."
     }
   ],
-  "pendingProposal": {
-    "modules": [
-      {
-        "id": "8790ffa1a3554086856608be",
-        "kind": "input",
-        "label": "Invoice Uploads",
-        "note": "Batch upload of vendor invoice files (text stand-ins for PDF/images).",
-        "cached": true,
-        "avgMs": 0,
-        "avgCostCents": 0,
-        "inputType": "text",
-        "inputNameContains": "invoice",
-        "inputDescription": "Text files containing vendor invoices (stand-ins for PDF/images)",
-        "inputMinCount": 1,
-        "outStructureId": "m_builtin_document",
-        "outType": {
-          "kind": "list",
-          "item": {
-            "kind": "ref",
-            "modelId": "m_builtin_document"
-          }
-        }
-      },
-      {
-        "id": "988bc01e3d22429189d8f211",
-        "kind": "llm-batch",
-        "label": "Extract Invoice Fields",
-        "note": "Per-invoice structured extraction with quotes.",
-        "cached": true,
-        "avgMs": 0,
-        "avgCostCents": 0,
-        "inputDescription": "List of Document objects - one invoice file each",
-        "inStructureId": "m_builtin_document",
-        "outStructureId": "bee7cb0d425b4f1481095a63",
-        "outType": {
-          "kind": "list",
-          "item": {
-            "kind": "ref",
-            "modelId": "bee7cb0d425b4f1481095a63"
-          }
-        },
-        "prompt": "Extract vendor, date, total, currency, and line items from this invoice. For each line item: include the description with exact quote, amount as number, and leave policy_violation/violation_reason blank for now.",
-        "model": "openrouter:deepseek-v4",
-        "costLimitCents": 100,
-        "inType": {
-          "kind": "list",
-          "item": {
-            "kind": "ref",
-            "modelId": "m_builtin_document"
-          }
-        }
-      },
-      {
-        "id": "mod_quote_988bc01e3d22429189d8f211",
-        "kind": "quote",
-        "label": "Link Quotes · Extract Invoice Fields",
-        "auto": true,
-        "note": "Auto · Invoice → Invoice · links LLM quote strings to source spans.",
-        "inStructureId": "bee7cb0d425b4f1481095a63",
-        "outStructureId": "bee7cb0d425b4f1481095a63",
-        "inType": {
-          "kind": "list",
-          "item": {
-            "kind": "ref",
-            "modelId": "bee7cb0d425b4f1481095a63"
-          }
-        },
-        "outType": {
-          "kind": "list",
-          "item": {
-            "kind": "ref",
-            "modelId": "bee7cb0d425b4f1481095a63"
-          }
-        },
-        "cached": true,
-        "avgMs": 12,
-        "avgCostCents": 0
-      },
-      {
-        "id": "cf814fb203954020b5f9bec6",
-        "kind": "input",
-        "label": "Travel Policy",
-        "note": "Company travel policy document.",
-        "cached": true,
-        "avgMs": 0,
-        "avgCostCents": 0,
-        "inputType": "text",
-        "inputNameContains": "policy",
-        "inputDescription": "Text file with travel expense rules",
-        "outStructureId": "m_builtin_document",
-        "outType": {
-          "kind": "ref",
-          "modelId": "m_builtin_document"
-        }
-      },
-      {
-        "id": "bbafe105401c444f8e679980",
-        "kind": "combine",
-        "label": "Merge for Validation",
-        "note": "Combine extracted invoices with policy text.",
-        "cached": true,
-        "avgMs": 0,
-        "avgCostCents": 0,
-        "inputDescription": "Invoice list from extraction plus policy Document",
-        "inStructureId": "bee7cb0d425b4f1481095a63",
-        "outStructureId": "a418ad68624d485f80a00652",
-        "outType": {
-          "kind": "ref",
-          "modelId": "a418ad68624d485f80a00652"
-        },
-        "inType": {
-          "kind": "ref",
-          "modelId": "bee7cb0d425b4f1481095a63"
-        }
-      },
-      {
-        "id": "4debf2b89e7b421fadfa3cfe",
-        "kind": "llm",
-        "label": "Check Policy Compliance",
-        "note": "Flag violating line items against policy.",
-        "cached": true,
-        "avgMs": 0,
-        "avgCostCents": 0,
-        "inputDescription": "AuditInput with invoices and policy text",
-        "inStructureId": "a418ad68624d485f80a00652",
-        "outStructureId": "bee7cb0d425b4f1481095a63",
-        "outType": {
-          "kind": "ref",
-          "modelId": "bee7cb0d425b4f1481095a63"
-        },
-        "prompt": "For each line item in these invoices, check if it violates the travel policy. Set policy_violation=true and a brief violation_reason if it breaks any rules. Policy: {policy.content}",
-        "model": "openrouter:deepseek-v4",
-        "costLimitCents": 100,
-        "inType": {
-          "kind": "ref",
-          "modelId": "a418ad68624d485f80a00652"
-        }
-      },
-      {
-        "id": "mod_quote_4debf2b89e7b421fadfa3cfe",
-        "kind": "quote",
-        "label": "Link Quotes · Check Policy Compliance",
-        "auto": true,
-        "note": "Auto · Invoice → Invoice · links LLM quote strings to source spans.",
-        "inStructureId": "bee7cb0d425b4f1481095a63",
-        "outStructureId": "bee7cb0d425b4f1481095a63",
-        "inType": {
-          "kind": "ref",
-          "modelId": "bee7cb0d425b4f1481095a63"
-        },
-        "outType": {
-          "kind": "ref",
-          "modelId": "bee7cb0d425b4f1481095a63"
-        },
-        "cached": true,
-        "avgMs": 12,
-        "avgCostCents": 0
-      },
-      {
-        "id": "59181e8244ac4fa589f0e372",
-        "kind": "transform",
-        "label": "Flatten Line Items",
-        "note": "Convert nested invoices to flat line item rows.",
-        "cached": true,
-        "avgMs": 0,
-        "avgCostCents": 0,
-        "inputDescription": "Invoice objects with line_items lists",
-        "inStructureId": "bee7cb0d425b4f1481095a63",
-        "outStructureId": "e8601c786690445baaf82a3e",
-        "outType": {
-          "kind": "list",
-          "item": {
-            "kind": "ref",
-            "modelId": "e8601c786690445baaf82a3e"
-          }
-        },
-        "inType": {
-          "kind": "ref",
-          "modelId": "bee7cb0d425b4f1481095a63"
-        }
-      },
-      {
-        "id": "b9183ba641ed4b54b278d6da",
-        "kind": "output",
-        "label": "Compliance Report",
-        "note": "",
-        "cached": true,
-        "avgMs": 0,
-        "avgCostCents": 0,
-        "inputDescription": "Flattened LineItem objects with compliance flags",
-        "inStructureId": "e8601c786690445baaf82a3e",
-        "outStructureId": "e8601c786690445baaf82a3e",
-        "outType": {
-          "kind": "ref",
-          "modelId": "e8601c786690445baaf82a3e"
-        },
-        "inType": {
-          "kind": "ref",
-          "modelId": "e8601c786690445baaf82a3e"
-        }
-      }
-    ],
-    "models": [
-      {
-        "id": "bee7cb0d425b4f1481095a63",
-        "name": "Invoice",
-        "description": "Extracted invoice fields with line items.",
-        "fields": [
-          {
-            "id": "2af49dc56a76477da4a2bd13",
-            "name": "vendor",
-            "optional": false,
-            "description": "Vendor name with source quote",
-            "type": "tuple[text,quote]"
-          },
-          {
-            "id": "8a887ce0befc49bbb9ce476e",
-            "name": "date",
-            "optional": false,
-            "description": "Invoice date with source quote",
-            "type": "tuple[text,quote]"
-          },
-          {
-            "id": "57c7ac0a99494a8e9b1d0c06",
-            "name": "total",
-            "optional": false,
-            "description": "Invoice total amount",
-            "type": "float"
-          },
-          {
-            "id": "20ae39a9e69c498e83ded591",
-            "name": "currency",
-            "optional": true,
-            "description": "Currency code if specified",
-            "type": "text"
-          },
-          {
-            "id": "d23a55905d97462e92762ba5",
-            "name": "line_items",
-            "optional": false,
-            "description": "Individual line items",
-            "type": "list[model]",
-            "ref": "e8601c786690445baaf82a3e"
-          }
-        ]
-      },
-      {
-        "id": "e8601c786690445baaf82a3e",
-        "name": "LineItem",
-        "description": "One invoice line item with policy compliance check.",
-        "fields": [
-          {
-            "id": "5accf72bf42f444496184eaf",
-            "name": "description",
-            "optional": false,
-            "description": "Item description with source quote",
-            "type": "tuple[text,quote]"
-          },
-          {
-            "id": "663fa8cafe3a46dea616d3d3",
-            "name": "amount",
-            "optional": false,
-            "description": "Line item amount",
-            "type": "float"
-          },
-          {
-            "id": "c09790adb30544e5a57b774a",
-            "name": "policy_violation",
-            "optional": false,
-            "description": "True if this line violates policy",
-            "type": "bool"
-          },
-          {
-            "id": "bf59347e9072469cb231a9f2",
-            "name": "violation_reason",
-            "optional": true,
-            "description": "Brief explanation if violated",
-            "type": "text"
-          }
-        ]
-      },
-      {
-        "id": "a418ad68624d485f80a00652",
-        "name": "AuditInput",
-        "description": "Combined invoices and policy for validation.",
-        "fields": [
-          {
-            "id": "c7bc4ff3e38246a78176cc2e",
-            "name": "invoices",
-            "optional": false,
-            "description": "Extracted invoices",
-            "type": "list[model]",
-            "ref": "bee7cb0d425b4f1481095a63"
-          },
-          {
-            "id": "0b3bc9b52fa54faaac7cb1bb",
-            "name": "policy",
-            "optional": false,
-            "description": "Travel policy document",
-            "type": "document"
-          }
-        ]
-      }
-    ],
-    "typeAliases": [],
-    "docs": [
-      {
-        "name": "sample_invoice.txt",
-        "type": "text",
-        "content": "VENDOR: Hotel Continental\nDATE: 2024-03-15\nTOTAL: $450.00\n\nLINE ITEMS:\n1. Room charge - $300.00\n2. Room service - $150.00",
-        "label": "inference"
-      },
-      {
-        "name": "travel_policy.txt",
-        "type": "text",
-        "content": "TRAVEL POLICY\n\n- Maximum hotel rate: $250/night\n- No alcohol expenses\n- Meal limit: $75/day",
-        "label": "inference"
-      }
-    ],
-    "documentation": "# Invoice Compliance Checker\n\n1. Upload multiple invoice text files\n2. Upload one travel policy text file\n3. Pipeline extracts vendor, date, totals, and line items with source quotes\n4. Checks each line against policy rules\n5. Outputs flattened spreadsheet with one row per line item and compliance flags",
-    "projectName": "Invoice Compliance Checker",
-    "changed": {
-      "modules": true,
-      "models": true,
-      "typeAliases": false,
-      "docs": true,
-      "documentation": true,
-      "name": true,
-      "actions": false
-    }
-  },
+  "pendingProposal": null,
   "modelOptions": [],
   "billingRuns": [],
   "billingAccount": null,

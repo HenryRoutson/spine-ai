@@ -8,7 +8,7 @@ import { materializeProposal } from "@/lib/server/pipeline_assistant"
 import { formatPipelineValidationErrors } from "@/lib/server/validity"
 import { stepEmitsList } from "@/lib/server/type_expr"
 import { structureOutForAssistant } from "@/lib/server/assistant-prompt"
-import { SEEDS_DIR } from "@/lib/server/seed"
+import { loadProjectSeed, SEEDS_DIR } from "@/lib/server/seed"
 
 type AssistantRaw = Parameters<typeof materializeProposal>[0]
 
@@ -101,5 +101,165 @@ describe("pipeline assistant materialize", () => {
     const batch = ctx.project.modules.find((m) => m.kind === ModuleKind.LlmBatch)
     expect(structureOutForAssistant(wrap!, ctx.project.models)).toBe("list[TextChunk]")
     expect(structureOutForAssistant(batch!, ctx.project.models)).toBe("ChunkSummary")
+  })
+
+  it("does not auto-insert a third Document input when two inputs already exist", () => {
+    const session = createSpineSession()
+    session.addProject({ open: true })
+    const raw = receiptMapRaw()
+    raw.models = [
+      {
+        name: "Resume",
+        description: "Extracted resume.",
+        fields: [{ name: "name", type: "text", optional: false, description: "Name" }],
+      },
+      {
+        name: "JobDescription",
+        description: "Parsed job.",
+        fields: [{ name: "required_skills", type: "list[text]", optional: false, description: "Skills" }],
+      },
+      {
+        name: "ResumeBatch",
+        description: "Merged.",
+        fields: [
+          { name: "resumes", type: "list[model]", optional: false, description: "Resumes", ref: "Resume" },
+          { name: "job_desc", type: "model", optional: false, description: "Job", ref: "JobDescription" },
+        ],
+      },
+    ]
+    raw.modules = [
+      {
+        kind: ModuleKind.Input,
+        label: "Resume Uploads",
+        note: "Many resumes.",
+        structureOut: "list[Document]",
+        inputType: "text",
+        inputDescription: "resumes",
+      },
+      {
+        kind: ModuleKind.LlmBatch,
+        label: "Extract Resume Fields",
+        note: "One Resume per file.",
+        structureIn: "Document",
+        structureOut: "Resume",
+        prompt: "Extract name.",
+        inputDescription: "docs",
+      },
+      {
+        kind: ModuleKind.Input,
+        label: "Job Description",
+        note: "One job posting.",
+        structureOut: "Document",
+        inputType: "text",
+        inputDescription: "job",
+      },
+      {
+        kind: ModuleKind.Llm,
+        label: "Parse Job Requirements",
+        note: "Parse required skills.",
+        structureIn: "Document",
+        structureOut: "JobDescription",
+        prompt: "List skills.",
+        inputDescription: "job doc",
+      },
+      {
+        kind: ModuleKind.Combine,
+        label: "Combine Inputs",
+        note: "Merge resumes with job.",
+        structureIn: "Resume",
+        structureOut: "ResumeBatch",
+        inputDescription: "merged",
+      },
+      {
+        kind: ModuleKind.Output,
+        label: "Out",
+        structureIn: "ResumeBatch",
+        structureOut: "ResumeBatch",
+        inputDescription: "out",
+      },
+    ]
+    const proposal = materializeProposal(raw, session.project!, DEFAULT_MODEL)
+    expect(proposal).toBeTruthy()
+    const inputs = proposal!.modules.filter((m) => m.kind === ModuleKind.Input)
+    expect(inputs.map((m) => m.label)).toEqual(["Resume Uploads", "Job Description"])
+    expect(proposal!.modules.some((m) => m.label === "Combine Inputs Document")).toBe(false)
+  })
+
+  it("flags combine output with no side-document field", () => {
+    const session = createSpineSession()
+    session.addProject({ open: true })
+    const raw = receiptMapRaw()
+    raw.models = [
+      {
+        name: "Resume",
+        description: "Extracted resume.",
+        fields: [{ name: "name", type: "text", optional: false, description: "Name" }],
+      },
+      {
+        name: "ResumeBatch",
+        description: "Merged.",
+        fields: [
+          { name: "resumes", type: "list[model]", optional: false, description: "Resumes", ref: "Resume" },
+          { name: "job_desc", type: "model", optional: false, description: "Job", ref: "Resume" },
+        ],
+      },
+    ]
+    raw.modules = [
+      {
+        kind: ModuleKind.Input,
+        label: "Resume Uploads",
+        note: "Many resumes.",
+        structureOut: "list[Document]",
+        inputType: "text",
+        inputDescription: "resumes",
+      },
+      {
+        kind: ModuleKind.LlmBatch,
+        label: "Extract Resume Fields",
+        note: "One Resume per file.",
+        structureIn: "Document",
+        structureOut: "Resume",
+        prompt: "Extract name.",
+        inputDescription: "docs",
+      },
+      {
+        kind: ModuleKind.Combine,
+        label: "Combine Inputs",
+        note: "Merge with a side document.",
+        structureIn: "Resume",
+        structureOut: "ResumeBatch",
+        inputDescription: "merged",
+      },
+      {
+        kind: ModuleKind.Output,
+        label: "Out",
+        structureIn: "ResumeBatch",
+        structureOut: "ResumeBatch",
+        inputDescription: "out",
+      },
+    ]
+    const proposal = materializeProposal(raw, session.project!, DEFAULT_MODEL)
+    expect(proposal).toBeTruthy()
+    expect(proposal!.modules.some((m) => m.kind === ModuleKind.Input && m.label === "Combine Inputs Document")).toBe(
+      true,
+    )
+    const errors = formatPipelineValidationErrors(
+      proposal!.modules,
+      proposal!.models,
+      proposal!.typeAliases,
+    )
+    expect(errors).toMatch(/no field for the side input/)
+  })
+})
+
+describe("combine seeds", () => {
+  it("expense auditor combine still has a document side field", () => {
+    const { project } = loadProjectSeed(resolve(SEEDS_DIR, "expense_auditor.json"))
+    const errors = formatPipelineValidationErrors(
+      project.modules,
+      project.models,
+      project.typeAliases ?? [],
+    )
+    expect(errors).not.toMatch(/no field for the side input/)
   })
 })

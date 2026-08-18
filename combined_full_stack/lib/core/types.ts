@@ -25,6 +25,12 @@ export type ProjectCreateOpts = { open?: boolean }
 // AI : TODO (arch-chat-turn) — identical to assistant-shared ChatTurn; one type.
 export type SessionChatTurn = { role: "user" | "assistant"; content: string }
 
+export type AssistantInFlight = {
+  projectId: string
+  message: string
+  startedAt: number
+}
+
 // AI : TODO (arch-billing-view) — thin CLI snapshot; GUI store.tsx redeclares a richer BillingAccountView.
 // AI :   Share one type (GUI fields optional) so they cannot drift.
 export type BillingAccountView = {
@@ -54,7 +60,9 @@ export type SessionSnapshot = {
   pendingCreates: Project[]
   deletedProjectIds: string[]
   chat: SessionChatTurn[]
+  chatByProjectId: Record<string, SessionChatTurn[]>
   pendingProposal: ProjectProposal | null
+  assistantInFlight: AssistantInFlight | null
   modelOptions: ModelOptionView[]
   billingRuns: PipelineRun[]
   billingAccount: BillingAccountView | null
@@ -64,6 +72,12 @@ export type SessionSnapshot = {
   shareLinkIds: string[]
   hostedApiIds: string[]
   docProjectIds: Partial<Record<DocId, ProjectId[]>>
+}
+
+export function chatForActiveProject(snap: SessionSnapshot): SessionChatTurn[] {
+  const id = snap.activeProjectId
+  if (id && snap.chatByProjectId?.[id]) return snap.chatByProjectId[id]
+  return snap.chat
 }
 
 export type ProjectPatch = {

@@ -1,6 +1,7 @@
 // AI : headless session barrel — grep "TODO (arch" in architecture-roadmap.ts for layering / duplication work.
-export type { SessionSnapshot, ProjectCreateOpts, ProjectPatch, PersistPort, locality_t, SessionChatTurn } from "@/lib/core/types"
-export { SpineSession, createSpineSession, createMemoryPersist, emptySessionSnapshot } from "@/lib/core/session"
+export type { SessionSnapshot, ProjectCreateOpts, ProjectPatch, PersistPort, locality_t, SessionChatTurn, AssistantInFlight } from "@/lib/core/types"
+export { chatForActiveProject } from "@/lib/core/types"
+export { SpineSession, createSpineSession, createMemoryPersist, emptySessionSnapshot, migrateSessionChat, ASSISTANT_IN_FLIGHT_STALE_MS } from "@/lib/core/session"
 export {
   overlayOptimisticProjects,
   overlayOptimisticRuns,

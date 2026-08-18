@@ -49,12 +49,28 @@ import type {
   ProjectPatch,
   SessionChatTurn,
   SessionSnapshot,
+  AssistantInFlight,
 } from "@/lib/core/types"
+import { chatForActiveProject } from "@/lib/core/types"
 
 export type SpineSessionOpts = {
   persist?: PersistPort
   egress?: EgressPort
   now?: () => number
+}
+
+export const ASSISTANT_IN_FLIGHT_STALE_MS = 5 * 60 * 1000
+
+export function migrateSessionChat(raw: Partial<SessionSnapshot>): {
+  chat: SessionChatTurn[]
+  chatByProjectId: Record<string, SessionChatTurn[]>
+} {
+  const byId: Record<string, SessionChatTurn[]> = { ...(raw.chatByProjectId ?? {}) }
+  if (Object.keys(byId).length === 0 && (raw.chat?.length ?? 0) > 0 && raw.activeProjectId) {
+    byId[raw.activeProjectId] = raw.chat ?? []
+  }
+  const chat = (raw.activeProjectId && byId[raw.activeProjectId]) || raw.chat || []
+  return { chat, chatByProjectId: byId }
 }
 
 export function emptySessionSnapshot(): SessionSnapshot {
@@ -69,7 +85,9 @@ export function emptySessionSnapshot(): SessionSnapshot {
     pendingCreates: [],
     deletedProjectIds: [],
     chat: [],
+    chatByProjectId: {},
     pendingProposal: null,
+    assistantInFlight: null,
     modelOptions: [],
     billingRuns: [],
     billingAccount: null,
@@ -144,7 +162,8 @@ export class SpineSession {
     this.persist = opts.persist
     this.egress = opts.egress
     this.now = opts.now ?? Date.now
-    this.snap = { ...emptySessionSnapshot(), ...(opts.persist?.load() ?? {}) }
+    const loaded = opts.persist?.load() ?? {}
+    this.snap = { ...emptySessionSnapshot(), ...loaded, ...migrateSessionChat(loaded) }
   }
 
   getSnapshot(): SessionSnapshot {
@@ -199,11 +218,18 @@ export class SpineSession {
   }
 
   get chat(): SessionChatTurn[] {
-    return this.snap.chat
+    return chatForActiveProject(this.snap)
   }
 
   get pendingProposal(): ProjectProposal | null {
     return this.snap.pendingProposal
+  }
+
+  get assistantInFlight(): AssistantInFlight | null {
+    const job = this.snap.assistantInFlight
+    if (!job) return null
+    if (this.now() - job.startedAt > ASSISTANT_IN_FLIGHT_STALE_MS) return null
+    return job
   }
 
   private commit(next: SessionSnapshot): void {
@@ -223,6 +249,7 @@ export class SpineSession {
     this.commit({
       ...this.snap,
       activeProjectId: id,
+      chat: this.snap.chatByProjectId?.[id] ?? [],
       projects: this.snap.projects.map((p) => (p.id === id ? { ...p, lastOpenedAt: this.now() } : p)),
     })
   }
@@ -247,6 +274,7 @@ export class SpineSession {
       pendingCreates,
       deletedProjectIds,
       activeProjectId: open ? fresh.id : this.snap.activeProjectId,
+      chat: open ? [] : this.snap.chat,
     })
     return fresh
   }
@@ -454,7 +482,18 @@ export class SpineSession {
     this.commit({ ...this.snap, runs: overlayOptimisticRuns(remote) })
   }
   appendChat(turn: SessionChatTurn): void {
-    this.commit({ ...this.snap, chat: [...this.snap.chat, turn] })
+    const id = this.snap.activeProjectId
+    const existing = chatForActiveProject(this.snap)
+    const nextTurns = [...existing, turn]
+    this.commit({
+      ...this.snap,
+      chat: nextTurns,
+      chatByProjectId: id ? { ...this.snap.chatByProjectId, [id]: nextTurns } : this.snap.chatByProjectId,
+    })
+  }
+
+  setAssistantInFlight(job: AssistantInFlight | null): void {
+    this.commit({ ...this.snap, assistantInFlight: job })
   }
 
   setPendingProposal(proposal: ProjectProposal | null): void {

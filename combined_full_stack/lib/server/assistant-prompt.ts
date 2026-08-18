@@ -17,6 +17,7 @@ import { isUnnamedProjectName, UNNAMED_PROJECT_NAME } from "@/lib/project-assist
 import type { ChatTurn } from "./assistant-shared";
 import { fieldToTypeExpr, stepEmitsList } from "./type_expr";
 import type { ModuleKind, PipelineModule, StructureModel } from "./types";
+import { customCodeEntriesForModule } from "@/lib/custom_code_entries";
 
 function structureName(models: StructureModel[], id: string | undefined): string | undefined {
   if (!id) return undefined;
@@ -97,6 +98,7 @@ export function buildStructureRulesPromptBlock(): string {
 - A type parameter in a field is typeExpr named T (or type: "T") — it substitutes when the structure's params bind T.
 - Instantiation: field typeExpr "TreeNode[Section]" or ref TreeNode with type args — do not clone TreeNode per payload type.
 - Use "text" for strings (not "str"). Use "tuple[text,quote]" when extracted text must link back to a source span; quote offsets are resolved downstream — never ask for doc_id/start/end in the schema.
+- After Link Quotes, tuple[text,quote] values are { text, quote: { doc_id, start, end } }. In custom-code use field.text — never field[0]. Keep tuple[text,quote] on spreadsheet columns when the user asked for quotes.
 - Use "model" / "list[model]" with ref set to another structure's exact name when nesting.
 - Use "document" for the shared Document structure ({ content, filename }) on combine / side-input models only. Do NOT put type "document" on structures emitted by llm or llm-batch — filename already lives on the input Document; the LLM cannot emit a real Document.
 - tuple[text,quote] only for values copied from the source. Inferred fields (category) and values often absent on the page (currency) must be optional or plain text.
@@ -130,6 +132,7 @@ Validation error messages and how to fix them:
 - "annotation / purpose is required" — set note on input, combine, llm, and llm-batch steps.
 - "code does not compile" — custom-code must be a TypeScript arrow expression, not Python.
 - "pipeline state has no …" on combine — no upstream step has emitted that structure name yet; add an earlier step with that structureOut label chain.
+- "combine output Foo has no field for the side input" — structureOut needs a document field (or a field whose ref matches the previous step). Do not put a parsed model in the side slot unless that model is what the previous step emits. If both documents are already parsed, use assemble instead of combine.
 
 Before returning modules, mentally verify spineExpects/spineEmits on each adjacent pair in the current pipeline JSON.`;
 }
@@ -220,6 +223,11 @@ A) Explicit side input (preferred when filenames matter): emit a full input step
 B) Auto side input: emit ONLY the combine step — server auto-inserts a generic Document Input before it. Put inputType / inputNameContains / inputMinCount on the combine spec — they apply to the auto-inserted side input.
 
 Never duplicate side inputs: if the module before combine is already kind input, do NOT also rely on pattern B.
+Do NOT parse both document kinds and then emit combine — that drops spine state and (if a second input already exists) does not get an auto side slot. Either:
+- process the first kind, then put the second input immediately before combine (no parse of the side file first), or
+- parse both, then assemble (zip) the two structured outputs — see Example 4.
+
+combine structureOut MUST have a field that receives the side input: type document (typical), or a field whose ref matches the previous step's structure. A parsed model that is not what the previous step emits is ignored at runtime (every field gets pipeline state).
 
 Typical two-document spine (Expense Report Auditor pattern):
   1. Input "Policy" (structureOut Document) → custom-code/llm → list[TableRow] on spine (stored in state)
@@ -235,6 +243,7 @@ Homework grader pattern (schema + many student files):
 Validation errors specific to combine:
 - "pipeline state has no Foo" — no upstream step emitted structure Foo; add processing after the first input before combine.
 - "pipeline state expects Foo, spine carries Bar" — structureIn does not match what upstream actually stored.
+- "combine output Foo has no field for the side input" — add a document field (or a field ref'ing the previous step). If both inputs are already parsed, use assemble instead.
 
 Create separate test documents per input slot (match inputNameContains). Reference seeds: Expense Report Auditor, Homework Grader.`;
 }
@@ -736,14 +745,130 @@ Spine: Document → list[TableRow] (state) + side Document → combine → Audit
   "message": "Two inputs via combine; audit uses one llm only after merge — not on raw files."
 }
 
+Example 4 — two already-parsed outputs → assemble (NOT combine, NOT a third upload)
+Task: "Many resumes plus one job description → spreadsheet of skill matches"
+Spine: list[Document] → list[Resume] (state) ; Document → JobDescription (spine) → assemble → list[SkillMatch] → output
+{
+  "projectNameUpdate": "Resume Skill Matcher",
+  "models": [
+    {
+      "name": "Resume",
+      "description": "Extracted resume fields.",
+      "fields": [
+        { "name": "name", "type": "tuple[text,quote]", "optional": false, "description": "Candidate name copied from the resume" },
+        { "name": "skills", "type": "list[tuple[text,quote]]", "optional": false, "description": "Skills copied from the resume" }
+      ]
+    },
+    {
+      "name": "JobDescription",
+      "description": "Required skills from the posting.",
+      "fields": [
+        { "name": "required_skills", "type": "list[text]", "optional": false, "description": "Required skills" }
+      ]
+    },
+    {
+      "name": "ResumeBatch",
+      "description": "Assembled resumes plus parsed job description.",
+      "fields": [
+        { "name": "resumes", "type": "list[model]", "optional": false, "description": "Extracted resumes", "ref": "Resume" },
+        { "name": "job_desc", "type": "model", "optional": false, "description": "Parsed job description", "ref": "JobDescription" }
+      ]
+    },
+    {
+      "name": "SkillMatch",
+      "description": "One skill row.",
+      "fields": [
+        { "name": "candidate_name", "type": "tuple[text,quote]", "optional": false, "description": "From resume.name" },
+        { "name": "skill", "type": "tuple[text,quote]", "optional": false, "description": "From resume.skills" },
+        { "name": "matched", "type": "bool", "optional": false, "description": "Skill listed in required_skills" }
+      ]
+    }
+  ],
+  "modules": [
+    {
+      "kind": "input",
+      "label": "Resume Uploads",
+      "note": "Many resume text files.",
+      "structureOut": "list[Document]",
+      "inputType": "text",
+      "inputNameContains": "resume",
+      "inputMinCount": 2,
+      "inputDescription": "Plain-text resumes"
+    },
+    {
+      "kind": "llm-batch",
+      "label": "Extract Resume Fields",
+      "note": "One Resume per Document. Link Quotes is auto-inserted.",
+      "structureIn": "Document",
+      "structureOut": "Resume",
+      "prompt": "Extract name and skills as source quotes.",
+      "inputDescription": "List of Document objects"
+    },
+    {
+      "kind": "input",
+      "label": "Job Description",
+      "note": "Single job posting.",
+      "structureOut": "Document",
+      "inputType": "text",
+      "inputNameContains": "job",
+      "inputDescription": "Plain-text job description"
+    },
+    {
+      "kind": "llm",
+      "label": "Parse Job Requirements",
+      "note": "Document → JobDescription.",
+      "structureIn": "Document",
+      "structureOut": "JobDescription",
+      "prompt": "List required skills.",
+      "inputDescription": "Job description Document"
+    },
+    {
+      "kind": "assemble",
+      "label": "Join Resume and Job",
+      "note": "Zip list[Resume] from Extract with JobDescription on the spine.",
+      "structureOut": "ResumeBatch",
+      "assembleBindings": {
+        "resumes": { "kind": "state", "label": "Extract Resume Fields" },
+        "job_desc": { "kind": "spine" }
+      },
+      "inputDescription": "JobDescription on the spine plus extracted resumes in state"
+    },
+    {
+      "kind": "custom-code",
+      "label": "Flatten Skill Matches",
+      "note": "ResumeBatch → list[SkillMatch]. Quotes stay objects with .text.",
+      "structureIn": "ResumeBatch",
+      "structureOut": "list[SkillMatch]",
+      "code": "(batch) => batch.resumes.flatMap(resume => resume.skills.map(skill => ({ candidate_name: resume.name, skill, matched: batch.job_desc.required_skills.includes(skill.text), })))",
+      "inputDescription": "Assembled ResumeBatch"
+    },
+    {
+      "kind": "output",
+      "label": "Skill Matches Output",
+      "structureIn": "SkillMatch",
+      "structureOut": "SkillMatch",
+      "inputDescription": "SkillMatch rows"
+    }
+  ],
+  "typeAliases": null,
+  "docs": [
+    { "name": "sample_resume_1.txt", "type": "text", "content": "Jane Smith\\\\nSkills: Python, SQL" },
+    { "name": "sample_job.txt", "type": "text", "content": "Required: Python, Machine Learning" }
+  ],
+  "documentationUpdate": "# Resume Skill Matcher\\\\n\\\\nBatch-extract resumes, parse the job, assemble, flatten quoted skill rows.",
+  "modulePatch": null,
+  "message": "Two parsed outputs joined with assemble — not combine, not a third upload. Flatten uses skill.text."
+}
+
 Key patterns all examples demonstrate:
 - Input structureOut is always Document (never a parsed model).
 - llm-batch follows a list-emitting step (input with list[Document], or custom-code with list[Row]).
 - Tabular spreadsheet goals end at list[Row] → output — do NOT custom-code fold rows into a CSV/Excel string (the UI already exports lists as CSV/XLSX).
 - list → single non-tabular object (joined prose report, ranked summary) uses custom-code fold (not a bare transform).
-- custom-code code is TypeScript arrow syntax — never Python.
+- custom-code code is TypeScript arrow syntax — never Python. After Link Quotes, quoted fields are { text, quote } — use .text, never [0].
 - Every structureIn/structureOut name is defined in models.
 - Two document kinds: first input + spine processing → explicit side input → combine (structureIn = state structure) — see Example 3.
+- Two already-parsed outputs: assemble (zip spine + state[label]) — see Example 4. Do not combine after parsing both.
 - One llm over merged compact JSON is fine AFTER combine; never one llm over many raw uploads — use llm-batch instead.`;
 }
 
@@ -849,7 +974,7 @@ export function buildProjectContextBlock(
       inputNameContains: m.inputNameContains,
       inputDescription: m.inputDescription,
       prompt: m.prompt,
-      code: m.code,
+      code: customCodeEntriesForModule(m)[0]?.code ?? m.code,
       model: m.model,
       inputMinCount: m.inputMinCount,
     })),

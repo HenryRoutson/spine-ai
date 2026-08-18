@@ -48,6 +48,7 @@ import {
   stepEmits,
   stepEmitsList,
   inputFeedsCombine,
+  inputFeedsAssemble,
   isCombineSideParseStep,
   isAutoQuoteStep,
   isManagedLockedStep,
@@ -427,6 +428,40 @@ function computeLlmDocumentFieldInvalid(
   return invalid;
 }
 
+// AI : execCombineStep only writes the side file into a document field or a field whose ref
+// AI : matches the previous step. Everything else gets pipeline state — silent type smash.
+function combineFieldTakesSide(
+  f: { type: FieldType; ref?: StructureModelId },
+  prevEmitId: StructureModelId | undefined,
+  inStructureId: StructureModelId | undefined,
+): boolean {
+  if (f.type === FieldType.Document || f.type === FieldType.ListDocument) return true;
+  return !!prevEmitId && prevEmitId !== inStructureId && f.ref === prevEmitId;
+}
+
+function computeCombineOutputInvalid(
+  modules: PipelineModule[],
+  models: StructureModel[],
+): InvalidMap {
+  const invalid: InvalidMap = new Map();
+  const allModels = withSharedModels(models);
+  for (let i = 0; i < modules.length; i++) {
+    const m = modules[i]!;
+    if (m.kind !== ModuleKind.Combine || !m.outStructureId) continue;
+    const out = allModels.find((x) => x.id === m.outStructureId);
+    if (!out) continue;
+    const prevEmit = stepEmits(i > 0 ? modules[i - 1] : undefined);
+    if (out.fields.some((f) => combineFieldTakesSide(f, prevEmit, m.inStructureId))) continue;
+    const prevName = prevEmit ? (modelName(allModels, prevEmit) ?? String(prevEmit)) : "the previous step";
+    pushInvalid(invalid, {
+      moduleId: m.id,
+      kind: InvalidKind.StructureField,
+      structureMessage: `combine output ${out.name} has no field for the side input — add a document field, or a field whose ref matches ${prevName}`,
+    });
+  }
+  return invalid;
+}
+
 function computeJsonInputMismatchInvalid(
   modules: PipelineModule[],
   models: StructureModel[],
@@ -730,12 +765,12 @@ function computeMissingCombineBeforeInputInvalid(modules: PipelineModule[]): Inv
   for (let i = 0; i < modules.length; i++) {
     const m = modules[i]!;
     if (m.kind === ModuleKind.Input) {
-      if (needsCombineForNextInput && !inputFeedsCombine(modules, i)) {
+      if (needsCombineForNextInput && !inputFeedsCombine(modules, i) && !inputFeedsAssemble(modules, i)) {
         pushInvalid(invalid, { moduleId: m.id, kind: InvalidKind.MissingCombineBeforeInput });
       }
       continue;
     }
-    if (m.kind === ModuleKind.Combine) {
+    if (m.kind === ModuleKind.Combine || m.kind === ModuleKind.Assemble) {
       needsCombineForNextInput = false;
       continue;
     }
@@ -963,6 +998,11 @@ export function computeInvalid(
       pushInvalid(invalid, issue);
     }
   }
+  for (const [id, issues] of computeCombineOutputInvalid(modules, models)) {
+    for (const issue of issues) {
+      pushInvalid(invalid, issue);
+    }
+  }
   for (const [id, issues] of computeInputAssignedDocInvalid(modules, opts)) {
     for (const issue of issues) {
       pushInvalid(invalid, issue);
@@ -990,7 +1030,7 @@ function computeUnusedOutputInvalid(modules: PipelineModule[], models: Structure
     const emitted = stepEmits(m);
     if (!emitted || m.kind === ModuleKind.Input || usesPassthroughStructure(m.kind)) continue;
     // AI : a combine consumes the previous step's output as its newDocument regardless of inStructureId.
-    if (modules[i + 1]?.kind === ModuleKind.Combine) continue;
+    if (modules[i + 1]?.kind === ModuleKind.Combine || modules[i + 1]?.kind === ModuleKind.Assemble) continue;
     const used = modules.slice(i + 1).some((down) => {
       if (down.inStructureId === emitted) return true;
       const expected = stepSpineInType(down);
@@ -1016,7 +1056,7 @@ function computeDuplicateIoStructInvalid(modules: PipelineModule[]): InvalidMap 
   for (let i = 0; i < modules.length; i++) {
     const m = modules[i];
     if (m.kind === ModuleKind.Input && m.outStructureId) {
-      if (inputFeedsCombine(modules, i)) continue;
+      if (inputFeedsCombine(modules, i) || inputFeedsAssemble(modules, i)) continue;
       if (spineInputStructs.has(m.outStructureId)) {
         pushInvalid(invalid, { moduleId: m.id, kind: InvalidKind.DuplicateInputStruct, expects: m.outStructureId });
       } else {
