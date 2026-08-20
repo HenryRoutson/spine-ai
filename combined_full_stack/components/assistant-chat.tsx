@@ -260,7 +260,6 @@ export function AssistantChat<TProposal>({
     try {
       const data = await requestAssistant(apiMessage, history, {
         setLoadingPhase,
-        setLoadingPhase,
         onThinkingDelta: (delta) => {
           setLiveThinking((prev) => prev + delta)
           onStreamingDraftChange?.((draft) => ({
@@ -467,15 +466,21 @@ export function AssistantChat<TProposal>({
                     </p>
                   ) : null}
                   {liveResponse && (
-                    <p className="text-xs leading-relaxed whitespace-pre-wrap">
-                      {liveResponse}
-                      <span className="inline-block animate-pulse text-muted-foreground">▍</span>
-                    </p>
+                    <div className="space-y-1">
+                      <p className="font-mono text-[9px] uppercase tracking-wider text-muted-foreground">
+                        draft summary — not applied yet
+                      </p>
+                      <p className="text-xs leading-relaxed whitespace-pre-wrap">
+                        {liveResponse}
+                        <span className="inline-block animate-pulse text-muted-foreground">▍</span>
+                      </p>
+                    </div>
                   )}
-                  {/* AI : skip "thinking…" spinner when the stream itself is already visible. */}
-                  {!(liveThinking && loadingPhase === "thinking") && (
+                  {liveResponse ? (
+                    <ChatTypingIndicator label="building proposal…" />
+                  ) : !(liveThinking && loadingPhase === "thinking") ? (
                     <ChatTypingIndicator label={loadingText} />
-                  )}
+                  ) : null}
                 </ChatBubble>
               </ChatMessage>
             )}

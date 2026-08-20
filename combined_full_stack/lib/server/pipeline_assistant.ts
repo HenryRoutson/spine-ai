@@ -58,6 +58,7 @@ import { inputTypesAreAllJsonNative, inputTypesForModule, isDocToTextInputType }
 import { USER_ADDABLE_MODULE_KINDS, kindAlwaysEmitsList, stepRequiresNote } from "@/lib/module-kinds";
 import { attachAssistantUsage } from "./assistant_billing";
 import { isUnnamedProjectName } from "@/lib/project-assistant-types";
+import { diffStructureModels } from "@/lib/proposal-shape-diff";
 import { catalogHasModel, resolveModelId } from "./model_catalog";
 import {
   DEFAULT_MODEL,
@@ -270,7 +271,9 @@ const proposedActionSchema = z.discriminatedUnion("type", [
 ]);
 
 const assistantResponseSchema = z.object({
-  message: z.string().describe("Short user-facing summary — not a design doc"),
+  message: z.string().describe(
+    "Short user-facing proposal summary — present/future tense ('I'll add…'), never past tense as if already applied. User must Approve first.",
+  ),
   // AI : full replacement wins when non-null; use modulePatch for targeted edits to 1–3 steps.
   modules: z
     .array(moduleSpecSchema)
@@ -804,6 +807,18 @@ export function materializeProposal(
 
   const aliasNames = collectTypeAliasNames(project.typeAliases ?? [], raw.typeAliases);
   const models = materializeModels(raw.models, project.models, aliasNames);
+  const modelsReallyChanged = hasModelChange && diffStructureModels(project.models, models).length > 0;
+  if (
+    !hasPipelineChange &&
+    !modelsReallyChanged &&
+    !hasTypeAliasChange &&
+    !hasDocChange &&
+    !hasDocumentationChange &&
+    !hasNameChange &&
+    !hasActions
+  ) {
+    return null;
+  }
   const typeAliases =
     raw.typeAliases !== null
       ? stripBuiltinTypeAliases(materializeTypeAliases(raw.typeAliases, project.typeAliases ?? [], models))
@@ -837,7 +852,7 @@ export function materializeProposal(
       : (project.documentation ?? ""),
     changed: {
       modules: hasPipelineChange,
-      models: hasModelChange,
+      models: modelsReallyChanged,
       typeAliases: hasTypeAliasChange,
       docs: hasDocChange,
       documentation: hasDocumentationChange,

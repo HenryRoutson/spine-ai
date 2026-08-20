@@ -6,15 +6,25 @@ import { migrateProjectModules } from "@/lib/quote-steps"
 import { structureIssueMessagesForUi, typesInvalidForUi } from "@/lib/structure-validity-ui"
 import { formatInvalidMapErrors } from "@/lib/validity"
 import type { AppWindowId } from "@/lib/app-shell"
-import type { PipelineModule, Project, StructureModel, TypeAlias } from "@/lib/types"
+import { ModuleKind, type PipelineModule, type Project, type StructureModel, type TypeAlias } from "@/lib/types"
 
 export type WorkspaceValidityIssue = "types" | "pipeline"
 
 export type WorkspaceValidity = {
   typesInvalid: boolean
   pipelineInvalid: boolean
+  pipelineEmpty: boolean
   pipelineEditingBlocked: boolean
   runTabsBlocked: boolean
+}
+
+// AI : new-project skeleton (Input + Output, no user models) is unfinished — not a validation error.
+export function isEmptyStarterPipeline(
+  modules: PipelineModule[],
+  models: StructureModel[] = [],
+): boolean {
+  if (models.length > 0) return false
+  return modules.every((m) => m.kind === ModuleKind.Input || m.kind === ModuleKind.Output)
 }
 
 export function computeWorkspaceValidity(
@@ -24,10 +34,12 @@ export function computeWorkspaceValidity(
   teamReadOnly = false,
 ): WorkspaceValidity {
   const typesInvalid = typesInvalidForUi(models, typeAliases)
-  const pipelineInvalid = computeInvalidForUi(modules, models, typeAliases).size > 0
+  const pipelineEmpty = isEmptyStarterPipeline(modules, models)
+  const pipelineInvalid = !pipelineEmpty && computeInvalidForUi(modules, models, typeAliases).size > 0
   return {
     typesInvalid,
     pipelineInvalid,
+    pipelineEmpty,
     pipelineEditingBlocked: typesInvalid || teamReadOnly,
     runTabsBlocked: typesInvalid || pipelineInvalid,
   }
@@ -81,6 +93,8 @@ export function projectRunBlockReason(project: Project): string | null {
   const models = migrated.models
   const typeAliases = project.typeAliases ?? []
 
+  if (isEmptyStarterPipeline(modules, models)) return "Pipeline is empty"
+
   const structureMsgs = structureIssueMessagesForUi(models, typeAliases)
   if (structureMsgs.length > 0) return structureMsgs[0]
 
@@ -94,10 +108,11 @@ export function projectRunBlockReason(project: Project): string | null {
 
 export function projectRunBlocked(project: Project): boolean {
   const migrated = migrateProjectModules(project)
-  return computeWorkspaceValidity(
+  const validity = computeWorkspaceValidity(
     migrated.modules,
     migrated.models,
     project.typeAliases ?? [],
     !!project.teamReadOnly,
-  ).runTabsBlocked
+  )
+  return validity.runTabsBlocked || validity.pipelineEmpty
 }

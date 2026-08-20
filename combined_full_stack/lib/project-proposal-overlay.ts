@@ -48,6 +48,7 @@ export function mergePendingProposals(
     documentation: next.changed.documentation ? next.documentation : prev.documentation,
     projectName: next.changed.name ? next.projectName : prev.projectName,
     proposedActions: next.changed.actions ? next.proposedActions : prev.proposedActions,
+    reviewFrom: next.reviewFrom ?? prev.reviewFrom,
     changed,
   }
 }

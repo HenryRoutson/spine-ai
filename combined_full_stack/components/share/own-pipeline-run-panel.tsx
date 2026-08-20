@@ -12,6 +12,7 @@ import {
 } from "lucide-react"
 import { apiJson, JSON_HEADERS } from "@/lib/api-client"
 import { API_ROUTES } from "@/lib/api-routes"
+import { PipelineObserveEmpty } from "@/components/pipeline-observe-empty"
 import { Button } from "@/components/ui/button"
 import { RunInputsNeededHint } from "@/components/run-with-stop-button"
 import { InferenceInputPickerPopup } from "@/components/inference-input-picker"
@@ -184,7 +185,7 @@ export function OwnPipelineRunPanel({
 
   const validity = project
     ? computeWorkspaceValidity(data.modules, data.models, project.typeAliases ?? [])
-    : { typesInvalid: false, pipelineInvalid: false, runTabsBlocked: false }
+    : { typesInvalid: false, pipelineInvalid: false, pipelineEmpty: false, runTabsBlocked: false }
 
   const minRunBalanceCents = billingAccount?.minRunBalanceCents ?? MIN_RUN_BALANCE_CENTS
   const insufficientCredit =
@@ -206,6 +207,7 @@ export function OwnPipelineRunPanel({
     runHook.phase === RunPhase.Running ||
     validity.typesInvalid ||
     validity.pipelineInvalid ||
+    validity.pipelineEmpty ||
     insufficientCredit
 
   if (data.loading) {
@@ -221,6 +223,12 @@ export function OwnPipelineRunPanel({
       <div className="space-y-4 py-8 text-center">
         <ErrorBanner text={data.loadError ?? "Pipeline not found"} />
       </div>
+    )
+  }
+
+  if (validity.pipelineEmpty) {
+    return (
+      <PipelineObserveEmpty copy="Describe what you want to build in Vibe first — then you can run it here." />
     )
   }
 

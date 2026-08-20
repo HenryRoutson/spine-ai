@@ -16,6 +16,7 @@ import { ShareEmbedForm } from "@/components/share/share-embed-form"
 import { ShareLinkForm } from "@/components/share/share-link-form"
 import { SharedLinkRunner } from "@/components/share/shared-link-runner"
 import { SharedWithMePanel } from "@/components/share/shared-with-me-panel"
+import { PipelineObserveEmpty } from "@/components/pipeline-observe-empty"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 import { spineActionProps } from "@/lib/core/parity"
@@ -37,9 +38,9 @@ export function SharePage() {
   const builder = useOptionalStore()
   const isConsumer = !builder
   const { setActiveWindow, activeSharedLinkId, openSharedRun } = useAppShell()
-  const { typesInvalid, pipelineInvalid, runTabsBlocked } = builder
+  const { typesInvalid, pipelineInvalid, pipelineEmpty, runTabsBlocked } = builder
     ? computeWorkspaceValidity(builder.modules, builder.models, builder.typeAliases)
-    : { typesInvalid: false, pipelineInvalid: false, runTabsBlocked: false }
+    : { typesInvalid: false, pipelineInvalid: false, pipelineEmpty: false, runTabsBlocked: false }
   const [section, setSection] = useState<ShareSection>(
     isConsumer ? ShareSection.MyPipelines : ShareSection.Publish,
   )
@@ -132,7 +133,7 @@ export function SharePage() {
     )
   }
 
-  const publishBlocked = typesInvalid || pipelineInvalid
+  const publishBlocked = typesInvalid || pipelineInvalid || pipelineEmpty
 
   return (
     <div className="flex h-full flex-col">
@@ -222,6 +223,8 @@ export function SharePage() {
           <div className="mx-auto max-w-2xl">
             <MyPipelinesPanel onRun={setActiveOwnProjectId} />
           </div>
+        ) : pipelineEmpty ? (
+          <PipelineObserveEmpty copy="Describe what you want to build in Vibe first — then you can publish a link or API." />
         ) : publishBlocked ? (
           <div className="flex flex-1 flex-col items-center justify-center gap-4 p-8 text-center">
             <div className="max-w-md rounded-lg border border-destructive/50 bg-destructive/10 px-6 py-8">

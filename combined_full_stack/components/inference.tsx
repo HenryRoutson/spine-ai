@@ -21,8 +21,10 @@ import { useStore } from "@/lib/store"
 import { isPreviewOnly } from "@/lib/demo-mode"
 import { MIN_RUN_BALANCE_CENTS } from "@/lib/billing_config"
 import { formatUsdFromCents } from "@/lib/format"
+import { isVibeWindow } from "@/lib/app-nav-config"
 import { useAppShell } from "@/lib/app-shell"
 import { computeWorkspaceValidity } from "@/lib/workspace-validity-ui"
+import { PipelineObserveEmpty } from "@/components/pipeline-observe-empty"
 import { modelName } from "@/lib/validity"
 import { useDocViewer } from "@/lib/doc-viewer"
 import { WindowHeader } from "@/components/window-header"
@@ -140,12 +142,14 @@ export function Inference() {
     removeDoc,
     reportMissingProject,
   } = useStore()
-  const { setActiveWindow, openLogging } = useAppShell()
+  const { activeWindow, setActiveWindow, openLogging } = useAppShell()
   const { openJobDetail } = useRunJobs()
   const { maybeAutoDiagnose } = useDiagnosisAgents()
   const { open } = useDocViewer()
   useRerenderOnEvent(LOGGING_SETTINGS_CHANGED_EVENT)
-  const { typesInvalid, pipelineInvalid } = computeWorkspaceValidity(modules, models, typeAliases)
+  const { typesInvalid, pipelineInvalid, pipelineEmpty } = computeWorkspaceValidity(modules, models, typeAliases)
+  const isVibe = isVibeWindow(activeWindow)
+  const showRunWorkspace = !pipelineEmpty && !typesInvalid && !pipelineInvalid
   const minRunBalanceCents = billingAccount?.minRunBalanceCents ?? MIN_RUN_BALANCE_CENTS
   const insufficientCredit =
     billingAccount != null && billingAccount.balanceCents < minRunBalanceCents
@@ -358,28 +362,32 @@ export function Inference() {
 
   return (
     <div className="flex h-full flex-col">
-      <WindowHeader
-        actions={
-          <div className="flex items-center gap-2">
-            <Button size="sm" className="h-8" onClick={() => void createBlankSetup()} disabled={creatingSetup}>
-              {creatingSetup ? (
-                <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
-              ) : (
-                <Plus className="mr-1.5 h-3.5 w-3.5" />
-              )}
-              New setup
-            </Button>
-            {run.phase !== "idle" ? (
-              <Button variant="outline" size="sm" className="bg-transparent" onClick={() => run.reset()} disabled={run.phase === "running"}>
-                <RotateCcw className="mr-1.5 h-3.5 w-3.5" /> Reset
+      {showRunWorkspace ? (
+        <WindowHeader
+          actions={
+            <div className="flex items-center gap-2">
+              <Button size="sm" className="h-8" onClick={() => void createBlankSetup()} disabled={creatingSetup}>
+                {creatingSetup ? (
+                  <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  <Plus className="mr-1.5 h-3.5 w-3.5" />
+                )}
+                New setup
               </Button>
-            ) : null}
-          </div>
-        }
-      />
-      <p className="border-b border-border px-5 py-2 text-[11px] text-muted-foreground">
-        AI outputs are not professional, medical, or legal advice — verify before acting.
-      </p>
+              {run.phase !== "idle" ? (
+                <Button variant="outline" size="sm" className="bg-transparent" onClick={() => run.reset()} disabled={run.phase === "running"}>
+                  <RotateCcw className="mr-1.5 h-3.5 w-3.5" /> Reset
+                </Button>
+              ) : null}
+            </div>
+          }
+        />
+      ) : null}
+      {showRunWorkspace ? (
+        <p className="border-b border-border px-5 py-2 text-[11px] text-muted-foreground">
+          AI outputs are not professional, medical, or legal advice — verify before acting.
+        </p>
+      ) : null}
 
       {actionError && (
         <p className="border-b border-destructive/30 bg-destructive/10 px-4 py-2 font-mono text-[11px] text-destructive">
@@ -387,22 +395,34 @@ export function Inference() {
         </p>
       )}
 
-      {typesInvalid ? (
+      {pipelineEmpty ? (
+        <PipelineObserveEmpty
+          copy={
+            isVibe
+              ? "Describe what you want to build in chat. Inference will be ready once there's a pipeline to run."
+              : "Describe what you want to build in chat, or add steps in Pipeline."
+          }
+        />
+      ) : typesInvalid ? (
         <div className="flex flex-1 flex-col items-center justify-center gap-4 p-8 text-center">
           <div className="max-w-md rounded-lg border border-destructive/50 bg-destructive/10 px-6 py-8">
             <AlertTriangle className="mx-auto h-10 w-10 text-destructive" />
             <p className="mt-4 text-sm font-medium text-destructive">
-              Fix type errors in Structure before running inference.
+              {isVibe
+                ? "The structures still need a few details. Ask the agent to fix them."
+                : "Fix type errors in Structure before running inference."}
             </p>
-            <Button
-              variant="outline"
-              size="sm"
-              className="mt-4 gap-1.5 border-destructive/50 text-destructive hover:bg-destructive/10 hover:text-destructive"
-              onClick={() => setActiveWindow("structure")}
-            >
-              <Boxes className="h-3.5 w-3.5" />
-              Go to Structure
-            </Button>
+            {isVibe ? null : (
+              <Button
+                variant="outline"
+                size="sm"
+                className="mt-4 gap-1.5 border-destructive/50 text-destructive hover:bg-destructive/10 hover:text-destructive"
+                onClick={() => setActiveWindow("structure")}
+              >
+                <Boxes className="h-3.5 w-3.5" />
+                Go to Structure
+              </Button>
+            )}
           </div>
         </div>
       ) : pipelineInvalid ? (
@@ -410,17 +430,21 @@ export function Inference() {
           <div className="rounded-lg border border-destructive/50 bg-destructive/10 px-6 py-8 max-w-md">
             <AlertTriangle className="mx-auto h-10 w-10 text-destructive" />
             <p className="mt-4 text-sm font-medium text-destructive">
-              Fix pipeline errors before running inference.
+              {isVibe
+                ? "The pipeline still needs a few details. Ask the agent to fix them."
+                : "Fix pipeline errors before running inference."}
             </p>
-            <Button
-              variant="outline"
-              size="sm"
-              className="mt-4 gap-1.5 border-destructive/50 text-destructive hover:bg-destructive/10 hover:text-destructive"
-              onClick={() => setActiveWindow("pipeline")}
-            >
-              <SpineNavIcon className="h-3.5 w-3.5" />
-              Go to Pipeline
-            </Button>
+            {isVibe ? null : (
+              <Button
+                variant="outline"
+                size="sm"
+                className="mt-4 gap-1.5 border-destructive/50 text-destructive hover:bg-destructive/10 hover:text-destructive"
+                onClick={() => setActiveWindow("pipeline")}
+              >
+                <SpineNavIcon className="h-3.5 w-3.5" />
+                Go to Pipeline
+              </Button>
+            )}
           </div>
         </div>
       ) : (

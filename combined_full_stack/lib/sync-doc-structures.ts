@@ -9,9 +9,8 @@ import {
   nextSharedStructureName,
 } from "@/lib/structure-shape"
 import { repairOrphanModelRefs } from "@/lib/structure-ref"
-import { fieldToTypeExpr } from "@/lib/server/type_expr"
-import { stableJson } from "@/lib/run-fingerprint"
 import { tabularRowSetsFromContent } from "@/lib/tabular-row-sets"
+import { diffStructureModels } from "@/lib/proposal-shape-diff"
 import type { DocId, DocRef, StructureModel, StructureModelId } from "@/lib/types"
 
 // AI : TODO bug — after manual structure edits, re-validate inferred models against stored doc text.
@@ -53,28 +52,5 @@ export function mergeInferredStructuresForDoc(
 }
 
 export function modelsChanged(before: StructureModel[], after: StructureModel[]): boolean {
-  if (before.length !== after.length) return true
-  const beforeById = new Map(before.map((m) => [m.id, m]))
-  return after.some((m) => {
-    const prev = beforeById.get(m.id)
-    if (!prev) return true
-    if (prev.name !== m.name || prev.sourceDocId !== m.sourceDocId) return true
-    if (prev.fields.length !== m.fields.length) return true
-    const prevByFieldId = new Map(prev.fields.map((f) => [f.id, f]))
-    return m.fields.some((f) => {
-      const old = prevByFieldId.get(f.id)
-      if (!old) return true
-      return (
-        old.name !== f.name ||
-        old.type !== f.type ||
-        old.ref !== f.ref ||
-        old.optional !== f.optional ||
-        old.minItems !== f.minItems ||
-        old.maxItems !== f.maxItems ||
-        old.minLength !== f.minLength ||
-        old.maxLength !== f.maxLength ||
-        stableJson(fieldToTypeExpr(old)) !== stableJson(fieldToTypeExpr(f))
-      )
-    })
-  })
+  return diffStructureModels(before, after).length > 0
 }

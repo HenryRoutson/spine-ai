@@ -28,6 +28,9 @@ import { usePersistedLeadingWidth } from "@/lib/use-persisted-leading-width"
 import { cn } from "@/lib/utils"
 import { COPY_FEEDBACK_MS } from "@/lib/ui-timing"
 import { useAppShell } from "@/lib/app-shell"
+import { isVibeWindow } from "@/lib/app-nav-config"
+import { computeWorkspaceValidity } from "@/lib/workspace-validity-ui"
+import { PipelineObserveEmpty } from "@/components/pipeline-observe-empty"
 import { API_ROUTES } from "@/lib/api-routes"
 import { stepDocId, stepDocLinkLabels, stepSourceDocId, isDocReferenceOutputJson } from "@/lib/step-doc"
 import { descriptionCheckLlmCallsFromStep, llmCallsFromStep } from "@/lib/llm-distribution"
@@ -74,7 +77,9 @@ type LoggingListDensity = "full" | "compact"
 export function Logging({ listDensity = "full" }: { listDensity?: LoggingListDensity } = {}) {
   const palette = useStatusPalette()
   const { runs, billingRuns, docs, modules, models, project, typeAliases, model: globalModel, hydrateRunDetail } = useStore()
-  const { focusRunId, focusRunAnchor, clearFocusRun, setSharedRunDocScope } = useAppShell()
+  const { activeWindow, focusRunId, focusRunAnchor, clearFocusRun, setSharedRunDocScope } = useAppShell()
+  const isVibe = isVibeWindow(activeWindow)
+  const { pipelineEmpty } = computeWorkspaceValidity(modules, models, typeAliases)
   const [query, setQuery] = useState("")
   const [selectedRun, setSelectedRun] = useState<string | null>(null)
   const [popup, setPopup] = useState<PopupPayload | null>(null)
@@ -186,6 +191,20 @@ export function Logging({ listDensity = "full" }: { listDensity?: LoggingListDen
 
   const selectedPipelineModule = runPipeline?.modules.find((m) => m.id === selectedPipelineModuleId)
 
+  if (pipelineEmpty && runs.length === 0) {
+    return (
+      <div className="flex h-full flex-col">
+        <PipelineObserveEmpty
+          copy={
+            isVibe
+              ? "Runs will appear here after you build a pipeline in chat and execute it."
+              : "Runs will appear here after you execute a pipeline."
+          }
+        />
+      </div>
+    )
+  }
+
   return (
     <div className="flex h-full flex-col">
       <ResizableSplit
@@ -207,30 +226,32 @@ export function Logging({ listDensity = "full" }: { listDensity?: LoggingListDen
                   className="h-8 pl-8 font-mono text-xs"
                 />
               </div>
-              <label
-                className={cn(
-                  "flex cursor-pointer items-center justify-between gap-2 rounded-md border px-2.5 py-1.5 transition-colors",
-                  errorsOnly
-                    ? "border-destructive/40 bg-destructive/5"
-                    : "border-border bg-muted/20",
-                )}
-              >
-                <span
+              {runs.length > 0 ? (
+                <label
                   className={cn(
-                    "flex items-center gap-1.5 font-mono text-[10px]",
-                    errorsOnly ? "text-destructive" : "text-muted-foreground",
+                    "flex cursor-pointer items-center justify-between gap-2 rounded-md border px-2.5 py-1.5 transition-colors",
+                    errorsOnly
+                      ? "border-destructive/40 bg-destructive/5"
+                      : "border-border bg-muted/20",
                   )}
                 >
-                  <AlertTriangle className="h-3 w-3 shrink-0" />
-                  Errors only
-                </span>
-                <Switch
-                  size="sm"
-                  checked={errorsOnly}
-                  onCheckedChange={(checked) => setErrorsOnly(!!checked)}
-                  data-spine-id="logging.errors-only"
-                />
-              </label>
+                  <span
+                    className={cn(
+                      "flex items-center gap-1.5 font-mono text-[10px]",
+                      errorsOnly ? "text-destructive" : "text-muted-foreground",
+                    )}
+                  >
+                    <AlertTriangle className="h-3 w-3 shrink-0" />
+                    Errors only
+                  </span>
+                  <Switch
+                    size="sm"
+                    checked={errorsOnly}
+                    onCheckedChange={(checked) => setErrorsOnly(!!checked)}
+                    data-spine-id="logging.errors-only"
+                  />
+                </label>
+              ) : null}
               <label
                 className={cn(
                   "flex cursor-pointer items-center justify-between gap-2 rounded-md border px-2.5 py-1.5 transition-colors",
@@ -252,7 +273,7 @@ export function Logging({ listDensity = "full" }: { listDensity?: LoggingListDen
             <ScrollArea className="min-h-0 flex-1">
               {filtered.length === 0 ? (
                 <p className="p-4 text-xs text-muted-foreground">
-                  No runs yet. Execute a pipeline from the Inference window.
+                  No runs yet. They'll show up here after you execute a pipeline.
                 </p>
               ) : (
                 <ul className="divide-y divide-border">

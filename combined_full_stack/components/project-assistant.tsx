@@ -3,7 +3,10 @@
 import { useMemo, useState } from "react"
 import { Check, AlertTriangle, FileText, BookOpen, Braces } from "lucide-react"
 import { MultiLangReadonlyCodeViewer, type MultiLangCodeSource } from "@/components/code-viewer"
+import { JsonUnifiedDiffView } from "@/components/json-unified-diff-view"
 import { allModelsToBaml, allModelsToDts, allModelsToGo, allModelsToPydantic, allModelsToRust } from "@/lib/pydantic"
+import { textUnifiedDiff } from "@/lib/json-diff"
+import { diffStructureModels, type StructureModelDiffEntry } from "@/lib/proposal-shape-diff"
 import { API_ROUTES } from "@/lib/api-routes"
 import { JSON_HEADERS } from "@/lib/api-client"
 import { readPipelineAssistantStream } from "@/lib/assistant-stream-read"
@@ -377,6 +380,11 @@ export function ProjectAssistant({ className, chatId }: ProjectAssistantProps) {
               typeAliases: data.proposal.typeAliases ?? [],
               docs: data.proposal.docs ?? [],
               documentation: data.proposal.documentation ?? "",
+              reviewFrom: {
+                models,
+                modules,
+                typeAliases,
+              },
               changed: data.proposal.changed ?? {
                 modules: true,
                 models: true,
@@ -397,7 +405,14 @@ export function ProjectAssistant({ className, chatId }: ProjectAssistantProps) {
   )
 }
 
+function changeKindLabel(kind: StructureModelDiffEntry["kind"]): string {
+  if (kind === "added") return "added"
+  if (kind === "removed") return "removed"
+  return "modified"
+}
+
 function ProjectProposalPreview({ msg }: { msg: AssistantChatMessage<ProjectProposal> }) {
+  const { models: liveModels } = useStore()
   const p = msg.proposal!
   const showModels = p.changed?.models ?? true
   const showTypeAliases = p.changed?.typeAliases ?? (p.typeAliases?.length ?? 0) > 0
@@ -408,6 +423,24 @@ function ProjectProposalPreview({ msg }: { msg: AssistantChatMessage<ProjectProp
   const showActions = (p.proposedActions?.length ?? 0) > 0
   const proposalTypes = p.typeAliases ?? []
   const proposalModels = p.models ?? []
+  const baselineModels = p.reviewFrom?.models ?? (msg.status === "pending" ? liveModels : undefined)
+  const modelDiff = useMemo(
+    () => (baselineModels ? diffStructureModels(baselineModels, proposalModels) : []),
+    [baselineModels, proposalModels],
+  )
+  const listModelDiff = modelDiff.length > 0
+  const fallbackAllModels = showModels && !listModelDiff && !baselineModels
+
+  const pydanticDiff = useMemo(() => {
+    if (!modelDiff.length) return ""
+    const before = modelDiff.flatMap((e) => (e.before ? [e.before] : []))
+    const after = modelDiff.flatMap((e) => (e.after ? [e.after] : []))
+    const diff = textUnifiedDiff(
+      allModelsToPydantic(before, proposalTypes, { includeImports: false }),
+      allModelsToPydantic(after, proposalTypes, { includeImports: false }),
+    )
+    return diff.split("\n").some((line) => line.startsWith("+") || line.startsWith("-")) ? diff : ""
+  }, [modelDiff, proposalTypes])
 
   const codeSources = useMemo<MultiLangCodeSource[]>(
     () => [
@@ -445,7 +478,8 @@ function ProjectProposalPreview({ msg }: { msg: AssistantChatMessage<ProjectProp
     [proposalModels, proposalTypes],
   )
 
-  const showCodegen = showModels || showTypeAliases
+  const showCodegen = (showModels && (listModelDiff || fallbackAllModels)) || showTypeAliases
+  const modelBadgeCount = listModelDiff ? modelDiff.length : proposalModels.length
 
   return (
     <>
@@ -463,9 +497,10 @@ function ProjectProposalPreview({ msg }: { msg: AssistantChatMessage<ProjectProp
             {p.modules.length} steps
           </Badge>
         )}
-        {showModels && (
+        {(listModelDiff || fallbackAllModels) && (
           <Badge variant="outline" className="font-mono text-[9px]">
-            {proposalModels.length} models
+            {modelBadgeCount} model{modelBadgeCount === 1 ? "" : "s"}
+            {listModelDiff ? " changed" : ""}
           </Badge>
         )}
         {showTypeAliases && (
@@ -525,7 +560,33 @@ function ProjectProposalPreview({ msg }: { msg: AssistantChatMessage<ProjectProp
         </pre>
       )}
 
-      {showModels && (
+      {listModelDiff ? (
+        <div className="mb-3">
+          <p className="mb-1.5 font-mono text-[9px] uppercase tracking-wider text-muted-foreground">
+            Structures
+          </p>
+          <ul className="space-y-1">
+            {modelDiff.map((entry) => (
+              <li
+                key={`${entry.kind}-${entry.name}`}
+                className="rounded border border-border/60 bg-background/50 px-2 py-1.5 font-mono text-[10px]"
+              >
+                <span className="text-muted-foreground">{changeKindLabel(entry.kind)}</span>
+                <span className="text-foreground"> {entry.name}</span>
+                {entry.locked ? (
+                  <span className="text-muted-foreground"> · locked</span>
+                ) : null}
+                {entry.addedFields.length > 0 ? (
+                  <span className="text-muted-foreground"> · +{entry.addedFields.join(", ")}</span>
+                ) : null}
+                {entry.removedFields.length > 0 ? (
+                  <span className="text-muted-foreground"> · −{entry.removedFields.join(", ")}</span>
+                ) : null}
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : fallbackAllModels ? (
         <div className="mb-3">
           <p className="mb-1.5 font-mono text-[9px] uppercase tracking-wider text-muted-foreground">
             Structures
@@ -542,7 +603,7 @@ function ProjectProposalPreview({ msg }: { msg: AssistantChatMessage<ProjectProp
             ))}
           </ul>
         </div>
-      )}
+      ) : null}
 
       {showTypeAliases && proposalTypes.length > 0 && (
         <div className="mb-3">
@@ -565,11 +626,18 @@ function ProjectProposalPreview({ msg }: { msg: AssistantChatMessage<ProjectProp
         </div>
       )}
 
-      {showCodegen && (
+      {showCodegen && pydanticDiff ? (
+        <div className="mb-3 max-h-56 overflow-auto rounded-md border border-border p-2">
+          <p className="mb-1.5 font-mono text-[9px] uppercase tracking-wider text-muted-foreground">
+            models.py diff
+          </p>
+          <JsonUnifiedDiffView diff={pydanticDiff} />
+        </div>
+      ) : showCodegen && fallbackAllModels ? (
         <div className="mb-3 flex h-56 flex-col overflow-hidden rounded-md border border-border">
           <MultiLangReadonlyCodeViewer sources={codeSources} badge="preview" switchVariant="segment" />
         </div>
-      )}
+      ) : null}
 
       {showModules && (
         <div className="mb-3">

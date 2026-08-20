@@ -7,8 +7,13 @@ function prettyJsonLines(value: unknown): string[] {
 }
 
 export function jsonUnifiedDiff(expected: unknown, actual: unknown): string {
-  const a = prettyJsonLines(expected)
-  const b = prettyJsonLines(actual)
+  return textUnifiedDiff(stablePrettyJson(expected), stablePrettyJson(actual))
+}
+
+// AI : line unified diff for any two texts — used by Vibe structure review (pydantic before/after).
+export function textUnifiedDiff(before: string, after: string): string {
+  const a = before.split("\n")
+  const b = after.split("\n")
   const out: string[] = []
   const n = Math.max(a.length, b.length)
   for (let i = 0; i < n; i++) {

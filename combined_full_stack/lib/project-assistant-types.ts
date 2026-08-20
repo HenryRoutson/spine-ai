@@ -27,6 +27,12 @@ export type ProjectProposal = {
   documentation: string
   projectName?: string
   proposedActions?: AssistantProposedAction[]
+  // AI : snapshot of live project at proposal time — review diffs stay correct after Approve.
+  reviewFrom?: {
+    models: StructureModel[]
+    modules: PipelineModule[]
+    typeAliases: TypeAlias[]
+  }
   // AI : which parts changed — used to apply only deltas on approve
   changed: {
     // AI : TODO (arch-proposal-changed) — mirrors proposal fields; derive from a key list so we don't maintain two.
