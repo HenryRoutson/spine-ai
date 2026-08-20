@@ -48,7 +48,7 @@ import { uiContextTargetProps } from "@/lib/ui-context-dom"
 import { RunningJobsHub } from "@/components/running-jobs-hub"
 import { RunJobsProvider } from "@/lib/run-jobs-context"
 import { TooltipProvider } from "@/components/ui/tooltip"
-import { isPreviewOnly } from "@/lib/demo-mode"
+import { isDemoMode, isPreviewOnly } from "@/lib/demo-mode"
 import { ActivityTracker } from "@/components/activity-tracker"
 import { SessionReplayRecorder } from "@/components/session-replay-recorder"
 import { SESSION_REPLAY_ENABLED } from "@/lib/session-replay-enabled"
@@ -273,7 +273,7 @@ function AppShellLayoutInner({ variant = "default" }: { variant?: "default" | "e
   const picker = useContext(ProjectPickerContext)
 
   const [warmShells, setWarmShells] = useState(() => ({
-    consumer: shellKind === AppShellKind.Consumer,
+    consumer: !isDemoMode() && shellKind === AppShellKind.Consumer,
     builder: shellKind === AppShellKind.Builder,
     picker: shellKind === AppShellKind.Picker,
   }))

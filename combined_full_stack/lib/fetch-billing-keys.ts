@@ -1,5 +1,6 @@
 import { API_ROUTES } from "@/lib/api-routes"
 import { FETCH_CREDENTIALS, logApiFailure, readApiErrorBody } from "@/lib/api-client"
+import { isDemoMode } from "@/lib/demo-mode"
 import {
   readBillingKeysSnapshot,
   writeBillingKeysSnapshot,
@@ -18,6 +19,7 @@ export type FetchBillingKeysOpts = { force?: boolean }
 export async function fetchBillingKeys(
   opts?: FetchBillingKeysOpts,
 ): Promise<BillingKeySnapshot[]> {
+  if (isDemoMode()) return readBillingKeysSnapshot() ?? []
   const force = opts?.force === true
   const now = Date.now()
   const cached = readBillingKeysSnapshot()

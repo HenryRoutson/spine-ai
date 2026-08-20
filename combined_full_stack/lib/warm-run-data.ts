@@ -1,5 +1,6 @@
 import { API_ROUTES } from "@/lib/api-routes"
 import { apiJson } from "@/lib/api-client"
+import { isDemoMode } from "@/lib/demo-mode"
 import type { MarketplaceListingCard } from "@/lib/marketplace-types"
 import {
   readMarketplaceSnapshot,
@@ -9,6 +10,7 @@ import {
 let defaultListingsFetchRef: Promise<MarketplaceListingCard[]> | null = null
 
 export async function fetchMarketplaceListings(query = ""): Promise<MarketplaceListingCard[]> {
+  if (isDemoMode()) return readMarketplaceSnapshot() ?? []
   const trimmed = query.trim()
   if (!trimmed) {
     if (defaultListingsFetchRef) return defaultListingsFetchRef

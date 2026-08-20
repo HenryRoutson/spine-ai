@@ -8,6 +8,20 @@ export function isDemoRoute(): boolean {
   return path === "/demo" || path.startsWith("/demo/");
 }
 
+function previewQueryEnabled(): boolean {
+  if (typeof window === "undefined") return false;
+  return new URLSearchParams(window.location.search).get("preview") === "1";
+}
+
+function syncFlagsFromLocation(): void {
+  if (!isDemoRoute()) return;
+  demoMode = true;
+  if (previewQueryEnabled()) previewOnly = true;
+}
+
+// AI : set before any child render/prefetch — DemoPage effects run too late (children first).
+syncFlagsFromLocation();
+
 export function setDemoMode(next: boolean): void {
   demoMode = next;
 }
@@ -22,5 +36,5 @@ export function setPreviewOnly(next: boolean): void {
 }
 
 export function isPreviewOnly(): boolean {
-  return previewOnly;
+  return previewOnly || previewQueryEnabled();
 }

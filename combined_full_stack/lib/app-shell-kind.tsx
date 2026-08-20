@@ -35,21 +35,30 @@ const AppShellKindContext = createContext<AppShellKindContextValue | null>(null)
 
 function resolveShellKindFromSession(): AppShellKind {
   if (typeof window === "undefined") return AppShellKind.Consumer
+  if (isDemoRoute()) return AppShellKind.Builder
   if (readActiveProjectSession()) return AppShellKind.Builder
   return AppShellKind.Consumer
 }
 
-export function AppShellKindProvider({ children }: { children: ReactNode }) {
+export function AppShellKindProvider({
+  children,
+  initialKind,
+}: {
+  children: ReactNode
+  initialKind?: AppShellKind
+}) {
   const router = useRouter()
   const pathname = usePathname()
-  const [shellKind, setShellKind] = useState<AppShellKind>(AppShellKind.Consumer)
+  const [shellKind, setShellKind] = useState<AppShellKind>(
+    () => initialKind ?? resolveShellKindFromSession(),
+  )
   const [hydrated, setHydrated] = useState(false)
 
   useLayoutEffect(() => {
     const params = new URLSearchParams(window.location.search)
     const shellParam = params.get("shell")
     const windowParam = params.get("window")
-    const demoRoute = pathname.startsWith("/demo")
+    const demoRoute = isDemoRoute() || pathname.startsWith("/demo")
     let next: AppShellKind = demoRoute
       ? AppShellKind.Builder
       : pathname.startsWith("/projects") || shellParam === "picker"
@@ -111,14 +120,14 @@ export function AppShellKindProvider({ children }: { children: ReactNode }) {
 
   const value = useMemo(
     () => ({
-      shellKind: hydrated ? shellKind : resolveShellKindFromSession(),
+      shellKind: hydrated ? shellKind : (initialKind ?? resolveShellKindFromSession()),
       setShellKind,
       navigateToRunMode,
       navigateToBuildMode,
       navigateToProjectPicker,
       openBuildWorkspace,
     }),
-    [hydrated, shellKind, navigateToRunMode, navigateToBuildMode, navigateToProjectPicker, openBuildWorkspace],
+    [hydrated, initialKind, shellKind, navigateToRunMode, navigateToBuildMode, navigateToProjectPicker, openBuildWorkspace],
   )
 
   useLayoutEffect(() => {

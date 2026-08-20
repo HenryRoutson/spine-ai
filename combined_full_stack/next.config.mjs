@@ -68,13 +68,18 @@ const nextConfig = {
       "base-uri 'self'",
       "form-action 'self'",
     ].join("; ")
+    // AI : CSP does not accept host:port wildcards — explicit localhost ports used by the landing page.
     const demoFrameAncestors =
-      "frame-ancestors 'self' https://spine-ai.dev https://www.spine-ai.dev http://localhost:* https://localhost:*"
+      "frame-ancestors 'self' https://spine-ai.dev https://www.spine-ai.dev http://localhost:3000 http://localhost:3001 http://127.0.0.1:3000 http://127.0.0.1:3001 https://localhost:3000 https://localhost:3001"
     // AI : /embed/* framing is set per-deployment in proxy (creator allowlist) — keep global SAMEORIGIN elsewhere.
     const baseSecurityHeaders = [
       { key: "X-Content-Type-Options", value: "nosniff" },
       { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
       { key: "Permissions-Policy", value: "camera=(), microphone=(), geolocation=()" },
+    ]
+    const demoFrameHeaders = [
+      ...baseSecurityHeaders,
+      { key: "Content-Security-Policy", value: `${csp}; ${demoFrameAncestors}` },
     ]
     return [
       {
@@ -86,11 +91,12 @@ const nextConfig = {
         ],
       },
       {
+        source: "/demo",
+        headers: demoFrameHeaders,
+      },
+      {
         source: "/demo/:path*",
-        headers: [
-          ...baseSecurityHeaders,
-          { key: "Content-Security-Policy", value: `${csp}; ${demoFrameAncestors}` },
-        ],
+        headers: demoFrameHeaders,
       },
       {
         source: "/embed/:path*",
