@@ -6,6 +6,7 @@ import {
   ChartContainer,
   ChartTooltip,
   ChartTooltipContent,
+  chartColorCssKey,
   type ChartConfig,
 } from "@/components/ui/chart"
 
@@ -61,7 +62,7 @@ export function BillingSpendChart({
       <AreaChart
         accessibilityLayer
         data={chartData}
-        margin={{ left: 12, right: 12 }}
+        margin={{ left: 8, right: 12, top: 8 }}
       >
         <CartesianGrid vertical={false} />
         <XAxis
@@ -75,7 +76,7 @@ export function BillingSpendChart({
           tickLine={false}
           axisLine={false}
           tickMargin={8}
-          width={40}
+          width={56}
           className="text-[10px]"
           domain={[0, yMaxCents]}
           tickFormatter={(v) => formatCents(v)}
@@ -90,9 +91,9 @@ export function BillingSpendChart({
             dataKey={s.key}
             type="natural"
             stackId="a"
-            fill={`var(--color-${s.key})`}
+            fill={`var(--color-${chartColorCssKey(s.key)})`}
             fillOpacity={0.4}
-            stroke={`var(--color-${s.key})`}
+            stroke={`var(--color-${chartColorCssKey(s.key)})`}
           />
         ))}
       </AreaChart>

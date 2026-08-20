@@ -5,14 +5,21 @@ export function projectOpenRank(p: Project): number {
   return p.lastOpenedAt ?? p.createdAt ?? 0
 }
 
+export function compareProjectsForList(a: Project, b: Project): number {
+  const rank = projectOpenRank(b) - projectOpenRank(a)
+  if (rank !== 0) return rank
+  const byName = a.name.localeCompare(b.name)
+  if (byName !== 0) return byName
+  return a.id.localeCompare(b.id)
+}
+
+export function sortProjectsForList(projects: readonly Project[]): Project[] {
+  return [...projects].sort(compareProjectsForList)
+}
+
 export function mostRecentlyOpenedProject(projects: Project[]): Project | undefined {
   if (!projects.length) return undefined
-  return projects.reduce((best, p) => {
-    const a = projectOpenRank(p)
-    const b = projectOpenRank(best)
-    if (a !== b) return a > b ? p : best
-    return p.id > best.id ? p : best
-  })
+  return [...projects].sort(compareProjectsForList)[0]
 }
 
 export function resolveActiveProject(

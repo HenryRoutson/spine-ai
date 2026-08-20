@@ -3,6 +3,7 @@
 
 import { useMemo, useRef, useState, useEffect } from "react"
 import { useStore } from "@/lib/store"
+import { formatDataBytes } from "@/lib/project-state-cache"
 import { useDocViewer } from "@/lib/doc-viewer"
 import { useAppShell } from "@/lib/app-shell"
 import { docLabelDisplay, docsForProject } from "@/lib/project-docs"
@@ -157,7 +158,7 @@ export function Documents() {
     <div className="flex h-full flex-col">
       <div className="grid grid-cols-3 gap-px border-b border-border bg-border">
         <Stat label="Documents" value={String(projectDocs.length)} />
-        <Stat label="Total size" value={`${(totalKb / 1024).toFixed(1)} MB`} />
+        <Stat label="Total size" value={formatDataBytes(totalKb * 1024)} />
         <Stat label="Unique hashes" value={String(new Set(projectDocs.map((d) => d.id)).size)} />
       </div>
 

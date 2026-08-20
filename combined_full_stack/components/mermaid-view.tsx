@@ -11,6 +11,38 @@ type MermaidViewProps = {
   className?: string
 }
 
+// AI : mermaid htmlLabels clip when foreignObject is narrower than the text; expand to content.
+function unclipMermaidNodeLabels(root: HTMLElement): void {
+  for (const fo of root.querySelectorAll("foreignObject")) {
+    const inner = fo.querySelector("div")
+    if (!inner) continue
+    const w = Math.ceil(Math.max(inner.scrollWidth, inner.offsetWidth, Number(fo.getAttribute("width") ?? 0)))
+    const h = Math.ceil(Math.max(inner.scrollHeight, inner.offsetHeight, Number(fo.getAttribute("height") ?? 0)))
+    const prevW = Number(fo.getAttribute("width") ?? 0)
+    const prevH = Number(fo.getAttribute("height") ?? 0)
+    if (w > prevW) {
+      const dw = w - prevW
+      fo.setAttribute("width", String(w))
+      fo.setAttribute("x", String(Number(fo.getAttribute("x") ?? 0) - dw / 2))
+      const rect = fo.closest("g.node")?.querySelector("rect")
+      if (rect) {
+        rect.setAttribute("width", String(w))
+        rect.setAttribute("x", String(Number(rect.getAttribute("x") ?? 0) - dw / 2))
+      }
+    }
+    if (h > prevH) {
+      const dh = h - prevH
+      fo.setAttribute("height", String(h))
+      fo.setAttribute("y", String(Number(fo.getAttribute("y") ?? 0) - dh / 2))
+      const rect = fo.closest("g.node")?.querySelector("rect")
+      if (rect) {
+        rect.setAttribute("height", String(h))
+        rect.setAttribute("y", String(Number(rect.getAttribute("y") ?? 0) - dh / 2))
+      }
+    }
+  }
+}
+
 // AI : client-only mermaid render — used for derived pipeline structure in documentation.
 export function MermaidView({ chart, className }: MermaidViewProps) {
   const containerRef = useRef<HTMLDivElement>(null)
@@ -34,11 +66,23 @@ export function MermaidView({ chart, className }: MermaidViewProps) {
           theme: "base",
           fontFamily: MONO_FONT,
           securityLevel: "strict",
-          flowchart: { htmlLabels: true, curve: "basis", padding: 20, nodeSpacing: 50, rankSpacing: 60 },
+          useMaxWidth: false,
+          themeCSS:
+            ".label,.edgeLabel,.nodeLabel,foreignObject{overflow:visible!important}.nodeLabel div{white-space:nowrap}",
+          flowchart: {
+            htmlLabels: true,
+            curve: "basis",
+            padding: 20,
+            nodeSpacing: 80,
+            rankSpacing: 80,
+            wrappingWidth: 480,
+            useMaxWidth: false,
+          },
         })
         const { svg } = await mermaid.render(`pipeline-mermaid-${renderId}`, chart)
         if (!cancelled && containerRef.current) {
           containerRef.current.innerHTML = svg
+          unclipMermaidNodeLabels(containerRef.current)
           setError(null)
         }
       } catch (e) {
@@ -60,7 +104,7 @@ export function MermaidView({ chart, className }: MermaidViewProps) {
     <div className={cn("min-w-0", className)}>
       <div
         ref={containerRef}
-        className="overflow-x-auto py-1 font-mono [&_svg]:mx-auto [&_svg]:h-auto [&_svg]:max-w-full [&_svg_.edgeLabel]:font-mono [&_svg_.edgeLabel]:text-[10px] [&_svg_.label]:font-mono [&_svg_.nodeLabel]:font-mono [&_svg_text]:font-mono"
+        className="overflow-x-auto py-1 font-mono [&_svg]:mx-auto [&_svg]:h-auto [&_svg_.edgeLabel]:font-mono [&_svg_.edgeLabel]:text-[10px] [&_svg_.label]:font-mono [&_svg_.nodeLabel]:font-mono [&_svg_foreignObject]:overflow-visible [&_svg_text]:font-mono"
         aria-label="Pipeline structure diagram"
       />
       {error && (

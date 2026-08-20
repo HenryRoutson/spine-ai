@@ -1,12 +1,12 @@
 "use client"
 
 import { useEffect, useState } from "react"
+import Link from "next/link"
 import { LayoutGrid, Loader2, LogIn, LogOut, Share2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { SharedRunPanel } from "@/components/share/shared-run-panel"
 import { LazyDocViewer } from "@/components/lazy-doc-viewer"
-import { ErrorBanner } from "@/components/inference/inference-run-chrome"
 import { DocViewerProvider } from "@/lib/doc-viewer"
 import { SharedRunDocScopeProvider } from "@/lib/shared-run-doc-scope"
 import { fetchSharedLink } from "@/lib/shared-run-client"
@@ -41,8 +41,15 @@ export function SharedRunViewer({
 
   if (loadError) {
     return (
-      <div className="flex min-h-dvh items-center justify-center p-8">
-        <ErrorBanner text={loadError} />
+      <div className="flex min-h-dvh flex-col items-center justify-center gap-3 p-8 text-center">
+        <p className="text-sm text-muted-foreground">
+          {variant === "embed" ? "Embed not found" : "Shared link not found"}
+        </p>
+        {variant === "page" ? (
+          <Link href="/" className="text-sm text-primary underline-offset-4 hover:underline">
+            Back to Spine
+          </Link>
+        ) : null}
       </div>
     )
   }

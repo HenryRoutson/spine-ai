@@ -172,7 +172,7 @@ export function Documentation() {
             </Button>
           </div>
           <div className="flex min-h-0 flex-1 items-center justify-center overflow-auto p-8">
-            <MermaidView chart={pipelineMermaid} className="w-full max-w-[min(100%,1400px)]" />
+            <MermaidView chart={pipelineMermaid} className="w-max min-w-0 max-w-none" />
           </div>
         </div>
       )}

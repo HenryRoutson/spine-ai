@@ -10,15 +10,15 @@ import { DiagnosisAgentProvider } from "@/lib/diagnosis-agent-context";
 import { AppShellKindProvider, AppShellKind } from "@/lib/app-shell-kind";
 import { AppShellLayout } from "@/components/app-shell-layout";
 import { RunJobsProvider } from "@/lib/run-jobs-context";
-import { setDemoMode, setPreviewOnly } from "@/lib/demo-mode";
+import { isIsolatedDemoPreview, setDemoMode, setPreviewOnly } from "@/lib/demo-mode";
 
 // AI : public preview route — embed=1 sizing; preview=1 disables runs; buildId loads landing-built pipeline.
 export default function DemoPage() {
   const [ready, setReady] = useState(false)
 
   useLayoutEffect(() => {
-    // AI : isolate landing iframe from a signed-in workspace tab in the same browser.
-    clearWorkspaceClientSession();
+    // AI : isolate landing iframe from a signed-in workspace tab — never wipe a top-level signed-in visit.
+    if (isIsolatedDemoPreview()) clearWorkspaceClientSession();
     const isPreview = new URLSearchParams(window.location.search).get("preview") === "1"
     setPreviewOnly(isPreview)
     setDemoMode(true)

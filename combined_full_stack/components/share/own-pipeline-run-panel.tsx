@@ -13,6 +13,7 @@ import {
 import { apiJson, JSON_HEADERS } from "@/lib/api-client"
 import { API_ROUTES } from "@/lib/api-routes"
 import { Button } from "@/components/ui/button"
+import { RunInputsNeededHint } from "@/components/run-with-stop-button"
 import { InferenceInputPickerPopup } from "@/components/inference-input-picker"
 import { InferenceInputSlot } from "@/components/inference/inference-input-slot"
 import { InferenceRunOutputs } from "@/components/inference/inference-outputs"
@@ -288,20 +289,27 @@ export function OwnPipelineRunPanel({
           ) : null}
         </div>
       ) : (
-        <Button
-          className="w-full"
-          disabled={runBlocked}
-          onClick={() => {
-            void runHook.start().then(() => onRunComplete?.())
-          }}
-        >
-          {runHook.runButtonBusy ? (
-            <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />
-          ) : (
-            <Zap className="mr-1.5 h-4 w-4" />
-          )}
-          {runHook.runButtonLabel}
-        </Button>
+        <>
+          <Button
+            className="w-full"
+            disabled={runBlocked}
+            onClick={() => {
+              void runHook.start().then(() => onRunComplete?.())
+            }}
+          >
+            {runHook.runButtonBusy ? (
+              <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />
+            ) : (
+              <Zap className="mr-1.5 h-4 w-4" />
+            )}
+            {runHook.runButtonLabel}
+          </Button>
+          <RunInputsNeededHint
+            ready={runHook.allInputsReady}
+            running={runHook.phase === RunPhase.Running}
+            inputCount={runHook.inputModules.length}
+          />
+        </>
       )}
 
       {runHook.pendingHumanReview && (

@@ -1,6 +1,6 @@
 "use client"
 
-import { useCallback, useEffect, useState } from "react"
+import { useCallback, useEffect, useMemo, useState } from "react"
 import {
   Copy,
   FolderKanban,
@@ -24,6 +24,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { cn } from "@/lib/utils"
 import { timeAgo } from "@/lib/time-ago"
+import { sortProjectsForList } from "@/lib/project-active"
 import { AnimatedRemovalItem } from "@/components/animated-removal-item"
 import { DeleteButton } from "@/components/delete-button"
 import { useAnimatedRemoval } from "@/lib/use-animated-removal"
@@ -64,7 +65,8 @@ export function ProjectPickerPage() {
   const quickDelete = useBrowserPrefEvent(PROJECT_DELETE_SETTINGS_CHANGED_EVENT, readQuickProjectDelete)
   // AI : picker is L0 Build — Vibe is chosen after open via Build surface (or hide-dev-tools default).
   const pickerPrimarySection = AppPrimarySection.Build
-  const displayProjects = mergeWithGhosts(projects)
+  const sortedProjects = useMemo(() => sortProjectsForList(projects), [projects])
+  const displayProjects = mergeWithGhosts(sortedProjects)
 
   useEffect(() => {
     warmProjectPrefetches(
@@ -319,7 +321,7 @@ export function ProjectPickerPage() {
                           deleting={deleting}
                           label={`Delete ${p.name}`}
                           spineId="project.delete"
-                          onClick={() => void runDelete(p, projects, () => deleteProject(p.id))}
+                          onClick={() => void runDelete(p, sortedProjects, () => deleteProject(p.id))}
                         />
                       ) : null}
                     </div>

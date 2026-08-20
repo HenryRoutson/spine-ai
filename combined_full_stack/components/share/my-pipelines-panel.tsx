@@ -5,6 +5,7 @@ import { AlertTriangle, Play, User } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 import { readAccountStateCache } from "@/lib/project-state-cache"
+import { sortProjectsForList } from "@/lib/project-active"
 import { useOptionalConsumerStore, useOptionalStore } from "@/lib/store"
 import { timeAgo } from "@/lib/time-ago"
 import { projectRunBlockReason, projectRunBlocked } from "@/lib/workspace-validity-ui"
@@ -21,7 +22,7 @@ export function MyPipelinesPanel({ onRun }: MyPipelinesPanelProps) {
 
   const projects = useMemo(() => {
     const list = consumer?.projects ?? cacheProjects ?? []
-    return [...list].sort((a, b) => (b.lastOpenedAt ?? b.createdAt ?? 0) - (a.lastOpenedAt ?? a.createdAt ?? 0))
+    return sortProjectsForList(list)
   }, [consumer?.projects, cacheProjects])
 
   const activeProjectId = builder?.project.id

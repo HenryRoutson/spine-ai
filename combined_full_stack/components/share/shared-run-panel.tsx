@@ -12,6 +12,7 @@ import {
   Zap,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import { RunInputsNeededHint } from "@/components/run-with-stop-button"
 import { Input } from "@/components/ui/input"
 import { docsForInputModule } from "@/lib/inference-input"
 import { InferenceInputSlot } from "@/components/inference/inference-input-slot"
@@ -185,6 +186,11 @@ export function SharedRunPanel({
           {needsSignIn ? "Sign in to run" : run.runButtonLabel}
         </Button>
       )}
+      <RunInputsNeededHint
+        ready={run.allInputsReady}
+        running={run.phase === "running"}
+        inputCount={run.inputModules.length}
+      />
 
       {run.pendingHumanReview && (
         <HumanReviewPanel

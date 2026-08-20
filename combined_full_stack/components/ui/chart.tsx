@@ -10,6 +10,13 @@ import { cn } from "@/lib/utils"
 const THEMES = { light: "", dark: ".dark" } as const
 
 const INITIAL_DIMENSION = { width: 320, height: 200 } as const
+
+// AI : CSS custom-property names cannot contain spaces (e.g. "DeepSeek V4").
+export function chartColorCssKey(key: string): string {
+  const slug = key.replace(/[^a-zA-Z0-9_-]/g, "-").replace(/^-+|-+$/g, "")
+  return slug || "series"
+}
+
 type TooltipNameType = number | string
 
 export type ChartConfig = Record<
@@ -123,7 +130,7 @@ ${colorConfig
     const color =
       itemConfig.theme?.[theme as keyof typeof itemConfig.theme] ??
       itemConfig.color
-    return color ? `  --color-${key}: ${color};` : null
+    return color ? `  --color-${chartColorCssKey(key)}: ${color};` : null
   })
   .join("\n")}
 }

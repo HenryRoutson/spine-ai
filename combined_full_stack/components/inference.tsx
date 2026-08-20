@@ -65,7 +65,7 @@ import {
   RunErrorSummary,
 } from "@/components/inference/inference-run-chrome"
 import { InferenceStepTracePanel } from "@/components/inference/inference-step-trace-panel"
-import { RunWithStopButton } from "@/components/run-with-stop-button"
+import { RunInputsNeededHint, RunWithStopButton } from "@/components/run-with-stop-button"
 import { IsolatedErrorButton } from "@/components/logging/isolated-error-actions"
 import { useDiagnosisAgents } from "@/lib/diagnosis-agent-context"
 import { DiagnosisRunLink } from "@/components/diagnosis-agents/diagnosis-run-link"
@@ -613,6 +613,11 @@ export function Inference() {
                       label={run.phase === "running" ? "Run another" : run.runButtonLabel}
                       runningLabel={run.runButtonLabel}
                       idleIcon={<Zap className="mr-1.5 h-4 w-4" />}
+                    />
+                    <RunInputsNeededHint
+                      ready={run.allInputsReady}
+                      running={run.phase === "running"}
+                      inputCount={run.inputModules.length}
                     />
                     {run.phase === "running" && run.attachedTrackId && (
                       <Button

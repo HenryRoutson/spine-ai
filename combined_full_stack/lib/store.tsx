@@ -492,7 +492,6 @@ export function StoreProvider({
     const run = (async () => {
       if (mode === StoreMode.Demo) {
         setBillingAccount(DEMO_BILLING)
-        writeBillingSnapshot(DEMO_BILLING)
         billingLastOkAtRef.current = Date.now()
         return
       }
@@ -539,7 +538,6 @@ export function StoreProvider({
     const run = (async () => {
       if (mode === StoreMode.Demo) {
         setEarningsAccount(DEMO_EARNINGS)
-        writeEarningsSnapshot(DEMO_EARNINGS)
         return
       }
       const data = await apiJson<EarningsAccountView>(API_ROUTES.earnings)
@@ -709,11 +707,13 @@ export function StoreProvider({
           allRuns: data.allRuns.length ? data.allRuns : (prev?.allRuns ?? []),
         }
       })
-      writeAccountStateCache({
-        projects: visibleProjects,
-        docs: dedupeDocsNewestByName(data.docs),
-        modelOptions: data.modelOptions,
-      })
+      if (mode !== StoreMode.Demo) {
+        writeAccountStateCache({
+          projects: visibleProjects,
+          docs: dedupeDocsNewestByName(data.docs),
+          modelOptions: data.modelOptions,
+        })
+      }
       // AI : workspace — only auto-open a project when sessionStorage says so (returning builders).
       if (mode === StoreMode.Workspace) {
         const known = !!projectId && visibleProjects.some((p) => p.id === projectId)
@@ -895,7 +895,7 @@ export function StoreProvider({
       return
     }
 
-    const cached = readProjectStateCache(scopedProjectId)
+    const cached = mode === StoreMode.Demo ? null : readProjectStateCache(scopedProjectId)
     const instant = !!cached
 
     if (instant) {
@@ -983,8 +983,9 @@ export function StoreProvider({
   }, [activeProjectId, mode, applyState])
 
   useEffect(() => {
+    if (mode === StoreMode.Demo) return
     if (state) writeStateSnapshot(state)
-  }, [state])
+  }, [state, mode])
 
   useEffect(() => {
     return () => {

@@ -146,3 +146,20 @@ export function RunWithStopButton({
     </Button>
   )
 }
+
+export function RunInputsNeededHint({
+  ready,
+  running,
+  inputCount,
+}: {
+  ready: boolean
+  running: boolean
+  inputCount: number
+}) {
+  if (ready || running || inputCount <= 0) return null
+  return (
+    <p className="text-center font-mono text-[10px] text-muted-foreground">
+      Select all {inputCount} input{inputCount === 1 ? "" : "s"} to run
+    </p>
+  )
+}

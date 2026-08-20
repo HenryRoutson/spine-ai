@@ -13,6 +13,22 @@ function previewQueryEnabled(): boolean {
   return new URLSearchParams(window.location.search).get("preview") === "1";
 }
 
+function embedQueryEnabled(): boolean {
+  if (typeof window === "undefined") return false;
+  return new URLSearchParams(window.location.search).get("embed") === "1";
+}
+
+// AI : landing iframe (/demo?embed=1&preview=1) must not hydrate a signed-in tab's workspace cache.
+export function isIsolatedDemoPreview(): boolean {
+  if (typeof window === "undefined") return false;
+  try {
+    if (window.self !== window.top) return true;
+  } catch {
+    return true;
+  }
+  return embedQueryEnabled() || previewQueryEnabled();
+}
+
 function syncFlagsFromLocation(): void {
   if (!isDemoRoute()) return;
   demoMode = true;
