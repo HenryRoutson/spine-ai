@@ -202,6 +202,9 @@ type ChatInputProps = {
   onFilesSelected?: (files: File[]) => void
   filesUploading?: boolean
   spineId?: string
+  // AI : Vibe briefs are multi-paragraph — Enter inserts a newline; ⌘/Ctrl+Enter sends.
+  // AI : Chatbot replies stay Enter-to-send (default).
+  submitOnEnter?: boolean
 }
 
 const MENTION_GROUP_ICON: Record<
@@ -342,6 +345,7 @@ function ChatInput({
   onFilesSelected,
   filesUploading = false,
   spineId = "assistant.send",
+  submitOnEnter = true,
 }: ChatInputProps) {
   const pasteList = pastes ?? []
   const pasteChipsEnabled = Boolean(onPastesChange)
@@ -434,10 +438,18 @@ function ChatInput({
     onPastesChange?.((prev) => prev.filter((p) => p.id !== id))
   }
 
+  function trySend() {
+    if (sendEnabled && !disabled) onSend()
+  }
+
   function handleKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
     if (e.key === "Shift") shiftDownRef.current = true
     // AI : don't steal Enter/Tab while IME composition is active (CJK etc.).
     if (e.nativeEvent.isComposing || e.key === "Process") return
+
+    const sendChord = e.key === "Enter" && (e.metaKey || e.ctrlKey)
+    const enterSubmit =
+      e.key === "Enter" && !e.shiftKey && !e.metaKey && !e.ctrlKey && submitOnEnter
 
     if (mentionOpen) {
       if (e.key === "Escape") {
@@ -465,7 +477,7 @@ function ChatInput({
           // AI : no matches — Esc-equivalent on Enter so send isn't soft-locked behind @query.
           if (e.key === "Enter") {
             setAtTrigger(null)
-            if (sendEnabled && !disabled) onSend()
+            if (enterSubmit || sendChord) trySend()
           }
           return
         }
@@ -475,9 +487,9 @@ function ChatInput({
       }
     }
 
-    if (e.key === "Enter" && !e.shiftKey) {
+    if (sendChord || enterSubmit) {
       e.preventDefault()
-      if (sendEnabled && !disabled) onSend()
+      trySend()
     }
   }
 
@@ -651,6 +663,7 @@ function ChatInput({
           disabled={!sendEnabled || disabled}
           onClick={onSend}
           aria-label={sendLabel}
+          title={submitOnEnter ? sendLabel : `${sendLabel} (\u2318Enter / Ctrl+Enter)`}
           spineId={spineId}
         >
           <Send className="h-4 w-4" />

@@ -514,6 +514,7 @@ export function AssistantChat<TProposal>({
         onMentionPick={readOnly ? undefined : onMentionPick}
         onFilesSelected={readOnly ? undefined : onFilesSelected}
         filesUploading={filesUploading}
+        submitOnEnter={false}
       />
     </Chat>
   )

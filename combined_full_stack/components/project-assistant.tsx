@@ -282,7 +282,7 @@ export function ProjectAssistant({ className, chatId }: ProjectAssistantProps) {
           teammateLabel ? `View only — ${teammateLabel}'s chat. Start a new chat to reply.` : undefined
         }
         initialMessage={PROJECT_ASSISTANT_INITIAL_MESSAGE}
-        placeholder="Describe… or type @ to mention steps, runs, cache, files"
+        placeholder="Describe the pipeline… Enter for a new line, \u2318Enter / Ctrl+Enter to send, or type @ to mention"
         loadingLabel={(phase) =>
           phase === "retrying"
             ? "retrying…"

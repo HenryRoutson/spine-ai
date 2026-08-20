@@ -105,13 +105,10 @@ export function Documents() {
         }
       } catch (e) {
         setLastDedup(null)
-        const msg = e instanceof Error ? e.message : null
-        if (msg && confidentialUploadWarning(f.name)) {
-          setUploadWarning(msg)
-          setTimeout(() => setUploadWarning(null), 6000)
-        } else {
-          console.error(e)
-        }
+        const msg = e instanceof Error ? e.message : "Upload failed"
+        setUploadWarning(msg)
+        setTimeout(() => setUploadWarning(null), 8000)
+        console.error(e)
       }
     }
   }

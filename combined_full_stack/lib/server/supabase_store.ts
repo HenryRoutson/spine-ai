@@ -638,16 +638,18 @@ export class SupabaseStore implements Store {
     const payload: ParserCacheRow = { ...row, createdAt: row.createdAt ?? Date.now() };
     indexParserRow(this.cacheIndex, payload);
     if (!this.hasParserCacheTable) return;
+    // AI : user_id must be explicit — service-role rebind has auth.uid()=null, so the
+    // AI : column default fails NOT NULL and every POST /api/docs 500s on flush.
     this.queueRest(() =>
       this.db.from("doc_parser_cache").upsert(
-        {
+        this.withUserId({
           cache_key: row.key,
           file_hash: row.fileHash,
           doc_id: row.docId,
           parser: row.parser,
           content: row.content,
           created_at: payload.createdAt,
-        },
+        }),
         { onConflict: "user_id,cache_key" },
       ),
     );
@@ -661,9 +663,10 @@ export class SupabaseStore implements Store {
     const payload: VisionCacheRow = { ...row, createdAt: row.createdAt ?? Date.now() };
     indexVisionRow(this.cacheIndex, payload);
     if (!this.hasVisionCacheTable) return;
+    // AI : same service-role trap as parserCacheSet — default auth.uid() is null.
     this.queueRest(() =>
       this.db.from("doc_vision_cache").upsert(
-        {
+        this.withUserId({
           cache_key: row.key,
           doc_id: row.docId,
           model: row.model,
@@ -671,7 +674,7 @@ export class SupabaseStore implements Store {
           purpose: row.purpose,
           content: row.content,
           created_at: payload.createdAt,
-        },
+        }),
         { onConflict: "user_id,cache_key" },
       ),
     );
@@ -739,10 +742,14 @@ export class SupabaseStore implements Store {
       this.platformSeedDocIds.delete(id);
     }
     if (this.hasParserCacheTable) {
-      this.queueRest(() => this.db.from("doc_parser_cache").delete().eq("doc_id", id));
+      this.queueRest(() =>
+        this.db.from("doc_parser_cache").delete().eq("user_id", this.scopedUserId).eq("doc_id", id),
+      );
     }
     if (this.hasVisionCacheTable) {
-      this.queueRest(() => this.db.from("doc_vision_cache").delete().eq("doc_id", id));
+      this.queueRest(() =>
+        this.db.from("doc_vision_cache").delete().eq("user_id", this.scopedUserId).eq("doc_id", id),
+      );
     }
     return true;
   }
