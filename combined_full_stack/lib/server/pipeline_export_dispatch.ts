@@ -636,7 +636,7 @@ const emitAssert: Record<ExportLang, StepBodyEmitter> = {
     const entries = assertEntriesForModule(ctx.m);
     const expectations = ctx.project.expectedOutputs ?? {};
     if (entries[0]?.language === "typescript") {
-      const wrapped = wrapAssertTypeScriptForExport(entries[0].code, expectations);
+      const wrapped = wrapAssertTypeScriptForExport(entries[0].code, expectations, ctx.inType);
       return [
         exportComment(TS, assertValidateComment()),
         `const __assert = ${wrapped};`,

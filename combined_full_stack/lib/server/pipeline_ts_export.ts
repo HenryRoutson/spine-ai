@@ -5,6 +5,7 @@ import {
   exportSectionComment,
   indentExportBlock,
   stepBodyUsesPipelineState,
+  stepBodyUsesInput,
   stepFnNameFromLabel,
   withExportLineCountMeta,
   exportSpineInTs,
@@ -31,6 +32,7 @@ function generateStepFn(m: PipelineModule, project: Project, index: number): str
   const meta = MODULE_META[m.kind];
   const body = emitStepBody("ts", { m, project, inType: inTs, outType: outTs });
   const stateParam = stepBodyUsesPipelineState(C, body, m) ? "state" : "_state";
+  const inputParam = stepBodyUsesInput(C, body) ? "input" : "_input";
   const header = [
     `/**`,
     ` * ${m.label.replace(/\*\//g, "*\\/")}`,
@@ -39,7 +41,7 @@ function generateStepFn(m: PipelineModule, project: Project, index: number): str
     ...(m.model ? [` * @model ${m.model}`] : []),
     ...(m.cached ? [` * @cached true`] : []),
     ` */`,
-    `async function ${fn}(input: ${inTs}, ${stateParam}: PipelineState): Promise<${outTs}> {`,
+    `async function ${fn}(${inputParam}: ${inTs}, ${stateParam}: PipelineState): Promise<${outTs}> {`,
   ];
   return [...header, indentExportBlock(body, 2), "}", ""].join("\n");
 }
@@ -50,7 +52,7 @@ export function generatePipelineSourceTs(project: Project): string {
   const needs = analyzeExportRuntimeNeeds(prepared);
   const runtimeImport = exportRuntimeImportTs({
     ...needs,
-    llmBatch: prepared.modules.some((m) => m.kind === ModuleKind.LlmBatch),
+    llmBatch: flattenPipelineModules(prepared.modules).some((m) => m.kind === ModuleKind.LlmBatch),
   });
   const sections: string[] = [];
   const flat = flattenPipelineModules(prepared.modules);

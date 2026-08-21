@@ -15,6 +15,7 @@ export function JsonPreviewPanel({
   defaultView,
   downloadBaseName,
   onFullscreen,
+  excelOnly = false,
 }: {
   json: string
   models?: StructureModel[]
@@ -23,22 +24,28 @@ export function JsonPreviewPanel({
   defaultView?: JsonViewerHumanViewId
   downloadBaseName?: string
   onFullscreen?: () => void
+  excelOnly?: boolean
 }) {
+  const view = excelOnly ? "table" : defaultView
   return (
     <div className={cn("flex min-h-0 flex-1 flex-col", className)}>
-      <div className="flex items-start justify-between gap-3 border-b border-border bg-secondary/20 px-4 py-2.5">
-        <JsonStructureMatches json={json} models={models} doc={doc} bare className="min-w-0 flex-1" />
+      <div className={cn("flex items-start gap-3 border-b border-border bg-secondary/20 px-4 py-2.5", excelOnly ? "justify-end" : "justify-between")}>
+        {excelOnly ? null : (
+          <JsonStructureMatches json={json} models={models} doc={doc} bare className="min-w-0 flex-1" />
+        )}
         <DataDownloadMenu
           content={json}
           models={models}
           baseNameOverride={downloadBaseName}
+          formats={excelOnly ? ["xlsx"] : undefined}
           className="ml-auto shrink-0"
         />
       </div>
       <JsonViewerEmbed
         json={json}
         className="min-h-0 flex-1"
-        defaultView={defaultView}
+        defaultView={view}
+        lockedView={excelOnly ? "table" : undefined}
         onFullscreen={onFullscreen}
       />
     </div>

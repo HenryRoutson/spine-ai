@@ -28,17 +28,21 @@ export function DataDownloadMenu({
   content,
   models: modelsProp,
   baseNameOverride,
+  formats,
   className,
 }: {
   content: string
   models?: StructureModel[]
   baseNameOverride?: string
+  formats?: DataDownloadFormat[]
   className?: string
 }) {
   const store = useOptionalStore()
   const models = modelsProp ?? store?.models
   const { email: userEmail } = useSupabaseSession()
   const canDownload = isDownloadableJson(content)
+  const options = formats?.length ? FORMATS.filter((f) => formats.includes(f.id)) : FORMATS
+  const only = options.length === 1 ? options[0] : undefined
 
   async function handleDownload(format: DataDownloadFormat) {
     try {
@@ -55,6 +59,28 @@ export function DataDownloadMenu({
     } catch (e) {
       console.error(e)
     }
+  }
+
+  if (only) {
+    const Icon = only.icon
+    return (
+      <span {...HTML_EXPORT_SKIP_PROPS} className="inline-flex">
+        <button
+          type="button"
+          disabled={!canDownload}
+          onClick={() => void handleDownload(only.id)}
+          className={cn(
+            buttonVariants({ variant: "outline", size: "sm" }),
+            "h-7 shrink-0 gap-1.5 text-[10px]",
+            className,
+          )}
+          title={canDownload ? only.label : "Nothing to download"}
+        >
+          <Icon className="h-3.5 w-3.5" />
+          {only.label}
+        </button>
+      </span>
+    )
   }
 
   return (
@@ -80,7 +106,7 @@ export function DataDownloadMenu({
           </DropdownMenuLabel>
         </DropdownMenuGroup>
         <DropdownMenuGroup>
-          {FORMATS.map(({ id, label, icon: Icon }) => (
+          {options.map(({ id, label, icon: Icon }) => (
             <DropdownMenuItem key={id} onClick={() => void handleDownload(id)} className="gap-2 font-mono text-xs">
               <Icon className="h-3.5 w-3.5 text-muted-foreground" />
               {label}

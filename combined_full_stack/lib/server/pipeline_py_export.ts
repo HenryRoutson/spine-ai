@@ -6,6 +6,7 @@ import {
   exportSectionComment,
   indentExportBlock,
   stepBodyUsesPipelineState,
+  stepBodyUsesInput,
   stepFnNameFromLabel,
   withExportLineCountMeta,
   exportSpineInPy,
@@ -31,6 +32,7 @@ function generateStepFn(m: PipelineModule, project: Project, index: number): str
   const meta = MODULE_META[m.kind];
   const body = emitStepBody("py", { m, project, inType: inPy, outType: outPy });
   const stateParam = stepBodyUsesPipelineState(C, body, m) ? "state" : "_state";
+  const inputParam = stepBodyUsesInput(C, body) ? "input" : "_input";
   const docLines = [
     m.label,
     `Kind: ${meta.label}`,
@@ -39,7 +41,7 @@ function generateStepFn(m: PipelineModule, project: Project, index: number): str
     ...(m.cached ? ["Cached: true"] : []),
   ];
   const header = [
-    `async def ${fn}(input: ${inPy}, ${stateParam}: PipelineState) -> ${outPy}:`,
+    `async def ${fn}(${inputParam}: ${inPy}, ${stateParam}: PipelineState) -> ${outPy}:`,
     `    """${docLines.join(" · ").replace(/"""/g, "''")}"""`,
   ];
   return [...header, indentExportBlock(body, 4), "", ""].join("\n");

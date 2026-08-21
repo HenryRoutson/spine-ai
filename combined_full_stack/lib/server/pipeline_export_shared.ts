@@ -142,6 +142,14 @@ export function stepBodyUsesPipelineState(
     );
 }
 
+// AI : fork product join reads state, not the spine param — prefix unused input as _input for tsc.
+export function stepBodyUsesInput(style: ExportCommentStyle, body: string): boolean {
+  return body
+    .split("\n")
+    .filter((line) => !line.trimStart().startsWith(style))
+    .some((line) => /\binput\b/.test(line));
+}
+
 export function reshapeStepComment(
   m: PipelineModule,
   inName: string | undefined,
@@ -298,7 +306,9 @@ export function exportSpineInType(
   project: Project,
   index: number,
 ): TypeExpr | undefined {
-  const prev = index > 0 ? project.modules[index - 1] : undefined;
+  // AI : fork lanes — prev is the lane predecessor, not top-level modules[index - 1].
+  const loc = locatePipelineModule(project.modules, m.id);
+  const prev = loc?.predecessor ?? (index > 0 ? project.modules[index - 1] : undefined);
   if (m.kind === ModuleKind.Input) return { kind: "document" };
   if (m.kind === ModuleKind.Combine || usesPassthroughStructure(m.kind)) {
     return prev ? stepSpineOutType(prev) : undefined;
@@ -386,8 +396,9 @@ export function goZeroValue(goType: string): string {
 // AI : export PipelineState keys use the same spine-out types as step signatures.
 export function pipelineStateTsInterfaceForExport(project: Project): string {
   const lines: string[] = [];
-  for (let i = 0; i < project.modules.length; i++) {
-    const m = project.modules[i]!;
+  const flat = flattenPipelineModules(project.modules);
+  for (let i = 0; i < flat.length; i++) {
+    const m = flat[i]!;
     const label = labelAsStateKey(m.label);
     if (!label) continue;
     lines.push(`  ${JSON.stringify(label)}: ${exportSpineOutTs(m, project, i)};`);
@@ -398,8 +409,9 @@ export function pipelineStateTsInterfaceForExport(project: Project): string {
 
 export function pipelineStatePyTypedDictForExport(project: Project): string {
   const entries: string[] = [];
-  for (let i = 0; i < project.modules.length; i++) {
-    const m = project.modules[i]!;
+  const flat = flattenPipelineModules(project.modules);
+  for (let i = 0; i < flat.length; i++) {
+    const m = flat[i]!;
     const label = labelAsStateKey(m.label);
     if (!label) continue;
     // AI : functional TypedDict — keys must match runtime state["Human Label"] strings.

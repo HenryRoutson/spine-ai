@@ -917,7 +917,10 @@ const seeds: Record<string, unknown> = {
       { id: "mod_out", kind: "output", label: "Breach Table", inStructureId: "m_breach", outStructureId: "m_breach", outType: { kind: "list", item: { kind: "ref", modelId: "m_breach" } }, cached: true, avgMs: 40, avgCostCents: 0, ...DESC("List of SlaBreachRow records — one breach verdict per monitored service") },
     ],
     strategies: STRATEGIES("sla"),
-    docs: [{ name: "cloudhost_sla_march_2025.md", type: "text", label: "inference", file: "sla_breach/sla_uptime_report.md" }],
+    docs: [
+      { name: "cloudhost_sla_uptime_march_2025.md", type: "text", label: "inference", file: "sla_breach/sla_uptime_report.md" },
+      { name: "sla_breach_testing.json", type: "json", label: "training", file: "sla_breach/sla_breach_testing.json" },
+    ],
   },
 
   bug_enricher: {

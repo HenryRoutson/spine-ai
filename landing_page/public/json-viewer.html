@@ -282,6 +282,14 @@ body[data-snapshot] .dl-wrap { display:block; }
 body[data-embed] .inline-json-root { font-size:10.5px; line-height:1.45; }
 body[data-embed] .rp-header { min-height:28px; }
 
+/* AI : excel-only embeds — hide tree/json, JSON jumps, structure panel */
+body[data-locked-view="table"] #vb-tree,
+body[data-locked-view="table"] #vb-json,
+body[data-locked-view="table"] .td-jumps,
+body[data-locked-view="table"] .th-struct-link { display: none; }
+body[data-locked-view="table"] #json-panel { display: none !important; }
+body[data-locked-view="table"]:not([data-fs="1"]) .rp-header { display: none; }
+
 /* ── Cards view (legacy) ──────────────────────────────── */
 .root-meta  { margin-bottom:14px; }
 .root-title { font-size:19px; font-weight:700; letter-spacing:-.3px; }
@@ -1512,6 +1520,19 @@ function applyDefaultView(mode) {
   }
 }
 
+function lockedViewMode() {
+  return document.body.getAttribute('data-locked-view');
+}
+
+function applyLockedView(view) {
+  if (view && JV_VALID_VIEWS.includes(view)) {
+    document.body.setAttribute('data-locked-view', view);
+    applyDefaultView(view);
+  } else {
+    document.body.removeAttribute('data-locked-view');
+  }
+}
+
 // ── App state ─────────────────────────────────────────────────────────────────
 let _currentVal  = null;
 let _currentMode = 'data';
@@ -1635,6 +1656,8 @@ function jumpToStructure(path) {
 }
 
 function setView(v) {
+  const locked = lockedViewMode();
+  if (locked && v !== locked) return;
   log('view:change', { from: _viewMode, to: v });
   _viewMode=v;
   ['tree','table','json'].forEach(id=>{
@@ -2579,6 +2602,12 @@ function clearDetailPanelChrome() {
   if (overlay) overlay.classList.remove('markup-open');
 }
 function openDetailPanel(title, obj) {
+  if (lockedViewMode() === 'table') {
+    const rows = Array.isArray(obj) ? obj : [obj];
+    excelStack.push({ label: title, rows, isArray: Array.isArray(obj) });
+    drawDataTable();
+    return;
+  }
   clearDetailPanelChrome();
   const panel = document.querySelector('.detail-panel');
   document.getElementById('dp-title').textContent=title;
@@ -3118,6 +3147,7 @@ window.addEventListener('message', (e) => {
   if (!e.data) return;
 
   if (e.data.type === 'json-viewer:settings') {
+    applyLockedView(e.data.lockedView);
     applyDefaultView(readDefaultView(e.data.defaultView));
     applySyntaxTheme(readSyntaxTheme(e.data.syntaxTheme));
     if (typeof e.data.showFullscreen === 'boolean') setFullscreenEnabled(e.data.showFullscreen);
@@ -3136,6 +3166,7 @@ window.addEventListener('message', (e) => {
     }
     log('external:load', { mode: _currentMode, type: Array.isArray(val) ? 'array' : typeof val });
     auditNoRawEmbeddedJsonLeaves(val);
+    applyLockedView(e.data.lockedView);
     applyDefaultView(readDefaultView(e.data.defaultView));
     applySyntaxTheme(readSyntaxTheme(e.data.syntaxTheme));
     setFullscreenEnabled(!!e.data.showFullscreen);

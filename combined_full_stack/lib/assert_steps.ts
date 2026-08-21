@@ -24,6 +24,7 @@ function assertHelpersNeeded(code: string): Set<string> {
   const needs = new Set<string>();
   if (/\bstep\s*\(/.test(code)) needs.add("step");
   if (/\blen\s*\(/.test(code)) needs.add("len");
+  if (/\bassert\s*\(/.test(code)) needs.add("assert");
   if (/\bassertEqual\s*\(/.test(code)) {
     needs.add("assertEqual");
     needs.add("expected");
@@ -88,6 +89,16 @@ function assertHelpersTs(expectationsLiteral: string, code: string, typed: boole
   if (x == null) return 0;
   if (typeof x === "string") return x.length;
   return 1;
+};`);
+  }
+
+  if (needs.has("assert")) {
+    parts.push(typed
+      ? `const assert = (cond: unknown, msg?: string): void => {
+  if (!cond) throw new Error(msg ?? "assert failed");
+};`
+      : `const assert = (cond, msg) => {
+  if (!cond) throw new Error(msg ?? "assert failed");
 };`);
   }
 
@@ -180,13 +191,19 @@ function withAssertSuccessReturn(body: string): string {
   return body.replace(/\}\s*$/, "  return true;\n}");
 }
 
-function wrapAssertTypeScriptInner(code: string, expectations: ExpectedOutputsMap, typed: boolean): string {
+function wrapAssertTypeScriptInner(
+  code: string,
+  expectations: ExpectedOutputsMap,
+  typed: boolean,
+  inputTs = "unknown",
+): string {
   const helpers = assertHelpersTs(JSON.stringify(expectations), code, typed);
   const needsDeepEqual = assertHelpersNeeded(code).has("deepEqual");
   const deepEqualFn = needsDeepEqual ? (typed ? DEEP_EQUAL_FN_TYPED : DEEP_EQUAL_FN) : "";
   const trimmed = code.trim();
   const inputParam = typed && !/\binput\b/.test(trimmed) ? "_input" : "input";
-  const params = typed ? `(${inputParam}: unknown, state: PipelineState)` : "(input, state)";
+  const stateParam = typed && !/\b(state|step)\b/.test(trimmed) ? "_state" : "state";
+  const params = typed ? `(${inputParam}: ${inputTs}, ${stateParam}: PipelineState)` : "(input, state)";
 
   if (!trimmed) return `${params} => {${deepEqualFn}${helpers} return true; }`;
   if (/^\s*\(/.test(trimmed)) {
@@ -214,8 +231,12 @@ export function wrapAssertTypeScript(code: string, expectations: ExpectedOutputs
 }
 
 // AI : typed wrapper for pipeline TS export — must stay valid under tsc strict + noUnusedLocals.
-export function wrapAssertTypeScriptForExport(code: string, expectations: ExpectedOutputsMap = {}): string {
-  return wrapAssertTypeScriptInner(code, expectations, true);
+export function wrapAssertTypeScriptForExport(
+  code: string,
+  expectations: ExpectedOutputsMap = {},
+  inputTs = "unknown",
+): string {
+  return wrapAssertTypeScriptInner(code, expectations, true, inputTs);
 }
 
 // AI : Python assert — never shadow builtin len; user code uses len_of().

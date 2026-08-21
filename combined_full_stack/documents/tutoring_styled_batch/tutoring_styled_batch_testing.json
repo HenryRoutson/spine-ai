@@ -3,5 +3,10 @@
   "inputs": {
     "Request": "year10_request.json"
   },
-  "expectedOutputs": {}
+  "expectedOutputs": {
+    "Expand \u2192 Style Jobs": null,
+    "Write Styled Questions": null,
+    "Join LaTeX Worksheet": null,
+    "LaTeX Worksheet": null
+  }
 }

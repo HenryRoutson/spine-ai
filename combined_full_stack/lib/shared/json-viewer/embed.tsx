@@ -17,6 +17,8 @@ export type JsonViewerEmbedProps = {
   className?: string
   // AI : per-embed override — landing / inference force table without changing global prefs
   defaultView?: JsonViewerHumanViewId
+  // AI : hide other formats — table lock is spreadsheet-only
+  lockedView?: JsonViewerHumanViewId
   syntaxTheme?: JsonViewerSyntaxThemeId
   // AI : optional — app wires localStorage prefs; landing can omit
   onSettingsEventName?: string
@@ -30,6 +32,7 @@ export function JsonViewerEmbed({
   json,
   className,
   defaultView,
+  lockedView,
   syntaxTheme,
   onSettingsEventName,
   readDefaultView,
@@ -47,7 +50,7 @@ export function JsonViewerEmbed({
     target.postMessage(payload, window.location.origin)
   }
 
-  const resolvedDefaultView = defaultView ?? readDefaultView?.() ?? DEFAULT_JSON_VIEWER_HUMAN_VIEW
+  const resolvedDefaultView = lockedView ?? defaultView ?? readDefaultView?.() ?? DEFAULT_JSON_VIEWER_HUMAN_VIEW
   const resolvedSyntaxTheme =
     syntaxTheme ?? readSyntaxTheme?.() ?? DEFAULT_JSON_VIEWER_SYNTAX_THEME
   const showFullscreen = !!onFullscreen
@@ -57,6 +60,7 @@ export function JsonViewerEmbed({
       type: JSON_VIEWER_MESSAGE_LOAD,
       json,
       defaultView: resolvedDefaultView,
+      lockedView,
       syntaxTheme: resolvedSyntaxTheme,
       showFullscreen,
     })
@@ -64,21 +68,22 @@ export function JsonViewerEmbed({
 
   useEffect(() => {
     sendLoad()
-  }, [json, resolvedDefaultView, resolvedSyntaxTheme, showFullscreen]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [json, resolvedDefaultView, lockedView, resolvedSyntaxTheme, showFullscreen]) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (!onSettingsEventName) return
     const onSettings = () => {
       post({
         type: JSON_VIEWER_MESSAGE_SETTINGS,
-        defaultView: defaultView ?? readDefaultView?.() ?? DEFAULT_JSON_VIEWER_HUMAN_VIEW,
+        defaultView: lockedView ?? defaultView ?? readDefaultView?.() ?? DEFAULT_JSON_VIEWER_HUMAN_VIEW,
+        lockedView,
         syntaxTheme: syntaxTheme ?? readSyntaxTheme?.() ?? DEFAULT_JSON_VIEWER_SYNTAX_THEME,
         showFullscreen: !!onFullscreenRef.current,
       })
     }
     window.addEventListener(onSettingsEventName, onSettings)
     return () => window.removeEventListener(onSettingsEventName, onSettings)
-  }, [onSettingsEventName, defaultView, syntaxTheme, readDefaultView, readSyntaxTheme])
+  }, [onSettingsEventName, defaultView, lockedView, syntaxTheme, readDefaultView, readSyntaxTheme])
 
   useEffect(() => {
     if (!onFullscreen) return

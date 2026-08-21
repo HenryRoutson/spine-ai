@@ -55,6 +55,8 @@ describe("validate project command", () => {
     }
     const result = validateProjectCommand({ ...ctx, project: broken })
     expect(result.ok).toBe(false)
-    expect(result.issues.some((i) => i.message.includes("combine"))).toBe(true)
+    expect(
+      result.issues.some((i) => /never consumed|dropped on the spine|combine/i.test(i.message)),
+    ).toBe(true)
   })
 })

@@ -8,6 +8,7 @@ import { DOCUMENTS_DIR, REPO_ROOT } from "./config";
 import { isUnavailableSeedDoc, unavailableSeedDocMessage } from "../seed-doc";
 import { TypeExprSchema } from "./spine_types";
 import { normalizeStructureModels } from "./type_expr";
+import { syncForkModules } from "@/lib/fork-pipeline";
 import {
   DocLabel,
   FIELD_TYPES,
@@ -38,9 +39,13 @@ const enumOf = <T extends string>(values: readonly T[]) => z.enum(values as [T, 
 const FieldTypeSchema = enumOf(FIELD_TYPES);
 const InputTypeSchema = enumOf(INPUT_TYPES.map((t) => t.value) as InputType[]);
 // AI : Convert to text is auto-inserted from inputType — never authored in seeds/*.json.
-const AUTHORED_MODULE_KINDS = (Object.keys(MODULE_META) as ModuleKind[]).filter(
-  (k) => k !== ModuleKind.DocToText,
-);
+// AI : always include "fork" as a string — tsx can drop ModuleKind.Fork from Object.keys(MODULE_META).
+const AUTHORED_MODULE_KINDS = [
+  ...new Set([
+    ...(Object.keys(MODULE_META) as string[]).filter((k) => k !== "doc-to-text"),
+    "fork",
+  ]),
+] as [ModuleKind, ...ModuleKind[]];
 const ModuleKindSchema = enumOf(AUTHORED_MODULE_KINDS);
 const StrategyKindSchema = enumOf(Object.keys(STRATEGY_META) as StrategyKind[]);
 
@@ -437,15 +442,22 @@ export function loadProjectSeed(path: string): ProjectSeed {
     inputs: p.inputs,
     expectedOutputs: loadExpectedOutputs(p.expectedOutputs, { lenient: true }),
   }));
+  const typeAliases = raw.typeAliases as TypeAlias[] | undefined;
+  // AI : product-join forks auto-derive sm_fork_<id> the same way the GUI validity-sync does.
+  const forkSynced = syncForkModules(
+    raw.modules.map(normalizeSeedModule) as PipelineModule[],
+    normalizeStructureModels(raw.models as StructureModel[]),
+    typeAliases ?? [],
+  );
   return {
     // AI : zod-validated plain strings → branded contract types
     project: {
       id: raw.id as ProjectId,
       name: raw.name,
       kind: raw.kind,
-      models: normalizeStructureModels(raw.models as StructureModel[]),
-      typeAliases: raw.typeAliases as TypeAlias[] | undefined,
-      modules: raw.modules.map(normalizeSeedModule) as PipelineModule[],
+      models: forkSynced.models,
+      typeAliases,
+      modules: forkSynced.modules,
       strategies: raw.strategies as Strategy[],
       seedDocNames: raw.docs.map((d) => d.name),
       expectedOutputs,

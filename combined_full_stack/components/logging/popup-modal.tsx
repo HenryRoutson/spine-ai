@@ -23,6 +23,7 @@ export type PopupDocPreviewItem = {
 export type PopupPayload = {
   json?: string
   defaultView?: JsonViewerHumanViewId
+  excelOnly?: boolean
   text?: string
   inputPreview?: string
   promptItems?: InputPreviewItem[]
@@ -76,6 +77,7 @@ export function PopupModal({ payload, onClose }: PopupModalProps) {
               json={payload.json}
               models={payload.models}
               defaultView={payload.defaultView}
+              excelOnly={payload.excelOnly}
               className="min-h-0 flex-1"
             />
           </div>

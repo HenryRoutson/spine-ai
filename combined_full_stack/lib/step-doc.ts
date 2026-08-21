@@ -2,6 +2,7 @@ import { InputType } from "@/lib/types"
 import type { DocId, DocRef, RunStep } from "@/lib/types"
 import type { DocViewMode } from "@/lib/doc-viewer"
 import { isMarkdownDoc, isLatexDoc, isPdfDoc } from "@/lib/doc-content"
+import { isJsonText } from "@shared/json-viewer/is-json-text"
 
 // AI : resolve the source doc for an input step — new runs store docId; older runs parse the preview.
 export function stepDocId(step: RunStep): DocId | undefined {
@@ -83,6 +84,13 @@ type StepOutputLike = {
   kind?: string
   outputJson?: string
   outputPreview?: string
+}
+
+// AI : spreadsheet JSON for the simple logging view — no prompts, text, or doc-id refs.
+export function stepSpreadsheetJson(step: StepOutputLike): string | undefined {
+  const json = step.outputJson?.trim()
+  if (!json || !isJsonText(json) || isDocReferenceOutputJson(json)) return undefined
+  return json
 }
 
 // AI : true when a step has user-visible output (excludes input doc_id spine refs).

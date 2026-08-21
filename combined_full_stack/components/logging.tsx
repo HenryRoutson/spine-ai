@@ -71,14 +71,19 @@ import { TestResults } from "@/components/test-results"
 import { CompareModal } from "@/components/logging/compare-modal"
 import { PopupModal, type PopupPayload } from "@/components/logging/popup-modal"
 import { LlmRetryGridSection } from "@/components/logging/llm-retry-grid"
+import { SimpleLoggingTrace } from "@/components/logging/simple-logging-trace"
 
 type LoggingListDensity = "full" | "compact"
 
-export function Logging({ listDensity = "full" }: { listDensity?: LoggingListDensity } = {}) {
+export function Logging({
+  listDensity = "full",
+  simple,
+}: { listDensity?: LoggingListDensity; simple?: boolean } = {}) {
   const palette = useStatusPalette()
   const { runs, billingRuns, docs, modules, models, project, typeAliases, model: globalModel, hydrateRunDetail } = useStore()
   const { activeWindow, focusRunId, focusRunAnchor, clearFocusRun, setSharedRunDocScope } = useAppShell()
   const isVibe = isVibeWindow(activeWindow)
+  const isSimple = simple ?? isVibe
   const { pipelineEmpty } = computeWorkspaceValidity(modules, models, typeAliases)
   const [query, setQuery] = useState("")
   const [selectedRun, setSelectedRun] = useState<string | null>(null)
@@ -222,7 +227,7 @@ export function Logging({ listDensity = "full" }: { listDensity?: LoggingListDen
                 <Input
                   value={query}
                   onChange={(e) => setQuery(e.target.value)}
-                  placeholder="Filter by model, step, run id…"
+                  placeholder={isSimple ? "Search runs…" : "Filter by model, step, run id…"}
                   className="h-8 pl-8 font-mono text-xs"
                 />
               </div>
@@ -252,6 +257,7 @@ export function Logging({ listDensity = "full" }: { listDensity?: LoggingListDen
                   />
                 </label>
               ) : null}
+              {isSimple ? null : (
               <label
                 className={cn(
                   "flex cursor-pointer items-center justify-between gap-2 rounded-md border px-2.5 py-1.5 transition-colors",
@@ -269,6 +275,7 @@ export function Logging({ listDensity = "full" }: { listDensity?: LoggingListDen
                   data-spine-id="logging.compact-list"
                 />
               </label>
+              )}
             </div>
             <ScrollArea className="min-h-0 flex-1">
               {filtered.length === 0 ? (
@@ -323,7 +330,7 @@ export function Logging({ listDensity = "full" }: { listDensity?: LoggingListDen
                                 ? { color: palette.ok, borderColor: `${palette.ok}66` }
                                 : { color: palette.err, borderColor: `${palette.err}66` }}
                             >
-                              {run.status}
+                              {isSimple ? (run.status === "ok" ? "Done" : "Failed") : run.status}
                             </Badge>
                           </>
                         ) : (
@@ -378,8 +385,14 @@ export function Logging({ listDensity = "full" }: { listDensity?: LoggingListDen
         trailing={
           !active ? (
             <div className="flex min-h-0 flex-1 items-center justify-center">
-              <p className="text-xs text-muted-foreground">Select a run to view its trace.</p>
+              <p className="text-xs text-muted-foreground">
+                {isSimple ? "Select a run to see what happened." : "Select a run to view its trace."}
+              </p>
             </div>
+          ) : isSimple ? (
+            <ScrollArea className="min-h-0 min-w-0 flex-1">
+              <SimpleLoggingTrace run={active} modules={modules} models={models} />
+            </ScrollArea>
           ) : (
             <ScrollArea className="min-h-0 min-w-0 flex-1">
               <div className="space-y-4 p-4" {...HTML_EXPORT_ROOT_PROPS}>

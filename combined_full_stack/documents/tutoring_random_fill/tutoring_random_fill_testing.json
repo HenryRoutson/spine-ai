@@ -3,5 +3,9 @@
   "inputs": {
     "Request": "year10_request.json"
   },
-  "expectedOutputs": {}
+  "expectedOutputs": {
+    "Generate Question Template": null,
+    "Fill Random Variations": null,
+    "LaTeX Worksheet": null
+  }
 }

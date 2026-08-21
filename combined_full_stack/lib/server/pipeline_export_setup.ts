@@ -6,6 +6,7 @@ import { generatePipelineRunnerFiles } from "./pipeline_export_runners";
 import { ModuleKind } from "./types";
 import { isMergeModuleKind } from "@/lib/module-kinds";
 import type { Project } from "./types";
+import { flattenPipelineModules } from "@/lib/fork-pipeline";
 import { collectWebhookExportEnvKeys } from "@/lib/webhook-step";
 
 export type ExportRuntimeNeeds = {
@@ -41,7 +42,7 @@ export function analyzeExportRuntimeNeeds(project: Project): ExportRuntimeNeeds 
   let webhook = false;
   let visionOcr = false;
   let docToText = false;
-  for (const m of project.modules) {
+  for (const m of flattenPipelineModules(project.modules)) {
     if (m.kind === ModuleKind.Llm) llm = true;
     // AI : example-select uses llmBatchStructured — treat like llm-batch for stub inclusion.
     if (m.kind === ModuleKind.LlmBatch || m.kind === ModuleKind.ExampleSelect) llmBatch = true;
@@ -66,7 +67,7 @@ export function analyzeExportRuntimeNeeds(project: Project): ExportRuntimeNeeds 
     visionOcr,
     docToText,
     inputModules,
-    webhookEnvKeys: collectWebhookExportEnvKeys(project.modules),
+    webhookEnvKeys: collectWebhookExportEnvKeys(flattenPipelineModules(project.modules)),
   };
 }
 

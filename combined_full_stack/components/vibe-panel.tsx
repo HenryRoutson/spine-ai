@@ -32,7 +32,7 @@ function renderObservePanel(tab: VibeObserveTab) {
     case AppWindowId.Inference:
       return <Inference />
     case AppWindowId.Logging:
-      return <Logging listDensity="compact" />
+      return <Logging listDensity="compact" simple />
   }
 }
 
