@@ -77,6 +77,7 @@ import { LOGGING_SETTINGS_CHANGED_EVENT } from "@/lib/logging-settings"
 import { pipelineFinalOutputSteps } from "@/lib/step-doc"
 import { timeAgo } from "@/lib/time-ago"
 import { useRerenderOnEvent } from "@/lib/use-browser-pref-event"
+import { SimpleViewToggle, useSimpleStepTrace } from "@/components/simple-view-toggle"
 import { docTextContent, fetchDocText, invalidateDocText } from "@/lib/doc-text-cache"
 import { docsForProject } from "@/lib/project-docs"
 import {
@@ -122,7 +123,7 @@ const STATUS_BADGE: Record<ReturnType<typeof setupStatus>, { label: string; clas
   ok: { label: "valid", className: "border-chart-2/40 text-chart-2" },
 }
 
-export function Inference() {
+export function Inference({ simple }: { simple?: boolean } = {}) {
   const {
     project,
     modules,
@@ -149,6 +150,7 @@ export function Inference() {
   useRerenderOnEvent(LOGGING_SETTINGS_CHANGED_EVENT)
   const { typesInvalid, pipelineInvalid, pipelineEmpty } = computeWorkspaceValidity(modules, models, typeAliases)
   const isVibe = isVibeWindow(activeWindow)
+  const [isSimple, setSimple] = useSimpleStepTrace(simple ?? isVibe)
   const showRunWorkspace = !pipelineEmpty && !typesInvalid && !pipelineInvalid
   const minRunBalanceCents = billingAccount?.minRunBalanceCents ?? MIN_RUN_BALANCE_CENTS
   const insufficientCredit =
@@ -346,8 +348,11 @@ export function Inference() {
     lastRunRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })
   }, [run.phase, run.run?.id, finalOutputSteps.length])
 
-  const nextRunSubtitle =
-    run.phase === "running"
+  const nextRunSubtitle = isSimple
+    ? run.phase === "running"
+      ? "This run is still going — you can start another."
+      : "Add a file for each item, then run."
+    : run.phase === "running"
       ? "Run in progress — start another anytime, or open a job in Runs for the full-screen trace"
       : run.phase === "done"
         ? "Change files here to run again with different inputs"
@@ -356,7 +361,9 @@ export function Inference() {
           : "Pick a saved setup or assign inputs manually, then run"
 
   const lastRunSubtitle = run.run
-    ? `${run.run.status === "ok" ? "Completed" : "Failed"} · ${timeAgo(run.run.startedAt)} · ${run.run.id}`
+    ? isSimple
+      ? `${run.run.status === "ok" ? "Done" : "Failed"} · ${timeAgo(run.run.startedAt)}`
+      : `${run.run.status === "ok" ? "Completed" : "Failed"} · ${timeAgo(run.run.startedAt)} · ${run.run.id}`
     : undefined
 
 
@@ -366,6 +373,7 @@ export function Inference() {
         <WindowHeader
           actions={
             <div className="flex items-center gap-2">
+              {isSimple ? null : (
               <Button size="sm" className="h-8" onClick={() => void createBlankSetup()} disabled={creatingSetup}>
                 {creatingSetup ? (
                   <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
@@ -374,6 +382,7 @@ export function Inference() {
                 )}
                 New setup
               </Button>
+              )}
               {run.phase !== "idle" ? (
                 <Button variant="outline" size="sm" className="bg-transparent" onClick={() => run.reset()} disabled={run.phase === "running"}>
                   <RotateCcw className="mr-1.5 h-3.5 w-3.5" /> Reset
@@ -521,7 +530,8 @@ export function Inference() {
           trailing={
             <ScrollArea className="min-h-0 min-w-0 flex-1">
               <div className="mx-auto max-w-4xl space-y-6 p-5">
-              {selected && (
+              <SimpleViewToggle checked={isSimple} onCheckedChange={setSimple} className="max-w-xs" />
+              {selected && !isSimple && (
                 <SetupDetail
                   key={selected.doc.id}
                   state={selected}
@@ -532,12 +542,19 @@ export function Inference() {
                 />
               )}
 
-              <InferenceRunSection title="Next run" subtitle={nextRunSubtitle} variant="current">
+              <InferenceRunSection
+                title={isSimple ? "Files" : "Next run"}
+                subtitle={nextRunSubtitle}
+                variant="current"
+                simple={isSimple}
+              >
                 <div className="space-y-2">
+                  {isSimple ? null : (
                   <p className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
                     pipeline inputs · {run.inputModules.length} slot{run.inputModules.length === 1 ? "" : "s"}
                   </p>
-                  <div>
+                  )}
+                  <div className="space-y-2">
                     {run.inputModules.map((m) => (
                       <InferenceInputSlot
                         key={m.id}
@@ -545,6 +562,7 @@ export function Inference() {
                         outModel={modelName(models, m.outStructureId)}
                         docs={docsForInputModule(run.inputDocs, m.id)}
                         issue={run.inputIssueByModule.get(m.id)}
+                        simple={isSimple}
                         jsonStruct={inputModuleJsonStructSchema(m, models, typeAliases)}
                         jsonStructDisabled={!!project?.teamReadOnly}
                         onOpenPicker={() => run.setPickerModuleId(m.id)}
@@ -558,12 +576,13 @@ export function Inference() {
                         onJsonStructAssigned={(doc) => run.setInputDocForModule(m.id, doc)}
                       />
                     ))}
-                    {run.inputCompatPairs.length > 0 && (
+                    {run.inputCompatPairs.length > 0 && !isSimple && (
                       <InputCompatPanel pairs={run.inputCompatPairs} />
                     )}
                   </div>
                 </div>
 
+                {isSimple ? null : (
                 <RunNotesPad
                   value={run.runNotes}
                   onChange={run.setRunNotes}
@@ -575,6 +594,7 @@ export function Inference() {
                         : "Describe what you're testing before you run"
                   }
                 />
+                )}
 
                 {previewOnly && run.phase !== "running" ? (
                   <div className="rounded-lg border border-border bg-muted/20 px-4 py-5 text-center">
@@ -715,6 +735,7 @@ export function Inference() {
 
                 {run.phase === "running" && (
                   <div className="space-y-3">
+                    {isSimple ? null : (
                     <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-primary/25 bg-primary/5 px-3 py-2">
                       <p className="font-mono text-[10px] uppercase tracking-wider text-primary">
                         Live step logs
@@ -740,6 +761,7 @@ export function Inference() {
                         ) : null}
                       </div>
                     </div>
+                    )}
                     <InferenceStepTracePanel
                     modules={modules}
                     phase={run.phase}
@@ -753,6 +775,7 @@ export function Inference() {
                     docs={docs}
                     models={models}
                     inputDocs={run.inputDocs}
+                    simple={isSimple}
                   />
                   </div>
                 )}
@@ -764,12 +787,18 @@ export function Inference() {
                     title="Last run"
                     subtitle={lastRunSubtitle}
                     variant="last"
+                    simple={isSimple}
                   >
-                    {finalOutputSteps.length > 0 && (
+                    {finalOutputSteps.length > 0 && !isSimple && (
                       <InferenceRunOutputs steps={finalOutputSteps} models={models} />
                     )}
 
                     {run.run.status !== "ok" && (
+                      isSimple ? (
+                        <p className="text-sm text-destructive">
+                          {run.runErrorDisplay?.message ?? "This run could not finish. Open a step for details."}
+                        </p>
+                      ) : (
                       <div className="rounded-lg border border-border bg-card px-6 py-6 space-y-3">
                         {run.runErrorDisplay ? (
                           <RunErrorSummary
@@ -791,9 +820,10 @@ export function Inference() {
                           <DiagnosisRunLink runId={run.run.id} />
                         </div>
                       </div>
+                      )
                     )}
 
-                    {run.error && (
+                    {run.error && !isSimple && (
                       <ErrorBanner
                         text={run.error.split("\n")[0] ?? run.error}
                         copyText={formatErrorForClipboard({
@@ -816,12 +846,15 @@ export function Inference() {
                       docs={docs}
                       models={models}
                       inputDocs={lastRunInputDocs}
+                      simple={isSimple}
                       footer={
+                        isSimple ? undefined : (
                         <GoToLoggingButton
                           variant="inline"
                           className="mt-4"
                           onClick={() => openLogging(run.run!.id)}
                         />
+                        )
                       }
                     />
                   </InferenceRunSection>

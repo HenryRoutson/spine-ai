@@ -181,6 +181,7 @@ type ChatInputProps = {
   onSend: () => void
   placeholder?: string
   disabled?: boolean
+  sendBusy?: boolean
   sendLabel?: string
   className?: string
   footer?: React.ReactNode
@@ -333,6 +334,7 @@ function ChatInput({
   onSend,
   placeholder = "Message…",
   disabled = false,
+  sendBusy = false,
   sendLabel = "Send",
   className,
   footer,
@@ -439,7 +441,7 @@ function ChatInput({
   }
 
   function trySend() {
-    if (sendEnabled && !disabled) onSend()
+    if (sendEnabled && !disabled && !sendBusy) onSend()
   }
 
   function handleKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
@@ -660,13 +662,13 @@ function ChatInput({
         <Button
           size="icon"
           className="h-10 w-10 shrink-0"
-          disabled={!sendEnabled || disabled}
+          disabled={!sendEnabled || disabled || sendBusy}
           onClick={onSend}
           aria-label={sendLabel}
           title={submitOnEnter ? sendLabel : `${sendLabel} (\u2318Enter / Ctrl+Enter)`}
           spineId={spineId}
         >
-          <Send className="h-4 w-4" />
+          {sendBusy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
           <span className="sr-only">{sendLabel}</span>
         </Button>
       </div>

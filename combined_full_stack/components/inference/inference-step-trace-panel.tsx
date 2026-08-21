@@ -20,6 +20,7 @@ import {
 } from "@/components/inference/inference-step-trace"
 import { moduleInputDescription } from "@/components/step-input-description"
 import { CyclingWaitPhrase } from "@/components/inference/inference-run-chrome"
+import { SimpleStepTrace, simpleTraceStepsFromLive } from "@/components/simple-step-trace"
 import { docsForInputModule } from "@/lib/inference-input"
 import { cn } from "@/lib/utils"
 import { COPY_FEEDBACK_MS } from "@/lib/ui-timing"
@@ -113,6 +114,7 @@ export function InferenceStepTracePanel({
   models,
   inputDocs,
   codeExecByModule,
+  simple = false,
 }: {
   modules: PipelineModule[]
   phase: "idle" | "running" | "done"
@@ -127,6 +129,7 @@ export function InferenceStepTracePanel({
   models: StructureModel[]
   inputDocs: Partial<Record<ModuleId, DocRef | DocRef[]>>
   codeExecByModule?: Map<ModuleId, CodeExecUiState>
+  simple?: boolean
 }) {
   const [stepsExpanded, setStepsExpanded] = useState(true)
   const [copiedKey, setCopiedKey] = useState<"errors" | "json" | "log" | null>(null)
@@ -158,6 +161,29 @@ export function InferenceStepTracePanel({
   function markCopied(key: typeof copiedKey) {
     setCopiedKey(key)
     setTimeout(() => setCopiedKey(null), COPY_FEEDBACK_MS)
+  }
+
+  if (simple) {
+    return (
+      <div className="space-y-3">
+        {phase === "running" ? (
+          <div className="space-y-2">
+            <div className="flex items-center justify-between gap-2">
+              <p className="text-sm text-muted-foreground">Working…</p>
+              <span className="text-sm tabular-nums text-muted-foreground">{progressPct}%</span>
+            </div>
+            <Progress value={progressPct} className="h-1.5" />
+            <CyclingWaitPhrase phrase={waitPhrase} />
+          </div>
+        ) : null}
+        {footer}
+        <SimpleStepTrace
+          steps={simpleTraceStepsFromLive({ modules, stepStates, run })}
+          models={models}
+        />
+        {logEndRef ? <div ref={logEndRef} /> : null}
+      </div>
+    )
   }
 
   return (

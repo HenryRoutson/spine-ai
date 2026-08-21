@@ -10,7 +10,7 @@ import {
   writeParserCacheIfFresh,
   shouldSaveOriginalBytes,
 } from "@/lib/server/doc_upload_parse";
-import { linkDocToProject, persistOriginalDocBytes } from "@/lib/server/store";
+import { linkDocToProject, persistOriginalDocBytes, resolveStoreProject } from "@/lib/server/store";
 import { logger } from "@/lib/server/server_logger";
 import { DocLabel } from "@/lib/server/types";
 import type { ProjectId } from "@/lib/server/types";
@@ -51,10 +51,10 @@ export async function POST(req: NextRequest) {
       name: uploadFile.name,
       type,
       label,
-      sizeKb: Math.round(uploadFile.size / 1024),
+      sizeKb: Math.max(1, Math.round(uploadFile.size / 1024)),
     });
 
-    if (projectId && !store.project(projectId)) {
+    if (projectId && !(await resolveStoreProject(store, projectId))) {
       return apiError(unknownProject(projectId), HTTP.NOT_FOUND, "unknown_project", {
         resource: `project:${projectId}`,
         detail: `Cannot attach upload "${uploadFile.name}" — project missing from store.`,

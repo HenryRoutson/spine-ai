@@ -16,8 +16,10 @@ export type DocDbRow = {
 
 export type UserDocDbRow = DocDbRow & { user_id: string };
 
+import { sizeKbFromChars } from "@/lib/doc-size";
+
 export function contentSizeKb(content: string): number {
-  return Math.max(1, Math.round(content.length / 1024));
+  return sizeKbFromChars(content.length);
 }
 
 export function docPreview(content: string): string {
@@ -50,7 +52,7 @@ export function docRefFromDbRow(row: DocDbRow): DocRef {
     name: row.name,
     type: row.type as InputType,
     label: row.label as DocLabel,
-    sizeKb: row.size_kb,
+    sizeKb: row.size_kb > 0 ? row.size_kb : contentSizeKb(row.content),
     uploadedAt: row.uploaded_at,
     preview: row.preview,
   };

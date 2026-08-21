@@ -22,7 +22,7 @@ export async function GET(req: NextRequest) {
   if (ctx instanceof NextResponse) return ctx;
   const { auth, store } = ctx;
 
-  const projectOrErr = requireProjectOr404(store, projectId, apiLog);
+  const projectOrErr = await requireProjectOr404(store, projectId, apiLog);
   if (projectOrErr instanceof NextResponse) return projectOrErr;
 
   const chats = await listAssistantChats(auth, projectId);
@@ -38,7 +38,7 @@ export async function POST(req: NextRequest) {
   if (ctx instanceof NextResponse) return ctx;
   const { auth, store } = ctx;
 
-  const projectOrErr = requireProjectOr404(store, projectId as ProjectId, apiLog);
+  const projectOrErr = await requireProjectOr404(store, projectId as ProjectId, apiLog);
   if (projectOrErr instanceof NextResponse) return projectOrErr;
 
   const chat = await createAssistantChat(

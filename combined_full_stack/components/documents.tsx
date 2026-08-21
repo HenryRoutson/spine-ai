@@ -4,6 +4,7 @@
 import { useMemo, useRef, useState, useEffect } from "react"
 import { useStore } from "@/lib/store"
 import { formatDataBytes } from "@/lib/project-state-cache"
+import { formatSizeKb } from "@/lib/doc-size"
 import { useDocViewer } from "@/lib/doc-viewer"
 import { useAppShell } from "@/lib/app-shell"
 import { docLabelDisplay, docsForProject } from "@/lib/project-docs"
@@ -241,7 +242,7 @@ export function Documents() {
                   kind: "project_doc",
                   id: `doc:${doc.id}`,
                   label: isTest ? `Test · ${doc.name}` : `File · ${doc.name}`,
-                  snippet: `${doc.label} · ${doc.type} · ${doc.sizeKb} KB · ${doc.id}`,
+                  snippet: `${doc.label} · ${doc.type} · ${formatSizeKb(doc.sizeKb)} · ${doc.id}`,
                 })}
               >
                 <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-border bg-card">
@@ -265,7 +266,7 @@ export function Documents() {
                       <Hash className="h-2.5 w-2.5" />
                       {doc.id}
                     </span>
-                    <span>{doc.sizeKb} KB</span>
+                    <span>{formatSizeKb(doc.sizeKb)}</span>
                     <span>
                       {new Date(doc.uploadedAt).toLocaleString()} · {timeAgo(doc.uploadedAt)}
                     </span>

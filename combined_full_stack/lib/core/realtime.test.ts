@@ -2,6 +2,8 @@ import { describe, expect, it, vi } from "vitest"
 import {
   overlayOptimisticProjects,
   confirmCreatedInMap,
+  reseedCreatedFromLocal,
+  shouldKeepLocalProject,
   createMemoryRealtimePort,
   attachRealtimePort,
   subscribeTeamRealtimeChannel,
@@ -41,6 +43,29 @@ describe("realtime overlay (shared with React store)", () => {
     const created = new Map<string, Project>([["p_1", project("p_1", "A")]])
     confirmCreatedInMap(created, [project("p_1", "A")])
     expect(created.size).toBe(0)
+  })
+
+  it("reseedCreatedFromLocal restores a create wiped by a stale remote snapshot", () => {
+    const local = project("p_new", "Blank")
+    const created = new Map<string, Project>()
+    confirmCreatedInMap(created, [local])
+    expect(created.size).toBe(0)
+    reseedCreatedFromLocal(created, [local], [], [])
+    const merged = overlayOptimisticProjects([], created, [])
+    expect(merged.map((p) => p.id)).toEqual(["p_new"])
+  })
+
+  it("shouldKeepLocalProject prefers in-flight builder edits over a fetch that started earlier", () => {
+    const local = project("p_1", "Edited")
+    expect(
+      shouldKeepLocalProject(local, { mutatedAt: 50, fetchedAt: 10, pendingSave: false }),
+    ).toBe(true)
+    expect(
+      shouldKeepLocalProject(local, { mutatedAt: 10, fetchedAt: 50, pendingSave: false }),
+    ).toBe(false)
+    expect(
+      shouldKeepLocalProject(local, { mutatedAt: 10, fetchedAt: 50, pendingSave: true }),
+    ).toBe(true)
   })
 
   it("session ingestRemoteProjects uses the same overlay as store.tsx", () => {

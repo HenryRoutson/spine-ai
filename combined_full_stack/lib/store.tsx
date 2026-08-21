@@ -89,7 +89,7 @@ import { warmSettingsAccount, warmSettingsTeams } from "@/lib/warm-settings-data
 import { useTeamRealtime } from "@/lib/use-team-realtime"
 import { DEMO_DEFAULT_PROJECT_ID } from "@/lib/demo-constants"
 import { setDemoMode } from "@/lib/demo-mode"
-import { overlayOptimisticProjects as mergeOptimisticProjects, confirmCreatedInMap } from "@/lib/core/realtime"
+import { overlayOptimisticProjects as mergeOptimisticProjects, confirmCreatedInMap, reseedCreatedFromLocal, shouldKeepLocalProject } from "@/lib/core/realtime"
 import { ProjectPickerSkeleton, StoreShellSkeleton } from "@/components/store-shell-skeletons"
 
 export type ProjectCreateOpts = { open?: boolean }
@@ -324,7 +324,7 @@ interface StoreState {
   saveError: string | null
   clearSaveError: () => void
   // AI : flush debounced project save immediately — call before startRun to avoid stale server state.
-  flushPendingSave: () => Promise<void>
+  flushPendingSave: () => Promise<boolean>
   // AI : run/save 404 unknown project — drop ghost cache and return to picker.
   reportMissingProject: (projectId: string) => void
   patchProject: (patch: Partial<Project>) => void
@@ -449,6 +449,8 @@ export function StoreProvider({
   const deletedProjectIdsRef = useRef(new Set<string>())
   // AI : full payloads — id-only sets cannot restore a create if applyState runs before setState flushes.
   const createdProjectsRef = useRef(new Map<string, Project>())
+  const projectMutatedAtRef = useRef(new Map<string, number>())
+  const projectsRef = useRef<Project[]>([])
 
   // AI : prod GET /api/state lags POST/DELETE (warm-instance + realtime). Never let that snapshot drop local creates or resurrect tombstones.
   const overlayOptimisticProjects = useCallback((projects: Project[]): Project[] => {
@@ -461,25 +463,32 @@ export function StoreProvider({
 
   const clearSaveError = useCallback(() => setSaveError(null), [])
 
-  const persistProject = useCallback(async (id: string, body: string) => {
-    if (mode === StoreMode.Demo) return
+  const persistProject = useCallback(async (id: string, body: string): Promise<boolean> => {
+    if (mode === StoreMode.Demo) return true
     const readOnly = state?.projects.find((p) => p.id === id)?.teamReadOnly
-    if (readOnly) return
-    const result = await apiPut(API_ROUTES.project(id), body)
+    if (readOnly) return true
+    const runPut = () => apiPut(API_ROUTES.project(id), body)
+    let result = await runPut()
+    if (!result.ok && result.status === 429) {
+      const retryMs = 2_000
+      await new Promise((resolve) => setTimeout(resolve, retryMs))
+      result = await runPut()
+    }
     if (!result.ok) {
-      if (result.status === 404) {
+      if (result.status === 404 && !createdProjectsRef.current.has(id)) {
         if (pendingSaveRef.current?.id === id) {
           if (saveTimer.current) clearTimeout(saveTimer.current)
           saveTimer.current = null
           pendingSaveRef.current = null
         }
         evictStaleProject(id, setState, setActiveProjectId, clearSaveError)
-        return
+        return false
       }
       setSaveError(result.error)
-      return
+      return false
     }
     setSaveError(null)
+    return true
   }, [mode, state?.projects, clearSaveError])
 
   const refreshBilling = useCallback(async (opts?: AccountRefreshOpts) => {
@@ -688,14 +697,30 @@ export function StoreProvider({
   )
 
   const applyState = useCallback(
-    (data: ServerState, projectId: string) => {
+    (data: ServerState, projectId: string, fetchedAt = 0) => {
       setLoadError(null)
+      const pendingSaveId = pendingSaveRef.current?.id
+      reseedCreatedFromLocal(
+        createdProjectsRef.current,
+        projectsRef.current,
+        data.projects,
+        deletedProjectIdsRef.current,
+      )
       confirmCreatedProjects(data.projects)
       const visibleProjects = overlayOptimisticProjects(data.projects)
       setState((prev) => {
-        // AI : keep in-flight lastOpenedAt when refetch races the open-stamp PUT
         const mergedProjects = visibleProjects.map((p) => {
           const local = prev?.projects.find((x) => x.id === p.id)
+          if (
+            shouldKeepLocalProject(local, {
+              mutatedAt: projectMutatedAtRef.current.get(p.id) ?? 0,
+              fetchedAt,
+              pendingSave: pendingSaveId === p.id,
+            })
+          ) {
+            const lastOpenedAt = Math.max(local.lastOpenedAt ?? 0, p.lastOpenedAt ?? 0)
+            return lastOpenedAt === local.lastOpenedAt ? local : { ...local, lastOpenedAt }
+          }
           if (!local?.lastOpenedAt) return p
           if (!p.lastOpenedAt || local.lastOpenedAt > p.lastOpenedAt) return { ...p, lastOpenedAt: local.lastOpenedAt }
           return p
@@ -857,7 +882,8 @@ export function StoreProvider({
   const refresh = useCallback(async (projectId = activeProjectId) => {
     refreshBilling().catch(console.error)
     refreshEarnings().catch(console.error)
-    applyState(await fetchState(projectId), projectId)
+    const fetchedAt = Date.now()
+    applyState(await fetchState(projectId), projectId, fetchedAt)
   }, [activeProjectId, applyState, fetchState, refreshBilling, refreshEarnings])
 
   // AI : Realtime on shared-pointer tables — pull /api/state so warm-cache lag cannot 404 runs.
@@ -919,27 +945,38 @@ export function StoreProvider({
     }
 
     let alive = true
+    const fetchedAt = Date.now()
 
     void loadProjectState(
       scopedProjectId,
       (chunk) => {
         if (!alive || loadGen !== stateLoadGenRef.current) return
-        setState((prev) => ({
-          projects: chunk.projects
-            ? overlayOptimisticProjects(chunk.projects)
-            : (prev?.projects ?? []),
-          docs: chunk.docs ? dedupeDocsNewestByName(chunk.docs) : (prev?.docs ?? []),
-          runs: chunk.runs ?? prev?.runs ?? [],
-          allRuns: prev?.allRuns ?? [],
-          modelOptions: chunk.modelOptions ?? prev?.modelOptions ?? [],
-        }))
+        setState((prev) => {
+          if (chunk.projects && prev) {
+            reseedCreatedFromLocal(
+              createdProjectsRef.current,
+              prev.projects,
+              chunk.projects,
+              deletedProjectIdsRef.current,
+            )
+          }
+          return {
+            projects: chunk.projects
+              ? overlayOptimisticProjects(chunk.projects)
+              : (prev?.projects ?? []),
+            docs: chunk.docs ? dedupeDocsNewestByName(chunk.docs) : (prev?.docs ?? []),
+            runs: chunk.runs ?? prev?.runs ?? [],
+            allRuns: prev?.allRuns ?? [],
+            modelOptions: chunk.modelOptions ?? prev?.modelOptions ?? [],
+          }
+        })
         if (chunk.projects) setStateSyncing(false)
         if (chunk.runs) setProjectLoading(false)
       },
     )
       .then((data) => {
         if (!alive || loadGen !== stateLoadGenRef.current) return
-        applyState(data, scopedProjectId)
+        applyState(data, scopedProjectId, fetchedAt)
         if (!prefetchedAllProjectsRef.current && data.projects.length) {
           prefetchedAllProjectsRef.current = true
           const otherIds = data.projects.map((p) => p.id).filter((id) => id !== scopedProjectId)
@@ -1016,6 +1053,7 @@ export function StoreProvider({
   }, [refreshBilling])
 
   const projects = state?.projects ?? []
+  projectsRef.current = projects
   const migratedProjects = useMemo(
     () => projects.map((p) => migrateProjectModules(p)),
     [projects],
@@ -1046,6 +1084,7 @@ export function StoreProvider({
         let next: Project | undefined
         const nextProjects = prev.projects.map((p) => (p.id === id ? (next = { ...p, ...patch }) : p))
         if (next) {
+          projectMutatedAtRef.current.set(id, Date.now())
           if (saveTimer.current) clearTimeout(saveTimer.current)
           const body = serializeProjectPutBody(next)
           pendingSaveRef.current = { id, body }
@@ -1060,15 +1099,23 @@ export function StoreProvider({
     [activeProjectId, persistProject],
   )
 
-  // AI : cancel the debounce and persist immediately — call before startRun to avoid stale server state.
-  const flushPendingSave = useCallback(async () => {
+  // AI : cancel the debounce and persist immediately — call before startRun / Approve to avoid stale server state.
+  const flushPendingSave = useCallback(async (): Promise<boolean> => {
     const pending = pendingSaveRef.current
-    if (!pending) return
-    if (saveTimer.current) clearTimeout(saveTimer.current)
-    saveTimer.current = null
-    pendingSaveRef.current = null
-    await persistProject(pending.id, pending.body)
-  }, [persistProject])
+    if (pending) {
+      if (saveTimer.current) clearTimeout(saveTimer.current)
+      saveTimer.current = null
+      pendingSaveRef.current = null
+      const ok = await persistProject(pending.id, pending.body)
+      if (!ok) pendingSaveRef.current = pending
+      return ok
+    }
+    const id = activeProjectId
+    const current = state?.projects.find((p) => p.id === id)
+    if (!current || mode === StoreMode.Demo) return true
+    if (current.teamReadOnly) return true
+    return persistProject(id, serializeProjectPutBody(current))
+  }, [activeProjectId, mode, persistProject, state?.projects])
 
   // AI : inference/save hit unknown project — same eviction path as runs prefetch 404.
   const reportMissingProject = useCallback(
@@ -1087,12 +1134,14 @@ export function StoreProvider({
     const stamped = { ...fresh, lastOpenedAt: Date.now() }
     createdProjectsRef.current.set(fresh.id, stamped)
     deletedProjectIdsRef.current.delete(fresh.id)
+    projectMutatedAtRef.current.set(fresh.id, Date.now())
     seedProjectInStateSnapshot(stamped)
     upsertProjectInAccountCache(stamped)
     writeProjectRunsCache(fresh.id, [])
     setState((prev) => {
       if (!prev) return prev
-      return { ...prev, projects: overlayOptimisticProjects(prev.projects) }
+      const without = prev.projects.filter((p) => p.id !== fresh.id)
+      return { ...prev, projects: overlayOptimisticProjects([stamped, ...without]) }
     })
     return stamped
   }, [overlayOptimisticProjects])
@@ -1746,9 +1795,20 @@ export function StoreProvider({
       className="fixed inset-x-0 top-0 z-50 flex items-center justify-between gap-3 border-b border-destructive/30 bg-destructive/10 px-4 py-2 font-mono text-[11px] text-destructive"
     >
       <span>Save failed: {saveError}</span>
-      <button type="button" onClick={clearSaveError} className="shrink-0 underline">
-        dismiss
-      </button>
+      <span className="flex shrink-0 items-center gap-3">
+        <button
+          type="button"
+          onClick={() => {
+            void flushPendingSave()
+          }}
+          className="underline"
+        >
+          retry
+        </button>
+        <button type="button" onClick={clearSaveError} className="underline">
+          dismiss
+        </button>
+      </span>
     </div>
   ) : null
 

@@ -172,6 +172,7 @@
     { "id": "s_cheap", "kind": "cheap-agent", "name": "Agent (Cheap Model)", "enabled": true, "model": "deepseek-v4", "accuracy": 82, "latencyMs": 18000, "costCents": 12, "passRate": 89 }
   ],
   "docs": [
-    { "name": "credit_agreement.md", "type": "text", "label": "inference", "file": "contract_diligence_fork/credit_agreement.md" }
+    { "name": "credit_agreement.md", "type": "text", "label": "inference", "file": "contract_diligence_fork/credit_agreement.md" },
+    { "name": "contract_diligence_fork_testing.json", "type": "json", "label": "training", "file": "contract_diligence_fork/contract_diligence_fork_testing.json" }
   ]
 }

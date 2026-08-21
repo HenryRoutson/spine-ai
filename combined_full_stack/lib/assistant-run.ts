@@ -181,7 +181,7 @@ export async function runAssistantTest(args: {
   docs: DocRef[]
   model: ModelId
   testDocName?: string
-  flushPendingSave?: () => Promise<void>
+  flushPendingSave?: () => Promise<boolean | void>
 }): Promise<AssistantTestRunResult> {
   const doc = pickProjectTestingDoc(args.docs, args.project, args.testDocName)
   if (!doc) {

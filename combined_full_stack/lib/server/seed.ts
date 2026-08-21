@@ -13,7 +13,6 @@ import {
   DocLabel,
   FIELD_TYPES,
   INPUT_TYPES,
-  MODULE_META,
   STRATEGY_META,
   InputType,
   ModuleKind,
@@ -38,15 +37,29 @@ export const SEEDS_DIR = resolve(process.cwd(), "seeds");
 const enumOf = <T extends string>(values: readonly T[]) => z.enum(values as [T, ...T[]]);
 const FieldTypeSchema = enumOf(FIELD_TYPES);
 const InputTypeSchema = enumOf(INPUT_TYPES.map((t) => t.value) as InputType[]);
+// AI : string literals — do not derive from Object.keys(MODULE_META); tsx can drop enum keys (Fork).
 // AI : Convert to text is auto-inserted from inputType — never authored in seeds/*.json.
-// AI : always include "fork" as a string — tsx can drop ModuleKind.Fork from Object.keys(MODULE_META).
 const AUTHORED_MODULE_KINDS = [
-  ...new Set([
-    ...(Object.keys(MODULE_META) as string[]).filter((k) => k !== "doc-to-text"),
-    "fork",
-  ]),
-] as [ModuleKind, ...ModuleKind[]];
-const ModuleKindSchema = enumOf(AUTHORED_MODULE_KINDS);
+  "input",
+  "llm",
+  "llm-batch",
+  "example-select",
+  "quote",
+  "transform",
+  "assemble",
+  "parallel",
+  "fork",
+  "combine",
+  "chunk",
+  "merge",
+  "custom-code",
+  "assert",
+  "human-review",
+  "webhook",
+  "chatbot",
+  "output",
+] as const;
+const ModuleKindSchema = z.enum(AUTHORED_MODULE_KINDS);
 const StrategyKindSchema = enumOf(Object.keys(STRATEGY_META) as StrategyKind[]);
 
 const fieldExampleListSchema = z.array(z.string().max(4_000)).max(32).optional();

@@ -49,7 +49,7 @@ type UseInferenceRunProgressArgs = {
   updateRunNotes: (runId: PipelineRun["id"], notes: string | undefined) => Promise<void>
   refreshBilling: (opts?: AccountRefreshOpts) => Promise<void>
   resetInputs?: () => void
-  flushPendingSave?: () => Promise<void>
+  flushPendingSave?: () => Promise<boolean | void>
   onProjectNotFound?: (projectId: ProjectId) => void
   projectLlmProviders?: import("@/lib/custom-llm-providers").CustomLlmProviderDef[]
 }

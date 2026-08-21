@@ -31,7 +31,7 @@ export async function POST(req: NextRequest) {
   if (modelOrErr instanceof NextResponse) return modelOrErr;
   const model = modelOrErr;
 
-  const projectOrErr = requireProjectOr404(store, projectId as ProjectId, apiLog);
+  const projectOrErr = await requireProjectOr404(store, projectId as ProjectId, apiLog);
   if (projectOrErr instanceof NextResponse) return projectOrErr;
   const project = projectOrErr;
 

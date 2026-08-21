@@ -6,7 +6,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { apiError, requireAuthStore } from "@/lib/server/api_context";
 import { HTTP, MESSAGE_REQUIRED, unknownProject } from "@/lib/server/api-errors";
 import { docContentBodySchema, parseRequestJson } from "@/lib/server/api_schemas";
-import { linkDocToProject, deleteDocForProject } from "@/lib/server/store";
+import { linkDocToProject, deleteDocForProject, resolveStoreProject } from "@/lib/server/store";
 import { logger } from "@/lib/server/server_logger";
 import { DocLabel, InputType } from "@/lib/server/types";
 import type { DocId, ProjectId } from "@/lib/server/types";
@@ -100,7 +100,7 @@ export async function POST(req: NextRequest) {
   const validated = validateDocContent(parsed);
   if (validated instanceof NextResponse) return validated;
 
-  if (validated.projectId && !store.project(validated.projectId)) {
+  if (validated.projectId && !(await resolveStoreProject(store, validated.projectId))) {
     return apiError(unknownProject(validated.projectId), HTTP.NOT_FOUND);
   }
 

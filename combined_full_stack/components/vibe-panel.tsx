@@ -30,7 +30,7 @@ const Logging = dynamic(() => import("@/components/logging").then((m) => ({ defa
 function renderObservePanel(tab: VibeObserveTab) {
   switch (tab) {
     case AppWindowId.Inference:
-      return <Inference />
+      return <Inference simple />
     case AppWindowId.Logging:
       return <Logging listDensity="compact" simple />
   }

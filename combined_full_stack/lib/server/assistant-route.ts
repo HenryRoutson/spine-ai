@@ -34,7 +34,7 @@ import { ensureModelOptionsFresh } from "./openrouter_models"
 import type { ProjectProposal } from "@/lib/project-assistant-types"
 import { mergePendingProposals, overlayProposalOnProject, mergeDocsByName } from "@/lib/project-proposal-overlay"
 import { DEFAULT_MODEL, type ModelId, type Project, ProjectId } from "./types"
-import type { Store } from "./store"
+import { resolveStoreProject, type Store } from "./store"
 
 const routeLog = logger("assistant-route")
 
@@ -115,12 +115,13 @@ export function parseAssistantRequestModel(model: ModelId | undefined): ModelId 
   }
 }
 
-export function requireProjectOr404(
+export async function requireProjectOr404(
   store: Store,
   projectId: ProjectId,
   log: { warn: (msg: string, ctx?: Record<string, unknown>) => void },
-): Project | NextResponse {
-  const project = store.project(projectId)
+): Promise<Project | NextResponse> {
+  // AI : warm lambdas miss projects created on another instance — resync before 404.
+  const project = await resolveStoreProject(store, projectId)
   if (!project) {
     log.warn(`unknown project`, { projectId })
     return apiError(unknownProject(projectId), HTTP.NOT_FOUND, "unknown_project", {

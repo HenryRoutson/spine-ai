@@ -18,6 +18,7 @@ import {
   TriangleAlert,
 } from "lucide-react"
 import { useOptionalStore } from "@/lib/store"
+import { formatSizeKb } from "@/lib/doc-size"
 import { useDocViewer } from "@/lib/doc-viewer"
 import {
   passableDocsForInputModule,
@@ -273,7 +274,7 @@ export function InferenceInputPickerPopup({
                               <Hash className="h-2.5 w-2.5" />
                               {doc.id}
                             </span>
-                            <span>{doc.sizeKb} KB</span>
+                            <span>{formatSizeKb(doc.sizeKb)}</span>
                             <span>{timeAgo(doc.uploadedAt)}</span>
                           </p>
                         </div>

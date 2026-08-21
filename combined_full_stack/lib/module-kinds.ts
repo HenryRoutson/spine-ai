@@ -2,25 +2,26 @@ import { LegacyModuleKind, ModuleKind } from "@/lib/types"
 import type { RunStepKind } from "@/lib/types"
 
 // AI : kinds users can add in the builder / pipeline assistant (quote is auto-managed).
+// AI : string literals — tsx can drop ModuleKind.Fork from the enum re-export.
 export const USER_ADDABLE_MODULE_KINDS = [
-  ModuleKind.Input,
-  ModuleKind.Llm,
-  ModuleKind.LlmBatch,
-  ModuleKind.ExampleSelect,
-  ModuleKind.Transform,
-  ModuleKind.Chunk,
-  ModuleKind.Merge,
-  ModuleKind.Assemble,
-  ModuleKind.Parallel,
-  ModuleKind.Fork,
-  ModuleKind.Combine,
-  ModuleKind.CustomCode,
-  ModuleKind.Assert,
-  ModuleKind.HumanReview,
-  ModuleKind.Webhook,
-  // AI : TODO (n8n-stage-A-ui) — ModuleKind.N8n once kind exists (catalog picker, not generic webhook).
-  ModuleKind.Chatbot,
-  ModuleKind.Output,
+  "input",
+  "llm",
+  "llm-batch",
+  "example-select",
+  "transform",
+  "chunk",
+  "merge",
+  "assemble",
+  "parallel",
+  "fork",
+  "combine",
+  "custom-code",
+  "assert",
+  "human-review",
+  "webhook",
+  // AI : TODO (n8n-stage-A-ui) — "n8n" once kind exists (catalog picker, not generic webhook).
+  "chatbot",
+  "output",
 ] as const satisfies readonly ModuleKind[]
 
 // AI : output/assert/human-review use inStructureId as the spine passthrough contract.

@@ -1,5 +1,5 @@
 "use client"
-// AI : parity ids — logging.errors-only logging.hydrate
+// AI : parity ids — logging.errors-only logging.hydrate logging.simple-view
 
 // AI : TODO (spec) — prompt context-length profiling grid per subcomponent (documents, JSON blocks, system text).
 import { useMemo, useState, useEffect } from "react"
@@ -72,6 +72,7 @@ import { CompareModal } from "@/components/logging/compare-modal"
 import { PopupModal, type PopupPayload } from "@/components/logging/popup-modal"
 import { LlmRetryGridSection } from "@/components/logging/llm-retry-grid"
 import { SimpleLoggingTrace } from "@/components/logging/simple-logging-trace"
+import { SimpleViewToggle, useSimpleStepTrace } from "@/components/simple-view-toggle"
 
 type LoggingListDensity = "full" | "compact"
 
@@ -83,7 +84,7 @@ export function Logging({
   const { runs, billingRuns, docs, modules, models, project, typeAliases, model: globalModel, hydrateRunDetail } = useStore()
   const { activeWindow, focusRunId, focusRunAnchor, clearFocusRun, setSharedRunDocScope } = useAppShell()
   const isVibe = isVibeWindow(activeWindow)
-  const isSimple = simple ?? isVibe
+  const [isSimple, setSimple] = useSimpleStepTrace(simple ?? isVibe)
   const { pipelineEmpty } = computeWorkspaceValidity(modules, models, typeAliases)
   const [query, setQuery] = useState("")
   const [selectedRun, setSelectedRun] = useState<string | null>(null)
@@ -257,7 +258,7 @@ export function Logging({
                   />
                 </label>
               ) : null}
-              {isSimple ? null : (
+              <SimpleViewToggle checked={isSimple} onCheckedChange={setSimple} />
               <label
                 className={cn(
                   "flex cursor-pointer items-center justify-between gap-2 rounded-md border px-2.5 py-1.5 transition-colors",
@@ -275,7 +276,6 @@ export function Logging({
                   data-spine-id="logging.compact-list"
                 />
               </label>
-              )}
             </div>
             <ScrollArea className="min-h-0 flex-1">
               {filtered.length === 0 ? (

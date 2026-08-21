@@ -526,6 +526,15 @@ export const PARITY_ROWS: ParityRow[] = [
     y("session.linkQuotes({ quote, sourceText, docId })"),
   ),
   row(
+    "logging.simple-view",
+    "logging",
+    { label: "Simplified view", file: "components/simple-view-toggle.tsx" },
+    n("no TUI simple view"),
+    na("client pref"),
+    n("no MCP"),
+    host("localStorage simple-step-trace"),
+  ),
+  row(
     "logging.errors-only",
     "logging",
     { label: "Errors only", file: "components/logging.tsx" },

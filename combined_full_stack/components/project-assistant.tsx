@@ -12,6 +12,7 @@ import { JSON_HEADERS } from "@/lib/api-client"
 import { readPipelineAssistantStream } from "@/lib/assistant-stream-read"
 import { assistantRequestFailed } from "@/lib/assistant-chat-types"
 import { useStore } from "@/lib/store"
+import { formatSizeKb, sizeKbFromChars } from "@/lib/doc-size"
 import { DocLabel, ModuleKind, MODULE_META } from "@/lib/types"
 import { AssistantChat, type AssistantChatMessage } from "@/components/assistant-chat"
 import { UiContextChip } from "@/components/ui-context-chip"
@@ -183,6 +184,11 @@ export function ProjectAssistant({ className, chatId }: ProjectAssistantProps) {
       }
     }
 
+    const saved = await flushPendingSave?.()
+    if (saved === false) {
+      throw new Error("Approved changes could not be saved. Retry Approve — the pipeline is still on screen.")
+    }
+
     const actions = proposal.proposedActions ?? []
     if (!actions.length) return
 
@@ -248,7 +254,9 @@ export function ProjectAssistant({ className, chatId }: ProjectAssistantProps) {
             docs,
             model: globalModel,
             testDocName: action.testDocName,
-            flushPendingSave,
+            flushPendingSave: async () => {
+              await flushPendingSave()
+            },
           })
           addRun(result.run)
           await updateRunTest(result.run.id, result.persistedTest).catch(console.error)
@@ -268,6 +276,7 @@ export function ProjectAssistant({ className, chatId }: ProjectAssistantProps) {
     <div className={cn("flex h-full flex-col", className)}>
       <AssistantChat<ProjectProposal>
         key={chatId}
+        chatId={resolvedChatId}
         title="Agent"
         subtitle={
           teammateLabel
@@ -684,7 +693,7 @@ function ProjectProposalPreview({ msg }: { msg: AssistantChatMessage<ProjectProp
                 <FileText className="h-3 w-3 shrink-0 text-muted-foreground" />
                 <span className="truncate text-foreground">{doc.name}</span>
                 <span className="text-muted-foreground">
-                  · {docLabelDisplay(doc.label)} · {Math.round(doc.content.length / 1024)}kb
+                  · {docLabelDisplay(doc.label)} · {formatSizeKb(sizeKbFromChars(doc.content.length))}
                 </span>
               </li>
             ))}

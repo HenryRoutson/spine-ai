@@ -6,6 +6,8 @@ export {
   overlayOptimisticProjects,
   overlayOptimisticRuns,
   confirmCreatedInMap,
+  reseedCreatedFromLocal,
+  shouldKeepLocalProject,
   TEAM_REALTIME_CHANNEL,
   TEAM_REALTIME_DEBOUNCE_MS,
   TEAM_REALTIME_TABLES,

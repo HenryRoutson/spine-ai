@@ -5,6 +5,7 @@ import {
   runMentionLabel,
 } from "@/lib/assistant-observe"
 import { docLabelDisplay } from "@/lib/project-docs"
+import { formatSizeKb } from "@/lib/doc-size"
 import { runHasErrors } from "@/lib/run-error-log"
 import type { DocRef, PipelineModule, PipelineRun, StructureModel, TypeAlias } from "@/lib/types"
 import { MODULE_META, ModuleKind } from "@/lib/types"
@@ -242,7 +243,7 @@ export function buildAssistantMentionOptions(args: {
       id: `doc:${doc.id}`,
       group: "Files",
       label: doc.name,
-      description: `${label} · ${doc.type} · ${doc.sizeKb}KB`,
+      description: `${label} · ${doc.type} · ${formatSizeKb(doc.sizeKb)}`,
       // AI : client preview only — server enrichUiContextRefs replaces with doc bytes.
       ref: uiContextRefFromDoc(doc),
     })

@@ -22,7 +22,7 @@ type UseInferenceRunArgs = {
   addRun: (r: PipelineRun) => void
   updateRunNotes: (runId: PipelineRun["id"], notes: string | undefined) => Promise<void>
   refreshBilling: () => Promise<void>
-  flushPendingSave?: () => Promise<void>
+  flushPendingSave?: () => Promise<boolean | void>
   onProjectNotFound?: (projectId: ProjectId) => void
 }
 

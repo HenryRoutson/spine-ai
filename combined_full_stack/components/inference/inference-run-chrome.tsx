@@ -52,12 +52,14 @@ export function InferenceRunSection({
   title,
   subtitle,
   variant = "current",
+  simple = false,
   children,
   className,
 }: {
   title: string
   subtitle?: string
   variant?: "current" | "last"
+  simple?: boolean
   children: React.ReactNode
   className?: string
 }) {
@@ -75,8 +77,8 @@ export function InferenceRunSection({
       <header className="mb-4 border-b border-border pb-3">
         <h2
           className={cn(
-            "font-mono text-[10px] uppercase tracking-wider",
-            variant === "last" ? "text-primary" : "text-muted-foreground",
+            simple ? "text-sm font-medium" : "font-mono text-[10px] uppercase tracking-wider",
+            variant === "last" ? "text-primary" : simple ? "text-foreground" : "text-muted-foreground",
           )}
         >
           {title}

@@ -52,10 +52,11 @@ import {
   forkContainsNestedFork,
   forkJoinOf,
   forkProductField,
+  isForkKind,
   locatePipelineModule,
   validateForkAssembleJoin,
 } from "@/lib/fork-pipeline";
-import { exampleSelectAcceptsWrapper } from "@/lib/example-select";
+import { exampleSelectAcceptsWrapper, isExampleSelectKind } from "@/lib/example-select";
 import {
   stepEmits,
   stepEmitsList,
@@ -218,7 +219,7 @@ function stepAcceptsSpineType(
     return e != null && e === a;
   }
   // AI : example-select unwraps the sole list[T] field on a combine (or similar) wrapper struct.
-  if (m.kind === ModuleKind.ExampleSelect && exampleSelectAcceptsWrapper(expected, actual, models)) return true;
+  if (isExampleSelectKind(m.kind) && exampleSelectAcceptsWrapper(expected, actual, models)) return true;
   if (!cardinalityMismatch(expected, actual)) return false;
   // AI : custom-code / coded transform steps reshape list↔object at runtime — spine item type still matches.
   if (m.kind === ModuleKind.CustomCode || m.kind === ModuleKind.Chunk || isMergeModuleKind(m.kind) || (m.kind === ModuleKind.Transform && !!m.code?.trim())) return true;
@@ -698,7 +699,7 @@ function computeExampleSelectInvalid(modules: PipelineModule[], models: Structur
   const invalid: InvalidMap = new Map();
   for (let i = 0; i < modules.length; i++) {
     const m = modules[i]!;
-    if (m.kind !== ModuleKind.ExampleSelect) continue;
+    if (!isExampleSelectKind(m.kind)) continue;
     const label = m.exampleContextLabel?.trim();
     if (!label) {
       pushInvalid(invalid, {
@@ -830,7 +831,7 @@ function computeForkInvalid(
 ): InvalidMap {
   const invalid: InvalidMap = new Map();
   for (const m of flattenPipelineModules(modules)) {
-    if (m.kind !== ModuleKind.Fork) continue;
+    if (!isForkKind(m.kind)) continue;
     const branches = forkBranchesOf(m);
     if (branches.length < FORK_MIN_BRANCHES) {
       pushInvalid(invalid, {
@@ -939,7 +940,7 @@ export function computeInvalid(
     mergeInvalid(invalid, computeInputDescriptionInvalid(flat));
   }
   for (const m of flat) {
-    if (m.kind === ModuleKind.Fork) continue;
+    if (isForkKind(m.kind)) continue;
     if (usesPassthroughStructure(m.kind)) {
       if (!m.inStructureId) pushInvalid(invalid, { moduleId: m.id, kind: InvalidKind.NoOutput });
       continue;
@@ -997,7 +998,7 @@ export function computeInvalid(
       continue;
     }
 
-    if (m.kind === ModuleKind.Fork) {
+    if (isForkKind(m.kind)) {
       const upstreamType = (prev && stepSpineOutType(prev)) ?? flowType;
       const expected = stepSpineInType(m) ?? upstreamType;
       if (expected && upstreamType && !stepAcceptsSpineType(m, expected, upstreamType, models, opts?.typeAliases ?? [])) {
@@ -1136,7 +1137,7 @@ export function computeInvalid(
 function assembleStateLabels(modules: PipelineModule[]): Set<string> {
   const labels = new Set<string>();
   for (const m of flattenPipelineModules(modules)) {
-    if (m.kind !== ModuleKind.Assemble && !(m.kind === ModuleKind.Fork && forkJoinOf(m) === "assemble")) continue;
+    if (m.kind !== ModuleKind.Assemble && !(isForkKind(m.kind) && forkJoinOf(m) === "assemble")) continue;
     for (const src of Object.values(m.assembleBindings ?? {})) {
       if (src.kind === "state" && src.label.trim()) labels.add(src.label.trim());
       if (src.kind === "path" && typeof src.from === "object" && src.from.label.trim()) {
@@ -1160,7 +1161,7 @@ function computeUnusedOutputInvalid(
     if (!emitted || m.kind === ModuleKind.Input || usesPassthroughStructure(m.kind)) continue;
     if (laneJoinConsumesLast && i === modules.length - 1) continue;
     // AI : a combine consumes the previous step's output as its newDocument regardless of inStructureId.
-    if (modules[i + 1]?.kind === ModuleKind.Combine || modules[i + 1]?.kind === ModuleKind.Assemble || modules[i + 1]?.kind === ModuleKind.Fork) continue;
+    if (modules[i + 1]?.kind === ModuleKind.Combine || modules[i + 1]?.kind === ModuleKind.Assemble || isForkKind(modules[i + 1]?.kind ?? "")) continue;
     if (assembleLabels.has(m.label.trim())) continue;
     // AI : Link Quotes is a managed follower — assemble binding the LLM still consumes the quote step.
     if (isAutoQuoteStep(m) && i > 0 && assembleLabels.has(modules[i - 1]!.label.trim())) continue;
@@ -1170,7 +1171,7 @@ function computeUnusedOutputInvalid(
       const actual = stepSpineOutType(m);
       // AI : example-select unwraps the sole list[T] field on a combine wrapper struct.
       return (
-        down.kind === ModuleKind.ExampleSelect &&
+        isExampleSelectKind(down.kind) &&
         !!expected &&
         !!actual &&
         exampleSelectAcceptsWrapper(expected, actual, models)

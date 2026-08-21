@@ -6,6 +6,7 @@ import { migrateProjectModules } from "@/lib/quote-steps"
 import { structureIssueMessagesForUi, typesInvalidForUi } from "@/lib/structure-validity-ui"
 import { formatInvalidMapErrors } from "@/lib/validity"
 import type { AppWindowId } from "@/lib/app-shell"
+import { stripSharedModels } from "@/lib/structure"
 import { ModuleKind, type PipelineModule, type Project, type StructureModel, type TypeAlias } from "@/lib/types"
 
 export type WorkspaceValidityIssue = "types" | "pipeline"
@@ -19,11 +20,12 @@ export type WorkspaceValidity = {
 }
 
 // AI : new-project skeleton (Input + Output, no user models) is unfinished — not a validation error.
+// AI : ignore shared builtins (Document, QuoteSpan, …) — migrate/withSharedModels always injects them.
 export function isEmptyStarterPipeline(
   modules: PipelineModule[],
   models: StructureModel[] = [],
 ): boolean {
-  if (models.length > 0) return false
+  if (stripSharedModels(models).length > 0) return false
   return modules.every((m) => m.kind === ModuleKind.Input || m.kind === ModuleKind.Output)
 }
 

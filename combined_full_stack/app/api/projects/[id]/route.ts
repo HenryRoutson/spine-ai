@@ -3,6 +3,7 @@ import { apiError, requireAuthStore, storeAuthError } from "@/lib/server/api_con
 import { parseProjectId, parseRequestJson, projectPatchSchema } from "@/lib/server/api_schemas";
 import { HTTP, unknownProject } from "@/lib/server/api-errors";
 import { logger } from "@/lib/server/server_logger";
+import { resolveStoreProject } from "@/lib/server/store";
 import { sanitizeModuleModels } from "@/lib/server/model_catalog";
 import { mergeStrategyConfigPatch } from "@/lib/server/strategies";
 import { normalizeStructureModels } from "@/lib/server/type_expr";
@@ -77,7 +78,7 @@ export async function PUT(req: NextRequest, ctx: { params: Promise<{ id: string 
     resource: `project:${rawId}`,
     detail: "Invalid or missing project id in URL.",
   });
-  const project = store.project(projectId);
+  const project = await resolveStoreProject(store, projectId);
   if (!project) {
     apiLog.warn(`PUT /api/projects — unknown`, { projectId });
     return apiError(unknownProject(projectId), HTTP.NOT_FOUND, "unknown_project", {
@@ -129,7 +130,7 @@ export async function DELETE(_req: NextRequest, ctx: { params: Promise<{ id: str
     resource: `project:${rawId}`,
     detail: "Invalid or missing project id in URL.",
   });
-  if (!store.project(projectId)) {
+  if (!(await resolveStoreProject(store, projectId))) {
     apiLog.warn(`DELETE /api/projects — unknown`, { projectId });
     return apiError(unknownProject(projectId), HTTP.NOT_FOUND, "unknown_project", {
       resource: `project:${projectId}`,

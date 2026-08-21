@@ -15,7 +15,7 @@ import {
   userProjectsFrom,
   type SeedDocSpec,
 } from "./seed";
-import { computeInvalid, migrateProjectModules, projectWithAuthoredModules, syncManagedPipelineSteps } from "./validity";
+import { migrateProjectModules, projectWithAuthoredModules, syncManagedPipelineSteps } from "./validity";
 import { stripSharedModels } from "./builtin_models";
 import type {
   DocId,
@@ -315,30 +315,12 @@ export function syncProjectFromSeed(existing: Project, seed: Project): Project {
   const seedDocNames = seed.seedDocNames?.length ? seed.seedDocNames : existing.seedDocNames;
 
   if (existing.id !== seed.id) {
-    const baseName = existing.name.replace(/ \d+$/, "");
-    if (baseName === seed.name) {
-      return mergeSeedPipelineIntoProject(existing, seed);
-    }
+    // AI : numbered clones are user-owned. Rewriting models/modules from the template on hydrate
+    // AI : silently destroyed Vibe-approved pipelines (Approve appeared to stick, then reverted).
     let next = existing;
     if (seedDocNames?.length && !existing.seedDocNames?.length)
       next = { ...next, seedDocNames };
-    let modules = next.modules.map((m) => {
-      const sm = seed.modules.find((s) => s.id === m.id);
-      if (!sm || (m.label === sm.label && m.note === sm.note)) return m;
-      return { ...m, label: sm.label, note: sm.note };
-    });
-    modules = syncManagedPipelineSteps(modules, next.models);
-    const invalid = computeInvalid(modules, next.models, { typeAliases: next.typeAliases ?? [] });
-    if (invalid.size > 0) {
-      const seedIds = new Set(seed.modules.map((m) => m.id));
-      const drop = [...invalid.keys()].filter((id) => !seedIds.has(id));
-      if (drop.length) modules = modules.filter((m) => !drop.includes(m.id));
-    }
-    const changed =
-      seedDocNames !== existing.seedDocNames ||
-      modules.length !== next.modules.length ||
-      modules.some((m, i) => m !== next.modules[i]);
-    return changed ? { ...next, modules } : next;
+    return next;
   }
 
   // AI : seed-owned project — reset models + linear step graph from seeds/*.json; keep runtime overrides only.
@@ -445,7 +427,7 @@ export function deleteDocForProject(store: Store, projectId: ProjectId, docId: D
   return store.removeDoc(docId);
 }
 
-// AI : numbered clones stay aligned with seeds/*.json (seedDocNames + module graph).
+// AI : numbered clones keep seedDocNames when missing — never rewrite their pipeline from the template.
 export function syncAllUserProjectsFromSeeds(store: Store): void {
   const seeds = allProjectSeeds();
   for (const p of store.projects()) {

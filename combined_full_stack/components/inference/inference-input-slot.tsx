@@ -46,6 +46,7 @@ export function InferenceInputSlot(props: {
   outModel?: string
   docs: DocRef[]
   issue?: { message: string }
+  simple?: boolean
   // AI : JSON + typed structureOut — exclusive: from file | branch | create empty.
   jsonStruct?: InferenceJsonStructSchema | null
   jsonStructDisabled?: boolean
@@ -58,6 +59,7 @@ export function InferenceInputSlot(props: {
     outModel,
     docs,
     issue,
+    simple = false,
     jsonStruct = null,
     jsonStructDisabled = false,
     onJsonStructAssigned,
@@ -81,6 +83,13 @@ export function InferenceInputSlot(props: {
   const [branchSeed, setBranchSeed] = useState<DocRef | null>(null)
   const clearSlot = storeProps?.onClearSlot
   const openPicker = storeProps?.onOpenPicker
+
+  useEffect(() => {
+    if (simple && mode === "branch") {
+      setBranchSeed(null)
+      setMode("file")
+    }
+  }, [simple, mode])
 
   useEffect(() => {
     // AI : picker assigns into docs — while branching with no seed yet, copy then clear so the form isn't "editing" that file.
@@ -108,6 +117,11 @@ export function InferenceInputSlot(props: {
     setMode("empty")
   }
 
+  const description = moduleInputDescription(inputModule)
+  const jsonModeTabs = simple
+    ? ([["file", "Choose file"], ["empty", "Fill in a form"]] as const)
+    : ([["file", "From file"], ["branch", "Branch off"], ["empty", "Create empty"]] as const)
+
   return (
     <div
       className={cn("rounded-lg border bg-card p-3", issue ? "border-destructive/50" : "border-border")}
@@ -127,6 +141,15 @@ export function InferenceInputSlot(props: {
           .join(" · "),
       })}
     >
+      {simple ? (
+        <div className="mb-2">
+          <p className="text-sm font-medium">{inputModule.label}</p>
+          {description ? (
+            <p className="mt-1 text-xs leading-relaxed text-muted-foreground">{description}</p>
+          ) : null}
+        </div>
+      ) : (
+        <>
       <div className="mb-2 flex flex-wrap items-center gap-1.5">
         <span className="text-xs font-medium">{inputModule.label}</span>
         <Badge variant="outline" className="font-mono text-[9px] capitalize">
@@ -154,27 +177,24 @@ export function InferenceInputSlot(props: {
         )}
       </div>
       <StepInputDescription
-        description={moduleInputDescription(inputModule)}
+        description={description}
         forceVisible={!!issue}
         className="mb-2"
       />
+        </>
+      )}
 
       {jsonModes && (
         <div className="mb-3 flex flex-wrap gap-1 rounded-md border border-border bg-muted/20 p-1">
-          {(
-            [
-              ["file", "From file"],
-              ["branch", "Branch off"],
-              ["empty", "Create empty"],
-            ] as const
-          ).map(([id, label]) => (
+          {jsonModeTabs.map(([id, label]) => (
             <button
               key={id}
               type="button"
               disabled={jsonStructDisabled}
               onClick={() => pickMode(id)}
               className={cn(
-                "rounded px-2.5 py-1 font-mono text-[10px] transition-colors",
+                "rounded px-2.5 py-1 text-[10px] transition-colors",
+                !simple && "font-mono",
                 mode === id
                   ? "bg-background text-foreground shadow-sm"
                   : "text-muted-foreground hover:text-foreground",
@@ -197,7 +217,7 @@ export function InferenceInputSlot(props: {
               onClick={openPicker}
               spineId="inference.assign-input"
             >
-              <FolderOpen className="mr-1.5 h-3.5 w-3.5" /> Choose file to branch from
+              <FolderOpen className="mr-1.5 h-3.5 w-3.5" /> {simple ? "Choose a file to start from" : "Choose file to branch from"}
             </Button>
           )}
           {(mode === "empty" || branchSeed) && (
@@ -233,7 +253,7 @@ export function InferenceInputSlot(props: {
           {docs.map((doc) => (
             <div key={doc.id} className="flex flex-wrap items-center gap-2">
               {upload ? (
-                <span className="inline-flex min-w-0 flex-1 items-center gap-1.5 rounded-md border border-border bg-secondary/30 px-2 py-1.5 font-mono text-[10px]">
+                <span className={cn("inline-flex min-w-0 flex-1 items-center gap-1.5 rounded-md border border-border bg-secondary/30 px-2 py-1.5", simple ? "text-xs" : "font-mono text-[10px]")}>
                   <FileText className="h-3 w-3 shrink-0 text-primary" />
                   <span className="truncate">{doc.name}</span>
                 </span>
@@ -241,7 +261,10 @@ export function InferenceInputSlot(props: {
                 <button
                   type="button"
                   onClick={() => storeProps!.onOpenDoc(doc.id)}
-                  className="inline-flex min-w-0 flex-1 items-center gap-1.5 rounded-md border border-border bg-secondary/30 px-2 py-1.5 font-mono text-[10px] transition-colors hover:border-primary/40 hover:bg-primary/5"
+                  className={cn(
+                    "inline-flex min-w-0 flex-1 items-center gap-1.5 rounded-md border border-border bg-secondary/30 px-2 py-1.5 transition-colors hover:border-primary/40 hover:bg-primary/5",
+                    simple ? "text-xs" : "font-mono text-[10px]",
+                  )}
                   title="Preview selected document"
                 >
                   <Link2 className="h-3 w-3 shrink-0 text-primary" />
@@ -267,7 +290,7 @@ export function InferenceInputSlot(props: {
           ))}
           {multi && !upload && (
             <Button variant="outline" size="sm" className="h-8 bg-transparent" onClick={storeProps!.onOpenPicker}>
-              <FolderOpen className="mr-1.5 h-3.5 w-3.5" /> Add document
+              <FolderOpen className="mr-1.5 h-3.5 w-3.5" /> {simple ? "Add file" : "Add document"}
             </Button>
           )}
           {multi && upload && docs.length < min && (
@@ -288,7 +311,7 @@ export function InferenceInputSlot(props: {
           )}
           {!multi && !upload && (
             <Button variant="outline" size="sm" className="h-8 bg-transparent" onClick={storeProps!.onOpenPicker}>
-              <FolderOpen className="mr-1.5 h-3.5 w-3.5" /> Change
+              <FolderOpen className="mr-1.5 h-3.5 w-3.5" /> {simple ? "Change file" : "Change"}
             </Button>
           )}
         </div>
@@ -305,11 +328,11 @@ export function InferenceInputSlot(props: {
           ) : (
             <Upload className="mr-1.5 h-3.5 w-3.5" />
           )}
-          {defaultFilename ? "Upload to replace default" : "Upload file"}
+          {defaultFilename ? (simple ? "Upload a different file" : "Upload to replace default") : "Upload file"}
         </Button>
       ) : (
         <Button variant="outline" size="sm" className="w-full bg-transparent" onClick={storeProps!.onOpenPicker}>
-          <FolderOpen className="mr-1.5 h-3.5 w-3.5" /> Choose from store
+          <FolderOpen className="mr-1.5 h-3.5 w-3.5" /> {simple ? "Choose file" : "Choose from store"}
         </Button>
       )}
       {upload && (
@@ -326,7 +349,7 @@ export function InferenceInputSlot(props: {
         />
       )}
       {issue && (
-        <p className="mt-2 font-mono text-[10px] text-destructive">{issue.message}</p>
+        <p className={cn("mt-2 text-destructive", simple ? "text-sm" : "font-mono text-[10px]")}>{issue.message}</p>
       )}
     </div>
   )

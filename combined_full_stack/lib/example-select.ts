@@ -1,4 +1,4 @@
-import { ModuleKind, type PipelineModule, type StructureModel } from "@/lib/types"
+import type { PipelineModule, StructureModel } from "@/lib/types"
 import { fieldToTypeExpr, typeExprRefModelId, type TypeExpr } from "@/lib/server/type_expr"
 import { examplePromptColumns, projectExampleForPrompt } from "@/lib/sql-schema"
 
@@ -24,7 +24,7 @@ POSSIBLE USEFUL EXAMPLE:
 export const DEFAULT_EXAMPLE_REASON_FIELD = "selection_reason"
 
 export function isExampleSelectKind(kind: string): boolean {
-  return kind === ModuleKind.ExampleSelect
+  return kind === "example-select"
 }
 
 export function exampleReasonField(m: PipelineModule): string {

@@ -87,6 +87,8 @@ export function ProjectPickerPage() {
     setBusy("blank")
     try {
       await addProject({ open: false })
+    } catch {
+      // AI : addProject already sets saveError — keep the spinner from hanging.
     } finally {
       setBusy(null)
     }
@@ -96,6 +98,8 @@ export function ProjectPickerPage() {
     setBusy(templateId)
     try {
       await cloneFromTemplate(templateId, { open: false })
+    } catch {
+      /* saveError banner */
     } finally {
       setBusy(null)
     }
@@ -105,6 +109,8 @@ export function ProjectPickerPage() {
     setBusy(`clone-${id}`)
     try {
       await cloneProject(id, { open: false })
+    } catch {
+      /* saveError banner */
     } finally {
       setBusy(null)
     }

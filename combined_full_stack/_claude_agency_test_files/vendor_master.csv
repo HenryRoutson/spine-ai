@@ -1,0 +1,4 @@
+vendor_name,vendor_id,tax_id,payment_terms,default_currency,risk_tier
+Acme Robotics Ltd,V-001,US-88-1234567,NET30,USD,low
+Blue Ocean Logistics,V-002,US-91-7654321,NET30,USD,medium
+Nimbus Cloud Services,V-003,US-45-1122334,NET15,USD,low

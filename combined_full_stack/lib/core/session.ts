@@ -26,6 +26,7 @@ import {
   attachRealtimePort,
   overlayOptimisticProjects,
   overlayOptimisticRuns,
+  reseedCreatedFromLocal,
   type RealtimePort,
   type TeamRealtimeHandlers,
 } from "@/lib/core/realtime"
@@ -492,6 +493,7 @@ export class SpineSession {
 
   ingestRemoteProjects(remote: Project[]): void {
     const created = new Map(this.snap.pendingCreates.map((p) => [p.id, p] as const))
+    reseedCreatedFromLocal(created, this.snap.projects, remote, this.snap.deletedProjectIds)
     for (const id of [...created.keys()]) {
       if (remote.some((p) => p.id === id)) created.delete(id)
     }

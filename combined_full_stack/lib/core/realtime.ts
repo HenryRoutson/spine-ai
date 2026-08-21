@@ -61,6 +61,30 @@ export function confirmCreatedInMap(created: Map<string, Project>, serverProject
   }
 }
 
+// AI : a stale GET /api/state that started before POST /api/projects can arrive after we already
+// AI : confirmed the create from a newer snapshot — put the local row back so overlay keeps it.
+export function reseedCreatedFromLocal(
+  created: Map<string, Project>,
+  local: readonly Project[],
+  remote: readonly Project[],
+  deletedIds: ReadonlySet<string> | readonly string[],
+): void {
+  const tombstones = deletedIds instanceof Set ? deletedIds : new Set(deletedIds)
+  const remoteIds = new Set(remote.map((p) => p.id))
+  for (const p of local) {
+    if (!remoteIds.has(p.id) && !tombstones.has(p.id)) created.set(p.id, p)
+  }
+}
+
+export function shouldKeepLocalProject(
+  local: Project | undefined,
+  opts: { mutatedAt: number; fetchedAt: number; pendingSave: boolean },
+): local is Project {
+  if (!local) return false
+  if (opts.pendingSave) return true
+  return opts.mutatedAt > opts.fetchedAt
+}
+
 export function overlayOptimisticRuns(
   remote: PipelineRun[],
   deletedRunIds: ReadonlySet<string> | readonly string[] = [],

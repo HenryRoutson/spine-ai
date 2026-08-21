@@ -174,6 +174,7 @@
     { "id": "s_cheap", "kind": "cheap-agent", "name": "Agent (Cheap Model)", "enabled": true, "model": "deepseek-v4", "accuracy": 82, "latencyMs": 18000, "costCents": 12, "passRate": 89 }
   ],
   "docs": [
-    { "name": "invoice_8841.md", "type": "text", "label": "inference", "file": "invoice_triage_fork/invoice_8841.md" }
+    { "name": "invoice_8841.md", "type": "text", "label": "inference", "file": "invoice_triage_fork/invoice_8841.md" },
+    { "name": "invoice_triage_fork_testing.json", "type": "json", "label": "training", "file": "invoice_triage_fork/invoice_triage_fork_testing.json" }
   ]
 }

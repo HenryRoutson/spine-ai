@@ -1,8 +1,10 @@
 "use client"
 
+import { Maximize2 } from "lucide-react"
 import { JsonStructureMatches } from "@/components/json-structure-matches"
 import { JsonViewerEmbed } from "@/components/json-viewer"
 import { DataDownloadMenu } from "@/components/data-download-menu"
+import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 import type { JsonViewerHumanViewId } from "@/lib/json-viewer"
 import type { DocRef, StructureModel } from "@/lib/types"
@@ -29,16 +31,28 @@ export function JsonPreviewPanel({
   const view = excelOnly ? "table" : defaultView
   return (
     <div className={cn("flex min-h-0 flex-1 flex-col", className)}>
-      <div className={cn("flex items-start gap-3 border-b border-border bg-secondary/20 px-4 py-2.5", excelOnly ? "justify-end" : "justify-between")}>
+      <div className={cn("flex items-start gap-2 border-b border-border bg-secondary/20 px-4 py-2.5", excelOnly ? "justify-end" : "justify-between")}>
         {excelOnly ? null : (
           <JsonStructureMatches json={json} models={models} doc={doc} bare className="min-w-0 flex-1" />
         )}
+        {excelOnly && onFullscreen ? (
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="h-7 gap-1.5 text-[10px]"
+            onClick={onFullscreen}
+          >
+            <Maximize2 className="h-3.5 w-3.5" />
+            Preview
+          </Button>
+        ) : null}
         <DataDownloadMenu
           content={json}
           models={models}
           baseNameOverride={downloadBaseName}
           formats={excelOnly ? ["xlsx"] : undefined}
-          className="ml-auto shrink-0"
+          className="shrink-0"
         />
       </div>
       <JsonViewerEmbed

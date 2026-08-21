@@ -123,6 +123,8 @@ type AssistantChatProps<TProposal> = {
   showAvatars?: boolean
   /** AI : Vibe hides Agent title / stats — Copy lives on the dock header */
   showHeaderMeta?: boolean
+  /** AI : per-agent draft in sessionStorage — isolate tabs */
+  chatId?: string
 }
 
 export function AssistantChat<TProposal>({
@@ -156,6 +158,7 @@ export function AssistantChat<TProposal>({
   readOnlyHint,
   showAvatars = true,
   showHeaderMeta = true,
+  chatId,
 }: AssistantChatProps<TProposal>) {
   const [internalMessages, setInternalMessages] = useState<AssistantChatMessage<TProposal>[]>([
     { id: uid(), role: "assistant", content: initialMessage },
@@ -184,6 +187,35 @@ export function AssistantChat<TProposal>({
   const quoteRootRef = useRef<HTMLDivElement>(null)
 
   const pending = [...messages].reverse().find((m) => m.proposal && m.status === "pending")
+  const draftStorageKey = `spine:vibe-draft:${chatId ?? "default"}`
+
+  useEffect(() => {
+    try {
+      const saved = sessionStorage.getItem(draftStorageKey)
+      if (saved) setInput(saved)
+    } catch {
+      /* quota / private mode */
+    }
+    // AI : restore per chat — don't keep a draft from another agent tab.
+  }, [draftStorageKey])
+
+  useEffect(() => {
+    try {
+      if (input.trim()) sessionStorage.setItem(draftStorageKey, input)
+      else if (!loading) sessionStorage.removeItem(draftStorageKey)
+    } catch {
+      /* quota / private mode */
+    }
+  }, [draftStorageKey, input, loading])
+
+  useEffect(() => {
+    if (!loading) return
+    const t = setTimeout(() => {
+      setLoading(false)
+      setError("That request stalled. Your draft is still in the box — try Send again.")
+    }, 150_000)
+    return () => clearTimeout(t)
+  }, [loading])
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" })
@@ -505,7 +537,8 @@ export function AssistantChat<TProposal>({
         onPastesChange={setPastes}
         onSend={() => void send(input, pastes)}
         placeholder={readOnly ? (readOnlyHint ?? "View only — this is a teammate's chat") : placeholder}
-        disabled={loading || readOnly}
+        disabled={readOnly}
+        sendBusy={loading}
         attachments={readOnly ? undefined : composerAttachments}
         canSend={
           !readOnly && (Boolean(input.trim()) || pastes.length > 0 || canSendWithoutText)

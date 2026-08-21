@@ -1,0 +1,6 @@
+invoice_id,vendor,invoice_date,due_date,amount,currency,po_number,line_items,status
+INV-1001,Acme Robotics Ltd,2026-06-01,2026-06-30,15420.50,USD,PO-88213,"3x Servo Arm Unit ($4200 ea), Freight ($1820.50)",unpaid
+INV-1002,Blue Ocean Logistics,2026-06-03,2026-07-03,2875.00,USD,PO-88214,"Freight consolidation services",paid
+INV-1003,Acme Robotics Ltd,2026-06-10,2026-07-10,980.25,USD,,"Spare parts - gripper fingers x10",unpaid
+INV-1004,Nimbus Cloud Services,2026-06-12,2026-06-27,4400.00,USD,PO-88220,"Compute credits - June",overdue
+INV-1005,Blue Ocean Logistics,2026-06-15,2026-07-15,19999.99,USD,PO-88221,"Ocean freight - container 40ft x2",unpaid
