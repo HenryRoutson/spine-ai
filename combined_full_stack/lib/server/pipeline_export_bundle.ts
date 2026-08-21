@@ -33,5 +33,6 @@ export function generatePipelineExportBundle(project: Project): PipelineSetupFil
     ...connectorFiles,
     ...generatePipelineDocumentFiles(project),
     ...exportRuntimeLibraryFiles(),
+    // AI : TODO (media-view-C-export) — visualizers/*.html from Project.visualizers (not documents/).
   ];
 }

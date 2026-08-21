@@ -80,6 +80,7 @@ export function InputModuleFields({
   const jsonNativeTypes = INPUT_TYPES.filter((t) => isJsonNativeInputType(t.value))
   const plainTextTypes = INPUT_TYPES.filter((t) => isPlainTextInputType(t.value))
   const convertTypes = INPUT_TYPES.filter((t) => isDocToTextInputType(t.value))
+  // AI : TODO (media-view-A-upload) — fourth group: Audio / Video / Model3d (blob in, not convert-to-text / json-native).
 
   return (
     <>

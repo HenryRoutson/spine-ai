@@ -63,6 +63,7 @@ export type TypeExpr =
   | { kind: typeof TypeExprKind.List; item: TypeExpr }
   | { kind: typeof TypeExprKind.Ref; modelId: StructureModelId; args?: TypeExpr[] }
   | { kind: typeof TypeExprKind.File; inputTypes: InputType[] }
+  // AI : TODO (media-view-A-types) — file(audio|video|model3d) once those InputTypes exist. Not new TypeExpr kinds.
   | { kind: typeof TypeExprKind.Optional; inner: TypeExpr }
   | { kind: typeof TypeExprKind.Set; item: TypeExpr }
   | { kind: typeof TypeExprKind.Map; key: TypeExpr; value: TypeExpr }
@@ -89,6 +90,7 @@ export const QuoteSchema = z.object({
   end: z.number().int(),
 });
 // AI : QuoteSpan is REFERENCES document(id) plus byte range, not a special TypeExpr forever.
+// AI : TODO (media-view-E-timequote) — optional t_start / t_end (seconds) for audio; click transcript seeks. Do not clone Quote.
 
 const TextQuoteSchema = z.object({ text: z.string(), quote: QuoteSchema });
 const DocumentSchema = z.object({ content: z.string(), filename: z.string() });

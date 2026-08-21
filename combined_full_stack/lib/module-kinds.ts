@@ -20,6 +20,7 @@ export const USER_ADDABLE_MODULE_KINDS = [
   "human-review",
   "webhook",
   // AI : TODO (n8n-stage-A-ui) — "n8n" once kind exists (catalog picker, not generic webhook).
+  // AI : TODO (media-view-D-job) — "remote-job" once kind exists (poll binary APIs, not webhook).
   "chatbot",
   "output",
 ] as const satisfies readonly ModuleKind[]

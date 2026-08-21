@@ -34,6 +34,7 @@ export const JSON_NATIVE_INPUT_TYPES: readonly InputType[] = [InputType.Excel, I
 export const PLAIN_TEXT_INPUT_TYPES: readonly InputType[] = [InputType.Text, InputType.Markdown, InputType.Latex]
 // AI : binary / markup that needs a locked convert-to-text step to instantiate Document.content.
 export const DOC_TO_TEXT_INPUT_TYPES: readonly InputType[] = [InputType.Pdf, InputType.Word, InputType.Image, InputType.Web]
+// AI : TODO (media-view-D-stt) — Audio (and maybe Video) need audio-to-text, not vision OCR. Do not dump into DOC_TO_TEXT.
 
 export function isJsonNativeInputType(type: InputType): boolean {
   return JSON_NATIVE_INPUT_TYPES.includes(type)

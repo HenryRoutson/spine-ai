@@ -293,6 +293,7 @@ const pipelineModulePatchSchema = z
     // AI : TODO (n8n-stage-A-api) — allowlist n8nNodeType, n8nNodeVersion, n8nParameters (record),
     // AI :   n8nCredentialEnv, n8nBaseUrlEnv, n8nApiKeyEnv, n8nTimeoutMs, n8nResponseMode, n8nResponsePath
     // AI :   (see lib/server/n8n-roadmap.ts).
+    // AI : TODO (media-view-B-api) — view: ViewBinding on modules. TODO (media-view-D-job) — remoteJob fields.
     chatbotMode: z.enum(["single", "until-exit"]).optional(),
     maxTurns: z.number().int().min(1).max(200).optional(),
     useOcr: z.boolean().optional(),
@@ -435,6 +436,7 @@ export const projectPatchSchema = z
     llmProviders: z.array(jsonSizeBounded(100_000)).max(20).optional(),
     documentation: z.string().max(MAX_ASSISTANT_MESSAGE_CHARS).optional(),
     langfuseExport: z.boolean().optional(),
+    // AI : TODO (media-view-C-store) — visualizers[] on project patch (html + inType); not a document upload.
   })
   .strict();
 

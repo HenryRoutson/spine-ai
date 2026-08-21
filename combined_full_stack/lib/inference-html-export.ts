@@ -19,10 +19,12 @@ import {
 import type { PipelineRun } from "@/lib/types"
 
 // AI : shareable HTML is a clone of the on-screen run pane (styles + code + JSON viewers).
+// AI : TODO (media-view-C-export) — snapshot spine-view iframes (/viewers/*.html + /visualizers/:id.html) like json-viewer.
 
 function isJsonViewerIframe(iframe: HTMLIFrameElement): boolean {
   const src = iframe.getAttribute("src") ?? iframe.src ?? ""
   return src.includes("json-viewer.html")
+  // AI : TODO (media-view-C-export) — also match /viewers/ and /visualizers/ embed iframes.
 }
 
 function readJsonViewerExport(iframe: HTMLIFrameElement): JsonViewerExportState | null {

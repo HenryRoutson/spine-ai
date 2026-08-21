@@ -58,6 +58,8 @@ export function buildModuleKindsPromptBlock(): string {
 
 // AI : TODO (n8n-stage-G-export) — document n8n step for assistant: pick n8nNodeType from catalog,
 // AI :   fill n8nParameters for resource/operation; never invent node type strings (see n8n-roadmap.ts).
+// AI : TODO (media-view-C-assistant) — “create visualizer for this model” writes HTML + defaultView; not a React component.
+// AI : TODO (media-view-D-higgsfield) — RemoteJob Higgsfield/TTS seeds; spine is VideoClip/AudioClip { doc_id }.
 
 // AI : chatbot — structureIn must be ChatbotPrompt; structureOut ChatbotResult; set chatbotMode; no module.prompt.
 
@@ -66,6 +68,8 @@ export function buildFieldTypesPromptBlock(): string {
 }
 
 export function buildInputTypesPromptBlock(): string {
+  // AI : TODO (media-view-B-assistant) — document audio/video/model3d inputTypes; view bindings on output steps;
+  // AI :   AudioClip/VideoClip envelopes; do not invent TypeExpr kinds. Visualizer HTML via defaultView, not custom-code.
   return `${INPUT_TYPES.map((t) => `- ${t.value}: ${t.label}`).join("\n")}
 JSON-native (direct parse in input when ONLY these types are selected): excel, json
 Plain text (already instantiated Document.content; LLM parse only when structureOut is not Document): text, markdown, latex

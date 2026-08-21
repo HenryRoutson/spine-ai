@@ -21,6 +21,7 @@ function precedingInputDocIds(m: PipelineModule, ctx: RunCtx): DocId[] {
 }
 
 // AI : instantiate Document.content from store originals — never put encoded bytes on the spine.
+// AI : TODO (media-view-D-stt) — audio-to-text (Whisper) fills content = transcript; optional word timings for seek.
 export async function execDocToTextStep(m: PipelineModule, ctx: RunCtx, log: RunLogger): Promise<ExecResult> {
   const { store } = ctx;
   const incoming = ctx.prevModuleId ? ctx.outputs.get(ctx.prevModuleId) : undefined;

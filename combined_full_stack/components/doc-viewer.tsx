@@ -74,6 +74,7 @@ export function DocViewer() {
   const tabs = docViewerTabs(docRef, hasPdf, hasVisionText)
   const showPdf = isPdfDoc(docRef, hasPdf)
   const tabularDoc = docRef ? isTabularDocType(docRef.type, docRef.name) : false
+  // AI : TODO (media-view-A-docs) — Play tab: <audio>/<video>/gltf from docFileUrl; JSON tab stays.
   const displayText =
     view === "vision" ? (visionEntries[visionIndex]?.text ?? "") : (parserText ?? "")
   const canEdit =

@@ -4,6 +4,8 @@ How to handle voice, Higgsfield-style video, 3D engineering files, and a **proje
 
 This sits on top of [`docs/new_type_system_plan.md`](new_type_system_plan.md) and [`docs/sql_types.md`](sql_types.md). It does **not** add `audio` / `video` / `gltf` as TypeExpr kinds.
 
+Code markers: grep `TODO (media-view` — source of truth for open work is `combined_full_stack/lib/server/media-view-roadmap.ts`. Mark a tag `DONE` in that file when the stage ships.
+
 ---
 
 ## Problem
@@ -378,40 +380,42 @@ Until that exists, only **fast** media (small TTS, already-uploaded files) shoul
 
 ### Phase A — Registry + media InputTypes (no generators)
 
-- [ ] `InputType.Audio | Video | Model3d` + `EXT_TYPE` + documents picker filters
-- [ ] Serve originals with correct Content-Type; signed URLs for `<video>` / three.js
-- [ ] `resolveViewer` + `DataViewPanel`; swap into `InferenceRunOutputs` and `StepTraceOutputPreview`
-- [ ] Builtin `audio` and `video` (native elements)
-- [ ] JSON tab always available
-- [ ] DocViewer modes for audio/video
+- [ ] `InputType.Audio | Video | Model3d` + `EXT_TYPE` + documents picker filters — `media-view-A-types`, `media-view-A-upload`
+- [ ] Serve originals with correct Content-Type; signed URLs for `<video>` / three.js — `media-view-A-storage`, `media-view-A-serve`
+- [ ] `resolveViewer` + `DataViewPanel`; swap into `InferenceRunOutputs` and `StepTraceOutputPreview` — `media-view-A-registry`, `media-view-A-outputs`
+- [ ] Builtin `audio` and `video` (native elements) — `media-view-A-players`
+- [ ] JSON tab always available — `media-view-A-registry`
+- [ ] DocViewer modes for audio/video — `media-view-A-docs`
+- [ ] Original-file download; share/embed/Vibe simple — `media-view-A-download`, `media-view-A-share`
 
 ### Phase B — View bindings
 
-- [ ] `PipelineModule.view` + `StructureModel.defaultView`
-- [ ] Assistant / seed schema / export
-- [ ] Builtin `gltf` + `stl` (lazy-load three.js)
-- [ ] Locked builtin models `AudioClip`, `VideoClip`, `Model3dAsset`
+- [ ] `PipelineModule.view` + `StructureModel.defaultView` — `media-view-B-binding`, `media-view-B-api`
+- [ ] Assistant / seed schema / export + View picker UI — `media-view-B-assistant`, `media-view-B-ui`
+- [ ] Builtin `gltf` + `stl` (lazy-load three.js) — `media-view-B-3d`
+- [ ] Locked builtin models `AudioClip`, `VideoClip`, `Model3dAsset` — `media-view-B-envelopes`
 
 ### Phase C — Custom visualizer slot
 
-- [ ] `ProjectVisualizer` + `/visualizers/:id.html?embed`
-- [ ] `spine-view-v1` postMessage (load / ready / resize / select / patch / fullscreen)
-- [ ] Structure / output-step picker
-- [ ] HTML export snapshot
-- [ ] Vibe/assistant: “create visualizer for this model”
+- [ ] `ProjectVisualizer` + `/visualizers/:id.html?embed` — `media-view-C-store`, `media-view-C-serve`
+- [ ] `spine-view-v1` postMessage (load / ready / resize / select / patch / fullscreen) — `media-view-C-protocol`, `media-view-C-patch`
+- [ ] Structure / output-step picker — `media-view-C-picker`
+- [ ] HTML export snapshot — `media-view-C-export`
+- [ ] Vibe/assistant: “create visualizer for this model” — `media-view-C-assistant`
 
 ### Phase D — Generation + async
 
-- [ ] `remote-job` (or webhook poll mode) + park/resume
-- [ ] Higgsfield seed (submit/poll/fetch → `VideoClip`)
-- [ ] TTS seed → `AudioClip`
-- [ ] Audio-to-text next to doc-to-text; optional word timings → seekable quotes
+- [ ] `remote-job` (or webhook poll mode) + park/resume — `media-view-D-job`
+- [ ] Higgsfield seed (submit/poll/fetch → `VideoClip`) — `media-view-D-higgsfield`
+- [ ] TTS seed → `AudioClip` — `media-view-D-tts`
+- [ ] Audio-to-text next to doc-to-text; optional word timings → seekable quotes — `media-view-D-stt`
 
 ### Phase E — CAD depth
 
-- [ ] STEP → glTF sidecar (wasm or worker)
-- [ ] node_id overlay + select → JSON path
-- [ ] Example visualizer: explode / BOM color
+- [ ] STEP → glTF sidecar (wasm or worker) — `media-view-E-step`
+- [ ] Time quotes on audio — `media-view-E-timequote`
+- [ ] node_id overlay + select → JSON path — `media-view-E-overlay`
+- [ ] Example visualizer: explode / BOM color — `media-view-E-example`
 
 Do not start at E. A + B already make “upload a clip, see a player instead of a JSON string of a url” true.
 

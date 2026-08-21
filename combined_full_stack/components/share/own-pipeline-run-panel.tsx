@@ -1,6 +1,7 @@
 "use client"
 
 // AI : TODO (arch-consumer-run) — shared-run-panel is the same chrome; one ConsumerRunPanel with funding/download slots.
+// AI : TODO (media-view-A-share) — DataViewPanel via InferenceRunOutputs; Play tab must work in consumer simple mode.
 
 import { useCallback, useMemo, useState } from "react"
 import {

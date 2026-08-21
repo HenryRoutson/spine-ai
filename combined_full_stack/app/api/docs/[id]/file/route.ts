@@ -14,6 +14,7 @@ function docFor(store: Store, id: DocId): DocRef | undefined {
 
 function expectsOriginalFile(doc: Pick<DocRef, "type"> | undefined): boolean {
   return doc?.type === InputType.Pdf || doc?.type === InputType.Image;
+  // AI : TODO (media-view-A-serve) — treat Audio / Video / Model3d as originals too; signed URLs for <video> / three.js.
 }
 
 function logOriginalFileMiss(method: "GET" | "HEAD", docId: DocId, doc: DocRef | undefined): void {

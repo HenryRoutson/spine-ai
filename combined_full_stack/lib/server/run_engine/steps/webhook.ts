@@ -11,6 +11,7 @@ export async function execWebhookStep(m: PipelineModule, ctx: RunCtx, log: RunLo
   if (!out) throw new Error(`webhook step ${m.id} has no output structure`);
   const input = requireLinearInput(m, ctx);
   const spec = webhookCallSpecFromModule(m);
+  // AI : TODO (media-view-D-job) — do NOT add poll loops here. Higgsfield/TTS is RemoteJob + park/resume.
   log.info(`webhook step`, {
     moduleId: m.id,
     method: spec.method,

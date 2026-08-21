@@ -62,6 +62,7 @@ function docsDir(): string {
 }
 
 // AI : original PDF/image bytes — local disk for JsonStore / warm cache; Supabase Storage in prod.
+// AI : TODO (media-view-A-storage) — add wav/mp3/mp4/webm/gltf/glb/stl (+ transcode sidecars). PDF+raster only today.
 export const ORIGINAL_DOC_EXTS = ["pdf", "png", "jpg", "jpeg", "webp"] as const;
 export type OriginalDocExt = (typeof ORIGINAL_DOC_EXTS)[number];
 

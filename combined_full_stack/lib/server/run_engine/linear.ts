@@ -276,6 +276,7 @@ export async function runLinearStepsFrom(
             });
           }
           if (err instanceof HumanReviewPendingError) {
+            // AI : TODO (media-view-D-job) — same pause path for ParkedJob (poll Higgsfield/TTS, then resume).
             throw new PipelinePausedError({
               runId,
               projectId,

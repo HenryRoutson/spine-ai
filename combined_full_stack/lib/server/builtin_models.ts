@@ -6,6 +6,8 @@ export const BUILTIN_QUOTE_SPAN_ID = "m_builtin_quote_span" as StructureModelId;
 export const BUILTIN_CHATBOT_PROMPT_ID = "m_builtin_chatbot_prompt" as StructureModelId;
 export const BUILTIN_CHATBOT_TURN_ID = "m_builtin_chatbot_turn" as StructureModelId;
 export const BUILTIN_CHATBOT_RESULT_ID = "m_builtin_chatbot_result" as StructureModelId;
+// AI : TODO (media-view-B-envelopes) — locked AudioClip / VideoClip / Model3dAsset (doc_id + mime + projections).
+// AI : TODO (media-view-B-3d) — Part3d overlay (asset + nodes + bom) is a user/seed model; mesh stays blob.
 
 // AI : shared across every project — the canonical shape for field type `document`.
 // AI : CREATE TABLE document (id TEXT PK, filename TEXT NOT NULL, mime TEXT,

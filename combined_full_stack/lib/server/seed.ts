@@ -193,6 +193,7 @@ const SeedFileSchema = z.object({
       webhookTimeoutMs: z.number().int().min(1).optional(),
       webhookIncludeState: z.boolean().optional(),
       webhookResponsePath: z.string().optional(),
+      // AI : TODO (media-view-B-api) — view: ViewBinding. TODO (media-view-D-job) — remote-job poll fields.
       mergeStateLabel: z.string().optional(),
       mergeWrapListField: z.string().optional(),
       mergeCustom: z.string().optional(),

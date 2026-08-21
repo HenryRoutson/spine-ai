@@ -28,6 +28,8 @@ export function InferenceRunOutputs({
   steps: RunStep[]
   models?: StructureModel[]
 }) {
+  // AI : TODO (media-view-A-outputs) — DataViewPanel from resolveViewer; JsonPreviewPanel is the JSON tab, not the only view.
+  // AI : TODO (media-view-A-share) — this component is also share / embed / Vibe simple — do not fork a builder-only player.
   const [popup, setPopup] = useState<PopupPayload | null>(null)
   return (
     <div className="space-y-3">
@@ -102,6 +104,7 @@ function InferenceStepOutput({
             className="h-full"
             onFullscreen={onFullscreen}
           />
+          {/* AI : TODO (media-view-A-players) — if resolveViewer → audio/video, mount native player; keep JSON as a tab. */}
         </div>
       ) : (
         <div className="max-h-48 overflow-auto px-4 py-3">
@@ -129,6 +132,7 @@ export function StepTraceOutputPreview({
   className?: string
   compact?: boolean
 }) {
+  // AI : TODO (media-view-A-outputs) — compact DataViewPanel here too (logging / inference traces).
   const json = runStep?.outputJson
   const preview = runStep?.outputPreview ?? outputPreview
   if (json && !isDocReferenceOutputJson(json)) {

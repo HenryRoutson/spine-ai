@@ -130,6 +130,8 @@ export interface StructureModel {
   // AI : type params — Ref { modelId, args } / Generic Name[T] instantiate field typeExprs.
   // AI : author via TypeParamsField, assistant params, CLI --params, MCP params. Codegen: class TreeNode[T](BaseModel).
   params?: string[];
+  // AI : TODO (media-view-B-binding) — defaultView?: ViewBinding — builtin | custom | field path.
+  // AI :   Used when this model appears in inference/logging/share if the step has no view of its own.
   // AI : TODO (type-join) — pk lives on ModelField.relation, not here. Lookup-embed derives views; do not flatten models to 3NF.
   // AI : DONE (sql-id-ref) — branded ids + catalog/index are lib/sql-id-*.ts; this type stays the table.
   // AI : StructureModel = CREATE TABLE (or VIEW). Nested list[model] is either a child table
@@ -159,6 +161,8 @@ export enum InputType {
   Latex = "latex",
   Web = "web",
   Image = "image",
+  // AI : TODO (media-view-A-types) — Audio | Video | Model3d mime wrappers (wav/mp3, mp4/webm, gltf/stl).
+  // AI :   Not TypeExpr kinds. Blob stays document.blob. See lib/server/media-view-roadmap.ts.
   // AI : InputType is document.mime / blob wrapper, not a separate type universe.
   // AI :   pdf/image/word → BLOB + mime; json/text/markdown/latex → TEXT content (blob optional).
   // AI :   sqlite/.sql dump as an input loads tables into the run catalog instead of nested JSON files.
@@ -195,6 +199,8 @@ export enum ModuleKind {
   HumanReview = "human-review", // AI : pause in Inference — operator approves or rejects before continuing
   Webhook = "webhook", // AI : server-side HTTP call — search APIs, Zapier, internal services (generic URL)
   // AI : TODO (n8n-stage-A) — add N8n = "n8n" — 1:1 wrap of one n8n node type (see lib/server/n8n-roadmap.ts).
+  // AI : TODO (media-view-D-job) — RemoteJob = "remote-job" (or webhook poll mode): submit → poll → fetch blob.
+  // AI :   Park/resume like human-review. Do not poll Higgsfield inside webhookTimeoutMs.
   Chatbot = "chatbot", // AI : pause for prompted chat — spine in ChatbotPrompt, out ChatbotResult
   Output = "output",
 }
@@ -318,6 +324,8 @@ export interface PipelineModule {
   // AI : explicit spine types — canonical; list[T] vs T lives here, not a separate boolean flag.
   inType?: TypeExpr;
   outType?: TypeExpr;
+  // AI : TODO (media-view-B-binding) — view?: ViewBinding on output (or any previewable step).
+  // AI :   Explicit wins over StructureModel.defaultView / mime / TypeExpr. JSON tab always remains.
   // config
   inputType?: InputTypeSpec;
   inputNameContains?: string; // AI : optional filename substring — only matching docs can fill this input slot
@@ -375,6 +383,8 @@ export interface PipelineModule {
   // AI : TODO (n8n-stage-A) — n8nNodeType / n8nNodeVersion / n8nParameters / n8nCredentialEnv /
   // AI :   n8nBaseUrlEnv / n8nApiKeyEnv / n8nTimeoutMs / n8nResponseMode / n8nResponsePath
   // AI :   (1:1 n8n node; catalog from OSS nodes-base — see lib/server/n8n-roadmap.ts).
+  // AI : TODO (media-view-D-job) — remoteJob submit/poll/fetch fields (provider, pollUrl, authEnv).
+  // AI :   Distinct from webhook (one shot) and n8n (catalog node). Spine out is MediaRef { doc_id }, not bytes.
   // AI : chatbot — prompt is spine ChatbotPrompt.prompt (no module.prompt).
   chatbotMode?: ChatbotMode;
   maxTurns?: number;
@@ -467,6 +477,7 @@ export interface Project {
   teamId?: import("@/lib/team-types").team_id_string; // AI : shared pointer — team members view/run this owner row; bills team owner
   teamReadOnly?: boolean; // AI : runtime — true when loaded via another member's ownership (pointer)
   teamProjectOwnerId?: import("./require_auth").user_id_string; // AI : runtime — owner's user_id for shared-pointer projects
+  // AI : TODO (media-view-C-store) — visualizers?: ProjectVisualizer[] — sandboxed HTML, not document uploads.
 }
 
 export enum StrategyKind {
@@ -812,6 +823,7 @@ export const INPUT_TYPES: { value: InputType; label: string }[] = [
   { value: InputType.Latex, label: "LaTeX" },
   { value: InputType.Web, label: "Web" },
   { value: InputType.Image, label: "Image" },
+  // AI : TODO (media-view-A-types) — { value: Audio, label: "Audio" }, Video, Model3d.
 ];
 
 export const MODULE_META: Record<ModuleKind, { label: string; description: string }> = {
@@ -876,6 +888,7 @@ export const MODULE_META: Record<ModuleKind, { label: string; description: strin
     description: "POST spine input to an external URL (search APIs, Zapier, custom HTTP) — server-side, secrets via env vars",
   },
   // AI : TODO (n8n-stage-A) — MODULE_META[ModuleKind.N8n] = { label: "n8n", description: "Run one n8n node (Slack, Gmail, …) via self-hosted n8n" }
+  // AI : TODO (media-view-D-job) — MODULE_META[RemoteJob] = submit/poll/fetch binary APIs (Higgsfield, TTS)
   [ModuleKind.Chatbot]: {
     label: "Chatbot",
     description: "Pause for prompted chat (single or until Exit) — input is locked ChatbotPrompt",

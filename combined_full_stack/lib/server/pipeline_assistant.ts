@@ -251,6 +251,7 @@ const modulePatchEntrySchema = z.object({
 const modelSpecSchema = structureModelSpecSchema;
 
 const ASSISTANT_DOC_TYPES = [InputType.Text, InputType.Markdown, InputType.Latex, InputType.Json] as const satisfies readonly InputType[];
+// AI : TODO (media-view-A-types) — allow Audio/Video/Model3d in assistant-created docs once InputTypes exist.
 
 const docSpecSchema = z.object({
   name: z.string(),

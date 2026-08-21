@@ -63,6 +63,8 @@ export async function execModule(m: PipelineModule, ctx: RunCtx, log: RunLogger)
     case ModuleKind.Chatbot:
       return execChatbotStep(m, ctx, log);
     // AI : TODO (n8n-stage-E-exec) — case ModuleKind.N8n: return execN8nStep(m, ctx, log)
+    // AI : TODO (media-view-D-job) — case RemoteJob: park + poll worker; fetch bytes → document; spine { doc_id }.
+    // AI :   Do not fold into execWebhookStep (one-shot HTTP). Distinct from remote-call-maybe-runner.
     // AI :   (ephemeral 1-node workflow against self-hosted n8n; see lib/server/n8n-roadmap.ts).
     default: {
       if (isMergeModuleKind(m.kind)) return execCustomCodeStep(m, ctx, log);

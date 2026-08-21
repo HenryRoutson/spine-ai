@@ -454,6 +454,7 @@ export function allModelsToSql(models: StructureModel[], modules?: PipelineModul
       "  doc_id TEXT NOT NULL REFERENCES document(id)",
       "  start INTEGER NOT NULL",
       "  end INTEGER NOT NULL",
+      // AI : TODO (media-view-E-timequote) — t_start REAL, t_end REAL nullable (seconds on audio/video docs).
     ]),
   ]
 

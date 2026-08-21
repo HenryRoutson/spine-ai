@@ -2,6 +2,7 @@
 // AI : parity ids — structure.add-model structure.add-alias
 
 // AI : TODO (spec) — per-structure "Quick summarise" button: cheap LLM flags inconsistencies (e.g. document_summary:int).
+// AI : TODO (media-view-B-ui) — model header defaultView picker (builtin + project visualizers).
 import { useEffect, useMemo, useRef, useState } from "react"
 import { Plus, Code2, Sparkles, Lock, Braces, FileSpreadsheet, Loader2, Upload, KeyRound } from "lucide-react"
 import { StructureExcelEditor } from "@/components/structure-excel-editor"

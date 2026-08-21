@@ -531,6 +531,7 @@ function isMermaidCode(className: string | undefined): boolean {
 
 function isTikzCode(className: string | undefined): boolean {
   return /(?:^|\s)language-tikz(?:\s|$)/.test(className ?? "")
+  // AI : TODO (media-view-A-registry) — TikZ string sniff is latex-in-JSON only. Do not add audio/video/glb regex here.
 }
 
 function isDiagramCodeElement(el: ReactNode): boolean {

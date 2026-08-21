@@ -42,6 +42,7 @@ function renderObservePanel(tab: VibeObserveTab) {
 }
 
 // AI : chat left (create/edit from scratch); Inference / Share / Logging on the right.
+// AI : TODO (media-view-A-share) — simple Inference still mounts Play tab; do not hide media behind builder-only chrome.
 export function VibePanel() {
   useMarkPrimarySectionReady(AppPrimarySection.Build)
   const { vibeObserveTab, setVibeObserveTab } = useAppShell()

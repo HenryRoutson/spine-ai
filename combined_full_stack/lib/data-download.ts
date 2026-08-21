@@ -10,6 +10,7 @@ function cellToExportValue(v: unknown): string | number | boolean | null {
 }
 
 // AI : one-level object flatten — mirrors json-viewer table export expectations.
+// AI : TODO (media-view-A-download) — when value has doc_id + mime audio/video/3d, download original bytes; keep JSON as second format.
 function flattenRow(obj: Record<string, unknown>, prefix = "", depth = 0): tabular_row {
   const cols: tabular_row = {}
   for (const [k, v] of Object.entries(obj)) {

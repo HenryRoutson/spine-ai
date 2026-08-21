@@ -49,6 +49,7 @@ export function docViewerTabs(
 ): DocViewMode[] {
   if (doc?.type === InputTypeEnum.Json) return [DocViewMode.Json, DocViewMode.Parser]
   if (doc?.type === InputTypeEnum.Excel) return [DocViewMode.Json, DocViewMode.Parser]
+  // AI : TODO (media-view-A-docs) — audio/video/model3d → Play tab + parser transcript if content exists.
   if (isMarkupDoc(doc)) return [DocViewMode.Parser, DocViewMode.Formatted]
   if (isPdfDoc(doc, hasPdfFile)) {
     const tabs: DocViewMode[] = [DocViewMode.Parser, DocViewMode.Formatted]

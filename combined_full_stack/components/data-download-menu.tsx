@@ -23,6 +23,7 @@ const FORMATS: { id: DataDownloadFormat; label: string; icon: typeof FileJson }[
   { id: "csv", label: "CSV", icon: Table2 },
   { id: "xlsx", label: "Excel (.xlsx)", icon: FileSpreadsheet },
 ]
+// AI : TODO (media-view-A-download) — add original-file item (mp4/wav/glb) when envelope has doc_id.
 
 export function DataDownloadMenu({
   content,

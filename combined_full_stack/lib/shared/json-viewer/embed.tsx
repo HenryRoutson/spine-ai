@@ -1,6 +1,8 @@
 "use client"
 
 // AI : embeds json-viewer.html (?embed) and sends JSON via postMessage — shared by app + landing.
+// AI : TODO (media-view-C-protocol) — copy this contract for spine-view-v1 (load/ready/resize/select/patch/fullscreen).
+// AI :   Builtin audio/video/gltf can be /viewers/*.html; project HTML is /visualizers/:id.html?embed.
 
 import { useEffect, useRef } from "react"
 import type { JsonViewerHumanViewId, JsonViewerSyntaxThemeId } from "./types"

@@ -31,6 +31,7 @@ async function ensureOriginalsBucket(db: SupabaseClient): Promise<{ error: unkno
     public: false,
     fileSizeLimit: 25 * 1024 * 1024,
     allowedMimeTypes: ["application/pdf", "image/png", "image/jpeg", "image/webp"],
+    // AI : TODO (media-view-A-storage) — audio/* video/* model/gltf-binary + size limit for clips/CAD.
   });
   if (!error) {
     origLog.info(`created Storage bucket doc-originals`);
