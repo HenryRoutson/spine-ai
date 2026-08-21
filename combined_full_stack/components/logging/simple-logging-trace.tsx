@@ -5,6 +5,7 @@ import { formatCostCents } from "@/lib/format"
 import { formatRunErrorForDisplay } from "@/lib/run-errors"
 import { isSlimPipelineRun, runBilledCents } from "@/lib/run-metrics"
 import { timeAgo } from "@/lib/time-ago"
+import { uiContextTargetProps } from "@/lib/ui-context-dom"
 import type { PipelineModule, PipelineRun, StructureModel } from "@/lib/types"
 
 function runStatusLabel(status: PipelineRun["status"]): string {
@@ -25,7 +26,15 @@ export function SimpleLoggingTrace({
   const failed = run.status === "error"
 
   return (
-    <div className="space-y-4 p-4">
+    <div
+      className="space-y-4 p-4"
+      {...uiContextTargetProps({
+        kind: failed ? "run_error" : "generic",
+        id: `run:${run.id}`,
+        label: `Run · ${runStatusLabel(run.status)}`,
+        snippet: failed ? runError?.message : undefined,
+      })}
+    >
       <div className="space-y-1">
         <p className="text-sm font-medium">
           {runStatusLabel(run.status)}

@@ -11,6 +11,7 @@ import {
   dedupeUiContextRefs,
   normalizeUiContextRef,
   truncateUiContextText,
+  uiContextIdBase,
   MAX_UI_CONTEXT_SNIPPET_CHARS,
   type UiContextRef,
 } from "@/lib/ui-context-types"
@@ -18,30 +19,44 @@ import { ModuleKind, type DocId, type Project, type ProjectId } from "./types"
 import type { Store } from "./store"
 
 function docIdFromRef(ref: UiContextRef): DocId | null {
-  const raw = ref.id.startsWith("doc:") ? ref.id.slice(4) : ref.id
+  const base = uiContextIdBase(ref.id)
+  const raw = base.startsWith("doc:") ? base.slice(4) : base
   if (!raw.trim()) return null
   return raw as DocId
 }
 
 function modelIdFromRef(ref: UiContextRef): string {
-  if (ref.id.startsWith("model:")) return ref.id.slice(6)
+  const base = uiContextIdBase(ref.id)
+  if (base.startsWith("model:")) return base.slice(6)
   // AI : legacy Select UI ids before model: prefix.
-  if (ref.id.startsWith("struct:")) return ref.id.slice(7)
-  return ref.id
+  if (base.startsWith("struct:")) return base.slice(7)
+  return base
 }
 
 function typeIdFromRef(ref: UiContextRef): string {
-  if (ref.id.startsWith("type:")) return ref.id.slice(5)
-  if (ref.id.startsWith("typealias:")) return ref.id.slice(10)
-  return ref.id
+  const base = uiContextIdBase(ref.id)
+  if (base.startsWith("type:")) return base.slice(5)
+  if (base.startsWith("typealias:")) return base.slice(10)
+  return base
 }
 
 function stepIdFromRef(ref: UiContextRef): string {
-  return ref.moduleId ?? (ref.id.startsWith("step:") ? ref.id.slice(5) : ref.id)
+  if (ref.moduleId) return ref.moduleId
+  const base = uiContextIdBase(ref.id)
+  return base.startsWith("step:") ? base.slice(5) : base
 }
 
 function findProjectRun(store: Store, projectId: ProjectId, runId: string) {
   return store.runs(projectId).find((r) => r.id === runId)
+}
+
+function mergePickSnippet(pick: string | undefined, live: string | undefined): string | undefined {
+  const a = pick?.trim()
+  const b = live?.trim()
+  if (a && b && a !== b && !a.includes(b)) {
+    return truncateUiContextText(`${a}\n\n--- live ---\n${b}`, MAX_UI_CONTEXT_SNIPPET_CHARS)
+  }
+  return truncateUiContextText(a || b || "", MAX_UI_CONTEXT_SNIPPET_CHARS) || undefined
 }
 
 /** AI : prefer server doc bytes / live project defs over client preview snippets. */
@@ -57,22 +72,22 @@ export function enrichUiContextRefs(
       if (!docId) return ref
       const meta = store.docs().find((d) => d.id === docId)
       const content = store.docContent(docId)
-      const snippet = truncateUiContextText(
-        content ?? ref.snippet ?? meta?.preview ?? "",
-        MAX_UI_CONTEXT_SNIPPET_CHARS,
-      )
+      const live = content ?? ref.snippet ?? meta?.preview ?? ""
       return normalizeUiContextRef({
         ...ref,
-        label: meta ? `File · ${meta.name}` : ref.label,
-        snippet: snippet || undefined,
+        label: meta ? (ref.id.includes("#") ? ref.label : `File · ${meta.name}`) : ref.label,
+        snippet: mergePickSnippet(ref.snippet, live),
       })
     }
 
-    if (ref.kind === "model" || (ref.kind === "generic" && (ref.id.startsWith("model:") || ref.id.startsWith("struct:")))) {
+    const idBase = uiContextIdBase(ref.id)
+    const isLeafPick = ref.id.includes("#") || !!ref.fieldPath
+
+    if (ref.kind === "model" || (ref.kind === "generic" && (idBase.startsWith("model:") || idBase.startsWith("struct:")))) {
       const model = project.models.find((m) => m.id === modelIdFromRef(ref))
       if (!model) return ref
       const fieldNames = model.fields.map((f) => f.name).join(", ")
-      const snippet = truncateUiContextText(
+      const live = truncateUiContextText(
         [model.description, fieldNames ? `fields: ${fieldNames}` : ""]
           .filter(Boolean)
           .join("\n"),
@@ -81,58 +96,52 @@ export function enrichUiContextRefs(
       return normalizeUiContextRef({
         ...ref,
         kind: "model",
-        id: ref.id.startsWith("model:") ? ref.id : `model:${model.id}`,
-        label: `Structure · ${model.name}`,
-        snippet: snippet || ref.snippet,
+        id: isLeafPick ? ref.id : idBase.startsWith("model:") ? idBase : `model:${model.id}`,
+        label: isLeafPick ? ref.label : `Structure · ${model.name}`,
+        snippet: mergePickSnippet(ref.snippet, live),
       })
     }
 
-    if (ref.kind === "type_alias" || (ref.kind === "generic" && (ref.id.startsWith("type:") || ref.id.startsWith("typealias:")))) {
+    if (ref.kind === "type_alias" || (ref.kind === "generic" && (idBase.startsWith("type:") || idBase.startsWith("typealias:")))) {
       const alias = (project.typeAliases ?? []).find((t) => t.id === typeIdFromRef(ref))
       if (!alias) return ref
       return normalizeUiContextRef({
         ...ref,
         kind: "type_alias",
-        id: ref.id.startsWith("type:") ? ref.id : `type:${alias.id}`,
-        label: `Type · ${alias.name}`,
-        snippet: truncateUiContextText(
-          alias.description || ref.snippet || "",
-          MAX_UI_CONTEXT_SNIPPET_CHARS,
-        ) || undefined,
+        id: isLeafPick ? ref.id : idBase.startsWith("type:") ? idBase : `type:${alias.id}`,
+        label: isLeafPick ? ref.label : `Type · ${alias.name}`,
+        snippet: mergePickSnippet(ref.snippet, alias.description),
       })
     }
 
     if (ref.kind === "pipeline_step") {
       const step = project.modules.find((m) => m.id === stepIdFromRef(ref))
       if (!step) return ref
-      const snippet = truncateUiContextText(
-        [step.note, step.prompt].filter(Boolean).join("\n\n") || ref.snippet || "",
-        MAX_UI_CONTEXT_SNIPPET_CHARS,
-      )
+      const live = [step.note, step.prompt].filter(Boolean).join("\n\n")
       return normalizeUiContextRef({
         ...ref,
         moduleId: step.id,
-        label: `${step.label} (${step.kind})`,
-        snippet: snippet || undefined,
+        label: isLeafPick ? ref.label : `${step.label} (${step.kind})`,
+        snippet: mergePickSnippet(ref.snippet, live) || undefined,
       })
     }
 
     // AI : full server run (not slim client list) — includes serverLogs for error pins.
     if (
       ref.kind === "run_error" ||
-      (ref.kind === "generic" && (ref.id.startsWith("run:") || ref.id.startsWith("run-error:")))
+      (ref.kind === "generic" && (idBase.startsWith("run:") || idBase.startsWith("run-error:")))
     ) {
       const runId = runIdFromUiContextId(ref.id)
       if (!runId) return ref
       const run = findProjectRun(store, project.id, runId)
       if (!run) return ref
-      const snippet = formatRunErrorPinSnippet(run)
+      const live = formatRunErrorPinSnippet(run)
       return normalizeUiContextRef({
         ...ref,
         kind: runHasErrors(run) ? "run_error" : "generic",
-        id: `run:${run.id}`,
-        label: `Run · ${run.status} · ${run.id.slice(0, 8)}`,
-        snippet: snippet || ref.snippet,
+        id: isLeafPick ? ref.id : `run:${run.id}`,
+        label: isLeafPick ? ref.label : `Run · ${run.status} · ${run.id.slice(0, 8)}`,
+        snippet: mergePickSnippet(ref.snippet, live),
       })
     }
 

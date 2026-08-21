@@ -8,6 +8,9 @@ import { createPortal } from "react-dom"
 import {
   findUiContextTargetAtPoint,
   readUiContextFromElement,
+  sameOriginIframes,
+  topLevelPointFromEvent,
+  viewportRectOf,
   UI_CONTEXT_ATTR,
 } from "@/lib/ui-context-dom"
 import type { UiContextRef } from "@/lib/ui-context-types"
@@ -84,18 +87,19 @@ export function UiContextSelectOverlay() {
         lastTargetRef.current = target
       }
       const ref = readUiContextFromElement(target)
-      const rect = target.getBoundingClientRect()
+      const rect = viewportRectOf(target)
       setHover({
         top: rect.top,
         left: rect.left,
-        width: Math.max(rect.width, 4),
-        height: Math.max(rect.height, 4),
+        width: rect.width,
+        height: rect.height,
         label: ref?.label ?? "UI",
       })
     }
 
     function onPointerMove(e: PointerEvent) {
-      updateHover(e.clientX, e.clientY)
+      const p = topLevelPointFromEvent(e)
+      updateHover(p.x, p.y)
     }
 
     // AI : swallow interactions outside the agent dock so editors/buttons don't fire during select.
@@ -112,7 +116,8 @@ export function UiContextSelectOverlay() {
       if (e.button !== 0) return
       if (eventInIgnoreZone(e.target)) return
       blockAppInteraction(e)
-      const target = findUiContextTargetAtPoint(e.clientX, e.clientY)
+      const p = topLevelPointFromEvent(e)
+      const target = findUiContextTargetAtPoint(p.x, p.y)
       if (!target) return
       const ref = readUiContextFromElement(target)
       if (!ref) return
@@ -136,46 +141,86 @@ export function UiContextSelectOverlay() {
 
     function onScroll() {
       if (!lastTargetRef.current) return
-      const rect = lastTargetRef.current.getBoundingClientRect()
+      const rect = viewportRectOf(lastTargetRef.current)
       setHover((prev) =>
         prev
           ? {
               ...prev,
               top: rect.top,
               left: rect.left,
-              width: Math.max(rect.width, 4),
-              height: Math.max(rect.height, 4),
+              width: rect.width,
+              height: rect.height,
             }
           : prev,
       )
     }
 
-    window.addEventListener("pointermove", onPointerMove, true)
-    window.addEventListener("pointerdown", onPointerDown, true)
-    window.addEventListener("pointerup", blockAppInteraction, true)
-    window.addEventListener("mousedown", blockAppInteraction, true)
-    window.addEventListener("mouseup", blockAppInteraction, true)
-    window.addEventListener("click", blockAppInteraction, true)
-    window.addEventListener("dblclick", blockAppInteraction, true)
-    window.addEventListener("contextmenu", blockAppInteraction, true)
-    window.addEventListener("dragstart", blockAppInteraction, true)
-    window.addEventListener("keydown", onKeyDown, true)
-    window.addEventListener("scroll", onScroll, true)
+    const ac = new AbortController()
+    const cap = { capture: true, signal: ac.signal } as const
+    const boundDocs = new WeakSet<Document>()
+    const iframeCursors: HTMLElement[] = []
+
+    const boundIframes = new WeakSet<HTMLIFrameElement>()
+
+    function bindDoc(doc: Document) {
+      if (boundDocs.has(doc)) return
+      boundDocs.add(doc)
+      doc.addEventListener("pointermove", onPointerMove, cap)
+      doc.addEventListener("pointerdown", onPointerDown, cap)
+      doc.addEventListener("pointerup", blockAppInteraction, cap)
+      doc.addEventListener("mousedown", blockAppInteraction, cap)
+      doc.addEventListener("mouseup", blockAppInteraction, cap)
+      doc.addEventListener("click", blockAppInteraction, cap)
+      doc.addEventListener("dblclick", blockAppInteraction, cap)
+      doc.addEventListener("contextmenu", blockAppInteraction, cap)
+      doc.addEventListener("dragstart", blockAppInteraction, cap)
+      doc.addEventListener("keydown", onKeyDown, cap)
+      doc.addEventListener("scroll", onScroll, cap)
+      if (doc !== document) {
+        const style = doc.createElement("style")
+        style.textContent = `.${HOVER_CLASS}{outline:2px solid rgb(56 189 248)!important;outline-offset:2px!important;}`
+        doc.head?.appendChild(style)
+        if (doc.body) {
+          doc.body.style.cursor = "crosshair"
+          doc.body.style.userSelect = "none"
+          iframeCursors.push(doc.body)
+        }
+      }
+    }
+
+    function bindIframes() {
+      for (const iframe of sameOriginIframes()) {
+        if (!boundIframes.has(iframe)) {
+          boundIframes.add(iframe)
+          iframe.addEventListener(
+            "load",
+            () => {
+              const doc = iframe.contentDocument
+              if (doc) bindDoc(doc)
+            },
+            cap,
+          )
+        }
+        const doc = iframe.contentDocument
+        if (doc && doc.body) bindDoc(doc)
+      }
+    }
+
+    bindDoc(document)
+    bindIframes()
+    const mo = new MutationObserver(bindIframes)
+    mo.observe(document.body, { childList: true, subtree: true })
+
     return () => {
+      ac.abort()
+      mo.disconnect()
       document.body.style.cursor = prevCursor
       document.body.classList.remove(BODY_SELECTING_CLASS)
+      for (const body of iframeCursors) {
+        body.style.cursor = ""
+        body.style.userSelect = ""
+      }
       clearHoverTarget()
-      window.removeEventListener("pointermove", onPointerMove, true)
-      window.removeEventListener("pointerdown", onPointerDown, true)
-      window.removeEventListener("pointerup", blockAppInteraction, true)
-      window.removeEventListener("mousedown", blockAppInteraction, true)
-      window.removeEventListener("mouseup", blockAppInteraction, true)
-      window.removeEventListener("click", blockAppInteraction, true)
-      window.removeEventListener("dblclick", blockAppInteraction, true)
-      window.removeEventListener("contextmenu", blockAppInteraction, true)
-      window.removeEventListener("dragstart", blockAppInteraction, true)
-      window.removeEventListener("keydown", onKeyDown, true)
-      window.removeEventListener("scroll", onScroll, true)
     }
   }, [selectMode, setSelectMode, setOpen])
 
@@ -201,7 +246,7 @@ export function UiContextSelectOverlay() {
       `}</style>
       <div className="pointer-events-none absolute inset-x-0 top-0 flex justify-center pt-3">
         <p className="rounded-md border border-sky-400/50 bg-background px-3 py-1.5 font-mono text-[11px] text-foreground shadow-lg">
-          Select mode · app clicks paused · pin a highlight · Esc exits
+          Select mode · pick a cell, file, or label · Esc exits
         </p>
       </div>
       {hover && (
@@ -216,9 +261,9 @@ export function UiContextSelectOverlay() {
             }}
           />
           <div
-            className="pointer-events-none absolute z-[10000] max-w-sm truncate rounded bg-sky-400 px-2 py-1 font-mono text-[11px] font-medium text-sky-950 shadow-lg"
+            className="pointer-events-none absolute z-[10000] max-w-md line-clamp-2 rounded bg-sky-400 px-2 py-1 font-mono text-[11px] font-medium text-sky-950 shadow-lg"
             style={{
-              top: Math.max(8, hover.top - 28),
+              top: Math.max(8, hover.top - 44),
               left: hover.left,
             }}
           >

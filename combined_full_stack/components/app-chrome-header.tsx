@@ -51,14 +51,19 @@ export function AppChromeHeader({
 
       <div className="mx-0.5 hidden h-6 w-px shrink-0 bg-border sm:block" />
 
-      <AppPrimaryNav value={primarySection} onChange={onPrimarySectionChange} openingSection={openingSection} />
-
-      {primarySection === AppPrimarySection.Build && projectSlot ? (
+      {projectSlot ? (
         <>
-          <div className="h-6 w-px shrink-0 bg-border" />
           {projectSlot}
+          <div className="h-6 w-px shrink-0 bg-border" />
         </>
       ) : null}
+
+      <AppPrimaryNav
+        value={primarySection}
+        onChange={onPrimarySectionChange}
+        openingSection={openingSection}
+        showBuild={!projectSlot}
+      />
 
       {/* AI : TODO (opt-browser-tui-chrome) — Terminal|GUI toggle here, like a theme switch; skip when embed. */}
       {trailing ? <div className="ml-auto flex shrink-0 items-center gap-2">{trailing}</div> : null}

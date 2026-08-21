@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import { AlertTriangle, Boxes, Globe, PanelTop, ScrollText, Store, User, Users, Zap } from "lucide-react"
+import { AlertTriangle, Boxes, Globe, type LucideIcon, PanelTop, ScrollText, Store, User, Users, Zap } from "lucide-react"
 import {
   DeploymentActivityPage,
   type ActivityFilter,
@@ -21,6 +21,7 @@ import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 import { spineActionProps } from "@/lib/core/parity"
 import { useOptionalStore } from "@/lib/store"
+import { isVibeWindow } from "@/lib/app-nav-config"
 import { useAppShell } from "@/lib/app-shell"
 import { consumePendingSharedRun } from "@/lib/pending-shared-run"
 import { useMarkPrimarySectionReady } from "@/lib/primary-section-opening"
@@ -33,11 +34,26 @@ import {
 import { AppPrimarySection } from "@/lib/app-primary-section-labels"
 import type { ProjectId } from "@/lib/types"
 
-export function SharePage() {
+type ShareNavEntry = {
+  id: ShareSection
+  label: string
+  icon: LucideIcon
+}
+
+// AI : Share inside a project publishes this project. Other pipelines live on All projects / Run.
+const BUILDER_SHARE_NAV: ShareNavEntry[] = [
+  { id: ShareSection.Publish, label: ShareTabLabel.Publish, icon: Globe },
+  { id: ShareSection.Activity, label: ShareTabLabel.Activity, icon: ScrollText },
+]
+
+export function SharePage({ simple }: { simple?: boolean } = {}) {
   useMarkPrimarySectionReady(AppPrimarySection.Run)
   const builder = useOptionalStore()
   const isConsumer = !builder
-  const { setActiveWindow, activeSharedLinkId, openSharedRun } = useAppShell()
+  const { setActiveWindow, activeWindow, activeSharedLinkId, openSharedRun } = useAppShell()
+  const isVibe = isVibeWindow(activeWindow)
+  // AI : vibe/simple — share-a-link only; inbound Shared with me / Marketplace live on the project picker.
+  const isSimple = simple === true || isVibe
   const { typesInvalid, pipelineInvalid, pipelineEmpty, runTabsBlocked } = builder
     ? computeWorkspaceValidity(builder.modules, builder.models, builder.typeAliases)
     : { typesInvalid: false, pipelineInvalid: false, pipelineEmpty: false, runTabsBlocked: false }
@@ -53,9 +69,9 @@ export function SharePage() {
     const pending = consumePendingSharedRun()
     if (pending) {
       openSharedRun(pending)
-      setSection(ShareSection.Shared)
+      if (isConsumer) setSection(ShareSection.Shared)
     }
-  }, [openSharedRun])
+  }, [isConsumer, openSharedRun])
 
   if (activeSharedLinkId) {
     return <SharedLinkRunner linkId={activeSharedLinkId} />
@@ -134,127 +150,76 @@ export function SharePage() {
   }
 
   const publishBlocked = typesInvalid || pipelineInvalid || pipelineEmpty
+  const visibleSection = BUILDER_SHARE_NAV.some((item) => item.id === section)
+    ? section
+    : ShareSection.Publish
 
   return (
     <div className="flex h-full flex-col">
-      <div className="border-b border-border px-5">
-        <div className="mx-auto flex max-w-6xl gap-1 py-2">
-          <button
-            type="button"
-            className={cn(
-              "flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-colors",
-              section === ShareSection.Publish
-                ? "bg-secondary text-foreground"
-                : "text-muted-foreground hover:text-foreground",
-            )}
-            onClick={() => setSection(ShareSection.Publish)}
-          >
-            <Globe className="h-3.5 w-3.5" />
-            Publish
-          </button>
-          <button
-            type="button"
-            className={cn(
-              "flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-colors",
-              section === ShareSection.MyPipelines
-                ? "bg-secondary text-foreground"
-                : "text-muted-foreground hover:text-foreground",
-            )}
-            onClick={() => setSection(ShareSection.MyPipelines)}
-          >
-            <User className="h-3.5 w-3.5" />
-            {ShareTabLabel.MyPipelines}
-          </button>
-          <button
-            type="button"
-            className={cn(
-              "flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-colors",
-              section === ShareSection.Shared
-                ? "bg-secondary text-foreground"
-                : "text-muted-foreground hover:text-foreground",
-            )}
-            onClick={() => setSection(ShareSection.Shared)}
-          >
-            <Users className="h-3.5 w-3.5" />
-            {ShareTabLabel.SharedWithMe}
-          </button>
-          <button
-            type="button"
-            className={cn(
-              "flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-colors",
-              section === ShareSection.Marketplace
-                ? "bg-secondary text-foreground"
-                : "text-muted-foreground hover:text-foreground",
-            )}
-            onClick={() => setSection(ShareSection.Marketplace)}
-          >
-            <Store className="h-3.5 w-3.5" />
-            Marketplace
-          </button>
-          <button
-            type="button"
-            className={cn(
-              "flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-colors",
-              section === ShareSection.Activity
-                ? "bg-secondary text-foreground"
-                : "text-muted-foreground hover:text-foreground",
-            )}
-            onClick={() => {
-              setActivityFilter(null)
-              setSection(ShareSection.Activity)
-            }}
-          >
-            <ScrollText className="h-3.5 w-3.5" />
-            Activity
-          </button>
+      {isSimple ? null : (
+        <div className="border-b border-border px-5">
+          <div className="mx-auto flex max-w-6xl gap-1 py-2">
+            {BUILDER_SHARE_NAV.map((item) => (
+              <ShareNavButton
+                key={item.id}
+                active={visibleSection === item.id}
+                icon={item.icon}
+                label={item.label}
+                onClick={() => {
+                  if (item.id === ShareSection.Activity) setActivityFilter(null)
+                  setSection(item.id)
+                }}
+              />
+            ))}
+          </div>
         </div>
-      </div>
+      )}
 
       <div className="min-h-0 flex-1 overflow-y-auto p-5">
-        {section === ShareSection.Activity ? (
+        {visibleSection === ShareSection.Activity ? (
           <DeploymentActivityPage projectId={builder.project.id} initialFilter={activityFilter} />
-        ) : section === ShareSection.Marketplace ? (
-          <MarketplaceBrowsePanel />
-        ) : section === ShareSection.Shared ? (
-          <div className="mx-auto max-w-2xl">
-            <SharedWithMePanel onRun={openSharedRun} />
-          </div>
-        ) : section === ShareSection.MyPipelines ? (
-          <div className="mx-auto max-w-2xl">
-            <MyPipelinesPanel onRun={setActiveOwnProjectId} />
-          </div>
         ) : pipelineEmpty ? (
-          <PipelineObserveEmpty copy="Describe what you want to build in Vibe first — then you can publish a link or API." />
+          <PipelineObserveEmpty
+            copy={isSimple ? "What do you want to build?" : "Build a pipeline first."}
+          />
         ) : publishBlocked ? (
           <div className="flex flex-1 flex-col items-center justify-center gap-4 p-8 text-center">
             <div className="max-w-md rounded-lg border border-destructive/50 bg-destructive/10 px-6 py-8">
               <AlertTriangle className="mx-auto h-10 w-10 text-destructive" />
               <p className="mt-4 text-sm font-medium text-destructive">
-                {typesInvalid
-                  ? "Fix type errors in Structure before publishing."
-                  : "Fix pipeline validation errors before publishing."}
+                {isSimple
+                  ? "Ask in chat to fix this."
+                  : typesInvalid
+                    ? "Fix type errors in Structure before publishing."
+                    : "Fix pipeline validation errors before publishing."}
               </p>
-              <Button
-                variant="outline"
-                size="sm"
-                className="mt-4 gap-1.5 border-destructive/50 text-destructive hover:bg-destructive/10 hover:text-destructive"
-                onClick={() => setActiveWindow(typesInvalid ? "structure" : "pipeline")}
-              >
-                <Boxes className="h-3.5 w-3.5" />
-                Go to {typesInvalid ? "Structure" : "Pipeline"}
-              </Button>
-              <p className="mt-4 text-xs text-muted-foreground">
-                You can still browse the marketplace or run shared links.
-              </p>
-              <div className="mt-1 flex justify-center gap-2">
-                <Button variant="link" size="sm" onClick={() => setSection(ShareSection.Marketplace)}>
-                  Open Marketplace
+              {isSimple ? null : (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="mt-4 gap-1.5 border-destructive/50 text-destructive hover:bg-destructive/10 hover:text-destructive"
+                  onClick={() => setActiveWindow(typesInvalid ? "structure" : "pipeline")}
+                >
+                  <Boxes className="h-3.5 w-3.5" />
+                  Go to {typesInvalid ? "Structure" : "Pipeline"}
                 </Button>
-                <Button variant="link" size="sm" onClick={() => setSection(ShareSection.Shared)}>
-                  {ShareTabLabel.SharedWithMe}
-                </Button>
-              </div>
+              )}
             </div>
+          </div>
+        ) : isSimple ? (
+          <div className="mx-auto flex max-w-xl flex-col gap-8">
+            <section className="rounded-lg border border-border bg-card p-4">
+              <ShareLinkForm
+                project={builder.project}
+                docs={builder.docs}
+                inferenceInputDocIds={builder.inferenceInputDocIds}
+                onCreated={() => setRefreshToken((n) => n + 1)}
+                simple
+              />
+            </section>
+            <section className="rounded-lg border border-border bg-card p-4">
+              <DeploymentsList projectId={builder.project.id} refreshToken={refreshToken} simple />
+            </section>
           </div>
         ) : (
           <>
@@ -368,5 +333,31 @@ export function SharePage() {
         )}
       </div>
     </div>
+  )
+}
+
+function ShareNavButton({
+  active,
+  onClick,
+  icon: Icon,
+  label,
+}: {
+  active: boolean
+  onClick: () => void
+  icon: LucideIcon
+  label: string
+}) {
+  return (
+    <button
+      type="button"
+      className={cn(
+        "flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-colors",
+        active ? "bg-secondary text-foreground" : "text-muted-foreground hover:text-foreground",
+      )}
+      onClick={onClick}
+    >
+      <Icon className="h-3.5 w-3.5" />
+      {label}
+    </button>
   )
 }

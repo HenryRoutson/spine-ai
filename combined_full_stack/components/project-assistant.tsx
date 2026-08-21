@@ -14,6 +14,7 @@ import { assistantRequestFailed } from "@/lib/assistant-chat-types"
 import { useStore } from "@/lib/store"
 import { formatSizeKb, sizeKbFromChars } from "@/lib/doc-size"
 import { DocLabel, ModuleKind, MODULE_META } from "@/lib/types"
+import { simpleKindBlurb } from "@/lib/plain-step-description"
 import { AssistantChat, type AssistantChatMessage } from "@/components/assistant-chat"
 import { UiContextChip } from "@/components/ui-context-chip"
 import { Badge } from "@/components/ui/badge"
@@ -42,9 +43,11 @@ type ProjectAssistantProps = {
   className?: string
   /** AI : open agent tab id — keeps this instance mounted while other agents run. */
   chatId: string
+  /** AI : Vibe / non-technical — hide canned welcome and technical chrome. */
+  simple?: boolean
 }
 
-export function ProjectAssistant({ className, chatId }: ProjectAssistantProps) {
+export function ProjectAssistant({ className, chatId, simple = false }: ProjectAssistantProps) {
   const {
     project,
     modules,
@@ -88,7 +91,7 @@ export function ProjectAssistant({ className, chatId }: ProjectAssistantProps) {
   } = useProjectAssistant()
   const { activeWindow } = useAppShell()
   // AI : Vibe vs Build — prompt awareness only; agent write power stays identical.
-  const isVibe = activeWindow === AppWindowId.Vibe
+  const isVibe = simple || activeWindow === AppWindowId.Vibe
   const humanSurface = isVibe ? "vibe" : "build"
   const [filesUploading, setFilesUploading] = useState(false)
   const [uploadError, setUploadError] = useState<string | null>(null)
@@ -285,21 +288,24 @@ export function ProjectAssistant({ className, chatId }: ProjectAssistantProps) {
         }
         showAvatars={!isVibe}
         showHeaderMeta={!isVibe}
-        showDebug
+        showDebug={!isVibe}
+        simple={isVibe}
         readOnly={!isMine}
         readOnlyHint={
           teammateLabel ? `View only — ${teammateLabel}'s chat. Start a new chat to reply.` : undefined
         }
         initialMessage={PROJECT_ASSISTANT_INITIAL_MESSAGE}
-        placeholder="Describe the pipeline… Enter for a new line, \u2318Enter / Ctrl+Enter to send, or type @ to mention"
+        placeholder="What do you want to build?"
         loadingLabel={(phase) =>
-          phase === "retrying"
-            ? "retrying…"
-            : phase === "structuring"
-              ? "designing project…"
-              : phase === "observing"
-                ? "reading runs…"
-                : "thinking…"
+          isVibe
+            ? "working…"
+            : phase === "retrying"
+              ? "retrying…"
+              : phase === "structuring"
+                ? "designing project…"
+                : phase === "observing"
+                  ? "reading runs…"
+                  : "thinking…"
         }
         messages={messages}
         onMessagesChange={setMessages}
@@ -310,7 +316,7 @@ export function ProjectAssistant({ className, chatId }: ProjectAssistantProps) {
         uiContextPins={uiContextPins}
         canSendWithoutText={uiContextPins.length > 0}
         onComposerAttachmentsConsumed={clearUiContextPins}
-        mentionOptions={mentionOptions}
+        mentionOptions={isVibe ? undefined : mentionOptions}
         onMentionPick={(option) => {
           if (option.action === "select_ui") {
             // AI : setSelectMode alone does not open the dock — mirror toggleSelectMode.
@@ -408,7 +414,7 @@ export function ProjectAssistant({ className, chatId }: ProjectAssistantProps) {
           }
           return data
         }}
-        renderProposal={(m) => <ProjectProposalPreview msg={m} />}
+        renderProposal={(m) => <ProjectProposalPreview msg={m} simple={isVibe} />}
       />
     </div>
   )
@@ -420,7 +426,63 @@ function changeKindLabel(kind: StructureModelDiffEntry["kind"]): string {
   return "modified"
 }
 
-function ProjectProposalPreview({ msg }: { msg: AssistantChatMessage<ProjectProposal> }) {
+function ProjectProposalPreview({
+  msg,
+  simple = false,
+}: {
+  msg: AssistantChatMessage<ProjectProposal>
+  simple?: boolean
+}) {
+  if (simple) return <SimpleProjectProposalPreview msg={msg} />
+  return <TechnicalProjectProposalPreview msg={msg} />
+}
+
+function simpleStepLabel(step: { label: string; kind: string }): string {
+  const raw = step.label.trim()
+  if (raw && raw.toLowerCase() !== step.kind.replace(/-/g, " ")) return raw
+  return simpleKindBlurb(step.kind) ?? raw
+}
+
+function SimpleProjectProposalPreview({ msg }: { msg: AssistantChatMessage<ProjectProposal> }) {
+  const p = msg.proposal!
+  const showModules = p.changed?.modules ?? true
+  const showDocs = p.changed?.docs ?? (p.docs?.length ?? 0) > 0
+  const showName = p.changed?.name ?? !!p.projectName
+  const actions = p.proposedActions ?? []
+  return (
+    <>
+      <p className="mb-2 text-xs font-medium text-foreground">Here's what I'll build</p>
+      {showName && p.projectName ? (
+        <p className="mb-2 text-xs text-muted-foreground">Name: {p.projectName}</p>
+      ) : null}
+      {showModules && p.modules.length > 0 ? (
+        <ol className="mb-2 space-y-1">
+          {p.modules.map((step, i) => (
+            <li key={step.id} className="text-xs text-foreground">
+              {i + 1}. {simpleStepLabel(step)}
+            </li>
+          ))}
+        </ol>
+      ) : null}
+      {showDocs && p.docs.length > 0 ? (
+        <p className="mb-2 text-xs text-muted-foreground">
+          Example files: {p.docs.map((d) => d.name).join(", ")}
+        </p>
+      ) : null}
+      {actions.length > 0 ? (
+        <p className="mb-2 text-xs text-muted-foreground">Then I'll try a run.</p>
+      ) : null}
+      {msg.status === "approved" ? (
+        <p className="text-xs text-muted-foreground">Applied.</p>
+      ) : null}
+      {msg.status === "rejected" ? (
+        <p className="text-xs text-muted-foreground">Rejected.</p>
+      ) : null}
+    </>
+  )
+}
+
+function TechnicalProjectProposalPreview({ msg }: { msg: AssistantChatMessage<ProjectProposal> }) {
   const { models: liveModels } = useStore()
   const p = msg.proposal!
   const showModels = p.changed?.models ?? true

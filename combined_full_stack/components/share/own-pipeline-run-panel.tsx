@@ -228,7 +228,7 @@ export function OwnPipelineRunPanel({
 
   if (validity.pipelineEmpty) {
     return (
-      <PipelineObserveEmpty copy="Describe what you want to build in Vibe first — then you can run it here." />
+      <PipelineObserveEmpty copy="What do you want to build?" />
     )
   }
 

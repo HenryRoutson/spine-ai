@@ -116,7 +116,9 @@ export function ProjectAssistantDockPanel({ embedded = false }: ProjectAssistant
       <div className="flex items-stretch border-b border-border">
         <div className="app-scrollbar flex min-w-0 flex-1 items-stretch gap-0.5 overflow-x-auto px-1 py-1">
           {openChatIds.length === 0 ? (
-            <p className="px-2 py-1 font-mono text-[10px] text-muted-foreground">No open agents</p>
+            <p className="px-2 py-1 font-mono text-[10px] text-muted-foreground">
+              {embedded ? "No chats" : "No open agents"}
+            </p>
           ) : (
             openChatIds.map((tabId) => {
               const active = tabId === activeChatId
@@ -172,32 +174,34 @@ export function ProjectAssistantDockPanel({ embedded = false }: ProjectAssistant
               {ownerSubtitle}
             </p>
           ) : null}
-          <Button
-            type="button"
-            size="sm"
-            variant={selectMode ? "secondary" : "outline"}
-            className="h-7 gap-1 px-2 font-mono text-[10px]"
-            onClick={toggleSelectMode}
-            aria-label={selectMode ? "Exit select UI mode" : "Select UI for agent"}
-            title={selectMode ? "Exit select UI mode (Esc)" : "Select UI for agent"}
-            spineId="assistant.select-ui"
-          >
-            <Crosshair className="h-3.5 w-3.5" />
-            {selectMode ? "Selecting…" : "Select"}
-            {uiContextPins.length > 0 ? (
-              <span className="rounded bg-primary/20 px-1 text-[9px]">{uiContextPins.length}</span>
-            ) : null}
-          </Button>
+          {embedded ? null : (
+            <Button
+              type="button"
+              size="sm"
+              variant={selectMode ? "secondary" : "outline"}
+              className="h-7 gap-1 px-2 font-mono text-[10px]"
+              onClick={toggleSelectMode}
+              aria-label={selectMode ? "Exit select UI mode" : "Select UI for agent"}
+              title={selectMode ? "Exit select UI mode (Esc)" : "Select UI for agent"}
+              spineId="assistant.select-ui"
+            >
+              <Crosshair className="h-3.5 w-3.5" />
+              {selectMode ? "Selecting…" : "Select"}
+              {uiContextPins.length > 0 ? (
+                <span className="rounded bg-primary/20 px-1 text-[9px]">{uiContextPins.length}</span>
+              ) : null}
+            </Button>
+          )}
           <Button
             type="button"
             variant="ghost"
             size="sm"
             className="h-7 gap-1 px-2 font-mono text-[9px]"
             onClick={() => void copyConversation()}
-            title="Copy full conversation (human + agent + debug)"
+            title="Copy chat"
           >
             {conversationCopied ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
-            {conversationCopied ? "Copied" : "Copy"}
+            {conversationCopied ? "Copied" : "Copy chat"}
           </Button>
           <Button
             type="button"
@@ -330,7 +334,7 @@ export function ProjectAssistantDockPanel({ embedded = false }: ProjectAssistant
             )}
             aria-hidden={tabId !== activeChatId}
           >
-            <ProjectAssistant chatId={tabId} />
+            <ProjectAssistant chatId={tabId} simple={embedded} />
           </div>
         ))}
       </div>

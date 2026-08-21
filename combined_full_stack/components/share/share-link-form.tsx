@@ -19,6 +19,7 @@ import { viewerFundsSharedRun } from "@/lib/shared-link-funding"
 import type { DocId, DocRef, ModuleId, Project } from "@/lib/types"
 import { COPY_FEEDBACK_MS } from "@/lib/ui-timing"
 import { copyTextToClipboard } from "@/lib/clipboard"
+import { cn } from "@/lib/utils"
 
 const LINK_FUNDING_OPTIONS = [
   {
@@ -43,16 +44,34 @@ const LINK_FUNDING_OPTIONS = [
   },
 ] as const
 
+const SIMPLE_LINK_FUNDING_OPTIONS = [
+  {
+    value: SharedLinkFundingMode.SharerPays,
+    label: "I'll pay",
+    senderPays: true,
+    description: "Anyone with the link can run it — billed to you.",
+  },
+  {
+    value: SharedLinkFundingMode.ViewerPays,
+    label: "They pay",
+    senderPays: false,
+    receiverSignInRequired: true,
+    description: "They sign in and use their own credits.",
+  },
+] as const
+
 export function ShareLinkForm({
   project,
   docs,
   inferenceInputDocIds,
   onCreated,
+  simple = false,
 }: {
   project: Project
   docs: DocRef[]
   inferenceInputDocIds: Partial<Record<ModuleId, DocId | DocId[]>>
   onCreated?: () => void
+  simple?: boolean
 }) {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -126,9 +145,11 @@ export function ShareLinkForm({
   return (
     <div className="space-y-4">
       <div>
-        <h3 className="text-sm font-semibold">Public link</h3>
+        <h3 className="text-sm font-semibold">{simple ? "Share a link" : "Public link"}</h3>
         <p className="mt-0.5 text-xs text-muted-foreground">
-          Share a run page — viewers see defaults plus their own uploads.
+          {simple
+            ? "Send this to anyone. They can run it in their browser."
+            : "Share a run page — viewers see defaults plus their own uploads."}
         </p>
       </div>
 
@@ -137,10 +158,11 @@ export function ShareLinkForm({
         onChange={(v) => setFundingMode(v as SharedLinkFundingMode)}
         senderLabel="You"
         receiverLabel="Viewer"
-        options={[...LINK_FUNDING_OPTIONS]}
+        options={simple ? [...SIMPLE_LINK_FUNDING_OPTIONS] : [...LINK_FUNDING_OPTIONS]}
+        simple={simple}
       />
 
-      {viewerFunds && (
+      {viewerFunds && !simple && (
         <SharePricingFields
           billingMultiple={billingMultiple}
           onBillingMultipleChange={setBillingMultiple}
@@ -152,14 +174,16 @@ export function ShareLinkForm({
         />
       )}
 
-      <label className="flex items-center gap-2 text-xs">
-        <input
-          type="checkbox"
-          checked={viewerNameRequired}
-          onChange={(e) => setViewerNameRequired(e.target.checked)}
-        />
-        Require viewer name
-      </label>
+      {simple ? null : (
+        <label className="flex items-center gap-2 text-xs">
+          <input
+            type="checkbox"
+            checked={viewerNameRequired}
+            onChange={(e) => setViewerNameRequired(e.target.checked)}
+          />
+          Require viewer name
+        </label>
+      )}
 
       <div className="space-y-2">
         <label className="flex items-center gap-2 text-xs">
@@ -168,7 +192,7 @@ export function ShareLinkForm({
             checked={spendLimitEnabled}
             onChange={(e) => setSpendLimitEnabled(e.target.checked)}
           />
-          Set spending limit
+          {simple ? "Stop after this much is spent" : "Set spending limit"}
         </label>
         {spendLimitEnabled && (
           <div className="flex items-center gap-2 pl-5">
@@ -179,14 +203,21 @@ export function ShareLinkForm({
               step="0.01"
               value={spendLimitUsd}
               onChange={(e) => setSpendLimitUsd(e.target.value)}
-              className="h-8 w-28 font-mono text-xs"
+              className={cn("h-8 w-28 text-xs", !simple && "font-mono")}
             />
-            <span className="text-[10px] text-muted-foreground">max billed via this link</span>
+            {simple ? null : (
+              <span className="text-[10px] text-muted-foreground">max billed via this link</span>
+            )}
           </div>
         )}
       </div>
 
-      <ShareDefaultFiles project={project} docs={docs} defaultDocsByModule={defaultDocsByModule} />
+      <ShareDefaultFiles
+        project={project}
+        docs={docs}
+        defaultDocsByModule={defaultDocsByModule}
+        simple={simple}
+      />
 
       {error && <p className="text-xs text-destructive">{error}</p>}
 
@@ -197,12 +228,13 @@ export function ShareLinkForm({
           </code>
           <Button size="sm" variant="outline" onClick={() => void copyUrl()}>
             {copied ? <Copy className="h-3.5 w-3.5" /> : <Link2 className="h-3.5 w-3.5" />}
+            {simple ? <span className="ml-1.5">{copied ? "Copied" : "Copy"}</span> : null}
           </Button>
         </div>
       ) : (
         <Button className="w-full gap-2" onClick={() => void createLink()} disabled={busy} spineId="share.create-link">
           {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Share2 className="h-4 w-4" />}
-          Create link
+          {simple ? "Create share link" : "Create link"}
         </Button>
       )}
     </div>

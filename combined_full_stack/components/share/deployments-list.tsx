@@ -71,6 +71,7 @@ function DeploymentRowCard({
   revoking,
   toggling,
   isLiability,
+  simple,
   onCopy,
   onToggleEnabled,
   onTakeDown,
@@ -81,6 +82,7 @@ function DeploymentRowCard({
   revoking: string | null
   toggling: string | null
   isLiability: boolean
+  simple: boolean
   onCopy: (url: string) => void
   onToggleEnabled: (kind: DeploymentKind, id: string, enabled: boolean) => void
   onTakeDown: (kind: DeploymentKind, id: string) => void
@@ -119,9 +121,11 @@ function DeploymentRowCard({
               <Globe className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
             )}
             <span className="truncate text-xs font-medium">{row.name}</span>
-            <span className="shrink-0 rounded bg-muted px-1.5 py-0.5 font-mono text-[9px] uppercase text-muted-foreground">
-              {kindLabel}
-            </span>
+            {simple ? null : (
+              <span className="shrink-0 rounded bg-muted px-1.5 py-0.5 font-mono text-[9px] uppercase text-muted-foreground">
+                {kindLabel}
+              </span>
+            )}
             {atLimit && (
               <span className="shrink-0 rounded bg-destructive/15 px-1.5 py-0.5 text-[9px] text-destructive">
                 limit reached
@@ -133,35 +137,44 @@ function DeploymentRowCard({
               </span>
             )}
           </div>
-          <p className="mt-1 font-mono text-[10px] text-muted-foreground">
-            {callCount} {isApi ? "requests" : "runs"} · {spendLabel(spent, limit, isAsset)}
+          <p className={cn("mt-1 text-muted-foreground", simple ? "text-xs" : "font-mono text-[10px]")}>
+            {callCount} {isApi ? "requests" : "runs"}
+            {simple ? ` · ${formatCents(spent)} used` : ` · ${spendLabel(spent, limit, isAsset)}`}
           </p>
-          <p className="mt-0.5 font-mono text-[10px] text-muted-foreground">
-            {isApi
-              ? `${callerFundsHostedApi((row as HostedApiRecord).fundingMode) ? "caller pays" : "you pay"} · ${pricingLabel(
-                  (row as HostedApiRecord).billingMultiple,
-                  (row as HostedApiRecord).flatFeeCents,
-                )} · key ${(row as HostedApiRecord).apiKeyPrefix}…`
-              : linkFundingLabel(row as SharedLinkRecord)}
-          </p>
-          {isEmbed && origins.length > 0 && (
+          {simple ? (
+            <p className="mt-0.5 text-xs text-muted-foreground">
+              {viewerFundsSharedRun((row as SharedLinkRecord).fundingMode) ? "They pay" : "You pay"}
+            </p>
+          ) : (
+            <p className="mt-0.5 font-mono text-[10px] text-muted-foreground">
+              {isApi
+                ? `${callerFundsHostedApi((row as HostedApiRecord).fundingMode) ? "caller pays" : "you pay"} · ${pricingLabel(
+                    (row as HostedApiRecord).billingMultiple,
+                    (row as HostedApiRecord).flatFeeCents,
+                  )} · key ${(row as HostedApiRecord).apiKeyPrefix}…`
+                : linkFundingLabel(row as SharedLinkRecord)}
+            </p>
+          )}
+          {simple || !isEmbed || origins.length === 0 ? null : (
             <p className="mt-0.5 truncate font-mono text-[9px] text-muted-foreground">
               origins: {origins.join(", ")}
             </p>
           )}
           <code className="mt-1 block truncate font-mono text-[9px] text-foreground/80">{url}</code>
-          {isLiability && (
+          {simple || !isLiability ? null : (
             <DeploymentSpendLimitEditor item={item} onSaved={() => void onRefresh()} />
           )}
-          <Button
-            size="sm"
-            variant="link"
-            className="mt-1 h-auto gap-1 p-0 text-[10px] text-muted-foreground"
-            onClick={() => onViewActivity({ kind: item.kind, id: row.id })}
-          >
-            <ScrollText className="h-3 w-3" />
-            View runs &amp; callers
-          </Button>
+          {simple ? null : (
+            <Button
+              size="sm"
+              variant="link"
+              className="mt-1 h-auto gap-1 p-0 text-[10px] text-muted-foreground"
+              onClick={() => onViewActivity({ kind: item.kind, id: row.id })}
+            >
+              <ScrollText className="h-3 w-3" />
+              View runs &amp; callers
+            </Button>
+          )}
         </div>
         <div className="flex shrink-0 gap-1">
           <Button
@@ -182,7 +195,7 @@ function DeploymentRowCard({
                 : "border-amber-500/40 text-amber-600 hover:bg-amber-500/10 hover:text-amber-600 dark:text-amber-400",
             )}
             disabled={actionBusy}
-            title={isEnabled ? "Temporarily disable" : "Re-enable"}
+            title={isEnabled ? (simple ? "Pause" : "Temporarily disable") : simple ? "Resume" : "Re-enable"}
             onClick={() => void onToggleEnabled(item.kind, row.id, !isEnabled)}
           >
             {toggling === row.id ? (
@@ -196,7 +209,7 @@ function DeploymentRowCard({
             variant="outline"
             className="h-7 px-2 text-destructive hover:bg-destructive/10 hover:text-destructive"
             disabled={actionBusy}
-            title="Delete deployment"
+            title={simple ? "Delete link" : "Delete deployment"}
             onClick={() => void onTakeDown(item.kind, row.id)}
           >
             {revoking === row.id ? (
@@ -218,6 +231,7 @@ function DeploymentSection({
   rows,
   revoking,
   toggling,
+  simple = false,
   onCopy,
   onToggleEnabled,
   onTakeDown,
@@ -231,6 +245,7 @@ function DeploymentSection({
   rows: DeploymentRow[]
   revoking: string | null
   toggling: string | null
+  simple?: boolean
   onCopy: (url: string) => void
   onToggleEnabled: (kind: DeploymentKind, id: string, enabled: boolean) => void
   onTakeDown: (kind: DeploymentKind, id: string) => void
@@ -260,6 +275,7 @@ function DeploymentSection({
               revoking={revoking}
               toggling={toggling}
               isLiability={deploymentIsLiability(item)}
+              simple={simple}
               onCopy={onCopy}
               onToggleEnabled={onToggleEnabled}
               onTakeDown={onTakeDown}
@@ -277,10 +293,12 @@ export function DeploymentsList({
   projectId,
   refreshToken = 0,
   onViewActivity,
+  simple = false,
 }: {
   projectId: string
   refreshToken?: number
   onViewActivity?: (filter: ActivityFilter) => void
+  simple?: boolean
 }) {
   const [busy, setBusy] = useState(false)
   const [revoking, setRevoking] = useState<string | null>(null)
@@ -310,13 +328,22 @@ export function DeploymentsList({
     void load()
   }, [load, refreshToken])
 
-  const { assets, liabilities } = useMemo(
-    () => partitionDeploymentRows(deploymentRowsForProject(liveDeploymentRows(links, apis), projectId)),
+  const projectRows = useMemo(
+    () => deploymentRowsForProject(liveDeploymentRows(links, apis), projectId),
     [links, apis, projectId],
   )
+  const { assets, liabilities } = useMemo(() => partitionDeploymentRows(projectRows), [projectRows])
+  const linkRows = useMemo(() => projectRows.filter((row) => row.kind === "link"), [projectRows])
 
   async function takeDown(kind: DeploymentKind, id: string) {
-    if (!window.confirm("Delete this deployment permanently? This cannot be undone.")) return
+    if (
+      !window.confirm(
+        simple
+          ? "Delete this link? People who have it won't be able to open it anymore."
+          : "Delete this deployment permanently? This cannot be undone.",
+      )
+    )
+      return
     setRevoking(id)
     setError(null)
     try {
@@ -356,15 +383,17 @@ export function DeploymentsList({
     onViewActivity?.(filter)
   }
 
-  const hasAny = assets.length + liabilities.length > 0
+  const hasAny = simple ? linkRows.length > 0 : assets.length + liabilities.length > 0
 
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between gap-2">
         <div>
-          <h3 className="text-sm font-semibold">Live deployments</h3>
+          <h3 className="text-sm font-semibold">{simple ? "Your links" : "Live deployments"}</h3>
           <p className="mt-0.5 text-xs text-muted-foreground">
-            Assets earn from viewers or callers; liabilities spend your credits.
+            {simple
+              ? "Copy, pause, or delete links you've already created."
+              : "Assets earn from viewers or callers; liabilities spend your credits."}
           </p>
         </div>
         <Button variant="outline" size="sm" onClick={() => void load()} disabled={busy}>
@@ -376,8 +405,26 @@ export function DeploymentsList({
 
       {!hasAny && !busy ? (
         <p className="rounded-md border border-dashed border-border px-4 py-10 text-center text-xs text-muted-foreground">
-          No live deployments for this project yet.
+          {simple ? "No links yet — create one above." : "No live deployments for this project yet."}
         </p>
+      ) : simple ? (
+        <ul className="space-y-2">
+          {linkRows.map((item) => (
+            <DeploymentRowCard
+              key={`${item.kind}-${item.row.id}`}
+              item={item}
+              revoking={revoking}
+              toggling={toggling}
+              isLiability={deploymentIsLiability(item)}
+              simple
+              onCopy={copyUrl}
+              onToggleEnabled={toggleEnabled}
+              onTakeDown={takeDown}
+              onRefresh={load}
+              onViewActivity={viewActivity}
+            />
+          ))}
+        </ul>
       ) : (
         <div className="space-y-5">
           <DeploymentSection

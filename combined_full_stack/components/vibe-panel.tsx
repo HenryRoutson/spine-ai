@@ -23,6 +23,9 @@ import { cn } from "@/lib/utils"
 const Inference = dynamic(() => import("@/components/inference").then((m) => ({ default: m.Inference })), {
   loading: () => <PanelLoading label="loading inference…" />,
 })
+const Share = dynamic(() => import("@/components/share/share-page").then((m) => ({ default: m.SharePage })), {
+  loading: () => <PanelLoading label="loading share…" />,
+})
 const Logging = dynamic(() => import("@/components/logging").then((m) => ({ default: m.Logging })), {
   loading: () => <PanelLoading label="loading logging…" />,
 })
@@ -31,12 +34,14 @@ function renderObservePanel(tab: VibeObserveTab) {
   switch (tab) {
     case AppWindowId.Inference:
       return <Inference simple />
+    case AppWindowId.Share:
+      return <Share simple />
     case AppWindowId.Logging:
       return <Logging listDensity="compact" simple />
   }
 }
 
-// AI : chat left (create/edit from scratch); Inference + Logging on the right — existing panels, observe only.
+// AI : chat left (create/edit from scratch); Inference / Share / Logging on the right.
 export function VibePanel() {
   useMarkPrimarySectionReady(AppPrimarySection.Build)
   const { vibeObserveTab, setVibeObserveTab } = useAppShell()

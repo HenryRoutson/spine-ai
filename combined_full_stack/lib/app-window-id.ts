@@ -13,7 +13,7 @@ export const AppWindowId = {
   Docs: "docs",
   ProjectBilling: "project-billing",
   ProjectSettings: "project-settings",
-  // AI : L0 Vibe — chat left (full project control); inference + logging observe on the right.
+  // AI : L0 Vibe — chat left (full project control); inference / share / logging observe on the right.
   Vibe: "vibe",
   Billing: "billing",
   Settings: "settings",

@@ -219,6 +219,15 @@ export function useInferenceDocs({
     setPickerModuleId(null)
   }
 
+  // AI : drop saved-setup + persisted slot picks so Inference starts from a blank assignment.
+  function clearInputAssignment() {
+    setInputDocs({})
+    setPickerModuleId(null)
+    setInputIssues([])
+    setInputCompatPairs([])
+    setInferenceInputDocIds({})
+  }
+
   return {
     inputDocs,
     inputDocIdsKey,
@@ -238,5 +247,6 @@ export function useInferenceDocs({
     replaceAssignedDoc,
     useSamples,
     applyInputAssignment,
+    clearInputAssignment,
   }
 }

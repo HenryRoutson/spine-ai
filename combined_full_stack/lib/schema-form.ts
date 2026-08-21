@@ -204,7 +204,7 @@ export function friendlyType(node: FormSchemaNode): string {
       number: "Number",
       integer: "Number",
       boolean: "Yes / No",
-      array: "List",
+      array: "Several items",
       object: "Group",
     }[node.type] ?? "Value"
   )

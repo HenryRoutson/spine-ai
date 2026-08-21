@@ -14,12 +14,16 @@ import {
 } from "@/lib/shared-with-me"
 import { openSharedLinkInWorkspace } from "@/lib/open-shared-in-workspace"
 import { timeAgo } from "@/lib/time-ago"
+import { cn } from "@/lib/utils"
 
 type SharedWithMePanelProps = {
   onRun: (linkId: string) => void
+  simple?: boolean
+  // AI : parent supplies the section heading (project picker).
+  embedded?: boolean
 }
 
-export function SharedWithMePanel({ onRun }: SharedWithMePanelProps) {
+export function SharedWithMePanel({ onRun, simple = false, embedded = false }: SharedWithMePanelProps) {
   const [entries, setEntries] = useState<SharedWithMeEntry[]>(() => readSharedWithMe())
   const [addInput, setAddInput] = useState("")
   const [addError, setAddError] = useState<string | null>(null)
@@ -34,7 +38,7 @@ export function SharedWithMePanel({ onRun }: SharedWithMePanelProps) {
   async function handleAdd() {
     const linkId = parseSharedLinkIdFromInput(addInput)
     if (!linkId) {
-      setAddError("Paste a shared link URL or pub_… id")
+      setAddError(simple ? "That doesn't look like a share link" : "Paste a shared link URL or pub_… id")
       return
     }
     setAdding(true)
@@ -58,16 +62,20 @@ export function SharedWithMePanel({ onRun }: SharedWithMePanelProps) {
 
   return (
     <div className="space-y-4">
-      <p className="text-sm text-muted-foreground">
-        Pipelines others shared with you. Run them here with full access to Billing and the rest of your workspace.
-      </p>
+      {embedded ? null : (
+        <p className="text-sm text-muted-foreground">
+          {simple
+            ? "Paste a link someone sent you to run it here."
+            : "Pipelines others shared with you. Run them here with full access to Billing and the rest of your workspace."}
+        </p>
+      )}
 
       <div className="flex gap-2">
         <Input
           value={addInput}
           onChange={(e) => setAddInput(e.target.value)}
-          placeholder="https://…/run/pub_… or pub_…"
-          className="h-9 font-mono text-xs"
+          placeholder={simple ? "Paste a link…" : "https://…/run/pub_… or pub_…"}
+          className={cn("h-9 text-xs", !simple && "font-mono")}
           disabled={adding}
           onKeyDown={(e) => {
             if (e.key === "Enter") void handleAdd()
@@ -82,7 +90,9 @@ export function SharedWithMePanel({ onRun }: SharedWithMePanelProps) {
 
       {entries.length === 0 ? (
         <p className="rounded-lg border border-dashed border-border px-4 py-8 text-center text-sm text-muted-foreground">
-          No shared links yet — paste a link above or open one from an email and choose &ldquo;Open in workspace&rdquo;.
+          {simple
+            ? "No links yet — paste one above."
+            : "No shared links yet — paste a link above or open one from an email and choose “Open in workspace”."}
         </p>
       ) : (
         <ul className="space-y-2">
@@ -93,8 +103,8 @@ export function SharedWithMePanel({ onRun }: SharedWithMePanelProps) {
             >
               <div className="min-w-0 flex-1">
                 <p className="truncate text-sm font-medium">{entry.name ?? entry.linkId}</p>
-                <p className="font-mono text-[10px] text-muted-foreground">
-                  {entry.linkId} · added {timeAgo(entry.addedAt)}
+                <p className={cn("text-muted-foreground", simple ? "text-xs" : "font-mono text-[10px]")}>
+                  {simple ? `Added ${timeAgo(entry.addedAt)}` : `${entry.linkId} · added ${timeAgo(entry.addedAt)}`}
                 </p>
               </div>
               <Button size="sm" variant="outline" className="h-8 gap-1.5" onClick={() => onRun(entry.linkId)}>

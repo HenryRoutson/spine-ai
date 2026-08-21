@@ -82,8 +82,14 @@ export function AppShellProvider({ children }: { children: ReactNode }) {
 
   const openSharedRun = useCallback((linkId: string) => {
     setActiveSharedLinkId(linkId)
+    // AI : Vibe hosts Share — stay on the surface (vibe-first also bounces editors away).
+    if (activeWindow === AppWindow.Vibe || readHideDeveloperTools()) {
+      setVibeObserveTab(AppWindow.Share)
+      if (activeWindow !== AppWindow.Vibe) setActiveWindow(AppWindow.Vibe)
+      return
+    }
     setActiveWindow(AppWindow.Share)
-  }, [])
+  }, [activeWindow])
 
   const clearSharedRun = useCallback(() => setActiveSharedLinkId(null), [])
 

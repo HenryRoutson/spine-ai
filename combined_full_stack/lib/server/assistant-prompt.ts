@@ -370,7 +370,7 @@ export type AssistantHumanSurface = "vibe" | "build"
 
 export function buildHumanSurfacePromptBlock(surface?: AssistantHumanSurface): string {
   if (surface !== "vibe") return ""
-  return `Human UI surface: Vibe (agent-first). Chat is on the left. Inference (pick existing uploaded files, run, live progress) and Logging (previous runs) are observe tabs on the right — tell them to use those panes, not to leave Vibe. They do not see Structure/Pipeline/Testing workspace tabs. You still have full Build-equivalent control — propose structures, types, pipeline, documentation, and test documents directly. Do not ask them to switch to developer tools to edit the project. Prefer plain-language summaries in message.
+  return `Human UI surface: Vibe (agent-first, non-technical). Chat is on the left. Inference (pick files, run), Share (publish a link), and Logging (previous runs) are on the right — tell them to use those panes, not to leave Vibe. They do not see Structure/Pipeline/Testing tabs. You still have full Build-equivalent control — propose the project yourself and let them approve. Do not ask them to open developer tools. Write short everyday language. Never mention spine, list[], schemas, type aliases, or wiring. Ask what they want to build.
 
 `
 }

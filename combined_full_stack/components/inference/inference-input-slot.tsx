@@ -11,6 +11,7 @@ import {
   type JsonStructFormKind,
 } from "@/components/inference/inference-json-struct-editor"
 import { StepInputDescription, moduleInputDescription } from "@/components/step-input-description"
+import { simpleStepDescription, toPlainIssueMessage } from "@/lib/plain-step-description"
 import { cn } from "@/lib/utils"
 import {
   inputTypeAccept,
@@ -117,10 +118,64 @@ export function InferenceInputSlot(props: {
     setMode("empty")
   }
 
-  const description = moduleInputDescription(inputModule)
+  const rawDescription = moduleInputDescription(inputModule)
+  const description = simple ? simpleStepDescription(rawDescription, inputModule.kind) : rawDescription
   const jsonModeTabs = simple
     ? ([["file", "Choose file"], ["empty", "Fill in a form"]] as const)
     : ([["file", "From file"], ["branch", "Branch off"], ["empty", "Create empty"]] as const)
+  // AI : empty file picker — in simple mode sit square beside the label, not a full-width bar.
+  const emptyFileSlot = docs.length === 0 && (!jsonModes || mode === "file")
+  const emptyPickerLabel = upload
+    ? defaultFilename
+      ? simple
+        ? "Upload a different file"
+        : "Upload to replace default"
+      : "Upload file"
+    : simple
+      ? "Choose file"
+      : "Choose from store"
+
+  // AI : simple view always offers unassign; advanced keeps remove for multi/upload only.
+  const onRemoveAssigned = uploadProps?.onRemoveDoc ?? storeProps?.onRemoveDoc
+
+  function emptyPickerButton(compact: boolean) {
+    return (
+      <Button
+        variant="outline"
+        size={compact ? "icon-sm" : "sm"}
+        className={compact ? "shrink-0 bg-transparent" : "w-full bg-transparent"}
+        disabled={upload && uploading}
+        onClick={upload ? () => inputRef.current?.click() : storeProps!.onOpenPicker}
+        aria-label={emptyPickerLabel}
+        title={compact ? emptyPickerLabel : undefined}
+      >
+        {upload && uploading ? (
+          <Loader2 className={cn("h-3.5 w-3.5 animate-spin", !compact && "mr-1.5")} />
+        ) : upload ? (
+          <Upload className={cn("h-3.5 w-3.5", !compact && "mr-1.5")} />
+        ) : (
+          <FolderOpen className={cn("h-3.5 w-3.5", !compact && "mr-1.5")} />
+        )}
+        {!compact && emptyPickerLabel}
+      </Button>
+    )
+  }
+
+  function removeFileButton(docId: DocId, compact: boolean) {
+    if (!onRemoveAssigned) return null
+    return (
+      <Button
+        variant={compact ? "outline" : "ghost"}
+        size={compact ? "icon-sm" : "sm"}
+        className={compact ? "shrink-0 bg-transparent" : "h-8"}
+        onClick={() => onRemoveAssigned(docId)}
+        aria-label="Remove file"
+        title={compact ? "Remove file" : undefined}
+      >
+        {compact || upload ? <X className="h-3.5 w-3.5" /> : "Remove"}
+      </Button>
+    )
+  }
 
   return (
     <div
@@ -142,11 +197,14 @@ export function InferenceInputSlot(props: {
       })}
     >
       {simple ? (
-        <div className="mb-2">
-          <p className="text-sm font-medium">{inputModule.label}</p>
-          {description ? (
-            <p className="mt-1 text-xs leading-relaxed text-muted-foreground">{description}</p>
-          ) : null}
+        <div className="mb-2 flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <p className="text-sm font-medium">{inputModule.label}</p>
+            {description ? (
+              <p className="mt-1 text-xs leading-relaxed text-muted-foreground">{description}</p>
+            ) : null}
+          </div>
+          {emptyFileSlot ? emptyPickerButton(true) : null}
         </div>
       ) : (
         <>
@@ -230,6 +288,7 @@ export function InferenceInputSlot(props: {
               disabled={jsonStructDisabled}
               onAssigned={onJsonStructAssigned!}
               source={jsonStructSource}
+              plain={simple}
             />
           )}
           {mode === "branch" && branchSeed && (
@@ -253,7 +312,15 @@ export function InferenceInputSlot(props: {
           {docs.map((doc) => (
             <div key={doc.id} className="flex flex-wrap items-center gap-2">
               {upload ? (
-                <span className={cn("inline-flex min-w-0 flex-1 items-center gap-1.5 rounded-md border border-border bg-secondary/30 px-2 py-1.5", simple ? "text-xs" : "font-mono text-[10px]")}>
+                <span
+                  className={cn("inline-flex min-w-0 flex-1 items-center gap-1.5 rounded-md border border-border bg-secondary/30 px-2 py-1.5", simple ? "text-xs" : "font-mono text-[10px]")}
+                  {...uiContextTargetProps({
+                    kind: "project_doc",
+                    id: `doc:${doc.id}`,
+                    label: `File · ${doc.name}`,
+                    snippet: doc.name,
+                  })}
+                >
                   <FileText className="h-3 w-3 shrink-0 text-primary" />
                   <span className="truncate">{doc.name}</span>
                 </span>
@@ -266,26 +333,19 @@ export function InferenceInputSlot(props: {
                     simple ? "text-xs" : "font-mono text-[10px]",
                   )}
                   title="Preview selected document"
+                  {...uiContextTargetProps({
+                    kind: "project_doc",
+                    id: `doc:${doc.id}`,
+                    label: `File · ${doc.name}`,
+                    snippet: doc.name,
+                  })}
                 >
                   <Link2 className="h-3 w-3 shrink-0 text-primary" />
                   <FileText className="h-3 w-3 shrink-0 text-primary" />
                   <span className="truncate">{doc.name}</span>
                 </button>
               )}
-              {(multi || upload) && (uploadProps?.onRemoveDoc ?? storeProps?.onRemoveDoc) && (
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="h-8"
-                  onClick={() =>
-                    upload
-                      ? uploadProps!.onRemoveDoc(doc.id)
-                      : storeProps!.onRemoveDoc!(doc.id)
-                  }
-                >
-                  {upload ? <X className="h-3.5 w-3.5" /> : "Remove"}
-                </Button>
-              )}
+              {(multi || upload || simple) && removeFileButton(doc.id, simple)}
             </div>
           ))}
           {multi && !upload && (
@@ -315,25 +375,8 @@ export function InferenceInputSlot(props: {
             </Button>
           )}
         </div>
-      ) : upload ? (
-        <Button
-          variant="outline"
-          size="sm"
-          className="w-full bg-transparent"
-          disabled={uploading}
-          onClick={() => inputRef.current?.click()}
-        >
-          {uploading ? (
-            <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
-          ) : (
-            <Upload className="mr-1.5 h-3.5 w-3.5" />
-          )}
-          {defaultFilename ? (simple ? "Upload a different file" : "Upload to replace default") : "Upload file"}
-        </Button>
-      ) : (
-        <Button variant="outline" size="sm" className="w-full bg-transparent" onClick={storeProps!.onOpenPicker}>
-          <FolderOpen className="mr-1.5 h-3.5 w-3.5" /> {simple ? "Choose file" : "Choose from store"}
-        </Button>
+      ) : simple ? null : (
+        emptyPickerButton(false)
       )}
       {upload && (
         <input
@@ -349,7 +392,9 @@ export function InferenceInputSlot(props: {
         />
       )}
       {issue && (
-        <p className={cn("mt-2 text-destructive", simple ? "text-sm" : "font-mono text-[10px]")}>{issue.message}</p>
+        <p className={cn("mt-2 text-destructive", simple ? "text-sm" : "font-mono text-[10px]")}>
+          {simple ? toPlainIssueMessage(issue.message) : issue.message}
+        </p>
       )}
     </div>
   )

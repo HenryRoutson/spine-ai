@@ -7,7 +7,9 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import {
   AlertTriangle,
   Boxes,
+  CircleOff,
   CreditCard,
+  Eraser,
   Layers,
   Loader2,
   Maximize2,
@@ -150,7 +152,9 @@ export function Inference({ simple }: { simple?: boolean } = {}) {
   useRerenderOnEvent(LOGGING_SETTINGS_CHANGED_EVENT)
   const { typesInvalid, pipelineInvalid, pipelineEmpty } = computeWorkspaceValidity(modules, models, typeAliases)
   const isVibe = isVibeWindow(activeWindow)
-  const [isSimple, setSimple] = useSimpleStepTrace(simple ?? isVibe)
+  const vibeSimple = simple === true || isVibe
+  const [prefSimple, setSimple] = useSimpleStepTrace(vibeSimple)
+  const isSimple = vibeSimple || prefSimple
   const showRunWorkspace = !pipelineEmpty && !typesInvalid && !pipelineInvalid
   const minRunBalanceCents = billingAccount?.minRunBalanceCents ?? MIN_RUN_BALANCE_CENTS
   const insufficientCredit =
@@ -195,6 +199,11 @@ export function Inference({ simple }: { simple?: boolean } = {}) {
   )
 
   const selected = setupStates.find((s) => s.doc.id === selectedId)
+  const noSetupSelected = selectedId === null
+
+  useEffect(() => {
+    setSelectedId(null)
+  }, [project.id])
 
   const run = useInferenceRun({
     project,
@@ -244,6 +253,24 @@ export function Inference({ simple }: { simple?: boolean } = {}) {
     },
     [setupStates, applySetupInputs],
   )
+
+  const selectNoSetup = useCallback(() => {
+    const leavingSetup = selectedId !== null
+    setSelectedId(null)
+    setActionError(null)
+    if (leavingSetup) run.clearInputAssignment()
+  }, [selectedId, run])
+
+  const clearSetup = useCallback(() => {
+    setSelectedId(null)
+    setActionError(null)
+    run.clearInputAssignment()
+  }, [run])
+
+  const hasAssignedInputs = run.inputModules.some(
+    (m) => docsForInputModule(run.inputDocs, m.id).length > 0,
+  )
+  const canClearSetup = selected != null || hasAssignedInputs
 
   async function deleteSetup(docId: DocId, e: React.MouseEvent) {
     e.stopPropagation()
@@ -358,7 +385,7 @@ export function Inference({ simple }: { simple?: boolean } = {}) {
         ? "Change files here to run again with different inputs"
         : selected
           ? `Using setup · ${setupDisplayName(selected.doc.name)}`
-          : "Pick a saved setup or assign inputs manually, then run"
+          : "No setup — assign inputs manually, then run"
 
   const lastRunSubtitle = run.run
     ? isSimple
@@ -367,37 +394,46 @@ export function Inference({ simple }: { simple?: boolean } = {}) {
     : undefined
 
 
+  const showNewSetup = !isSimple
+  const showReset = run.phase !== "idle"
+  const showClearSetup = !isSimple
+  const headerActions =
+    showNewSetup || showReset || showClearSetup ? (
+      <div className="flex items-center gap-2">
+        {showClearSetup ? (
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-8 bg-transparent"
+            onClick={clearSetup}
+            disabled={!canClearSetup}
+            spineId="inference.clear-setup"
+          >
+            <Eraser className="mr-1.5 h-3.5 w-3.5" />
+            Clear setup
+          </Button>
+        ) : null}
+        {showNewSetup ? (
+          <Button size="sm" className="h-8" onClick={() => void createBlankSetup()} disabled={creatingSetup}>
+            {creatingSetup ? (
+              <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+            ) : (
+              <Plus className="mr-1.5 h-3.5 w-3.5" />
+            )}
+            New setup
+          </Button>
+        ) : null}
+        {showReset ? (
+          <Button variant="outline" size="sm" className="bg-transparent" onClick={() => run.reset()} disabled={run.phase === "running"}>
+            <RotateCcw className="mr-1.5 h-3.5 w-3.5" /> Reset
+          </Button>
+        ) : null}
+      </div>
+    ) : undefined
+
   return (
     <div className="flex h-full flex-col">
-      {showRunWorkspace ? (
-        <WindowHeader
-          actions={
-            <div className="flex items-center gap-2">
-              {isSimple ? null : (
-              <Button size="sm" className="h-8" onClick={() => void createBlankSetup()} disabled={creatingSetup}>
-                {creatingSetup ? (
-                  <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
-                ) : (
-                  <Plus className="mr-1.5 h-3.5 w-3.5" />
-                )}
-                New setup
-              </Button>
-              )}
-              {run.phase !== "idle" ? (
-                <Button variant="outline" size="sm" className="bg-transparent" onClick={() => run.reset()} disabled={run.phase === "running"}>
-                  <RotateCcw className="mr-1.5 h-3.5 w-3.5" /> Reset
-                </Button>
-              ) : null}
-            </div>
-          }
-        />
-      ) : null}
-      {showRunWorkspace ? (
-        <p className="border-b border-border px-5 py-2 text-[11px] text-muted-foreground">
-          AI outputs are not professional, medical, or legal advice — verify before acting.
-        </p>
-      ) : null}
-
+      {showRunWorkspace ? <WindowHeader actions={headerActions} /> : null}
       {actionError && (
         <p className="border-b border-destructive/30 bg-destructive/10 px-4 py-2 font-mono text-[11px] text-destructive">
           {actionError}
@@ -408,8 +444,8 @@ export function Inference({ simple }: { simple?: boolean } = {}) {
         <PipelineObserveEmpty
           copy={
             isVibe
-              ? "Describe what you want to build in chat. Inference will be ready once there's a pipeline to run."
-              : "Describe what you want to build in chat, or add steps in Pipeline."
+              ? "What do you want to build?"
+              : "Ask in chat, or add steps in Pipeline."
           }
         />
       ) : typesInvalid ? (
@@ -418,7 +454,7 @@ export function Inference({ simple }: { simple?: boolean } = {}) {
             <AlertTriangle className="mx-auto h-10 w-10 text-destructive" />
             <p className="mt-4 text-sm font-medium text-destructive">
               {isVibe
-                ? "The structures still need a few details. Ask the agent to fix them."
+                ? "Ask in chat to fix this."
                 : "Fix type errors in Structure before running inference."}
             </p>
             {isVibe ? null : (
@@ -440,7 +476,7 @@ export function Inference({ simple }: { simple?: boolean } = {}) {
             <AlertTriangle className="mx-auto h-10 w-10 text-destructive" />
             <p className="mt-4 text-sm font-medium text-destructive">
               {isVibe
-                ? "The pipeline still needs a few details. Ask the agent to fix them."
+                ? "Ask in chat to fix this."
                 : "Fix pipeline errors before running inference."}
             </p>
             {isVibe ? null : (
@@ -459,24 +495,56 @@ export function Inference({ simple }: { simple?: boolean } = {}) {
       ) : (
         <ResizableSplit
           className="min-h-0 flex-1"
-          leadingWidth={sidebarWidth}
+          leadingWidth={isSimple ? 0 : sidebarWidth}
           onLeadingWidthChange={setSidebarWidth}
           onLeadingWidthCommit={commitSidebarWidth}
           minLeading={inferenceSidebarSplit.min}
           maxLeading={inferenceSidebarSplit.max}
           leading={
+            isSimple ? null : (
             <>
               <p className="border-b border-border px-3 py-2 font-mono text-[10px] uppercase text-muted-foreground">
-                saved setups ({setupDocs.length})
+                setups · {noSetupSelected ? "no setup" : "setup"} ({setupDocs.length} saved)
               </p>
               <ScrollArea className="min-h-0 flex-1">
-                {setupStates.length === 0 && (
-                  <p className="px-3 py-4 text-xs text-muted-foreground">
-                    No setups yet. Create one — files ending in{" "}
-                    <span className="font-mono">{INFERENCE_SETUP_SUFFIX}</span> show up here and in Documents.
-                  </p>
-                )}
                 <ul className="p-1.5">
+                  <li>
+                    <div
+                      className={cn(
+                        "flex items-center gap-1 rounded-md px-1 py-1",
+                        noSetupSelected && "bg-secondary",
+                      )}
+                    >
+                      <button
+                        type="button"
+                        onClick={selectNoSetup}
+                        className="flex min-w-0 flex-1 items-start gap-2 rounded-md px-1 py-1 text-left hover:bg-accent"
+                        {...uiContextTargetProps({
+                          kind: "generic",
+                          id: "inference:no-setup",
+                          label: "No setup",
+                          snippet: "assign inputs manually",
+                        })}
+                      >
+                        <CircleOff className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
+                        <span
+                          className="min-w-0 flex-1 break-all font-mono text-[11px] leading-snug"
+                          title="No setup — assign inputs manually"
+                        >
+                          no setup
+                        </span>
+                        <Badge variant="outline" className="shrink-0 font-mono text-[9px] border-border text-muted-foreground">
+                          default
+                        </Badge>
+                      </button>
+                    </div>
+                  </li>
+                  {setupStates.length === 0 && (
+                    <li className="px-2 py-3 text-xs text-muted-foreground">
+                      No saved setups. Create one — files ending in{" "}
+                      <span className="font-mono">{INFERENCE_SETUP_SUFFIX}</span> show up here and in Documents.
+                    </li>
+                  )}
                   {setupStates.map((s) => {
                     const status = setupStatus(s)
                     const badge = STATUS_BADGE[status]
@@ -526,11 +594,14 @@ export function Inference({ simple }: { simple?: boolean } = {}) {
                 </ul>
               </ScrollArea>
             </>
+            )
           }
           trailing={
             <ScrollArea className="min-h-0 min-w-0 flex-1">
               <div className="mx-auto max-w-4xl space-y-6 p-5">
-              <SimpleViewToggle checked={isSimple} onCheckedChange={setSimple} className="max-w-xs" />
+              {vibeSimple ? null : (
+                <SimpleViewToggle checked={isSimple} onCheckedChange={setSimple} className="max-w-xs" />
+              )}
               {selected && !isSimple && (
                 <SetupDetail
                   key={selected.doc.id}
@@ -628,15 +699,25 @@ export function Inference({ simple }: { simple?: boolean } = {}) {
                     {run.matchingPriorRun && run.phase === "idle" && (
                       <div className="rounded-lg border border-chart-3/40 bg-chart-3/5 px-4 py-3">
                         <p className="text-sm text-foreground">
-                          This setup already completed successfully.
+                          {isSimple
+                            ? "This already ran successfully."
+                            : "This setup already completed successfully."}
                         </p>
-                        <p className="mt-1 font-mono text-[10px] text-muted-foreground">
-                          {timeAgo(run.matchingPriorRun.startedAt)} · {run.matchingPriorRun.id}
-                        </p>
-                        <GoToLoggingButton
-                          className="mt-3"
-                          onClick={() => openLogging(run.matchingPriorRun!.id)}
-                        />
+                        {isSimple ? (
+                          <p className="mt-1 text-xs text-muted-foreground">
+                            {timeAgo(run.matchingPriorRun.startedAt)}
+                          </p>
+                        ) : (
+                          <>
+                            <p className="mt-1 font-mono text-[10px] text-muted-foreground">
+                              {timeAgo(run.matchingPriorRun.startedAt)} · {run.matchingPriorRun.id}
+                            </p>
+                            <GoToLoggingButton
+                              className="mt-3"
+                              onClick={() => openLogging(run.matchingPriorRun!.id)}
+                            />
+                          </>
+                        )}
                       </div>
                     )}
                       <RunWithStopButton
@@ -662,8 +743,9 @@ export function Inference({ simple }: { simple?: boolean } = {}) {
                       ready={run.allInputsReady}
                       running={run.phase === "running"}
                       inputCount={run.inputModules.length}
+                      simple={isSimple}
                     />
-                    {run.phase === "running" && run.attachedTrackId && (
+                    {run.phase === "running" && run.attachedTrackId && !isSimple && (
                       <Button
                         type="button"
                         variant="outline"
@@ -717,6 +799,9 @@ export function Inference({ simple }: { simple?: boolean } = {}) {
                 )}
 
                 {run.error && run.phase !== "done" && (
+                  isSimple ? (
+                    <p className="text-sm text-destructive">This run could not start. Check the files above.</p>
+                  ) : (
                   <ErrorBanner
                     text={run.error.split("\n")[0] ?? run.error}
                     copyText={formatErrorForClipboard({
@@ -725,11 +810,14 @@ export function Inference({ simple }: { simple?: boolean } = {}) {
                     })}
                     uiLocation="Inference → Run Pipeline → start run"
                   />
+                  )
                 )}
 
                 {run.deduped && run.phase === "done" && (
                   <div className="rounded-lg border border-chart-3/40 bg-chart-3/5 px-4 py-3 text-sm text-foreground">
-                    Reused a prior successful run with the same fingerprint — no new inference was billed.
+                    {isSimple
+                      ? "Used a previous result — nothing new was billed."
+                      : "Reused a prior successful run with the same fingerprint — no new inference was billed."}
                   </div>
                 )}
 
@@ -796,7 +884,7 @@ export function Inference({ simple }: { simple?: boolean } = {}) {
                     {run.run.status !== "ok" && (
                       isSimple ? (
                         <p className="text-sm text-destructive">
-                          {run.runErrorDisplay?.message ?? "This run could not finish. Open a step for details."}
+                          This run could not finish. Open a step below for details.
                         </p>
                       ) : (
                       <div className="rounded-lg border border-border bg-card px-6 py-6 space-y-3">
@@ -871,6 +959,7 @@ export function Inference({ simple }: { simple?: boolean } = {}) {
           selectedDocIds={docsForInputModule(run.inputDocs, run.pickerModule.id).map((d) => d.id)}
           onSelect={(doc) => run.setInputDocForModule(run.pickerModule!.id, doc)}
           onClose={() => run.setPickerModuleId(null)}
+          simple={isSimple}
         />
       )}
     </div>

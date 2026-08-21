@@ -16,6 +16,10 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { Input } from "@/components/ui/input"
 import { navigateToProjectPicker } from "@/lib/app-mode-nav"
+import { isAccountWindow } from "@/lib/app-nav-config"
+import { useAppShell } from "@/lib/app-shell"
+import { AppWindowId } from "@/lib/app-window-id"
+import { readHideDeveloperTools } from "@/lib/developer-tools-settings"
 import {
   PROJECT_DELETE_SETTINGS_CHANGED_EVENT,
   readQuickProjectDelete,
@@ -81,6 +85,7 @@ function ProjectRenameInput({
 export function ProjectSelector({ embed = false }: { embed?: boolean }) {
   const { projects, project, setActiveProjectId, prefetchProject, addProject, renameProject, deleteProject } =
     useStore()
+  const { activeWindow, setActiveWindow } = useAppShell()
   const [editing, setEditing] = useState<{ id: string; initialName: string } | null>(null)
   const [addingProject, setAddingProject] = useState(false)
   const { isDeleting, isExiting, runDelete, mergeWithGhosts } = useAnimatedRemoval<Project>()
@@ -156,7 +161,15 @@ export function ProjectSelector({ embed = false }: { embed?: boolean }) {
                 <DropdownMenuItem
                   onMouseEnter={() => prefetchProject(p.id)}
                   onFocus={() => prefetchProject(p.id)}
-                  onClick={() => setActiveProjectId(p.id)}
+                  onClick={() => {
+                    setActiveProjectId(p.id)
+                    // AI : Project dropdown is L0 for the open project — leave Billing/Settings back into it.
+                    if (isAccountWindow(activeWindow)) {
+                      setActiveWindow(
+                        readHideDeveloperTools() ? AppWindowId.Vibe : AppWindowId.Structure,
+                      )
+                    }
+                  }}
                   className="group flex items-center justify-between gap-2 text-xs"
                 >
                   <span className="flex min-w-0 flex-1 flex-col">

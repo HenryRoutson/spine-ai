@@ -7,7 +7,7 @@ import { readHideDeveloperTools } from "@/lib/developer-tools-settings"
 export function resolvePrimarySection(mode: AppMode, activeWindow: AppWindowIdType): AppPrimarySection {
   if (activeWindow === AppWindowId.Billing) return AppPrimarySection.Billing
   if (activeWindow === AppWindowId.Settings) return AppPrimarySection.Settings
-  // AI : Vibe is a Build sub-surface — keep L0 on Build so project selector stays shared.
+  // AI : Vibe lives inside the open project — keep L0 on Build so picker / Run still treat it as project work.
   if (activeWindow === AppWindowId.Vibe) return AppPrimarySection.Build
   return mode === AppMode.Run ? AppPrimarySection.Run : AppPrimarySection.Build
 }

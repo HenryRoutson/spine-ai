@@ -27,9 +27,11 @@ function priceLabel(cents: number): string {
 
 export function MarketplaceBrowsePanel({
   embedded = false,
+  simple = false,
 }: {
   // AI : when true, parent page supplies the section heading (projects tab).
   embedded?: boolean
+  simple?: boolean
 }) {
   const [query, setQuery] = useState("")
   const [listings, setListings] = useState<MarketplaceListingCard[]>(
@@ -128,7 +130,9 @@ export function MarketplaceBrowsePanel({
         <div>
           <h3 className="text-sm font-semibold">Marketplace</h3>
           <p className="mt-0.5 text-xs text-muted-foreground">
-            Search published pipelines and copy one into your workspace to edit independently.
+            {simple
+              ? "Copy a ready-made project into your workspace."
+              : "Search published pipelines and copy one into your workspace to edit independently."}
           </p>
         </div>
       ) : null}
@@ -160,7 +164,7 @@ export function MarketplaceBrowsePanel({
             <MarketplaceListSkeleton />
           ) : listings.length === 0 ? (
             <p className="py-8 text-center text-xs text-muted-foreground">
-              No listings yet — publish from the Share tab.
+              {simple ? "Nothing here yet." : "No listings yet — publish from the Share tab."}
             </p>
           ) : (
             listings.map((row) => (
@@ -183,12 +187,12 @@ export function MarketplaceBrowsePanel({
                         {row.description}
                       </p>
                     ) : null}
-                    <p className="mt-1 font-mono text-[10px] text-muted-foreground">
+                    <p className={cn("mt-1 text-muted-foreground", simple ? "text-xs" : "font-mono text-[10px]")}>
                       {row.stepCount} steps · {row.cloneCount} copies
                       {row.isOwner ? " · yours" : ""}
                     </p>
                   </div>
-                  <span className="shrink-0 rounded bg-muted px-1.5 py-0.5 font-mono text-[10px]">
+                  <span className={cn("shrink-0 rounded bg-muted px-1.5 py-0.5 text-[10px]", !simple && "font-mono")}>
                     {priceLabel(row.priceCents)}
                   </span>
                 </div>
@@ -200,7 +204,7 @@ export function MarketplaceBrowsePanel({
         <div className="rounded-lg border border-border bg-card p-4">
           {!selectedId ? (
             <p className="py-10 text-center text-xs text-muted-foreground">
-              Select a listing to preview and copy.
+              {simple ? "Pick one to preview." : "Select a listing to preview and copy."}
             </p>
           ) : detailLoading || !detail ? (
             <MarketplaceDetailSkeleton />
@@ -212,17 +216,21 @@ export function MarketplaceBrowsePanel({
                   {detail.description || "No description"}
                 </p>
               </div>
-              <p className="font-mono text-[10px] text-muted-foreground">
-                Snapshot · {detail.stepCount} steps · {priceLabel(detail.priceCents)}
+              <p className={cn("text-muted-foreground", simple ? "text-xs" : "font-mono text-[10px]")}>
+                {simple
+                  ? `${detail.stepCount} steps · ${priceLabel(detail.priceCents)}`
+                  : `Snapshot · ${detail.stepCount} steps · ${priceLabel(detail.priceCents)}`}
               </p>
-              <ul className="max-h-48 space-y-1 overflow-y-auto rounded-md border border-border bg-muted/20 p-2">
-                {detail.snapshot.modules.map((m) => (
-                  <li key={m.id} className="font-mono text-[10px] text-muted-foreground">
-                    <span className="text-foreground">{m.label || m.kind}</span>
-                    <span className="ml-1 opacity-60">({m.kind})</span>
-                  </li>
-                ))}
-              </ul>
+              {simple ? null : (
+                <ul className="max-h-48 space-y-1 overflow-y-auto rounded-md border border-border bg-muted/20 p-2">
+                  {detail.snapshot.modules.map((m) => (
+                    <li key={m.id} className="font-mono text-[10px] text-muted-foreground">
+                      <span className="text-foreground">{m.label || m.kind}</span>
+                      <span className="ml-1 opacity-60">({m.kind})</span>
+                    </li>
+                  ))}
+                </ul>
+              )}
               <div className="flex flex-wrap gap-2">
                 {detail.isOwner ? (
                   <Button
@@ -254,7 +262,9 @@ export function MarketplaceBrowsePanel({
                     )}
                     {detail.priceCents > 0
                       ? `Copy for ${formatCents(detail.priceCents)}`
-                      : "Copy to workspace"}
+                      : simple
+                        ? "Copy"
+                        : "Copy to workspace"}
                   </Button>
                 )}
               </div>

@@ -80,8 +80,9 @@ export function SchemaJsonEditor({
 
   return (
     <div className="space-y-2">
-      <div className="flex items-center justify-between gap-2">
-        {!formOnly && (
+      {(formOnly && errorCount === 0) ? null : (
+      <div className={cn("flex items-center gap-2", formOnly ? "justify-end" : "justify-between")}>
+        {formOnly ? null : (
           <Tabs value={mode} onValueChange={(v) => setMode(v as "form" | "json")}>
             <TabsList className="h-7">
               <TabsTrigger value="form" className="px-2.5 font-mono text-[10px]">
@@ -93,16 +94,17 @@ export function SchemaJsonEditor({
             </TabsList>
           </Tabs>
         )}
-        {formOnly && <p className="font-mono text-[10px] text-muted-foreground">guided form</p>}
         <span
           className={cn(
-            "rounded-full px-2 py-0.5 font-mono text-[10px] font-semibold",
+            "rounded-full px-2 py-0.5 text-[10px] font-semibold",
+            !formOnly && "font-mono",
             errorCount ? "bg-destructive/15 text-destructive" : "bg-chart-2/15 text-chart-2",
           )}
         >
-          {errorCount ? `${errorCount} issue(s)` : "valid"}
+          {errorCount ? `${errorCount} issue${errorCount === 1 ? "" : "s"}` : formOnly ? "Looks good" : "valid"}
         </span>
       </div>
+      )}
 
       {(formOnly || mode === "form") ? (
         <div className="max-h-96 overflow-auto rounded border border-border bg-muted/10 p-3">
@@ -381,7 +383,7 @@ function ArrayField({
           onChange([...arr, d])
         }}
       >
-        <Plus className="mr-1 h-3 w-3" /> Add item
+        <Plus className="mr-1 h-3 w-3" /> {arr.length ? "Add another" : "Add"}
       </Button>
       {errors[path] && <FieldErr msg={errors[path]!} />}
     </div>

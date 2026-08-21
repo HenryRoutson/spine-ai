@@ -13,7 +13,7 @@ import {
 import { runErrorLogText, runHasErrors } from "@/lib/run-error-log"
 import { formatRunErrorForDisplay } from "@/lib/run-errors"
 import { ModuleKind, type PipelineModule, type PipelineRun, type RunStep } from "@/lib/types"
-import { truncateUiContextText, MAX_UI_CONTEXT_SNIPPET_CHARS } from "@/lib/ui-context-types"
+import { truncateUiContextText, uiContextIdBase, MAX_UI_CONTEXT_SNIPPET_CHARS } from "@/lib/ui-context-types"
 
 export const MAX_RECENT_RUNS_FOR_ASSISTANT = 5
 export const MAX_PROMPT_CACHE_PREFIX_CHARS = 400
@@ -31,9 +31,10 @@ export type AssistantRunSummary = {
 }
 
 export function runIdFromUiContextId(id: string): string | null {
-  if (id.startsWith("run:")) return id.slice(4) || null
-  if (id.startsWith("run-error:")) return id.slice(10) || null
-  return id.trim() || null
+  const base = uiContextIdBase(id)
+  if (base.startsWith("run:")) return base.slice(4) || null
+  if (base.startsWith("run-error:")) return base.slice(10) || null
+  return base.trim() || null
 }
 
 export function summarizeRunForAssistant(run: PipelineRun): AssistantRunSummary {

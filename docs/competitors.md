@@ -62,4 +62,5 @@ https://docs.cloud.google.com/gemini-enterprise-agent-platform/agents
 https://www.xano.com/
 https://www.zite.com/
 https://vercel.com/blog/agent-stack
+Airtable
 

@@ -5,6 +5,7 @@ import { AlertTriangle, CheckCircle2, ChevronDown, Circle, Loader2 } from "lucid
 import { JsonPreviewPanel } from "@/components/json-preview-panel"
 import { PopupModal, type PopupPayload } from "@/components/logging/popup-modal"
 import { moduleInputDescription, resolveStepInputDescription } from "@/components/step-input-description"
+import { simpleStepDescription } from "@/lib/plain-step-description"
 import { Progress } from "@/components/ui/progress"
 import { useStatusPalette } from "@/lib/chart-colors"
 import type { StepUiState } from "@/lib/run-engine"
@@ -12,6 +13,7 @@ import { isManagedLockedStep } from "@/lib/structure-parse-steps"
 import { stepSpreadsheetJson } from "@/lib/step-doc"
 import { cn } from "@/lib/utils"
 import type { ModuleId, PipelineModule, PipelineRun, RunStep, StructureModel } from "@/lib/types"
+import { uiContextTargetProps } from "@/lib/ui-context-dom"
 
 export type SimpleStepStatus = "idle" | "running" | "ok" | "cached" | "error"
 
@@ -42,7 +44,7 @@ export function simpleTraceStepsFromRun(run: PipelineRun, modules: PipelineModul
     .map((step) => ({
       id: step.moduleId,
       label: step.label,
-      description: resolveStepInputDescription(step, modules),
+      description: simpleStepDescription(resolveStepInputDescription(step, modules), step.kind),
       status: statusFrom(step, undefined),
       json: stepSpreadsheetJson(step),
       errorPreview: step.status === "error" ? step.outputPreview : undefined,
@@ -65,7 +67,10 @@ export function simpleTraceStepsFromLive({
     return {
       id: module.id,
       label: module.label,
-      description: moduleInputDescription(module) ?? runStep?.inputDescription?.trim(),
+      description: simpleStepDescription(
+        moduleInputDescription(module) ?? runStep?.inputDescription?.trim(),
+        module.kind,
+      ),
       status,
       json: stepSpreadsheetJson(runStep ?? {}),
       errorPreview: status === "error" ? (runStep?.outputPreview ?? ui?.outputPreview) : undefined,
@@ -111,7 +116,23 @@ export function SimpleStepTrace({
           const failed = step.status === "error"
           const running = step.status === "running"
           return (
-            <li key={step.id} className="rounded-lg border border-border bg-card">
+            <li
+              key={step.id}
+              className="rounded-lg border border-border bg-card"
+              {...uiContextTargetProps({
+                kind: "pipeline_step",
+                id: `step:${step.id}`,
+                label: `Step · ${step.label}`,
+                moduleId: step.id,
+                snippet: [
+                  step.description,
+                  `status: ${stepStatusLabel(step.status)}`,
+                  step.errorPreview,
+                ]
+                  .filter(Boolean)
+                  .join("\n"),
+              })}
+            >
               <button
                 type="button"
                 onClick={() => toggle(step.id)}

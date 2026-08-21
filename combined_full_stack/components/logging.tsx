@@ -84,7 +84,9 @@ export function Logging({
   const { runs, billingRuns, docs, modules, models, project, typeAliases, model: globalModel, hydrateRunDetail } = useStore()
   const { activeWindow, focusRunId, focusRunAnchor, clearFocusRun, setSharedRunDocScope } = useAppShell()
   const isVibe = isVibeWindow(activeWindow)
-  const [isSimple, setSimple] = useSimpleStepTrace(simple ?? isVibe)
+  const vibeSimple = simple === true || isVibe
+  const [prefSimple, setSimple] = useSimpleStepTrace(vibeSimple)
+  const isSimple = vibeSimple || prefSimple
   const { pipelineEmpty } = computeWorkspaceValidity(modules, models, typeAliases)
   const [query, setQuery] = useState("")
   const [selectedRun, setSelectedRun] = useState<string | null>(null)
@@ -201,11 +203,7 @@ export function Logging({
     return (
       <div className="flex h-full flex-col">
         <PipelineObserveEmpty
-          copy={
-            isVibe
-              ? "Runs will appear here after you build a pipeline in chat and execute it."
-              : "Runs will appear here after you execute a pipeline."
-          }
+          copy={isVibe ? "Runs will show up here." : "Runs will appear here after you execute a pipeline."}
         />
       </div>
     )
@@ -258,7 +256,7 @@ export function Logging({
                   />
                 </label>
               ) : null}
-              <SimpleViewToggle checked={isSimple} onCheckedChange={setSimple} />
+              {vibeSimple ? null : <SimpleViewToggle checked={isSimple} onCheckedChange={setSimple} />}
               <label
                 className={cn(
                   "flex cursor-pointer items-center justify-between gap-2 rounded-md border px-2.5 py-1.5 transition-colors",

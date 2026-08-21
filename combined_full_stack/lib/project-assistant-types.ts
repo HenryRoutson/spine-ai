@@ -46,5 +46,12 @@ export type ProjectProposal = {
   }
 }
 
-export const PROJECT_ASSISTANT_INITIAL_MESSAGE =
-  "Describe what you want to build. I'll propose structures, pipeline steps (with correct list/single spine wiring), docs, and sample test documents — same full project control whether you're on Vibe or Build. On Vibe, pick existing files and watch runs in Inference and Logging on the right. I can also propose a pipeline run after you approve. Approve to apply — invalid pipelines are caught and retried automatically before you see them."
+// AI : one question for Vibe and Build — stored welcome is shared across surfaces.
+export const PROJECT_ASSISTANT_INITIAL_MESSAGE = "What do you want to build?"
+
+export function isCannedProjectAssistantWelcome(content: string, id?: string): boolean {
+  if (id?.endsWith("-welcome")) return true
+  const text = content.trim()
+  if (text === PROJECT_ASSISTANT_INITIAL_MESSAGE) return true
+  return text.startsWith("Describe what you want to build.")
+}

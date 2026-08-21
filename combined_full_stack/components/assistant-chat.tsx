@@ -21,6 +21,7 @@ import {
 } from "@/lib/pasted-attachment"
 import type { AssistantMentionOption } from "@/lib/assistant-mentions"
 import type { UiContextRef } from "@/lib/ui-context-types"
+import { isCannedProjectAssistantWelcome } from "@/lib/project-assistant-types"
 import { AssistantDebugPanel } from "@/components/assistant-debug-panel"
 import { ChatQuoteSelection } from "@/components/chat-quote-selection"
 import { UiContextChip } from "@/components/ui-context-chip"
@@ -123,6 +124,8 @@ type AssistantChatProps<TProposal> = {
   showAvatars?: boolean
   /** AI : Vibe hides Agent title / stats — Copy lives on the dock header */
   showHeaderMeta?: boolean
+  /** AI : Vibe / non-technical — hide thinking dump and trim labels */
+  simple?: boolean
   /** AI : per-agent draft in sessionStorage — isolate tabs */
   chatId?: string
 }
@@ -158,6 +161,7 @@ export function AssistantChat<TProposal>({
   readOnlyHint,
   showAvatars = true,
   showHeaderMeta = true,
+  simple = false,
   chatId,
 }: AssistantChatProps<TProposal>) {
   const [internalMessages, setInternalMessages] = useState<AssistantChatMessage<TProposal>[]>([
@@ -282,7 +286,10 @@ export function AssistantChat<TProposal>({
     setErrorDebugTrace([])
     onStreamingDraftChange?.(emptyStreamingDraft())
 
-    const history = buildAssistantHistory(messages, ASSISTANT_HISTORY_LIMIT)
+    const history = buildAssistantHistory(
+      messages.filter((m) => !isCannedProjectAssistantWelcome(m.content, m.id)),
+      ASSISTANT_HISTORY_LIMIT,
+    )
     const pendingProposal = [...messages]
       .reverse()
       .find((m) => m.role === "assistant" && m.proposal && m.status === "pending")?.proposal
@@ -376,6 +383,9 @@ export function AssistantChat<TProposal>({
     typeof loadingLabel === "function" ? loadingLabel(loadingPhase) : loadingLabel
 
   const quoteEnabled = Boolean(onPinUiContext) && !readOnly
+  const visibleMessages = simple
+    ? messages.filter((m) => !isCannedProjectAssistantWelcome(m.content, m.id))
+    : messages
 
   return (
     <Chat className="h-full">
@@ -404,12 +414,16 @@ export function AssistantChat<TProposal>({
         onQuote={(ref) => onPinUiContext?.(ref)}
       >
           <ChatList>
-            {messages.map((m) => {
+            {visibleMessages.map((m) => {
               const variant = m.role === "user" ? "user" : "assistant"
-              const typed =
+              const typedRaw =
                 m.role === "user" && m.pastes?.length
                   ? typedTextFromComposedMessage(m.content, m.pastes)
                   : m.content
+              const typed =
+                !simple && isCannedProjectAssistantWelcome(typedRaw, m.id)
+                  ? initialMessage
+                  : typedRaw
               return (
                 <ChatMessage key={m.id} variant={variant}>
                   {showAvatars ? <ChatBubbleAvatar variant={variant} /> : null}
@@ -489,7 +503,7 @@ export function AssistantChat<TProposal>({
                       className="border-border/50 bg-muted/30"
                       showCopyButton={false}
                     />
-                  ) : liveThinking ? (
+                  ) : !simple && liveThinking ? (
                     <p className="max-h-40 overflow-y-auto font-mono text-[10px] leading-relaxed whitespace-pre-wrap text-foreground/80">
                       {liveThinking}
                       {loadingPhase === "thinking" && (
@@ -499,9 +513,11 @@ export function AssistantChat<TProposal>({
                   ) : null}
                   {liveResponse && (
                     <div className="space-y-1">
-                      <p className="font-mono text-[9px] uppercase tracking-wider text-muted-foreground">
-                        draft summary — not applied yet
-                      </p>
+                      {simple ? null : (
+                        <p className="font-mono text-[9px] uppercase tracking-wider text-muted-foreground">
+                          draft summary — not applied yet
+                        </p>
+                      )}
                       <p className="text-xs leading-relaxed whitespace-pre-wrap">
                         {liveResponse}
                         <span className="inline-block animate-pulse text-muted-foreground">▍</span>
@@ -509,8 +525,8 @@ export function AssistantChat<TProposal>({
                     </div>
                   )}
                   {liveResponse ? (
-                    <ChatTypingIndicator label="building proposal…" />
-                  ) : !(liveThinking && loadingPhase === "thinking") ? (
+                    <ChatTypingIndicator label={simple ? "working…" : "building proposal…"} />
+                  ) : !(liveThinking && loadingPhase === "thinking" && !simple) ? (
                     <ChatTypingIndicator label={loadingText} />
                   ) : null}
                 </ChatBubble>

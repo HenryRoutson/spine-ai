@@ -14,6 +14,7 @@ import { docsForProject } from "@/lib/project-docs"
 import { tryParseJson } from "@/lib/json-utils"
 import { defaultFromSchema, jsonSchemaToFormRoot, validateFormData } from "@/lib/schema-form"
 import { useOptionalStore } from "@/lib/store"
+import { cn } from "@/lib/utils"
 import { DocLabel, InputType, type DocId, type DocRef, type Project } from "@/lib/types"
 
 export type JsonStructFormKind = "empty" | "branch"
@@ -41,6 +42,8 @@ type InferenceJsonStructEditorProps = {
   disabled?: boolean
   onAssigned: (doc: DocRef) => void
   source?: InferenceJsonStructDocSource
+  // AI : vibe/simple — no type names or "JSON" in the helper copy.
+  plain?: boolean
 }
 
 export function InferenceJsonStructEditor({
@@ -51,6 +54,7 @@ export function InferenceJsonStructEditor({
   disabled = false,
   onAssigned,
   source,
+  plain = false,
 }: InferenceJsonStructEditorProps) {
   const store = useOptionalStore()
   const addDocContent = source?.addDocContent ?? store?.addDocContent
@@ -115,6 +119,10 @@ export function InferenceJsonStructEditor({
 
   const fieldErrors = formRoot ? validateFormData(safeParse(text), formRoot) : {}
   const formBlocked = Object.keys(fieldErrors).length > 0 || !!loadError
+  const shownLoadError =
+    plain && loadError?.startsWith("Not valid JSON")
+      ? "This file could not be opened as a form."
+      : loadError
   const preview = isPreviewOnly()
   const canApply =
     !!addDocContent &&
@@ -158,43 +166,53 @@ export function InferenceJsonStructEditor({
 
   return (
     <div className="space-y-2">
-      <p className="font-mono text-[10px] text-muted-foreground">
-        {kind === "empty"
-          ? `New ${modelName} values — saved as its own file when you apply`
-          : seedDoc
-            ? `Branched from ${seedDoc.name} — source stays unchanged`
-            : `Branch ${modelName} from a store file`}
+      <p className={cn(plain ? "text-xs text-muted-foreground" : "font-mono text-[10px] text-muted-foreground")}>
+        {plain
+          ? kind === "empty"
+            ? "Fill in the fields, then save."
+            : seedDoc
+              ? `Starting from ${seedDoc.name} — the original file is not changed.`
+              : "Pick a file to start from."
+          : kind === "empty"
+            ? `New ${modelName} values — saved as its own file when you apply`
+            : seedDoc
+              ? `Branched from ${seedDoc.name} — source stays unchanged`
+              : `Branch ${modelName} from a store file`}
       </p>
       {loading ? (
-        <p className="flex items-center gap-1.5 font-mono text-[11px] text-muted-foreground">
-          <Loader2 className="h-3.5 w-3.5 animate-spin" /> loading…
+        <p className={cn("flex items-center gap-1.5 text-muted-foreground", plain ? "text-sm" : "font-mono text-[11px]")}>
+          <Loader2 className="h-3.5 w-3.5 animate-spin" /> {plain ? "Loading…" : "loading…"}
         </p>
-      ) : loadError && kind === "branch" && !seedDoc ? (
-        <p className="font-mono text-[10px] text-muted-foreground">{loadError}</p>
-      ) : loadError ? (
-        <p className="font-mono text-[10px] text-destructive">{loadError}</p>
+      ) : shownLoadError && kind === "branch" && !seedDoc ? (
+        <p className={cn("text-muted-foreground", plain ? "text-xs" : "font-mono text-[10px]")}>{shownLoadError}</p>
+      ) : shownLoadError ? (
+        <p className={cn("text-destructive", plain ? "text-sm" : "font-mono text-[10px]")}>{shownLoadError}</p>
       ) : (
         <>
           <SchemaJsonEditor schema={schema} text={text} onText={setText} formOnly />
           <div className="flex flex-wrap items-center justify-between gap-2">
-            <p className="font-mono text-[9px] text-muted-foreground">
+            <p className={cn(plain ? "text-xs text-muted-foreground" : "font-mono text-[9px] text-muted-foreground")}>
               {preview
                 ? "Sign in to save"
                 : workingDoc
-                  ? `Assigned as ${workingDoc.name}`
-                  : "Apply creates a new file and assigns it to this slot"}
+                  ? `Saved as ${workingDoc.name}`
+                  : plain
+                    ? "Save to use this as the file for this step"
+                    : "Apply creates a new file and assigns it to this slot"}
             </p>
             <div className="flex items-center gap-2">
-              {saveError && <p className="font-mono text-[10px] text-destructive">{saveError}</p>}
+              {saveError && (
+                <p className={cn("text-destructive", plain ? "text-sm" : "font-mono text-[10px]")}>{saveError}</p>
+              )}
               <Button
                 type="button"
                 size="sm"
-                className="h-7 font-mono text-[10px]"
+                className={cn("h-7", !plain && "font-mono text-[10px]")}
                 disabled={!canApply}
                 onClick={() => void apply()}
               >
                 {saving ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : null}
-                Apply
+                {plain ? "Save" : "Apply"}
               </Button>
             </div>
           </div>

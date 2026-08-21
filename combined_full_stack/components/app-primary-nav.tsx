@@ -19,11 +19,19 @@ type AppPrimaryNavProps = {
   value: AppPrimarySection
   onChange: (section: AppPrimarySection) => void
   openingSection?: AppPrimarySection | null
+  // AI : hide Build when a project is open — the Project dropdown is the project-level control.
+  showBuild?: boolean
   className?: string
 }
 
-// AI : L0 — Run, Build, Billing, Settings (Vibe lives under Build as a surface toggle).
-export function AppPrimaryNav({ value, onChange, openingSection = null, className }: AppPrimaryNavProps) {
+// AI : L0 — Run, Build, Billing, Settings. Build is the door from Run / the picker, not in-project chrome.
+export function AppPrimaryNav({
+  value,
+  onChange,
+  openingSection = null,
+  showBuild = true,
+  className,
+}: AppPrimaryNavProps) {
   const warmRun = useWarmRun()
   const warmBuild = useWarmBuild()
   const warmBilling = useWarmBilling()
@@ -51,15 +59,17 @@ export function AppPrimaryNav({ value, onChange, openingSection = null, classNam
         spineId="nav.run"
         {...APP_PRIMARY_SECTION_NAV[AppPrimarySection.Run]}
       />
-      <PrimaryButton
-        active={value === AppPrimarySection.Build}
-        loading={openingSection === AppPrimarySection.Build}
-        onClick={() => onChange(AppPrimarySection.Build)}
-        onWarm={warmBuild}
-        icon={Hammer}
-        spineId="nav.build"
-        {...APP_PRIMARY_SECTION_NAV[AppPrimarySection.Build]}
-      />
+      {showBuild ? (
+        <PrimaryButton
+          active={value === AppPrimarySection.Build}
+          loading={openingSection === AppPrimarySection.Build}
+          onClick={() => onChange(AppPrimarySection.Build)}
+          onWarm={warmBuild}
+          icon={Hammer}
+          spineId="nav.build"
+          {...APP_PRIMARY_SECTION_NAV[AppPrimarySection.Build]}
+        />
+      ) : null}
       <PrimaryButton
         active={value === AppPrimarySection.Billing}
         loading={openingSection === AppPrimarySection.Billing}

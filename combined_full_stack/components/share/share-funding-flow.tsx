@@ -86,18 +86,22 @@ export function ShareFundingPicker({
   senderLabel,
   receiverLabel,
   options,
+  simple = false,
 }: {
   value: string
   onChange: (value: string) => void
   senderLabel: string
   receiverLabel: string
   options: ShareFundingChoice[]
+  simple?: boolean
 }) {
   const selected = options.find((o) => o.value === value) ?? options[0]
 
   return (
     <div className="space-y-2">
-      <Label className="font-mono text-[10px] uppercase tracking-wider">Who pays</Label>
+      <Label className={simple ? "text-xs font-medium" : "font-mono text-[10px] uppercase tracking-wider"}>
+        Who pays?
+      </Label>
       <div className="space-y-1">
         {options.map((opt) => (
           <button
@@ -118,12 +122,14 @@ export function ShareFundingPicker({
           </button>
         ))}
       </div>
-      <ShareFundingDiagram
-        senderLabel={senderLabel}
-        receiverLabel={receiverLabel}
-        senderPays={selected.senderPays}
-        receiverSignInRequired={selected.receiverSignInRequired}
-      />
+      {simple ? null : (
+        <ShareFundingDiagram
+          senderLabel={senderLabel}
+          receiverLabel={receiverLabel}
+          senderPays={selected.senderPays}
+          receiverSignInRequired={selected.receiverSignInRequired}
+        />
+      )}
     </div>
   )
 }

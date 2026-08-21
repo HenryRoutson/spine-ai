@@ -48,6 +48,7 @@ export enum ShareTabLabel {
   Marketplace = "Marketplace",
   Publish = "Publish",
   Activity = "Activity",
+  ShareALink = "Share a link",
 }
 
 export enum ShareSection {
@@ -159,7 +160,7 @@ const BUILDER_WINDOW_HEADERS: Record<AppWindowId, WindowHeaderCopy> = {
   vibe: {
     step: AppWindowStepLabel.Vibe,
     title: AppWindowTitle.Vibe,
-    description: "Talk to the agent to build the full project — structures, pipeline, docs, and run. Inference and Logging sit on the right for files, live progress, and past runs.",
+    description: "Talk to the agent to build the full project — structures, pipeline, docs, and run. Inference, Share, and Logging sit on the right for files, live progress, publishing, and past runs.",
   },
   billing: {
     step: AppWindowStepLabel.Billing,

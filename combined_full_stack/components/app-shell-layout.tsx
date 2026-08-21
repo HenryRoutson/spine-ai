@@ -433,7 +433,7 @@ function BuilderShellLayoutInner({ variant = "default" }: { variant?: "default" 
   const isVibe = isVibeWindow(activeWindow)
   const isAccount = isAccountWindow(activeWindow)
   const buildSurface = resolveBuildSurface(activeWindow)
-  // AI : surface toggle shares Build chrome; workspace tabs only on editors surface.
+  // AI : surface toggle shares project chrome; workspace tabs only on editors surface.
   const showSurfaceToggle = !embed && !hideDeveloperTools && !isAccount
   const showWorkspaceTabs = !isAccount && !isVibe
   const showWorkspaceChrome = showSurfaceToggle || showWorkspaceTabs
@@ -469,7 +469,7 @@ function BuilderShellLayoutInner({ variant = "default" }: { variant?: "default" 
     else if (params.has("session_id") || params.has("canceled")) setActiveWindow(AppWindowId.Billing)
   }, [setActiveWindow])
 
-  // AI : hide developer tools → force Vibe surface inside Build (L0 Build stays).
+  // AI : hide developer tools → force Vibe; otherwise vibe | dev toggle stays.
   useEffect(() => {
     if (!hideDeveloperTools) return
     if (primarySection !== AppPrimarySection.Build) return

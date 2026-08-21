@@ -71,6 +71,12 @@ export function truncateUiContextText(text: string, max: number): string {
   return `${t.slice(0, Math.max(0, max - 1))}…`
 }
 
+// AI : detailed Select UI ids are `base#leaf` so enrich can still resolve the marked ancestor.
+export function uiContextIdBase(id: string): string {
+  const i = id.indexOf("#")
+  return i === -1 ? id : id.slice(0, i)
+}
+
 export function normalizeUiContextRef(raw: UiContextRef): UiContextRef {
   return {
     id: truncateUiContextText(raw.id, 120),

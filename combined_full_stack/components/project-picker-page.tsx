@@ -8,6 +8,7 @@ import {
   Pencil,
   RefreshCw,
   Store,
+  Users,
 } from "lucide-react"
 import { useStorePicker } from "@/lib/store"
 import { AppChromeHeader } from "@/components/app-chrome-header"
@@ -33,6 +34,8 @@ import {
   ExampleTemplateGrid,
 } from "@/components/project-workspace-sections"
 import { MarketplaceBrowsePanel } from "@/components/share/marketplace-browse-panel"
+import { SharedWithMePanel } from "@/components/share/shared-with-me-panel"
+import { ShareTabLabel } from "@/lib/window-panel-meta"
 import { warmProjectPrefetches } from "@/lib/project-state-cache"
 import {
   PROJECT_DELETE_SETTINGS_CHANGED_EVENT,
@@ -60,7 +63,7 @@ export function ProjectPickerPage() {
   const [openingId, setOpeningId] = useState<ProjectId | null>(null)
   const [resyncMsg, setResyncMsg] = useState<string | null>(null)
   const { openingSection, beginOpening, markSectionReady } = usePrimarySectionOpening()
-  const { activeWindow, setActiveWindow } = useAppShell()
+  const { activeWindow, setActiveWindow, openSharedRun } = useAppShell()
   const { isDeleting, isExiting, runDelete, mergeWithGhosts } = useAnimatedRemoval<Project>()
   const quickDelete = useBrowserPrefEvent(PROJECT_DELETE_SETTINGS_CHANGED_EVENT, readQuickProjectDelete)
   // AI : picker is L0 Build — Vibe is chosen after open via Build surface (or hide-dev-tools default).
@@ -81,6 +84,14 @@ export function ProjectPickerPage() {
       openProject(id)
     },
     [openProject],
+  )
+
+  const handleRunShared = useCallback(
+    (linkId: string) => {
+      openSharedRun(linkId)
+      navigateToRunMode()
+    },
+    [openSharedRun],
   )
 
   async function handleCreateBlank() {
@@ -339,8 +350,21 @@ export function ProjectPickerPage() {
 
           <section className="mb-8">
             <div className="mb-3 flex items-center gap-2">
+              <Users className="h-4 w-4 text-primary" />
+              <h3 className="text-sm font-semibold">{ShareTabLabel.SharedWithMe}</h3>
+            </div>
+            <p className="mb-3 text-xs text-muted-foreground">
+              Paste a share link to run someone else&apos;s pipeline — billing stays in your account.
+            </p>
+            <div className="max-w-2xl">
+              <SharedWithMePanel embedded onRun={handleRunShared} />
+            </div>
+          </section>
+
+          <section className="mb-8">
+            <div className="mb-3 flex items-center gap-2">
               <Store className="h-4 w-4 text-primary" />
-              <h3 className="text-sm font-semibold">Marketplace</h3>
+              <h3 className="text-sm font-semibold">{ShareTabLabel.Marketplace}</h3>
             </div>
             <p className="mb-3 text-xs text-muted-foreground">
               Search pipelines others published — copy one into your workspace to edit independently.

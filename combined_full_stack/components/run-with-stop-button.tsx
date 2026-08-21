@@ -151,15 +151,21 @@ export function RunInputsNeededHint({
   ready,
   running,
   inputCount,
+  simple = false,
 }: {
   ready: boolean
   running: boolean
   inputCount: number
+  simple?: boolean
 }) {
   if (ready || running || inputCount <= 0) return null
   return (
-    <p className="text-center font-mono text-[10px] text-muted-foreground">
-      Select all {inputCount} input{inputCount === 1 ? "" : "s"} to run
+    <p className={cn("text-center text-muted-foreground", simple ? "text-sm" : "font-mono text-[10px]")}>
+      {simple
+        ? inputCount === 1
+          ? "Add a file above, then run."
+          : `Add a file for each of the ${inputCount} items above, then run.`
+        : `Select all ${inputCount} input${inputCount === 1 ? "" : "s"} to run`}
     </p>
   )
 }
