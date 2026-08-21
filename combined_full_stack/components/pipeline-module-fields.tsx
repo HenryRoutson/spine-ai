@@ -544,7 +544,7 @@ export function PipelineModuleFields({
       )}
       {/* AI : TODO (n8n-stage-A-ui) — ModuleKind.N8n → N8nModuleFields (node picker + param form from catalog) */}
       {/* AI : TODO (media-view-B-ui) — View picker on output (and any previewable step). TODO (media-view-C-picker) — custom visualizer. */}
-      {/* AI : TODO (media-view-D-job) — RemoteJob fields (submit/poll/fetch) — not a second webhook form. */}
+      {/* AI : DONE (media-view-D-job) — poll/ingest live on webhook-fields, not a RemoteJob form. */}
       {selected.kind === ModuleKind.Chatbot && (
         <ChatbotModuleFields
           selected={selected}

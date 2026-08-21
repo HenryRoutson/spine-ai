@@ -14,7 +14,7 @@ import type {
 
 // AI : serialized mid-run state — server pauses before user-code steps; browser runs the fn and POSTs back.
 // AI : TODO(spec) — checkpoint.ctx gains `byLabel: PipelineState`; clientStep carries it for custom TS.
-// AI : TODO (media-view-D-job) — ParkedJob { stepModuleId, provider, job_id, poll_after } next to HumanReviewPendingError.
+// AI : TODO (media-view-D-job-park) — optional park/resume if a host kills long polls; in-process poll is the default.
 export type RunCheckpoint = {
   runId: RunId;
   projectId: ProjectId;

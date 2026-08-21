@@ -13,6 +13,7 @@ import { DocEditDialog } from "@/components/doc-edit-dialog"
 import { cn } from "@/lib/utils"
 import { DataDownloadMenu } from "@/components/data-download-menu"
 import { JsonPreviewPanel } from "@/components/json-preview-panel"
+import { MediaPlayer } from "@/components/media-player"
 import { MarkupView } from "@/components/highlight"
 import { docViewerTabs, docViewTabLabel, isPdfDoc, markupKindForDoc } from "@/lib/doc-content"
 import { MarkupKind } from "@/lib/markup-kinds"
@@ -33,6 +34,7 @@ const TAB_LABEL: Record<DocViewMode, string> = {
   formatted: "formatted",
   pdf: "pdf",
   json: "json",
+  play: "play",
 }
 
 function tabLabel(mode: DocViewMode, doc: Pick<DocRef, "name" | "type"> | undefined, hasPdf: boolean): string {
@@ -74,7 +76,7 @@ export function DocViewer() {
   const tabs = docViewerTabs(docRef, hasPdf, hasVisionText)
   const showPdf = isPdfDoc(docRef, hasPdf)
   const tabularDoc = docRef ? isTabularDocType(docRef.type, docRef.name) : false
-  // AI : TODO (media-view-A-docs) — Play tab: <audio>/<video>/gltf from docFileUrl; JSON tab stays.
+  // AI : Play tab: native <audio>/<video> from docFileUrl; JSON stays a tab on inference outputs.
   const displayText =
     view === "vision" ? (visionEntries[visionIndex]?.text ?? "") : (parserText ?? "")
   const canEdit =
@@ -136,7 +138,13 @@ export function DocViewer() {
       <aside
         className={cn(
           "relative flex h-full w-full flex-col border-l border-border bg-card shadow-xl",
-          view === "pdf" ? "max-w-3xl" : view === "json" ? "max-w-5xl" : view === "formatted" ? "max-w-2xl" : "max-w-xl",
+          view === "pdf" || view === "play"
+            ? "max-w-3xl"
+            : view === "json"
+              ? "max-w-5xl"
+              : view === "formatted"
+                ? "max-w-2xl"
+                : "max-w-xl",
         )}
       >
         <div className="flex items-center justify-between border-b border-border px-5 py-3.5">
@@ -186,7 +194,16 @@ export function DocViewer() {
             </button>
           </div>
         </div>
-        {view === "pdf" ? (
+        {view === "play" ? (
+          <MediaPlayer
+            view={{
+              viewerId: docRef?.type === "audio" ? "audio" : "video",
+              docId: target.docId,
+              filename: docRef?.name,
+            }}
+            className="min-h-0 flex-1"
+          />
+        ) : view === "pdf" ? (
           // AI : TODO security — same-origin inline PDF iframe; sandbox viewer or attachment disposition.
           <iframe
             src={docFileUrl(target.docId)}
@@ -265,6 +282,8 @@ export function DocViewer() {
           <span>
             {view === "pdf"
               ? "original document — stored beside built-in parser text"
+              : view === "play"
+                ? "original media — stored as document.blob"
               : view === "json"
                 ? "interactive JSON viewer — tree · table"
                 : view === "formatted"

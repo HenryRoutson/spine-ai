@@ -20,6 +20,8 @@ export {
   DOC_TO_TEXT_INPUT_TYPES,
   JSON_NATIVE_INPUT_TYPES,
   PLAIN_TEXT_INPUT_TYPES,
+  MEDIA_INPUT_TYPES,
+  isMediaInputType,
   moduleInputReady,
   orderedInputModules,
   upstreamInputModule,

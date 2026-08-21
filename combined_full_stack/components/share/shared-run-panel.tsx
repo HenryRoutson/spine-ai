@@ -1,7 +1,7 @@
 "use client"
 
 // AI : TODO (arch-consumer-run) — own-pipeline-run-panel is the same chrome; one ConsumerRunPanel with funding/download slots.
-// AI : TODO (media-view-A-share) — InferenceRunOutputs here must pick up DataViewPanel; do not add a second renderer.
+// AI : DONE (media-view-A-share) — InferenceRunOutputs here picks up DataViewPanel.
 
 import { useState } from "react"
 import {

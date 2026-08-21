@@ -43,7 +43,9 @@ export function useProjectIdIndex(): { catalog: Catalog; index: IdIndex; loading
       }),
     ).then((rows) => {
       if (cancelled) return
-      setLoaded(rows.filter((r): r is CatalogDocInput => !!r && !!r.content.trim()))
+      setLoaded(
+        rows.filter((r): r is NonNullable<typeof r> => r != null && r.content.trim().length > 0),
+      )
       setLoading(false)
     })
     return () => {

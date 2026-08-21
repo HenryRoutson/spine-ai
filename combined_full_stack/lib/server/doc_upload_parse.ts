@@ -6,7 +6,7 @@ import type { TabularSheet } from "@/lib/server/tabular_parse"
 import type { DocId, InputType } from "@/lib/server/types"
 import {
   inputTypeFromFilename,
-  MAX_UPLOAD_BYTES,
+  maxUploadBytesForFilename,
   REJECTED_UPLOAD_EXTS,
   uploadSizeErrorMessage,
 } from "@/lib/server/upload_constants"
@@ -28,7 +28,9 @@ type ParserCacheStore = Pick<Store, "parserCacheGetByFileHash" | "parserCacheSet
 
 export function validateUploadFile(file: File | null): UploadValidationError | null {
   if (!(file instanceof File)) return { message: "missing file", status: 400 }
-  if (file.size > MAX_UPLOAD_BYTES) return { message: uploadSizeErrorMessage(), status: 413 }
+  if (file.size > maxUploadBytesForFilename(file.name)) {
+    return { message: uploadSizeErrorMessage(maxUploadBytesForFilename(file.name)), status: 413 }
+  }
   const ext = file.name.split(".").pop()?.toLowerCase() ?? ""
   // AI : SECURITY — block executable / HTML uploads before bytes are read.
   if (REJECTED_UPLOAD_EXTS.has(ext)) {
@@ -84,8 +86,19 @@ export function validateUploadBytes(
 
 export { inputTypeFromFilename }
 
+export function blobDocContent(filename: string, bytes: Uint8Array): string {
+  return `blob ${hashFileBytes(bytes)}\n${filename}\n${bytes.length}`
+}
+
 export function shouldSaveOriginalBytes(type: InputType): boolean {
-  return type === "pdf" || type === "image" || type === "excel" || type === "json"
+  return (
+    type === "pdf" ||
+    type === "image" ||
+    type === "excel" ||
+    type === "json" ||
+    type === "audio" ||
+    type === "video"
+  )
 }
 
 export async function parseUploadedBytes(
@@ -112,6 +125,8 @@ export async function parseUploadedBytes(
     }
   } else if (type === "image") {
     content = ""
+  } else if (type === "audio" || type === "video") {
+    content = blobDocContent(filename, bytes)
   } else if (type === "excel") {
     parserKind = "plain"
     const cached = store?.parserCacheGetByFileHash(fileHash, parserKind)

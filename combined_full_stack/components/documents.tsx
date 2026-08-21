@@ -23,6 +23,8 @@ import {
   FileJson,
   Globe,
   ImageIcon,
+  FileAudio,
+  FileVideo,
   Hash,
   Eye,
   Pencil,
@@ -54,6 +56,8 @@ const TYPE_ICON: Record<InputType, typeof FileText> = {
   latex: FileText,
   web: Globe,
   image: ImageIcon,
+  audio: FileAudio,
+  video: FileVideo,
 }
 
 export function Documents() {

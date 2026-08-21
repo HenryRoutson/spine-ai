@@ -63,7 +63,7 @@ export type TypeExpr =
   | { kind: typeof TypeExprKind.List; item: TypeExpr }
   | { kind: typeof TypeExprKind.Ref; modelId: StructureModelId; args?: TypeExpr[] }
   | { kind: typeof TypeExprKind.File; inputTypes: InputType[] }
-  // AI : TODO (media-view-A-types) — file(audio|video|model3d) once those InputTypes exist. Not new TypeExpr kinds.
+  // AI : DONE (media-view-A-types) — file() takes InputType[] including audio/video. Not new TypeExpr kinds.
   | { kind: typeof TypeExprKind.Optional; inner: TypeExpr }
   | { kind: typeof TypeExprKind.Set; item: TypeExpr }
   | { kind: typeof TypeExprKind.Map; key: TypeExpr; value: TypeExpr }

@@ -43,6 +43,6 @@
 // AI : TODO (n8n-stage-F-spine) — deriveIn/Out (likely json / outStructureId); validity + migrate
 // AI : TODO (n8n-stage-G-export) — pipeline_export_shared + assistant-prompt / moduleSpecSchema
 // AI : TODO (n8n-stage-H-community) — optional community node packages beyond nodes-base
-// AI : TODO (media-view-D-higgsfield) — Higgsfield/TTS is RemoteJob (media-view-roadmap), not an n8n node. Webhook stays one-shot HTTP.
+// AI : DONE (media-view-D-higgsfield) — generate APIs are webhook poll + ingest (media-view-roadmap), not an n8n node.
 
 export {};

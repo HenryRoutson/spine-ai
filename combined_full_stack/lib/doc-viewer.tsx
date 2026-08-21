@@ -12,8 +12,8 @@ export const DocViewMode = {
   Vision: "vision",
   Json: "json",
   Formatted: "formatted",
+  Play: "play",
   // AI : TODO ocr-boxes — DocViewMode.OcrBoxes overlay; see lib/ocr-boxes.ts. Wire when convert-to-text stores OcrBox[].
-  // AI : TODO (media-view-A-docs) — Audio | Video | Model3d modes; same docFileUrl as PDF.
 } as const
 
 export type DocViewMode = (typeof DocViewMode)[keyof typeof DocViewMode]

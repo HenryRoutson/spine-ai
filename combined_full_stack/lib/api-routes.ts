@@ -9,6 +9,7 @@ export const API_ROUTES = {
   billingCheckout: "/api/billing/checkout",
   billingEarningsWithdraw: "/api/earnings/withdraw",
   billingKeys: "/api/billing/keys",
+  secrets: "/api/secrets",
   billingWebhook: "/api/billing/webhook",
   projects: "/api/projects",
   project: (id: string) => `/api/projects/${id}`,

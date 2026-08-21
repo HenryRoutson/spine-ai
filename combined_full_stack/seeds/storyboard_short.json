@@ -1,0 +1,321 @@
+{
+  "id": "p_storyboard_short",
+  "name": "Storyboard short",
+  "kind": "media-demo",
+  "models": [
+    {
+      "id": "m_brief",
+      "name": "Brief",
+      "description": "One-line brief for a 720p short.",
+      "fields": [
+        {
+          "id": "f_logline",
+          "name": "logline",
+          "type": "text",
+          "optional": false,
+          "description": "What happens — one or two sentences",
+          "minLength": 1,
+          "examples": ["A red bicycle courier cuts through a rainy Tokyo alley at dusk"]
+        },
+        {
+          "id": "f_audience",
+          "name": "audience",
+          "type": "text",
+          "optional": true,
+          "description": "Who this is for",
+          "examples": ["product teaser"]
+        }
+      ]
+    },
+    {
+      "id": "m_bible",
+      "name": "CreativeBible",
+      "description": "Locked identity + one shot. face_lock and wardrobe are copied verbatim into every generate prompt.",
+      "fields": [
+        { "id": "f_title", "name": "title", "type": "text", "optional": false, "description": "On-screen title" },
+        { "id": "f_premise", "name": "premise", "type": "text", "optional": false, "description": "What the short is about" },
+        { "id": "f_tone", "name": "tone", "type": "text", "optional": false, "description": "Mood / genre" },
+        { "id": "f_char_name", "name": "character_name", "type": "text", "optional": false, "description": "Character name" },
+        { "id": "f_face", "name": "face_lock", "type": "text", "optional": false, "description": "Verbatim face identity — copy into every image and motion prompt" },
+        { "id": "f_wardrobe", "name": "wardrobe", "type": "text", "optional": false, "description": "Verbatim wardrobe — copy into every image and motion prompt" },
+        { "id": "f_loc_name", "name": "location_name", "type": "text", "optional": false, "description": "Location name" },
+        { "id": "f_loc_look", "name": "location_look", "type": "text", "optional": false, "description": "Lighting, palette, landmarks" },
+        { "id": "f_motion", "name": "motion_prompt", "type": "text", "optional": false, "description": "Camera move + action for image-to-video. Keep face_lock and wardrobe. 720p cinematic." },
+        { "id": "f_lower", "name": "lower_third", "type": "text", "optional": false, "description": "Lower-third overlay, e.g. Name — role" }
+      ]
+    },
+    {
+      "id": "m_image_req",
+      "name": "ImageGenRequest",
+      "description": "Raw Higgsfield Soul JSON body — 720p still.",
+      "fields": [
+        { "id": "f_img_prompt", "name": "prompt", "type": "text", "optional": false, "description": "Soul prompt", "minLength": 1 },
+        { "id": "f_img_ar", "name": "aspect_ratio", "type": "text", "optional": false, "description": "3:4 portrait or 16:9 plate", "examples": ["16:9", "3:4"] },
+        { "id": "f_img_res", "name": "resolution", "type": "text", "optional": false, "description": "Always 720p", "examples": ["720p"] }
+      ]
+    },
+    {
+      "id": "m_video_req",
+      "name": "VideoGenRequest",
+      "description": "Raw Higgsfield image-to-video JSON body.",
+      "fields": [
+        { "id": "f_vid_prompt", "name": "prompt", "type": "text", "optional": false, "description": "Motion prompt" },
+        { "id": "f_vid_url", "name": "image_url", "type": "text", "optional": false, "description": "Public HTTPS still URL (Higgsfield CDN from ingest)" }
+      ]
+    },
+    {
+      "id": "m_storyboard",
+      "name": "Storyboard",
+      "description": "Stills + clip + overlay copy — play in Inference, not a zip download.",
+      "fields": [
+        { "id": "f_sb_title", "name": "title", "type": "text", "optional": false, "description": "Title card" },
+        { "id": "f_sb_lower", "name": "lower_third", "type": "text", "optional": false, "description": "Lower-third" },
+        { "id": "f_sb_char", "name": "character", "type": "model", "optional": false, "ref": "m_builtin_image_still", "description": "Character plate" },
+        { "id": "f_sb_loc", "name": "location", "type": "model", "optional": false, "ref": "m_builtin_image_still", "description": "16:9 hero still" },
+        { "id": "f_sb_clip", "name": "clip", "type": "model", "optional": false, "ref": "m_builtin_video_clip", "description": "Generated clip" }
+      ]
+    }
+  ],
+  "modules": [
+    {
+      "id": "mod_brief",
+      "kind": "input",
+      "label": "Brief",
+      "inputType": "json",
+      "inputNameContains": "brief",
+      "inputDescription": "JSON Brief — logline plus optional audience",
+      "outStructureId": "m_brief",
+      "cached": true,
+      "avgMs": 40,
+      "avgCostCents": 0,
+      "note": "Validate the brief locally."
+    },
+    {
+      "id": "mod_bible",
+      "kind": "llm",
+      "label": "Write bible",
+      "note": "Idea + character/location extraction. face_lock and wardrobe must be copy-paste identity strings.",
+      "inputDescription": "Brief JSON",
+      "inStructureId": "m_brief",
+      "outStructureId": "m_bible",
+      "prompt": "Invent a family-safe cinematic short from this brief. Lock one character and one location. face_lock is a precise facial description (age look, hair, skin, distinctive features) that later prompts will copy verbatim — do not paraphrase later. wardrobe is a precise clothing lock. location_look is lighting, palette, and landmarks. motion_prompt is camera move + action for image-to-video of the character standing in that location; copy face_lock and wardrobe into it; no on-screen text. title is short. lower_third is \"Name — role\". Resolution of all generates is 720p. No logos, no real celebrities, no NSFW.",
+      "model": "deepseek-v4",
+      "cached": true,
+      "avgMs": 4000,
+      "avgCostCents": 4
+    },
+    {
+      "id": "mod_refs",
+      "kind": "fork",
+      "label": "Hero request",
+      "note": "Parallel Soul stills, then assemble the DoP body from the 16:9 still url + bible motion prompt.",
+      "inputDescription": "CreativeBible",
+      "inStructureId": "m_bible",
+      "outStructureId": "m_video_req",
+      "forkJoin": "assemble",
+      "assembleBindings": {
+        "image_url": { "kind": "path", "from": { "label": "Location still" }, "path": "url" },
+        "prompt": { "kind": "path", "from": "spine", "path": "motion_prompt" }
+      },
+      "cached": true,
+      "avgMs": 25000,
+      "avgCostCents": 0,
+      "inType": { "kind": "ref", "modelId": "m_bible" },
+      "outType": { "kind": "ref", "modelId": "m_video_req" },
+      "forkBranches": [
+        {
+          "id": "fbr_character",
+          "label": "Character",
+          "modules": [
+            {
+              "id": "mod_char_plate",
+              "kind": "llm",
+              "label": "Character plate",
+              "note": "Fill Soul JSON. Copy face_lock and wardrobe verbatim.",
+              "inputDescription": "CreativeBible",
+              "inStructureId": "m_bible",
+              "outStructureId": "m_image_req",
+              "prompt": "Write a Higgsfield Soul image request. Portrait, looking at camera, even studio light. Copy face_lock and wardrobe verbatim into prompt. aspect_ratio must be 3:4. resolution must be exactly 720p. No text, no logos, family-safe. Output only prompt, aspect_ratio, resolution.",
+              "model": "deepseek-v4",
+              "cached": true,
+              "avgMs": 2500,
+              "avgCostCents": 2
+            },
+            {
+              "id": "mod_char_still",
+              "kind": "webhook",
+              "label": "Character still",
+              "note": "Soul submit → poll status_url → store images.0.url as ImageStill.",
+              "inputDescription": "ImageGenRequest",
+              "inStructureId": "m_image_req",
+              "outStructureId": "m_builtin_image_still",
+              "webhookUrl": "env:HIGGSFIELD_IMAGE_URL",
+              "webhookMethod": "POST",
+              "webhookAuthEnv": "HIGGSFIELD_API_KEY",
+              "webhookTimeoutMs": 180000,
+              "webhookIncludeState": false,
+              "webhookBodyMode": "raw",
+              "webhookPollStatusUrlPath": "status_url",
+              "webhookIngestUrlPath": "images.0.url",
+              "webhookIngestInputType": "image",
+              "cached": true,
+              "avgMs": 20000,
+              "avgCostCents": 0,
+              "inType": { "kind": "ref", "modelId": "m_image_req" },
+              "outType": { "kind": "ref", "modelId": "m_builtin_image_still" }
+            }
+          ]
+        },
+        {
+          "id": "fbr_location",
+          "label": "Location",
+          "modules": [
+            {
+              "id": "mod_loc_plate",
+              "kind": "llm",
+              "label": "Location plate",
+              "note": "16:9 hero still — character in the location. This is the image-to-video source.",
+              "inputDescription": "CreativeBible",
+              "inStructureId": "m_bible",
+              "outStructureId": "m_image_req",
+              "prompt": "Write a Higgsfield Soul image request. Wide 16:9 cinematic establishing shot of the location WITH the character in frame. Copy face_lock and wardrobe verbatim. Include location_look. Leave headroom for a camera move. aspect_ratio must be 16:9. resolution must be exactly 720p. No text, no logos, family-safe. Output only prompt, aspect_ratio, resolution.",
+              "model": "deepseek-v4",
+              "cached": true,
+              "avgMs": 2500,
+              "avgCostCents": 2
+            },
+            {
+              "id": "mod_loc_still",
+              "kind": "webhook",
+              "label": "Location still",
+              "note": "Soul submit → poll status_url → store images.0.url as ImageStill.",
+              "inputDescription": "ImageGenRequest",
+              "inStructureId": "m_image_req",
+              "outStructureId": "m_builtin_image_still",
+              "webhookUrl": "env:HIGGSFIELD_IMAGE_URL",
+              "webhookMethod": "POST",
+              "webhookAuthEnv": "HIGGSFIELD_API_KEY",
+              "webhookTimeoutMs": 180000,
+              "webhookIncludeState": false,
+              "webhookBodyMode": "raw",
+              "webhookPollStatusUrlPath": "status_url",
+              "webhookIngestUrlPath": "images.0.url",
+              "webhookIngestInputType": "image",
+              "cached": true,
+              "avgMs": 20000,
+              "avgCostCents": 0,
+              "inType": { "kind": "ref", "modelId": "m_image_req" },
+              "outType": { "kind": "ref", "modelId": "m_builtin_image_still" }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "mod_hero",
+      "kind": "webhook",
+      "label": "Hero clip",
+      "note": "DoP image-to-video. image_url is the ingested location still's public url.",
+      "inputDescription": "VideoGenRequest",
+      "inStructureId": "m_video_req",
+      "outStructureId": "m_builtin_video_clip",
+      "webhookUrl": "env:HIGGSFIELD_GENERATE_URL",
+      "webhookMethod": "POST",
+      "webhookAuthEnv": "HIGGSFIELD_API_KEY",
+      "webhookTimeoutMs": 180000,
+      "webhookIncludeState": false,
+      "webhookBodyMode": "raw",
+      "webhookPollStatusUrlPath": "status_url",
+      "webhookIngestUrlPath": "video.url",
+      "webhookIngestInputType": "video",
+      "cached": false,
+      "avgMs": 45000,
+      "avgCostCents": 0,
+      "inType": { "kind": "ref", "modelId": "m_video_req" },
+      "outType": { "kind": "ref", "modelId": "m_builtin_video_clip" }
+    },
+    {
+      "id": "mod_board",
+      "kind": "assemble",
+      "label": "Storyboard",
+      "note": "Zip stills + clip + overlay copy. Play tab shows images, video, and title/lower-third in the app.",
+      "inputDescription": "Hero VideoClip",
+      "inStructureId": "m_builtin_video_clip",
+      "outStructureId": "m_storyboard",
+      "assembleBindings": {
+        "clip": { "kind": "spine" },
+        "character": { "kind": "state", "label": "Character still" },
+        "location": { "kind": "state", "label": "Location still" },
+        "title": { "kind": "path", "from": { "label": "Write bible" }, "path": "title" },
+        "lower_third": { "kind": "path", "from": { "label": "Write bible" }, "path": "lower_third" }
+      },
+      "cached": true,
+      "avgMs": 20,
+      "avgCostCents": 0,
+      "inType": { "kind": "ref", "modelId": "m_builtin_video_clip" },
+      "outType": { "kind": "ref", "modelId": "m_storyboard" }
+    },
+    {
+      "id": "mod_out",
+      "kind": "output",
+      "label": "Play",
+      "inputDescription": "Storyboard — stills and clip play in Inference",
+      "inStructureId": "m_storyboard",
+      "outStructureId": "m_storyboard",
+      "cached": true,
+      "avgMs": 20,
+      "avgCostCents": 0,
+      "note": "Visualization of stored blobs plus overlay copy. Tests still assert JSON on the envelope.",
+      "inType": { "kind": "ref", "modelId": "m_storyboard" },
+      "outType": { "kind": "ref", "modelId": "m_storyboard" }
+    }
+  ],
+  "strategies": [
+    {
+      "id": "s_cheap",
+      "kind": "cheap-agent",
+      "name": "Agent (Cheap Model)",
+      "enabled": true,
+      "model": "deepseek-v4",
+      "accuracy": 80,
+      "latencyMs": 15000,
+      "costCents": 10,
+      "passRate": 80
+    }
+  ],
+  "docs": [
+    {
+      "name": "brief.json",
+      "type": "json",
+      "label": "inference",
+      "file": "storyboard_short/brief.json"
+    },
+    {
+      "name": "storyboard_short_inference.json",
+      "type": "json",
+      "label": "inference",
+      "file": "storyboard_short/storyboard_short_inference.json"
+    },
+    {
+      "name": "storyboard_short_testing.json",
+      "type": "json",
+      "label": "training",
+      "file": "storyboard_short/storyboard_short_testing.json"
+    },
+    {
+      "name": "storyboard_short_README.md",
+      "type": "text",
+      "label": "training",
+      "file": "storyboard_short/README.md"
+    }
+  ],
+  "inferencePresets": [
+    {
+      "name": "Default brief",
+      "description": "Sample Brief JSON",
+      "inputs": {
+        "Brief": "brief.json"
+      }
+    }
+  ]
+}

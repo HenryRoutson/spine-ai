@@ -3,7 +3,7 @@
 import { useEffect } from "react"
 import { SharedRunViewer } from "@/components/shared-run-viewer"
 import type { EmbedOptions } from "@/lib/shared-link-types"
-// AI : TODO (media-view-A-share) — embed is the same run UI; media/custom views must work without builder chrome.
+// AI : DONE (media-view-A-share) — embed is the same run UI; DataViewPanel works without builder chrome.
 
 export function EmbedRunViewer({
   linkId,

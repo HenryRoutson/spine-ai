@@ -2,6 +2,7 @@ import { resolve } from "node:path"
 import { describe, expect, it } from "vitest"
 import { applyLookupEmbeds, autoFkEmbedSpecs, indexRowsByKey } from "@/lib/lookup-embed"
 import { SEEDS_DIR, loadProjectSeed } from "@/lib/server/seed"
+import type { StructureModelId } from "@/lib/types"
 
 const CATALOG = [
   {
@@ -41,7 +42,11 @@ describe("lookup-embed", () => {
 
   it("indexes billed_work ItemFilterContext FKs onto WorkItem for pass 2", () => {
     const { project } = loadProjectSeed(resolve(SEEDS_DIR, "billed_work_catalog_select.json"))
-    const specs = autoFkEmbedSpecs(project.models, "m_item_filter_ctx", "m_work_item")
+    const specs = autoFkEmbedSpecs(
+      project.models,
+      "m_item_filter_ctx" as StructureModelId,
+      "m_work_item" as StructureModelId,
+    )
     expect(specs).toEqual([
       {
         leftPath: "selected_examples.billed_items",

@@ -712,6 +712,7 @@ export function StoreProvider({
         const mergedProjects = visibleProjects.map((p) => {
           const local = prev?.projects.find((x) => x.id === p.id)
           if (
+            local &&
             shouldKeepLocalProject(local, {
               mutatedAt: projectMutatedAtRef.current.get(p.id) ?? 0,
               fetchedAt,

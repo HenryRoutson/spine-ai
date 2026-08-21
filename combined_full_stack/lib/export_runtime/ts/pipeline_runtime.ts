@@ -642,6 +642,7 @@ export type WebhookCallOpts = {
   includeState?: boolean;
   responsePath?: string;
   timeoutMs?: number;
+  bodyMode?: "wrap" | "raw";
 };
 
 export async function callWebhook(
@@ -657,9 +658,11 @@ export async function callWebhook(
   };
   if (opts.authEnv) {
     const auth = process.env[opts.authEnv]?.trim();
-    if (auth) headers.Authorization = auth.startsWith("Bearer ") ? auth : `Bearer ${auth}`;
+    if (auth) {
+      headers.Authorization = /^(Bearer|Key|Basic|Digest)\s+/i.test(auth) ? auth : `Bearer ${auth}`;
+    }
   }
-  const body = opts.includeState === false ? { input } : { input, state };
+  const body = opts.bodyMode === "raw" ? input : opts.includeState === false ? { input } : { input, state };
   const res = await fetch(url, {
     method: opts.method ?? "POST",
     headers,

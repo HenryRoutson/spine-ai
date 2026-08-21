@@ -59,7 +59,7 @@ export function buildModuleKindsPromptBlock(): string {
 // AI : TODO (n8n-stage-G-export) — document n8n step for assistant: pick n8nNodeType from catalog,
 // AI :   fill n8nParameters for resource/operation; never invent node type strings (see n8n-roadmap.ts).
 // AI : TODO (media-view-C-assistant) — “create visualizer for this model” writes HTML + defaultView; not a React component.
-// AI : TODO (media-view-D-higgsfield) — RemoteJob Higgsfield/TTS seeds; spine is VideoClip/AudioClip { doc_id }.
+// AI : DONE (media-view-D-higgsfield) — webhook poll + ingest seed; spine is VideoClip { doc_id }. Not a Higgsfield ModuleKind.
 
 // AI : chatbot — structureIn must be ChatbotPrompt; structureOut ChatbotResult; set chatbotMode; no module.prompt.
 
@@ -68,12 +68,12 @@ export function buildFieldTypesPromptBlock(): string {
 }
 
 export function buildInputTypesPromptBlock(): string {
-  // AI : TODO (media-view-B-assistant) — document audio/video/model3d inputTypes; view bindings on output steps;
-  // AI :   AudioClip/VideoClip envelopes; do not invent TypeExpr kinds. Visualizer HTML via defaultView, not custom-code.
+  // AI : TODO (media-view-B-assistant) — view bindings on output steps. Visualizer HTML via defaultView, not custom-code.
   return `${INPUT_TYPES.map((t) => `- ${t.value}: ${t.label}`).join("\n")}
 JSON-native (direct parse in input when ONLY these types are selected): excel, json
 Plain text (already instantiated Document.content; LLM parse only when structureOut is not Document): text, markdown, latex
 Needs convert-to-text (auto locked "Convert to text" step; then "Parse to structure" if structureOut is not Document): pdf, word, image, web
+Media (blob in Documents, play in the viewer — do NOT convert-to-text; output VideoClip/AudioClip, never base64 in JSON): audio, video
 Mixed selections (e.g. pdf + excel) always use Document on the input step plus convert-to-text when any binary type is selected. Do NOT emit Convert to text or Parse to structure yourself.`;
 }
 
@@ -85,7 +85,7 @@ export function buildTypeAliasesRulesPromptBlock(): string {
   // AI : ChatbotPrompt / ChatbotResult listed in built-in structures below.
   return `Reusable type aliases (typeAliases array):
 - Built-in types (always available — do NOT redefine in typeAliases): quote_string_t (LLM verbatim quote string), quote_span_t (linked QuoteSpan struct), text_quote_t (text + quote string pair). Prefer these over typeExpr tuple[text, quote].
-- Built-in structures (always available): Document (upload I/O), QuoteSpan (doc_id, start, end — linked span after Link Quotes), ChatbotPrompt (prompt text for Chatbot steps), ChatbotTurn, ChatbotResult (prompt + transcript + exit_reason).
+- Built-in structures (always available): Document (upload I/O), QuoteSpan (doc_id, start, end — linked span after Link Quotes), ChatbotPrompt (prompt text for Chatbot steps), ChatbotTurn, ChatbotResult (prompt + transcript + exit_reason), VideoClip / AudioClip / ImageStill (doc_id + filename + mime — media envelopes; bytes live on document.blob, never in JSON).
 - Define standalone Python-style types when a field shape is reused or nested: list[list[int]], dict[str, str], Optional[T], tuple[Section, Meta].
 - Parametric aliases: set params to ["A","B"] and use those names in expr (e.g. name Pair, params ["A","B"], expr tuple[A, B]). Instantiation is Pair[Summary, Entities] on a field typeExpr — do not clone a new alias per instantiation.
 - Each alias: name, description, expr (Python type string — same syntax as the Structure → Types editor), optional params.
@@ -113,7 +113,7 @@ export function buildStructureRulesPromptBlock(): string {
 - Every field needs a description string (use "" if nothing to add).
 - Optional fields: set optional true.
 - Field examples: set examples (string array) with valid sample values; set negativeExamples (string array) with values the LLM must NOT emit — both are injected into LLM prompts automatically.
-- Auto-generated models (auto: true — Combine Inputs output or document inference) and built-ins (Document, QuoteSpan, ChatbotPrompt/Turn/Result) are locked: return them unchanged; omitting them does not delete them (server restores locked structs).
+- Auto-generated models (auto: true — Combine Inputs output or document inference) and built-ins (Document, QuoteSpan, ChatbotPrompt/Turn/Result, VideoClip, AudioClip, ImageStill) are locked: return them unchanged; omitting them does not delete them (server restores locked structs).
 - When changing structures, return a FULL replacement models array (include untouched models too) — not a patch. The review UI diffs this against the live project, so do not treat echoing unchanged structs as a rewrite.
 - When answering questions without schema changes, set models to null.`;
 }

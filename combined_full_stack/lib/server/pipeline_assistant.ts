@@ -55,7 +55,7 @@ import { migrateModuleSpineTypes, patchSpineOutList } from "./spine_types";
 import { stepEmitsList } from "./type_expr";
 import { uid } from "@/lib/id";
 import { inputTypesAreAllJsonNative, inputTypesForModule, isDocToTextInputType } from "@/lib/inference-input-core";
-import { USER_ADDABLE_MODULE_KINDS, kindAlwaysEmitsList, stepRequiresNote } from "@/lib/module-kinds";
+import { USER_ADDABLE_MODULE_KINDS, asModuleKind, kindAlwaysEmitsList, stepRequiresNote } from "@/lib/module-kinds";
 import { attachAssistantUsage } from "./assistant_billing";
 import { isUnnamedProjectName } from "@/lib/project-assistant-types";
 import { diffStructureModels } from "@/lib/proposal-shape-diff";
@@ -164,7 +164,7 @@ const moduleSpecSchema = z
       .describe("fork only — 2–4 linear lanes that share the previous spine, then join"),
   })
   .superRefine((spec, ctx) => {
-    if (stepRequiresNote(spec.kind) && !spec.note?.trim()) {
+    if (stepRequiresNote(asModuleKind(spec.kind)) && !spec.note?.trim()) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
         message: "note is required for input, combine, assemble, parallel, and llm steps",
@@ -251,7 +251,7 @@ const modulePatchEntrySchema = z.object({
 const modelSpecSchema = structureModelSpecSchema;
 
 const ASSISTANT_DOC_TYPES = [InputType.Text, InputType.Markdown, InputType.Latex, InputType.Json] as const satisfies readonly InputType[];
-// AI : TODO (media-view-A-types) — allow Audio/Video/Model3d in assistant-created docs once InputTypes exist.
+// AI : TODO (media-view-A-types) — assistant-created docs stay text/json; binary clips are uploaded or ingested, not authored as content strings.
 
 const docSpecSchema = z.object({
   name: z.string(),
@@ -418,7 +418,7 @@ function makeModuleFromSpec(
   let mod = createPipelineModule(
     {
       id: existingId ?? uid<ModuleId>(),
-      kind: spec.kind,
+      kind: asModuleKind(spec.kind),
       label: spec.label,
       note: spec.note,
       inputType: spec.kind === ModuleKind.Input ? (spec.inputType as PipelineModule["inputType"]) ?? InputType.Text : undefined,

@@ -34,6 +34,7 @@ export const JSON_NATIVE_INPUT_TYPES: readonly InputType[] = [InputType.Excel, I
 export const PLAIN_TEXT_INPUT_TYPES: readonly InputType[] = [InputType.Text, InputType.Markdown, InputType.Latex]
 // AI : binary / markup that needs a locked convert-to-text step to instantiate Document.content.
 export const DOC_TO_TEXT_INPUT_TYPES: readonly InputType[] = [InputType.Pdf, InputType.Word, InputType.Image, InputType.Web]
+export const MEDIA_INPUT_TYPES: readonly InputType[] = [InputType.Audio, InputType.Video]
 // AI : TODO (media-view-D-stt) — Audio (and maybe Video) need audio-to-text, not vision OCR. Do not dump into DOC_TO_TEXT.
 
 export function isJsonNativeInputType(type: InputType): boolean {
@@ -46,6 +47,10 @@ export function isPlainTextInputType(type: InputType): boolean {
 
 export function isDocToTextInputType(type: InputType): boolean {
   return DOC_TO_TEXT_INPUT_TYPES.includes(type)
+}
+
+export function isMediaInputType(type: InputType): boolean {
+  return MEDIA_INPUT_TYPES.includes(type)
 }
 
 export function inputTypesAreAllJsonNative(types: InputType[]): boolean {
@@ -128,6 +133,8 @@ const FILE_ACCEPT: Partial<Record<InputType, readonly string[]>> = {
   latex: [".tex", ".latex"],
   web: [".html", ".htm"],
   image: [".png", ".jpg", ".jpeg", ".webp"],
+  audio: [".wav", ".mp3", ".m4a", ".ogg"],
+  video: [".mp4", ".webm", ".mov"],
 }
 
 export function inputTypeAccept(type?: InputTypeSpec): string | undefined {

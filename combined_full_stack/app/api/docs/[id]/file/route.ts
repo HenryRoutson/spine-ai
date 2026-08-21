@@ -13,8 +13,12 @@ function docFor(store: Store, id: DocId): DocRef | undefined {
 }
 
 function expectsOriginalFile(doc: Pick<DocRef, "type"> | undefined): boolean {
-  return doc?.type === InputType.Pdf || doc?.type === InputType.Image;
-  // AI : TODO (media-view-A-serve) — treat Audio / Video / Model3d as originals too; signed URLs for <video> / three.js.
+  return (
+    doc?.type === InputType.Pdf ||
+    doc?.type === InputType.Image ||
+    doc?.type === InputType.Audio ||
+    doc?.type === InputType.Video
+  );
 }
 
 function logOriginalFileMiss(method: "GET" | "HEAD", docId: DocId, doc: DocRef | undefined): void {
@@ -38,7 +42,7 @@ function originalFileMissing(id: string, doc: DocRef | undefined) {
   const type = doc?.type ?? "unknown";
   const detail = expectsOriginalFile(doc)
     ? `Doc text exists in Supabase, but original ${type} bytes were not on disk, in bundled seeds, or in Storage bucket doc-originals. Re-upload the file.`
-    : `No original binary for ${id} (type=${type}) — only PDF/image uploads are stored as files.`;
+    : `No original binary for ${id} (type=${type}) — only PDF/image/audio/video uploads are stored as files.`;
   return apiError(`no original file for ${id}`, HTTP.NOT_FOUND, "original_file_missing", {
     resource: `doc:${id}`,
     detail,

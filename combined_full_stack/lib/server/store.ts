@@ -61,9 +61,21 @@ function docsDir(): string {
   return join(dataDir(), "docs");
 }
 
-// AI : original PDF/image bytes — local disk for JsonStore / warm cache; Supabase Storage in prod.
-// AI : TODO (media-view-A-storage) — add wav/mp3/mp4/webm/gltf/glb/stl (+ transcode sidecars). PDF+raster only today.
-export const ORIGINAL_DOC_EXTS = ["pdf", "png", "jpg", "jpeg", "webp"] as const;
+// AI : original PDF/image/audio/video bytes — local disk for JsonStore / warm cache; Supabase Storage in prod.
+export const ORIGINAL_DOC_EXTS = [
+  "pdf",
+  "png",
+  "jpg",
+  "jpeg",
+  "webp",
+  "mp4",
+  "webm",
+  "mov",
+  "wav",
+  "mp3",
+  "m4a",
+  "ogg",
+] as const;
 export type OriginalDocExt = (typeof ORIGINAL_DOC_EXTS)[number];
 
 export const EXT_MIME: Record<OriginalDocExt, string> = {
@@ -72,6 +84,13 @@ export const EXT_MIME: Record<OriginalDocExt, string> = {
   jpg: "image/jpeg",
   jpeg: "image/jpeg",
   webp: "image/webp",
+  mp4: "video/mp4",
+  webm: "video/webm",
+  mov: "video/quicktime",
+  wav: "audio/wav",
+  mp3: "audio/mpeg",
+  m4a: "audio/mp4",
+  ogg: "audio/ogg",
 };
 
 export function parseOriginalDocExt(ext: string): OriginalDocExt | undefined {

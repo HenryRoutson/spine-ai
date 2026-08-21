@@ -16,8 +16,8 @@ export function invalidOptsForDocs(
       const ids = (Array.isArray(raw) ? raw : [raw]).filter(Boolean)
       const types = ids
         .map((docId) => docs.find((d) => d.id === docId)?.type)
-        .filter((t): t is string => !!t)
-      if (types.length) assignedDocTypes[id as ModuleId] = types
+        .filter((t): t is NonNullable<typeof t> => t != null)
+      if (types.length) assignedDocTypes[id as ModuleId] = types as string[]
     }
   }
   return { inferenceDocs, assignedDocTypes }

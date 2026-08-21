@@ -4,6 +4,7 @@ import { useEffect } from "react"
 import { createPortal } from "react-dom"
 import { X } from "lucide-react"
 import { JsonPreviewPanel } from "@/components/json-preview-panel"
+import { DataViewPanel } from "@/components/data-view-panel"
 import { InlineDocPreview } from "@/components/inline-doc-preview"
 import { IoPager } from "@/components/logging/io-pager"
 import { PromptText } from "@/components/highlight"
@@ -73,13 +74,22 @@ export function PopupModal({ payload, onClose }: PopupModalProps) {
             {popupQuotes.length > 0 && (
               <QuoteLinks quotes={popupQuotes} className="border-b border-border px-4 py-3" />
             )}
-            <JsonPreviewPanel
-              json={payload.json}
-              models={payload.models}
-              defaultView={payload.defaultView}
-              excelOnly={payload.excelOnly}
-              className="min-h-0 flex-1"
-            />
+            {payload.excelOnly ? (
+              <JsonPreviewPanel
+                json={payload.json}
+                models={payload.models}
+                defaultView={payload.defaultView}
+                excelOnly
+                className="min-h-0 flex-1"
+              />
+            ) : (
+              <DataViewPanel
+                json={payload.json}
+                models={payload.models}
+                defaultView={payload.defaultView}
+                className="min-h-0 flex-1"
+              />
+            )}
           </div>
         ) : payload.serverLogs ? (
           <div className="min-h-0 flex-1 overflow-auto p-4 font-mono text-xs leading-relaxed">

@@ -2,7 +2,7 @@
 // AI : TODO (opt-browser-tui-controller) — already host-agnostic; browser terminal mode should import this, not fork it.
 
 import { MODULE_META, type ModuleKind } from "@/lib/types"
-import { USER_ADDABLE_MODULE_KINDS } from "@/lib/module-kinds"
+import { USER_ADDABLE_MODULE_KINDS, asModuleKind } from "@/lib/module-kinds"
 import {
   TUI_TAB_ALIASES,
   TUI_TAB_HOTKEY,
@@ -149,9 +149,9 @@ export function suggestCommands(query: string, ctx: TuiCommandContext, boostId?:
 export function suggestStepKinds(query: string): StepKindSuggest[] {
   const q = query.trim().toLowerCase()
   const rows: StepKindSuggest[] = USER_ADDABLE_MODULE_KINDS.map((kind) => ({
-    kind,
-    label: MODULE_META[kind].label,
-    hint: MODULE_META[kind].description,
+    kind: asModuleKind(kind),
+    label: MODULE_META[asModuleKind(kind)].label,
+    hint: MODULE_META[asModuleKind(kind)].description,
   }))
   const matched = q
     ? rows.filter((row) => `${row.kind} ${row.label} ${row.hint}`.toLowerCase().includes(q))

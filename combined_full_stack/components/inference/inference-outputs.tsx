@@ -2,7 +2,7 @@
 
 import { useState } from "react"
 import { AlertTriangle, CheckCircle2 } from "lucide-react"
-import { JsonPreviewPanel } from "@/components/json-preview-panel"
+import { DataViewPanel } from "@/components/data-view-panel"
 import { PopupModal, type PopupPayload } from "@/components/logging/popup-modal"
 import { cn } from "@/lib/utils"
 import { useStatusPalette } from "@/lib/chart-colors"
@@ -28,8 +28,6 @@ export function InferenceRunOutputs({
   steps: RunStep[]
   models?: StructureModel[]
 }) {
-  // AI : TODO (media-view-A-outputs) — DataViewPanel from resolveViewer; JsonPreviewPanel is the JSON tab, not the only view.
-  // AI : TODO (media-view-A-share) — this component is also share / embed / Vibe simple — do not fork a builder-only player.
   const [popup, setPopup] = useState<PopupPayload | null>(null)
   return (
     <div className="space-y-3">
@@ -97,14 +95,13 @@ function InferenceStepOutput({
       </div>
       {step.outputJson ? (
         <div className={expanded ? "h-[min(28rem,55vh)]" : "h-[min(16rem,32vh)]"}>
-          <JsonPreviewPanel
+          <DataViewPanel
             json={step.outputJson}
             models={models}
             defaultView="table"
             className="h-full"
             onFullscreen={onFullscreen}
           />
-          {/* AI : TODO (media-view-A-players) — if resolveViewer → audio/video, mount native player; keep JSON as a tab. */}
         </div>
       ) : (
         <div className="max-h-48 overflow-auto px-4 py-3">
@@ -132,14 +129,13 @@ export function StepTraceOutputPreview({
   className?: string
   compact?: boolean
 }) {
-  // AI : TODO (media-view-A-outputs) — compact DataViewPanel here too (logging / inference traces).
   const json = runStep?.outputJson
   const preview = runStep?.outputPreview ?? outputPreview
   if (json && !isDocReferenceOutputJson(json)) {
     return (
       <div className={cn("mt-2 overflow-hidden rounded-md border border-border", className)}>
         <div className={compact ? "h-[min(12rem,28vh)]" : "h-[min(24rem,50vh)]"}>
-          <JsonPreviewPanel json={json} models={models} defaultView="table" className="h-full" />
+          <DataViewPanel json={json} models={models} defaultView="table" className="h-full" />
         </div>
       </div>
     )

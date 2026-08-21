@@ -42,14 +42,19 @@ export function isPdfDoc(doc: DocMeta, hasPdfFile = false): boolean {
 // AI : "parser" = built-in PDF.js / upload text (docs.content). "vision" = cached OCR text.
 // AI : TODO ocr-boxes — when convert-to-text stores OcrBox[] (lib/ocr-boxes.ts), append a boxes tab
 // AI :   for pdf/image and overlay on the original-bytes blob (no extra encoded copies).
+export function isMediaDoc(doc: DocMeta): boolean {
+  return doc?.type === InputTypeEnum.Audio || doc?.type === InputTypeEnum.Video
+}
+
 export function docViewerTabs(
   doc: DocMeta,
   hasPdfFile: boolean,
   hasVisionText = false,
 ): DocViewMode[] {
+  if (isMediaDoc(doc)) return [DocViewMode.Play, DocViewMode.Parser]
   if (doc?.type === InputTypeEnum.Json) return [DocViewMode.Json, DocViewMode.Parser]
   if (doc?.type === InputTypeEnum.Excel) return [DocViewMode.Json, DocViewMode.Parser]
-  // AI : TODO (media-view-A-docs) — audio/video/model3d → Play tab + parser transcript if content exists.
+  // AI : TODO (media-view-B-3d) — model3d → Play/gltf tab + parser if content exists.
   if (isMarkupDoc(doc)) return [DocViewMode.Parser, DocViewMode.Formatted]
   if (isPdfDoc(doc, hasPdfFile)) {
     const tabs: DocViewMode[] = [DocViewMode.Parser, DocViewMode.Formatted]
@@ -75,6 +80,8 @@ export function docViewTabLabel(mode: DocViewMode, doc: DocMeta, hasPdfFile = fa
       return "vision OCR"
     case DocViewMode.Json:
       return doc?.type === InputTypeEnum.Excel ? "table" : "json"
+    case DocViewMode.Play:
+      return doc?.type === InputTypeEnum.Audio ? "audio" : "video"
   }
 }
 
@@ -86,6 +93,7 @@ export function defaultDocViewMode(
   const tabs = docViewerTabs(doc, hasPdfFile, opts.hasVisionText)
   if (opts.requested && tabs.includes(opts.requested)) return opts.requested
   if (opts.hasSpan) return DocViewMode.Parser
+  if (isMediaDoc(doc)) return DocViewMode.Play
   if (doc?.type === InputTypeEnum.Json || doc?.type === InputTypeEnum.Excel) return DocViewMode.Json
   if (isPdfDoc(doc, hasPdfFile) && hasPdfFile) return DocViewMode.Pdf
   if (isMarkupDoc(doc)) return DocViewMode.Formatted

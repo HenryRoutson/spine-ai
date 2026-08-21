@@ -161,8 +161,10 @@ export enum InputType {
   Latex = "latex",
   Web = "web",
   Image = "image",
-  // AI : TODO (media-view-A-types) — Audio | Video | Model3d mime wrappers (wav/mp3, mp4/webm, gltf/stl).
-  // AI :   Not TypeExpr kinds. Blob stays document.blob. See lib/server/media-view-roadmap.ts.
+  Audio = "audio",
+  Video = "video",
+  // AI : DONE (media-view-A-types) — Audio | Video are mime wrappers. Not TypeExpr kinds. Blob stays document.blob.
+  // AI : TODO (media-view-E-step) — Model3d mime wrapper when CAD lands.
   // AI : InputType is document.mime / blob wrapper, not a separate type universe.
   // AI :   pdf/image/word → BLOB + mime; json/text/markdown/latex → TEXT content (blob optional).
   // AI :   sqlite/.sql dump as an input loads tables into the run catalog instead of nested JSON files.
@@ -199,8 +201,7 @@ export enum ModuleKind {
   HumanReview = "human-review", // AI : pause in Inference — operator approves or rejects before continuing
   Webhook = "webhook", // AI : server-side HTTP call — search APIs, Zapier, internal services (generic URL)
   // AI : TODO (n8n-stage-A) — add N8n = "n8n" — 1:1 wrap of one n8n node type (see lib/server/n8n-roadmap.ts).
-  // AI : TODO (media-view-D-job) — RemoteJob = "remote-job" (or webhook poll mode): submit → poll → fetch blob.
-  // AI :   Park/resume like human-review. Do not poll Higgsfield inside webhookTimeoutMs.
+  // AI : DONE (media-view-D-job) — no RemoteJob kind. Async media = webhook poll + ingest (pipeline, not a connector catalog).
   Chatbot = "chatbot", // AI : pause for prompted chat — spine in ChatbotPrompt, out ChatbotResult
   Output = "output",
 }
@@ -216,6 +217,12 @@ export enum WebhookMethod {
   Post = "POST",
   Put = "PUT",
   Patch = "PATCH",
+}
+
+// AI : wrap = { input, state? } (default). raw = POST the typed spine as the JSON body (async media APIs).
+export enum WebhookBodyMode {
+  Wrap = "wrap",
+  Raw = "raw",
 }
 
 export enum CustomCodeLanguage {
@@ -378,13 +385,22 @@ export interface PipelineModule {
   webhookMethod?: WebhookMethod;
   webhookAuthEnv?: string; // env var name — value sent as Authorization (Bearer added when missing)
   webhookTimeoutMs?: number;
-  webhookIncludeState?: boolean; // default true — POST { input, state }
-  webhookResponsePath?: string; // dot path into JSON response body
+  webhookIncludeState?: boolean; // default true — POST { input, state } when body mode is wrap
+  webhookResponsePath?: string; // dot path into the (possibly polled) JSON body
+  webhookBodyMode?: WebhookBodyMode; // AI : raw posts the spine value; wrap keeps { input, state }
+  // AI : poll GET of a URL taken from the submit JSON (e.g. status_url) until a terminal status.
+  // AI :   Pipeline primitive — not a vendor connector. Timeout is webhookTimeoutMs.
+  webhookPollStatusUrlPath?: string;
+  webhookPollStatusPath?: string; // default "status"
+  webhookPollDoneWhen?: string[]; // default ["completed"]
+  webhookPollFailWhen?: string[]; // default ["failed", "nsfw", "canceled", "cancelled"]
+  // AI : fetch a media URL from the terminal JSON into document.blob; spine becomes VideoClip-shaped.
+  webhookIngestUrlPath?: string;
+  webhookIngestInputType?: InputType; // video | audio | image
   // AI : TODO (n8n-stage-A) — n8nNodeType / n8nNodeVersion / n8nParameters / n8nCredentialEnv /
   // AI :   n8nBaseUrlEnv / n8nApiKeyEnv / n8nTimeoutMs / n8nResponseMode / n8nResponsePath
   // AI :   (1:1 n8n node; catalog from OSS nodes-base — see lib/server/n8n-roadmap.ts).
-  // AI : TODO (media-view-D-job) — remoteJob submit/poll/fetch fields (provider, pollUrl, authEnv).
-  // AI :   Distinct from webhook (one shot) and n8n (catalog node). Spine out is MediaRef { doc_id }, not bytes.
+  // AI : DONE (media-view-D-job) — async media is webhook poll + ingest, not ModuleKind.RemoteJob / Higgsfield step.
   // AI : chatbot — prompt is spine ChatbotPrompt.prompt (no module.prompt).
   chatbotMode?: ChatbotMode;
   maxTurns?: number;
@@ -823,7 +839,8 @@ export const INPUT_TYPES: { value: InputType; label: string }[] = [
   { value: InputType.Latex, label: "LaTeX" },
   { value: InputType.Web, label: "Web" },
   { value: InputType.Image, label: "Image" },
-  // AI : TODO (media-view-A-types) — { value: Audio, label: "Audio" }, Video, Model3d.
+  { value: InputType.Audio, label: "Audio" },
+  { value: InputType.Video, label: "Video" },
 ];
 
 export const MODULE_META: Record<ModuleKind, { label: string; description: string }> = {
@@ -885,10 +902,10 @@ export const MODULE_META: Record<ModuleKind, { label: string; description: strin
   },
   [ModuleKind.Webhook]: {
     label: "Webhook",
-    description: "POST spine input to an external URL (search APIs, Zapier, custom HTTP) — server-side, secrets via env vars",
+    description:
+      "HTTP call with typed spine in/out — optional poll of a status URL and fetch of a media URL into Documents. Not a vendor catalog.",
   },
   // AI : TODO (n8n-stage-A) — MODULE_META[ModuleKind.N8n] = { label: "n8n", description: "Run one n8n node (Slack, Gmail, …) via self-hosted n8n" }
-  // AI : TODO (media-view-D-job) — MODULE_META[RemoteJob] = submit/poll/fetch binary APIs (Higgsfield, TTS)
   [ModuleKind.Chatbot]: {
     label: "Chatbot",
     description: "Pause for prompted chat (single or until Exit) — input is locked ChatbotPrompt",

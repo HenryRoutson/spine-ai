@@ -28,7 +28,7 @@ export function JsonPreviewPanel({
   onFullscreen?: () => void
   excelOnly?: boolean
 }) {
-  // AI : TODO (media-view-A-registry) — this stays the JSON/table tab. DataViewPanel wraps it + media/custom iframes.
+  // AI : DONE (media-view-A-registry) — this stays the JSON/table tab. DataViewPanel wraps it + media.
   const view = excelOnly ? "table" : defaultView
   return (
     <div className={cn("flex min-h-0 flex-1 flex-col", className)}>

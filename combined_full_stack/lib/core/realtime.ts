@@ -79,7 +79,7 @@ export function reseedCreatedFromLocal(
 export function shouldKeepLocalProject(
   local: Project | undefined,
   opts: { mutatedAt: number; fetchedAt: number; pendingSave: boolean },
-): local is Project {
+): boolean {
   if (!local) return false
   if (opts.pendingSave) return true
   return opts.mutatedAt > opts.fetchedAt

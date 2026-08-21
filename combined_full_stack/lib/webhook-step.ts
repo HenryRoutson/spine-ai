@@ -1,5 +1,5 @@
 import type { PipelineModule } from "@/lib/types";
-import { WebhookMethod } from "@/lib/types";
+import { InputType, WebhookBodyMode, WebhookMethod } from "@/lib/types";
 
 // AI : TODO (n8n-stage-E-exec) — do NOT fold n8n into webhook; share only URL/env resolve helpers if useful.
 // AI :   N8n step talks to n8n's node catalog + execute API (lib/server/n8n-roadmap.ts), not a raw URL body POST.
@@ -7,6 +7,20 @@ import { WebhookMethod } from "@/lib/types";
 // AI :   one IR then printers (same as pipeline exporters).
 
 export const DEFAULT_WEBHOOK_TIMEOUT_MS = 30_000;
+export const DEFAULT_POLL_DONE_WHEN = ["completed"] as const;
+export const DEFAULT_POLL_FAIL_WHEN = ["failed", "nsfw", "canceled", "cancelled"] as const;
+export const DEFAULT_POLL_STATUS_PATH = "status";
+
+// AI : public generate URLs — not secrets. env:HIGGSFIELD_GENERATE_URL falls back here so Inference runs
+// AI : without a server .env; only HIGGSFIELD_API_KEY must be set (Settings → Secrets).
+export const WEBHOOK_URL_DEFAULTS: Record<string, string> = {
+  HIGGSFIELD_GENERATE_URL: "https://platform.higgsfield.ai/higgsfield-ai/dop/standard",
+  HIGGSFIELD_IMAGE_URL: "https://platform.higgsfield.ai/higgsfield-ai/soul/standard",
+};
+
+export function missingWebhookSecretMessage(key: string): string {
+  return `${key} is not set. Add it in Settings → Secrets, or as an environment variable.`;
+}
 
 type env_record = Record<string, string | undefined>;
 
@@ -15,15 +29,15 @@ export function resolveWebhookUrl(spec: string | undefined, env: env_record = pr
   if (!raw) throw new Error("webhook URL not configured");
   if (raw.startsWith("env:")) {
     const key = raw.slice(4).trim();
-    const val = env[key];
-    if (!val?.trim()) throw new Error(`environment variable ${key} is not set`);
+    const val = env[key]?.trim() || WEBHOOK_URL_DEFAULTS[key];
+    if (!val?.trim()) throw new Error(missingWebhookSecretMessage(key));
     return val.trim();
   }
   const envRef = raw.match(/^\$\{([A-Za-z_][A-Za-z0-9_]*)\}$/);
   if (envRef) {
     const key = envRef[1]!;
-    const val = env[key];
-    if (!val?.trim()) throw new Error(`environment variable ${key} is not set`);
+    const val = env[key]?.trim() || WEBHOOK_URL_DEFAULTS[key];
+    if (!val?.trim()) throw new Error(missingWebhookSecretMessage(key));
     return val.trim();
   }
   return raw;
@@ -58,6 +72,13 @@ export type WebhookCallSpec = {
   timeoutMs: number;
   includeState: boolean;
   responsePath?: string;
+  bodyMode: WebhookBodyMode;
+  pollStatusUrlPath?: string;
+  pollStatusPath: string;
+  pollDoneWhen: string[];
+  pollFailWhen: string[];
+  ingestUrlPath?: string;
+  ingestInputType: InputType;
 };
 
 export function webhookCallSpecFromModule(m: PipelineModule): WebhookCallSpec {
@@ -68,7 +89,31 @@ export function webhookCallSpecFromModule(m: PipelineModule): WebhookCallSpec {
     timeoutMs: m.webhookTimeoutMs ?? DEFAULT_WEBHOOK_TIMEOUT_MS,
     includeState: m.webhookIncludeState !== false,
     responsePath: m.webhookResponsePath?.trim() || undefined,
+    bodyMode: m.webhookBodyMode === WebhookBodyMode.Raw ? WebhookBodyMode.Raw : WebhookBodyMode.Wrap,
+    pollStatusUrlPath: m.webhookPollStatusUrlPath?.trim() || undefined,
+    pollStatusPath: m.webhookPollStatusPath?.trim() || DEFAULT_POLL_STATUS_PATH,
+    pollDoneWhen: m.webhookPollDoneWhen?.length ? m.webhookPollDoneWhen : [...DEFAULT_POLL_DONE_WHEN],
+    pollFailWhen: m.webhookPollFailWhen?.length ? m.webhookPollFailWhen : [...DEFAULT_POLL_FAIL_WHEN],
+    ingestUrlPath: m.webhookIngestUrlPath?.trim() || undefined,
+    ingestInputType: m.webhookIngestInputType ?? InputType.Video,
   };
+}
+
+export function authorizationHeader(authValue: string): string {
+  const v = authValue.trim();
+  if (/^(Bearer|Key|Basic|Digest)\s+/i.test(v)) return v;
+  // AI : Higgsfield Cloud keys are KEY_ID:KEY_SECRET — Bearer would 401.
+  if (/^[A-Za-z0-9._-]+:[A-Za-z0-9._-]+$/.test(v)) return `Key ${v}`;
+  return `Bearer ${v}`;
+}
+
+export function buildWebhookFetchBody(
+  input: unknown,
+  state: Record<string, unknown> | undefined,
+  spec: Pick<WebhookCallSpec, "bodyMode" | "includeState">,
+): unknown {
+  if (spec.bodyMode === WebhookBodyMode.Raw) return input;
+  return buildWebhookBody(input, state, spec.includeState);
 }
 
 export function buildWebhookBody(
@@ -86,18 +131,30 @@ export async function callWebhook(
   state: Record<string, unknown> | undefined,
   env: env_record = process.env,
 ): Promise<unknown> {
+  const { sliced } = await runWebhookCall(spec, input, state, env);
+  return sliced;
+}
+
+export async function runWebhookCall(
+  spec: WebhookCallSpec,
+  input: unknown,
+  state: Record<string, unknown> | undefined,
+  env: env_record = process.env,
+): Promise<{ terminal: unknown; sliced: unknown; authHeader?: string }> {
   const resolvedUrl = resolveWebhookUrl(spec.url, env);
   const authKey = spec.authEnv?.trim();
   const authValue = authKey ? env[authKey]?.trim() : undefined;
-  const body = buildWebhookBody(input, state, spec.includeState);
-  const headers: Record<string, string> = { "Content-Type": "application/json", Accept: "application/json" };
-  if (authValue) {
-    headers.Authorization = authValue.startsWith("Bearer ") ? authValue : `Bearer ${authValue}`;
+  if (authKey && !authValue) {
+    throw new Error(missingWebhookSecretMessage(authKey));
   }
+  const authHeader = authValue ? authorizationHeader(authValue) : undefined;
+  const body = buildWebhookFetchBody(input, state, spec);
+  const headers: Record<string, string> = { "Content-Type": "application/json", Accept: "application/json" };
+  if (authHeader) headers.Authorization = authHeader;
   const init: RequestInit = {
     method: spec.method,
     headers,
-    signal: AbortSignal.timeout(spec.timeoutMs),
+    signal: AbortSignal.timeout(Math.min(spec.timeoutMs, 30_000)),
   };
   if (spec.method !== WebhookMethod.Post && spec.method !== WebhookMethod.Put && spec.method !== WebhookMethod.Patch) {
     throw new Error(`unsupported webhook method ${spec.method}`);
@@ -111,12 +168,61 @@ export async function callWebhook(
     );
   }
   const contentType = res.headers.get("content-type") ?? "";
-  const raw = contentType.includes("application/json") ? await res.json() : await res.text();
-  return getValueAtPath(raw, spec.responsePath);
+  const submitted = contentType.includes("application/json") ? await res.json() : await res.text();
+  const terminal = spec.pollStatusUrlPath
+    ? await pollWebhookUntilDone(submitted, spec, authHeader, Date.now() + spec.timeoutMs)
+    : submitted;
+  return { terminal, sliced: getValueAtPath(terminal, spec.responsePath), authHeader };
+}
+
+function statusStringAt(root: unknown, path: string): string {
+  const v = getValueAtPath(root, path);
+  return typeof v === "string" ? v : String(v ?? "");
+}
+
+export async function pollWebhookUntilDone(
+  submitted: unknown,
+  spec: WebhookCallSpec,
+  authHeader: string | undefined,
+  deadlineMs: number,
+): Promise<unknown> {
+  const path = spec.pollStatusUrlPath;
+  if (!path) return submitted;
+  let current = submitted;
+  let delayMs = 2_000;
+  while (true) {
+    const status = statusStringAt(current, spec.pollStatusPath).toLowerCase();
+    if (spec.pollDoneWhen.some((s) => s.toLowerCase() === status)) return current;
+    if (spec.pollFailWhen.some((s) => s.toLowerCase() === status)) {
+      const err = getValueAtPath(current, "error");
+      throw new Error(`webhook job ${status}${err ? `: ${String(err).slice(0, 240)}` : ""}`);
+    }
+    const remain = deadlineMs - Date.now();
+    if (remain <= 0) throw new Error(`webhook poll timed out after ${spec.timeoutMs}ms (last status ${status || "unknown"})`);
+    const statusUrl = getValueAtPath(current, path);
+    if (typeof statusUrl !== "string" || !statusUrl.trim()) {
+      throw new Error(`webhook poll: no URL at path "${path}"`);
+    }
+    await new Promise((r) => setTimeout(r, Math.min(delayMs, remain)));
+    const pollHeaders: Record<string, string> = { Accept: "application/json" };
+    if (authHeader) pollHeaders.Authorization = authHeader;
+    const res = await fetch(statusUrl.trim(), {
+      method: "GET",
+      headers: pollHeaders,
+      signal: AbortSignal.timeout(Math.min(30_000, Math.max(1_000, deadlineMs - Date.now()))),
+    });
+    if (!res.ok) {
+      const text = await res.text().catch(() => "");
+      throw new Error(`webhook poll ${res.status}${text ? `: ${text.slice(0, 240)}` : ""}`);
+    }
+    current = await res.json();
+    delayMs = Math.min(Math.round(delayMs * 1.5), 10_000);
+  }
 }
 
 export function webhookStepUsesPipelineState(m: PipelineModule): boolean {
-  return webhookCallSpecFromModule(m).includeState;
+  const spec = webhookCallSpecFromModule(m);
+  return spec.bodyMode !== WebhookBodyMode.Raw && spec.includeState;
 }
 
 type webhook_export_opts = {
@@ -142,6 +248,7 @@ function webhookExportOpts(m: PipelineModule): webhook_export_opts {
 
 export function exportWebhookStepBodyTs(m: PipelineModule, outTs: string): string {
   const o = webhookExportOpts(m);
+  const spec = webhookCallSpecFromModule(m);
   const parts = [
     `urlEnv: "${o.urlEnv}"`,
     `method: "${o.method}"`,
@@ -149,6 +256,7 @@ export function exportWebhookStepBodyTs(m: PipelineModule, outTs: string): strin
     o.includeState ? "" : "includeState: false",
     o.responsePath ? `responsePath: "${o.responsePath}"` : "",
     o.timeoutMs !== DEFAULT_WEBHOOK_TIMEOUT_MS ? `timeoutMs: ${o.timeoutMs}` : "",
+    spec.bodyMode === WebhookBodyMode.Raw ? `bodyMode: "raw"` : "",
   ].filter(Boolean);
   return [
     `const raw = await callWebhook(input, state, { ${parts.join(", ")} });`,

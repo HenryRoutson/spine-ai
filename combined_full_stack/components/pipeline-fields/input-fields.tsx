@@ -16,6 +16,7 @@ import {
   inputModuleTypesAreAllJsonNative,
   isDocToTextInputType,
   isJsonNativeInputType,
+  isMediaInputType,
   isPlainTextInputType,
 } from "@/lib/inference-input"
 import {
@@ -80,7 +81,7 @@ export function InputModuleFields({
   const jsonNativeTypes = INPUT_TYPES.filter((t) => isJsonNativeInputType(t.value))
   const plainTextTypes = INPUT_TYPES.filter((t) => isPlainTextInputType(t.value))
   const convertTypes = INPUT_TYPES.filter((t) => isDocToTextInputType(t.value))
-  // AI : TODO (media-view-A-upload) — fourth group: Audio / Video / Model3d (blob in, not convert-to-text / json-native).
+  const mediaTypes = INPUT_TYPES.filter((t) => isMediaInputType(t.value))
 
   return (
     <>
@@ -141,6 +142,25 @@ export function InputModuleFields({
                       label={t.label}
                       active={active}
                       tone="convert"
+                      onClick={() => toggleInputType(t.value, active, selected, onUpdate!)}
+                    />
+                  )
+                })}
+              </div>
+            </div>
+            <div>
+              <p className="mb-1 font-mono text-[9px] uppercase tracking-wide text-muted-foreground">
+                Media · blob in, play in the viewer
+              </p>
+              <div className="flex flex-wrap gap-1.5">
+                {mediaTypes.map((t) => {
+                  const active = inputTypesForModule(selected).includes(t.value)
+                  return (
+                    <TypeChip
+                      key={t.value}
+                      label={t.label}
+                      active={active}
+                      tone="json"
                       onClick={() => toggleInputType(t.value, active, selected, onUpdate!)}
                     />
                   )

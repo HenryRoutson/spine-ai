@@ -68,7 +68,7 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 
-import { USER_ADDABLE_MODULE_KINDS } from "@/lib/module-kinds"
+import { USER_ADDABLE_MODULE_KINDS, asModuleKind } from "@/lib/module-kinds"
 import { syncListOpsStepModule } from "@/lib/list-ops-steps"
 import { deriveAssembleStepTypes, deriveParallelStepTypes } from "@/lib/assemble-type-expr"
 import { COPY_FEEDBACK_MS } from "@/lib/ui-timing"
@@ -552,11 +552,11 @@ function AddStepMenu({
           {USER_ADDABLE_MODULE_KINDS.map((k) => (
             <DropdownMenuItem
               key={k}
-              onClick={() => onInsert(k, insertAt, loc)}
+              onClick={() => onInsert(asModuleKind(k), insertAt, loc)}
               className="gap-3 px-2 py-2"
             >
-              <KindMenuItemIcon kind={k} />
-              <span className="min-w-0 flex-1 truncate">{MODULE_META[k].label}</span>
+              <KindMenuItemIcon kind={asModuleKind(k)} />
+              <span className="min-w-0 flex-1 truncate">{MODULE_META[asModuleKind(k)].label}</span>
             </DropdownMenuItem>
           ))}
         </DropdownMenuGroup>

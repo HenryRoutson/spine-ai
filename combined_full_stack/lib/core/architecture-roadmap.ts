@@ -78,7 +78,7 @@
 // AI : DONE (sql-id-ref) — slices A–B: Key column, branded ids, catalog, inspector, inspect_ids.
 // AI : TODO (sql-id-ref) — slice C: run JSON tables, allowed-id LLM hints, near-match, checkRefs.
 // AI :   Distinct from field.ref (embed) and type-join (lookup-embed). lib/sql-id-roadmap.ts.
-// AI : TODO (media-view-A-registry) — data vs view: InputType media + DataViewPanel; not TypeExpr kinds.
+// AI : DONE (media-view-A-registry) — data vs view: InputType media + DataViewPanel; not TypeExpr kinds.
 // AI :   Grep TODO (media-view. lib/server/media-view-roadmap.ts + docs/media_and_custom_views_plan.md.
 
 export {}

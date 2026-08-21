@@ -78,6 +78,8 @@ export interface RunCtx {
   // AI : per-llm-step spend cap — set in linear runner before description check / exec.
   stepCostLimitCents?: number;
   stepBaseCents?: number;
+  // AI : Settings → Secrets merged over process.env for webhook URL/auth. Never serialize into checkpoints.
+  webhookEnv?: Record<string, string>;
 }
 
 export type StepInputForCheck = {

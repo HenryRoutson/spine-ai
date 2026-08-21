@@ -19,6 +19,6 @@
 // AI :   LLM/parallel-adapter-only (webhook usually skips)
 // AI : TODO (remote-call-not-unify-kinds) — do NOT merge llm into webhook/API Response kind;
 // AI :   kitchen-sink prompt+model+jsonMode+cost+URL is worse than two families
-// AI : TODO (media-view-D-job) — RemoteJob (Higgsfield/TTS poll) is also NOT webhook and NOT this maybe-runner.
+// AI : DONE (media-view-D-job) — generate poll/ingest is webhook, not this maybe-runner and not a RemoteJob kind.
 
 export {};

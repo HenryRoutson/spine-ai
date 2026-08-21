@@ -20,10 +20,17 @@ export const USER_ADDABLE_MODULE_KINDS = [
   "human-review",
   "webhook",
   // AI : TODO (n8n-stage-A-ui) — "n8n" once kind exists (catalog picker, not generic webhook).
-  // AI : TODO (media-view-D-job) — "remote-job" once kind exists (poll binary APIs, not webhook).
+  // AI : DONE (media-view-D-job) — async media is webhook poll + ingest, not a RemoteJob kind.
   "chatbot",
   "output",
-] as const satisfies readonly ModuleKind[]
+] as const
+
+export type UserAddableModuleKind = (typeof USER_ADDABLE_MODULE_KINDS)[number]
+
+// AI : string-enum ModuleKind is nominal — literals need a cast at the enum boundary.
+export function asModuleKind(kind: UserAddableModuleKind): ModuleKind {
+  return kind as ModuleKind
+}
 
 // AI : output/assert/human-review use inStructureId as the spine passthrough contract.
 // AI : Chatbot is NOT passthrough — in=ChatbotPrompt, out=ChatbotResult.

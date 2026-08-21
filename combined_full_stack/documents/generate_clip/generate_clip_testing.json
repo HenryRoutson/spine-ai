@@ -1,0 +1,10 @@
+{
+  "description": "Generate clip — webhook output is live media; no golden mp4.",
+  "inputs": {
+    "Clip prompt": "clip_prompt.json"
+  },
+  "expectedOutputs": {
+    "Generate": null,
+    "Clip": null
+  }
+}

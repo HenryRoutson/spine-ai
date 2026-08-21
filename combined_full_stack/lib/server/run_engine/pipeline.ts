@@ -50,7 +50,7 @@ import {
 import { labelAsStateKey } from "../pipeline_state";
 import { modelById, recordStepModel, snapshotForByLabel, stepFailuresFor, stepServerLogs, validatesStepOutputAsList } from "./helpers";
 import { persistArtifacts, persistCustomCodeArtifacts } from "./artifacts";
-import { restoreCtx } from "./context";
+import { loadWebhookSecretEnv } from "../user_secrets";
 import { createWriteLive } from "./live";
 import { runLinearStepsFrom } from "./linear";
 import { execForkJoin } from "./steps/fork";
@@ -145,6 +145,7 @@ export async function runPipeline(
   const steps: RunStep[] = [];
   const artifacts: { moduleId: ModuleId; structure?: StructureModel; value: unknown }[] = [];
   const cacheOwnerId = opts.cacheOwnerId ?? "local";
+  ctx.webhookEnv = await loadWebhookSecretEnv(cacheOwnerId);
   const savedCentsAcc = { value: 0 };
 
   const langfuseTraceId = await beginLangfusePipelineRun({
@@ -265,6 +266,8 @@ export async function resumeRunPipeline(
     source: opts.runMeta?.source,
   });
   const ctx = restoreCtx(project, store, ledger, model, checkpoint.ctx);
+  const cacheOwnerId = opts.cacheOwnerId ?? checkpoint.cacheOwnerId ?? "local";
+  ctx.webhookEnv = await loadWebhookSecretEnv(cacheOwnerId);
   const steps: RunStep[] = [...checkpoint.steps];
   const artifacts: { moduleId: ModuleId; structure?: StructureModel; value: unknown }[] = steps
     .filter((s) => s.status !== "error")
@@ -282,7 +285,6 @@ export async function resumeRunPipeline(
   if (!m) throw new Error(`resume: invalid step index ${checkpoint.stepIndex}`);
 
   const writeLive = createWriteLive(project, model, steps, opts.liveHtml ?? persist);
-  const cacheOwnerId = opts.cacheOwnerId ?? checkpoint.cacheOwnerId ?? "local";
   const savedCentsAcc = {
     value: steps.reduce((a, s) => a + (s.savedCostCents ?? 0), 0),
   };

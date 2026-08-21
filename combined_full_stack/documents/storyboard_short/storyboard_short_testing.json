@@ -1,0 +1,12 @@
+{
+  "description": "Live media — no golden stills or mp4. Assert structure in Inference, not CI pixels.",
+  "inputs": {
+    "Brief": "brief.json"
+  },
+  "expectedOutputs": {
+    "Character still": null,
+    "Location still": null,
+    "Hero clip": null,
+    "Play": null
+  }
+}

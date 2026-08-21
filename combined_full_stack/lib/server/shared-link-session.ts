@@ -3,7 +3,7 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { isAbsolute, join, relative, resolve } from "node:path";
 import { dataDir } from "./config";
-import { hashContent, saveOriginalDocBytes, type Store } from "./store";
+import { EXT_MIME, hashContent, ORIGINAL_DOC_EXTS, saveOriginalDocBytes, type Store } from "./store";
 import { shouldSaveOriginalBytes } from "./doc_upload_parse";
 import { DocLabel } from "./types";
 import { InputType, type DocId, type DocRef, type ModuleId, type SharedLinkId } from "./types";
@@ -224,23 +224,14 @@ export function resolveSharedDocParserText(
   return undefined;
 }
 
-const SHARED_ORIGINAL_EXTS = ["pdf", "png", "jpg", "jpeg", "webp"] as const;
-const SHARED_ORIGINAL_MIME: Record<(typeof SHARED_ORIGINAL_EXTS)[number], string> = {
-  pdf: "application/pdf",
-  png: "image/png",
-  jpg: "image/jpeg",
-  jpeg: "image/jpeg",
-  webp: "image/webp",
-};
-
 export type SharedOriginalDocFile = { path: string; mime: string };
 
 function sharedOriginalInDir(dir: string, baseName: string): SharedOriginalDocFile | null {
   if (!parseSharedDocId(baseName)) return null;
-  for (const ext of SHARED_ORIGINAL_EXTS) {
+  for (const ext of ORIGINAL_DOC_EXTS) {
     const path = safeJoinUnder(dir, `${baseName}.${ext}`);
     if (!path || !existsSync(path)) continue;
-    return { path, mime: SHARED_ORIGINAL_MIME[ext] };
+    return { path, mime: EXT_MIME[ext] };
   }
   return null;
 }

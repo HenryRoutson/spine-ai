@@ -193,7 +193,13 @@ const SeedFileSchema = z.object({
       webhookTimeoutMs: z.number().int().min(1).optional(),
       webhookIncludeState: z.boolean().optional(),
       webhookResponsePath: z.string().optional(),
-      // AI : TODO (media-view-B-api) — view: ViewBinding. TODO (media-view-D-job) — remote-job poll fields.
+      webhookBodyMode: z.enum(["wrap", "raw"]).optional(),
+      webhookPollStatusUrlPath: z.string().optional(),
+      webhookPollStatusPath: z.string().optional(),
+      webhookPollDoneWhen: z.array(z.string()).optional(),
+      webhookPollFailWhen: z.array(z.string()).optional(),
+      webhookIngestUrlPath: z.string().optional(),
+      webhookIngestInputType: InputTypeSchema.optional(),
       mergeStateLabel: z.string().optional(),
       mergeWrapListField: z.string().optional(),
       mergeCustom: z.string().optional(),
@@ -426,7 +432,7 @@ export function expectedOutputsForRun(project: Project, runInputDocNames: string
 }
 
 function normalizeSeedModule(m: {
-  kind: ModuleKind;
+  kind: ModuleKind | (typeof AUTHORED_MODULE_KINDS)[number];
   label: string;
   note?: string;
   inputDescription?: string;
@@ -435,7 +441,7 @@ function normalizeSeedModule(m: {
 }): PipelineModule {
   return {
     ...m,
-    note: resolveModuleNote(m.kind, m.note, {
+    note: resolveModuleNote(m.kind as ModuleKind, m.note, {
       label: m.label,
       inputDescription: m.inputDescription,
     }),

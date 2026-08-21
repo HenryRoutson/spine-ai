@@ -6,8 +6,9 @@ export const BUILTIN_QUOTE_SPAN_ID = "m_builtin_quote_span" as StructureModelId;
 export const BUILTIN_CHATBOT_PROMPT_ID = "m_builtin_chatbot_prompt" as StructureModelId;
 export const BUILTIN_CHATBOT_TURN_ID = "m_builtin_chatbot_turn" as StructureModelId;
 export const BUILTIN_CHATBOT_RESULT_ID = "m_builtin_chatbot_result" as StructureModelId;
-// AI : TODO (media-view-B-envelopes) — locked AudioClip / VideoClip / Model3dAsset (doc_id + mime + projections).
-// AI : TODO (media-view-B-3d) — Part3d overlay (asset + nodes + bom) is a user/seed model; mesh stays blob.
+export const BUILTIN_VIDEO_CLIP_ID = "m_builtin_video_clip" as StructureModelId;
+export const BUILTIN_AUDIO_CLIP_ID = "m_builtin_audio_clip" as StructureModelId;
+export const BUILTIN_IMAGE_STILL_ID = "m_builtin_image_still" as StructureModelId;
 
 // AI : shared across every project — the canonical shape for field type `document`.
 // AI : CREATE TABLE document (id TEXT PK, filename TEXT NOT NULL, mime TEXT,
@@ -151,12 +152,136 @@ export const BUILTIN_CHATBOT_RESULT_MODEL: StructureModel = {
   ],
 };
 
+// AI : generated or uploaded clip — bytes in document.blob; this envelope is what the spine validates.
+export const BUILTIN_VIDEO_CLIP_MODEL: StructureModel = {
+  id: BUILTIN_VIDEO_CLIP_ID,
+  name: "VideoClip",
+  description: "Video file envelope — document blob plus a playable URL. Not a vendor job object.",
+  shared: true,
+  locked: true,
+  fields: [
+    {
+      id: "f_video_doc_id",
+      name: "doc_id",
+      type: FieldType.Text,
+      optional: true,
+      description: "Hosted document hash when the clip is stored as document.blob",
+    },
+    {
+      id: "f_video_url",
+      name: "url",
+      type: FieldType.Text,
+      optional: true,
+      description: "Remote playable URL (export / before ingest). Prefer doc_id for hosted runs.",
+    },
+    {
+      id: "f_video_filename",
+      name: "filename",
+      type: FieldType.Text,
+      optional: false,
+      description: "Clip filename",
+      examples: ["clip.mp4"],
+    },
+    {
+      id: "f_video_mime",
+      name: "mime",
+      type: FieldType.Text,
+      optional: false,
+      description: "MIME type",
+      examples: ["video/mp4"],
+    },
+  ],
+};
+
+export const BUILTIN_AUDIO_CLIP_MODEL: StructureModel = {
+  id: BUILTIN_AUDIO_CLIP_ID,
+  name: "AudioClip",
+  description: "Audio file envelope — document blob plus a playable URL.",
+  shared: true,
+  locked: true,
+  fields: [
+    {
+      id: "f_audio_doc_id",
+      name: "doc_id",
+      type: FieldType.Text,
+      optional: true,
+      description: "Hosted document hash when the clip is stored as document.blob",
+    },
+    {
+      id: "f_audio_url",
+      name: "url",
+      type: FieldType.Text,
+      optional: true,
+      description: "Remote playable URL (export / before ingest).",
+    },
+    {
+      id: "f_audio_filename",
+      name: "filename",
+      type: FieldType.Text,
+      optional: false,
+      description: "Clip filename",
+      examples: ["clip.mp3"],
+    },
+    {
+      id: "f_audio_mime",
+      name: "mime",
+      type: FieldType.Text,
+      optional: false,
+      description: "MIME type",
+      examples: ["audio/mpeg"],
+    },
+  ],
+};
+
+export const BUILTIN_IMAGE_STILL_MODEL: StructureModel = {
+  id: BUILTIN_IMAGE_STILL_ID,
+  name: "ImageStill",
+  description: "Still image envelope — document blob plus a playable URL. Same ingest shape as VideoClip.",
+  shared: true,
+  locked: true,
+  fields: [
+    {
+      id: "f_image_doc_id",
+      name: "doc_id",
+      type: FieldType.Text,
+      optional: true,
+      description: "Hosted document hash when the still is stored as document.blob",
+    },
+    {
+      id: "f_image_url",
+      name: "url",
+      type: FieldType.Text,
+      optional: true,
+      description: "Remote playable URL (export / before ingest). Prefer doc_id for hosted runs.",
+    },
+    {
+      id: "f_image_filename",
+      name: "filename",
+      type: FieldType.Text,
+      optional: false,
+      description: "Still filename",
+      examples: ["still.png"],
+    },
+    {
+      id: "f_image_mime",
+      name: "mime",
+      type: FieldType.Text,
+      optional: false,
+      description: "MIME type",
+      examples: ["image/png"],
+    },
+  ],
+};
+
 export const SHARED_STRUCTURE_MODELS: StructureModel[] = [
   BUILTIN_DOCUMENT_MODEL,
   BUILTIN_QUOTE_SPAN_MODEL,
   BUILTIN_CHATBOT_PROMPT_MODEL,
   BUILTIN_CHATBOT_TURN_MODEL,
   BUILTIN_CHATBOT_RESULT_MODEL,
+  BUILTIN_VIDEO_CLIP_MODEL,
+  BUILTIN_AUDIO_CLIP_MODEL,
+  BUILTIN_IMAGE_STILL_MODEL,
 ];
 
 export function isSharedStructureModel(m: StructureModel): boolean {
@@ -167,11 +292,17 @@ export function isSharedStructureModel(m: StructureModel): boolean {
     m.id === BUILTIN_CHATBOT_PROMPT_ID ||
     m.id === BUILTIN_CHATBOT_TURN_ID ||
     m.id === BUILTIN_CHATBOT_RESULT_ID ||
+    m.id === BUILTIN_VIDEO_CLIP_ID ||
+    m.id === BUILTIN_AUDIO_CLIP_ID ||
+    m.id === BUILTIN_IMAGE_STILL_ID ||
     m.name === "Document" ||
     m.name === "QuoteSpan" ||
     m.name === "ChatbotPrompt" ||
     m.name === "ChatbotTurn" ||
-    m.name === "ChatbotResult"
+    m.name === "ChatbotResult" ||
+    m.name === "VideoClip" ||
+    m.name === "AudioClip" ||
+    m.name === "ImageStill"
   );
 }
 

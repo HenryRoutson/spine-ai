@@ -9,20 +9,23 @@
 //   PipelineModule.view | StructureModel.defaultView → mime / InputType → TypeExpr file() / envelope ref → JSON
 //
 // Copy: JsonViewerEmbed (iframe + postMessage). Do not mount user HTML in the Next.js tree.
+//
+// Product: visualization, validation, pipeline — not an integration catalog.
+//   Higgsfield (and any generate API) is webhook URL + JSON paths + VideoClip, not ModuleKind.Higgsfield.
 
 // ---------------------------------------------------------------------------
 // Phase A — registry + media InputTypes (no generators)
 // ---------------------------------------------------------------------------
-// AI : TODO (media-view-A-types) — InputType.Audio | Video | Model3d + INPUT_TYPES labels
-// AI : TODO (media-view-A-upload) — EXT_TYPE + picker groups; keep rejecting html/js as docs
-// AI : TODO (media-view-A-storage) — ORIGINAL_DOC_EXTS + bucket MIME + size (25MB is too small)
-// AI : TODO (media-view-A-serve) — /api/docs/[id]/file for audio/video/3d; signed URLs for <video> / three.js
-// AI : TODO (media-view-A-registry) — lib/data-view.ts resolveViewer + DataViewPanel (JSON always a tab)
-// AI : TODO (media-view-A-players) — builtin audio + video (native elements, not string sniff)
-// AI : TODO (media-view-A-outputs) — swap JsonPreviewPanel in inference-outputs + step-trace preview
-// AI : TODO (media-view-A-docs) — DocViewMode audio/video + docViewerTabs / DocViewer
-// AI : TODO (media-view-A-download) — original-file download when doc_id present; CSV flatten is wrong for clips
-// AI : TODO (media-view-A-share) — same DataViewPanel in share / embed / Vibe simple (not builder-only)
+// AI : DONE (media-view-A-types) — InputType.Audio | Video + INPUT_TYPES labels (Model3d later)
+// AI : DONE (media-view-A-upload) — EXT_TYPE + picker groups; html/js still rejected
+// AI : DONE (media-view-A-storage) — ORIGINAL_DOC_EXTS + bucket MIME; video/audio 80MB
+// AI : DONE (media-view-A-serve) — /api/docs/[id]/file for audio/video
+// AI : DONE (media-view-A-registry) — lib/data-view.ts resolveViewer + DataViewPanel (JSON always a tab)
+// AI : DONE (media-view-A-players) — builtin audio + video (native elements)
+// AI : DONE (media-view-A-outputs) — DataViewPanel in inference-outputs + step-trace preview
+// AI : DONE (media-view-A-docs) — DocViewMode.Play + docViewerTabs / DocViewer
+// AI : DONE (media-view-A-download) — DataViewPanel links original bytes when doc_id/url present.
+// AI : DONE (media-view-A-share) — InferenceRunOutputs is share / embed / Vibe simple (same DataViewPanel)
 
 // ---------------------------------------------------------------------------
 // Phase B — view bindings + envelopes + 3D builtins
@@ -31,7 +34,7 @@
 // AI : TODO (media-view-B-api) — api_schemas + seed schema allowlist view bindings
 // AI : TODO (media-view-B-ui) — output-step + structure header View picker
 // AI : TODO (media-view-B-assistant) — assistant-prompt / moduleSpec: set view like outType
-// AI : TODO (media-view-B-envelopes) — locked builtin AudioClip / VideoClip / Model3dAsset (like Document)
+// AI : DONE (media-view-B-envelopes) — locked builtin AudioClip / VideoClip / ImageStill
 // AI : TODO (media-view-B-3d) — builtin gltf + stl (lazy three.js); mesh stays blob, not JSON vertices
 
 // ---------------------------------------------------------------------------
@@ -48,11 +51,10 @@
 // ---------------------------------------------------------------------------
 // Phase D — generation + async (Higgsfield / TTS / STT)
 // ---------------------------------------------------------------------------
-// AI : TODO (media-view-D-job) — ModuleKind.RemoteJob (or webhook poll mode) + park/resume like human-review
-// AI :   Do NOT poll Higgsfield inside a webhook timeout. Writes document blob, spine is { doc_id }.
-// AI :   Distinct from remote-call-maybe-runner (llm fan-out) and n8n catalog.
-// AI : TODO (media-view-D-higgsfield) — seed: submit → poll → fetch mp4 → VideoClip
-// AI : TODO (media-view-D-tts) — TTS seed → AudioClip (same remote-job; not base64 in JSON)
+// AI : DONE (media-view-D-job) — webhook poll + ingest URL→document.blob. Not ModuleKind.RemoteJob.
+// AI :   Not a Higgsfield/n8n catalog. Timeout is webhookTimeoutMs (in-process poll).
+// AI : DONE (media-view-D-higgsfield) — seed generate_clip: raw POST → poll status_url → fetch video.url → VideoClip
+// AI : TODO (media-view-D-tts) — TTS seed → AudioClip (same webhook poll/ingest; not base64 in JSON)
 // AI : TODO (media-view-D-stt) — audio-to-text next to doc-to-text; optional word timings
 
 // ---------------------------------------------------------------------------

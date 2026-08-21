@@ -29,9 +29,20 @@ async function ensureOriginalsBucket(db: SupabaseClient): Promise<{ error: unkno
   origLog.warn(`Storage bucket doc-originals missing — creating it`);
   const { error } = await db.storage.createBucket(DOC_ORIGINALS_BUCKET, {
     public: false,
-    fileSizeLimit: 25 * 1024 * 1024,
-    allowedMimeTypes: ["application/pdf", "image/png", "image/jpeg", "image/webp"],
-    // AI : TODO (media-view-A-storage) — audio/* video/* model/gltf-binary + size limit for clips/CAD.
+    fileSizeLimit: 80 * 1024 * 1024,
+    allowedMimeTypes: [
+      "application/pdf",
+      "image/png",
+      "image/jpeg",
+      "image/webp",
+      "video/mp4",
+      "video/webm",
+      "video/quicktime",
+      "audio/wav",
+      "audio/mpeg",
+      "audio/mp4",
+      "audio/ogg",
+    ],
   });
   if (!error) {
     origLog.info(`created Storage bucket doc-originals`);

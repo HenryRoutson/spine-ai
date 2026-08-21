@@ -1,0 +1,130 @@
+{
+  "id": "p_generate_clip",
+  "name": "Generate clip",
+  "kind": "media-demo",
+  "models": [
+    {
+      "id": "m_clip_prompt",
+      "name": "ClipPrompt",
+      "description": "Typed generate request posted as the webhook JSON body — not a vendor SDK object.",
+      "fields": [
+        {
+          "id": "f_prompt",
+          "name": "prompt",
+          "type": "text",
+          "optional": false,
+          "description": "Motion / scene prompt",
+          "minLength": 1,
+          "examples": ["A red bicycle rolls through a sunlit alley, camera tracking left"]
+        },
+        {
+          "id": "f_image_url",
+          "name": "image_url",
+          "type": "text",
+          "optional": true,
+          "description": "Optional source image URL for image-to-video models"
+        }
+      ]
+    }
+  ],
+  "modules": [
+    {
+      "id": "mod_prompt_in",
+      "kind": "input",
+      "label": "Clip prompt",
+      "inputType": "json",
+      "inputNameContains": "clip_prompt",
+      "inputDescription": "JSON ClipPrompt — posted as the generate body",
+      "outStructureId": "m_clip_prompt",
+      "cached": true,
+      "avgMs": 40,
+      "avgCostCents": 0,
+      "note": "Validate the request locally. The webhook posts this object (raw body), not { input, state }."
+    },
+    {
+      "id": "mod_generate",
+      "kind": "webhook",
+      "label": "Generate",
+      "note": "Generic submit → poll status_url → store video.url as a VideoClip. Point HIGGSFIELD_GENERATE_URL at any compatible generate endpoint — Spine is not an integration catalog.",
+      "inputDescription": "ClipPrompt JSON",
+      "inStructureId": "m_clip_prompt",
+      "outStructureId": "m_builtin_video_clip",
+      "webhookUrl": "env:HIGGSFIELD_GENERATE_URL",
+      "webhookMethod": "POST",
+      "webhookAuthEnv": "HIGGSFIELD_API_KEY",
+      "webhookTimeoutMs": 180000,
+      "webhookIncludeState": false,
+      "webhookBodyMode": "raw",
+      "webhookPollStatusUrlPath": "status_url",
+      "webhookIngestUrlPath": "video.url",
+      "webhookIngestInputType": "video",
+      "cached": false,
+      "avgMs": 45000,
+      "avgCostCents": 0,
+      "inType": { "kind": "ref", "modelId": "m_clip_prompt" },
+      "outType": { "kind": "ref", "modelId": "m_builtin_video_clip" }
+    },
+    {
+      "id": "mod_clip_out",
+      "kind": "output",
+      "label": "Clip",
+      "inputDescription": "VideoClip envelope — play in Inference; JSON tab is the typed spine",
+      "inStructureId": "m_builtin_video_clip",
+      "outStructureId": "m_builtin_video_clip",
+      "cached": true,
+      "avgMs": 20,
+      "avgCostCents": 0,
+      "note": "Visualization of the stored blob. Tests still assert JSON equality on the envelope.",
+      "inType": { "kind": "ref", "modelId": "m_builtin_video_clip" },
+      "outType": { "kind": "ref", "modelId": "m_builtin_video_clip" }
+    }
+  ],
+  "strategies": [
+    {
+      "id": "s_cheap",
+      "kind": "cheap-agent",
+      "name": "Agent (Cheap Model)",
+      "enabled": true,
+      "model": "deepseek-v4",
+      "accuracy": 80,
+      "latencyMs": 15000,
+      "costCents": 10,
+      "passRate": 80
+    }
+  ],
+  "docs": [
+    {
+      "name": "clip_prompt.json",
+      "type": "json",
+      "label": "inference",
+      "file": "generate_clip/clip_prompt.json"
+    },
+    {
+      "name": "generate_clip_inference.json",
+      "type": "json",
+      "label": "inference",
+      "file": "generate_clip/generate_clip_inference.json"
+    },
+    {
+      "name": "generate_clip_testing.json",
+      "type": "json",
+      "label": "training",
+      "file": "generate_clip/generate_clip_testing.json"
+    },
+    {
+      "name": "generate_clip_README.md",
+      "type": "text",
+      "label": "training",
+      "file": "generate_clip/README.md"
+    }
+  ],
+  "inferencePresets": [
+    {
+      "name": "Default prompt",
+      "description": "Sample ClipPrompt JSON",
+      "inputs": {
+        "Clip prompt": "clip_prompt.json"
+      }
+    }
+  ]
+}

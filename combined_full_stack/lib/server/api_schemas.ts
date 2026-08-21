@@ -71,6 +71,16 @@ export const projectTeamBodySchema = z
   })
   .strict();
 export const userBillingKeyIdSchema = z.string().trim().min(1).max(128);
+export const secretNameSchema = z
+  .string()
+  .trim()
+  .regex(/^[A-Z][A-Z0-9_]{0,127}$/, "Secret name must be UPPER_SNAKE_CASE");
+export const upsertSecretBodySchema = z
+  .object({
+    name: secretNameSchema,
+    value: z.string().min(1).max(8_000),
+  })
+  .strict();
 
 export function parseProjectId(raw: string): ProjectId | null {
   const parsed = projectIdSchema.safeParse(raw);
@@ -290,10 +300,17 @@ const pipelineModulePatchSchema = z
     webhookTimeoutMs: z.number().int().min(1_000).max(600_000).optional(),
     webhookIncludeState: z.boolean().optional(),
     webhookResponsePath: z.string().max(512).optional(),
+    webhookBodyMode: z.enum(["wrap", "raw"]).optional(),
+    webhookPollStatusUrlPath: z.string().max(512).optional(),
+    webhookPollStatusPath: z.string().max(128).optional(),
+    webhookPollDoneWhen: z.array(z.string().max(64)).max(16).optional(),
+    webhookPollFailWhen: z.array(z.string().max(64)).max(16).optional(),
+    webhookIngestUrlPath: z.string().max(512).optional(),
+    webhookIngestInputType: z.nativeEnum(InputType).optional(),
     // AI : TODO (n8n-stage-A-api) — allowlist n8nNodeType, n8nNodeVersion, n8nParameters (record),
     // AI :   n8nCredentialEnv, n8nBaseUrlEnv, n8nApiKeyEnv, n8nTimeoutMs, n8nResponseMode, n8nResponsePath
     // AI :   (see lib/server/n8n-roadmap.ts).
-    // AI : TODO (media-view-B-api) — view: ViewBinding on modules. TODO (media-view-D-job) — remoteJob fields.
+    // AI : TODO (media-view-B-api) — view: ViewBinding on modules.
     chatbotMode: z.enum(["single", "until-exit"]).optional(),
     maxTurns: z.number().int().min(1).max(200).optional(),
     useOcr: z.boolean().optional(),

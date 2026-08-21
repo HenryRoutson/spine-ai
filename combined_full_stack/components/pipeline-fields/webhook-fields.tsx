@@ -2,7 +2,7 @@ import { Input } from "@/components/ui/input"
 import { Switch } from "@/components/ui/switch"
 import { DEFAULT_WEBHOOK_TIMEOUT_MS } from "@/lib/webhook-step"
 import { InvalidKind, type InvalidStep } from "@/lib/validity"
-import { WebhookMethod, type PipelineModule } from "@/lib/types"
+import { InputType, WebhookBodyMode, WebhookMethod, type PipelineModule } from "@/lib/types"
 import { PipelineField, StaticValue } from "@/components/pipeline-fields/shared"
 
 type WebhookModuleFieldsProps = {
@@ -21,7 +21,7 @@ export function WebhookModuleFields({ selected, edit, invalid, onUpdate }: Webho
     <>
       <PipelineField
         label="Webhook URL"
-        hint='HTTPS endpoint or env:VAR / ${VAR} — for n8n, Zapier, search APIs, etc.'
+        hint="HTTPS endpoint, env:VAR, or ${VAR}. Public Higgsfield generate URLs have built-in defaults — set HIGGSFIELD_API_KEY in Settings → Secrets."
         hintTone={missingUrl ? "error" : undefined}
       >
         {edit ? (
@@ -60,7 +60,7 @@ export function WebhookModuleFields({ selected, edit, invalid, onUpdate }: Webho
 
       <PipelineField
         label="Auth env var"
-        hint="Optional — env var holding Bearer token or full Authorization value"
+        hint="Settings → Secrets name, or process env. Value is sent as Authorization (`Key id:secret`, `Bearer …`)."
       >
         {edit ? (
           <Input
@@ -139,6 +139,92 @@ export function WebhookModuleFields({ selected, edit, invalid, onUpdate }: Webho
           <StaticValue>{selected.webhookIncludeState !== false ? "On" : "Off"}</StaticValue>
         </PipelineField>
       )}
+
+      <PipelineField
+        label="JSON body"
+        hint="Wrap keeps { input, state }. Raw posts the typed spine (use this for generate APIs)."
+      >
+        {edit ? (
+          <select
+            value={selected.webhookBodyMode ?? WebhookBodyMode.Wrap}
+            onChange={(e) =>
+              onUpdate!({ webhookBodyMode: e.target.value as WebhookBodyMode })
+            }
+            className="h-8 w-full rounded-md border border-input bg-background px-2 font-mono text-xs"
+          >
+            <option value={WebhookBodyMode.Wrap}>wrap — {"{ input, state }"}</option>
+            <option value={WebhookBodyMode.Raw}>raw — spine JSON</option>
+          </select>
+        ) : (
+          <StaticValue mono>{selected.webhookBodyMode ?? WebhookBodyMode.Wrap}</StaticValue>
+        )}
+      </PipelineField>
+
+      <PipelineField
+        label="Poll status URL path"
+        hint="Dot path on the submit JSON to a GET URL (e.g. status_url). Empty = one-shot. Not a vendor connector."
+      >
+        {edit ? (
+          <Input
+            value={selected.webhookPollStatusUrlPath ?? ""}
+            onChange={(e) => onUpdate!({ webhookPollStatusUrlPath: e.target.value || undefined })}
+            onBlur={(e) => {
+              const trimmed = e.target.value.trim()
+              if (trimmed !== (selected.webhookPollStatusUrlPath ?? "")) {
+                onUpdate!({ webhookPollStatusUrlPath: trimmed || undefined })
+              }
+            }}
+            placeholder="status_url"
+            className="h-8 font-mono text-xs"
+          />
+        ) : selected.webhookPollStatusUrlPath?.trim() ? (
+          <StaticValue mono>{selected.webhookPollStatusUrlPath}</StaticValue>
+        ) : (
+          <StaticValue mono>—</StaticValue>
+        )}
+      </PipelineField>
+
+      <PipelineField
+        label="Store media URL path"
+        hint="Dot path on the completed JSON to a file URL — fetched into Documents and typed as VideoClip/AudioClip"
+      >
+        {edit ? (
+          <Input
+            value={selected.webhookIngestUrlPath ?? ""}
+            onChange={(e) => onUpdate!({ webhookIngestUrlPath: e.target.value || undefined })}
+            onBlur={(e) => {
+              const trimmed = e.target.value.trim()
+              if (trimmed !== (selected.webhookIngestUrlPath ?? "")) {
+                onUpdate!({ webhookIngestUrlPath: trimmed || undefined })
+              }
+            }}
+            placeholder="video.url"
+            className="h-8 font-mono text-xs"
+          />
+        ) : selected.webhookIngestUrlPath?.trim() ? (
+          <StaticValue mono>{selected.webhookIngestUrlPath}</StaticValue>
+        ) : (
+          <StaticValue mono>—</StaticValue>
+        )}
+      </PipelineField>
+
+      {selected.webhookIngestUrlPath?.trim() ? (
+        <PipelineField label="Stored media type">
+          {edit ? (
+            <select
+              value={selected.webhookIngestInputType ?? InputType.Video}
+              onChange={(e) => onUpdate!({ webhookIngestInputType: e.target.value as InputType })}
+              className="h-8 w-full rounded-md border border-input bg-background px-2 font-mono text-xs"
+            >
+              <option value={InputType.Video}>video</option>
+              <option value={InputType.Audio}>audio</option>
+              <option value={InputType.Image}>image</option>
+            </select>
+          ) : (
+            <StaticValue mono>{selected.webhookIngestInputType ?? InputType.Video}</StaticValue>
+          )}
+        </PipelineField>
+      ) : null}
     </>
   )
 }

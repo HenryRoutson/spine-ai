@@ -1,7 +1,14 @@
 import { InputType } from "@/lib/server/types"
 
 export const MAX_UPLOAD_BYTES = 25 * 1024 * 1024
-// AI : TODO (media-view-A-storage) — raise / bypass 25MB for audio/video/3d; chunked upload to doc-originals.
+export const MAX_MEDIA_UPLOAD_BYTES = 80 * 1024 * 1024
+
+const MEDIA_UPLOAD_EXTS = new Set(["mp4", "webm", "mov", "wav", "mp3", "m4a", "ogg"])
+
+export function maxUploadBytesForFilename(filename: string): number {
+  const ext = filename.split(".").pop()?.toLowerCase() ?? ""
+  return MEDIA_UPLOAD_EXTS.has(ext) ? MAX_MEDIA_UPLOAD_BYTES : MAX_UPLOAD_BYTES
+}
 
 // AI : SECURITY — html/htm rejected (stored XSS / inline script risk); Web type is not uploadable.
 export const EXT_TYPE: Record<string, InputType> = {
@@ -20,7 +27,13 @@ export const EXT_TYPE: Record<string, InputType> = {
   png: InputType.Image,
   jpg: InputType.Image,
   jpeg: InputType.Image,
-  // AI : TODO (media-view-A-upload) — wav/mp3/ogg/m4a → Audio; mp4/webm/mov → Video; gltf/glb/stl/obj → Model3d.
+  wav: InputType.Audio,
+  mp3: InputType.Audio,
+  m4a: InputType.Audio,
+  ogg: InputType.Audio,
+  mp4: InputType.Video,
+  webm: InputType.Video,
+  mov: InputType.Video,
 }
 
 export const REJECTED_UPLOAD_EXTS = new Set(["html", "htm", "svg", "js", "mjs", "cjs", "wasm"])
@@ -31,6 +44,6 @@ export function inputTypeFromFilename(filename: string): InputType {
   return EXT_TYPE[ext] ?? InputType.Text
 }
 
-export function uploadSizeErrorMessage(): string {
-  return `file too large (max ${MAX_UPLOAD_BYTES / (1024 * 1024)}MB)`
+export function uploadSizeErrorMessage(maxBytes = MAX_UPLOAD_BYTES): string {
+  return `file too large (max ${maxBytes / (1024 * 1024)}MB)`
 }

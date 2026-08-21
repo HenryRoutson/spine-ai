@@ -10,6 +10,7 @@ export {
   ModuleKind,
   ChatbotMode,
   WebhookMethod,
+  WebhookBodyMode,
   CustomCodeLanguage,
   MergeListStrategy,
   MergeDictStrategy,
