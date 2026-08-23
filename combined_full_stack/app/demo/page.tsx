@@ -23,6 +23,11 @@ export default function DemoPage() {
     setPreviewOnly(isPreview)
     setDemoMode(true)
     setReady(true)
+    // AI : tell an embedding parent (landing page) this frame actually mounted — lets it
+    // AI : distinguish "blocked/unreachable" from "loading" instead of showing a broken frame forever.
+    if (window.parent !== window) {
+      window.parent.postMessage({ source: "spine-demo", type: "ready" }, "*")
+    }
     return () => {
       setPreviewOnly(false)
       setDemoMode(false)

@@ -36,6 +36,7 @@ import {
 import type { Store } from "../store";
 import { UsageLedger } from "../usage";
 import type { RunCheckpoint } from "../run_checkpoint";
+import { restoreCtx } from "./context";
 import { computeRunFingerprint, buildRunInputDocIds, stepCacheKey } from "../run_fingerprint";
 import { writeStepCache } from "../step_cache";
 import { stepOutputTypeName, validateStepOutput } from "../structure";
