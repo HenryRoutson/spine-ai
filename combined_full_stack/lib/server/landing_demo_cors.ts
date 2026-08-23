@@ -3,6 +3,8 @@
 const ALLOWED_ORIGINS = new Set([
   "https://www.spine-ai.dev",
   "https://spine-ai.dev",
+  "https://www.auto-pipeline.dev",
+  "https://auto-pipeline.dev",
   "http://localhost:3000",
   "http://localhost:3001",
   "http://127.0.0.1:3000",

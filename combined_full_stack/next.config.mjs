@@ -69,8 +69,22 @@ const nextConfig = {
       "form-action 'self'",
     ].join("; ")
     // AI : CSP does not accept host:port wildcards — explicit localhost ports used by the landing page.
-    const demoFrameAncestors =
-      "frame-ancestors 'self' https://spine-ai.dev https://www.spine-ai.dev http://localhost:3000 http://localhost:3001 http://127.0.0.1:3000 http://127.0.0.1:3001 https://localhost:3000 https://localhost:3001"
+    // AI : auto-pipeline.dev still serves the same landing and iframes spine-ai-app.dev.
+    const demoFrameAncestors = [
+      "frame-ancestors 'self'",
+      "https://spine-ai.dev",
+      "https://www.spine-ai.dev",
+      "https://auto-pipeline.dev",
+      "https://www.auto-pipeline.dev",
+      "https://www.spine-ai-app.dev",
+      "https://spine-ai-app.dev",
+      "http://localhost:3000",
+      "http://localhost:3001",
+      "http://127.0.0.1:3000",
+      "http://127.0.0.1:3001",
+      "https://localhost:3000",
+      "https://localhost:3001",
+    ].join(" ")
     // AI : /embed/* framing is set per-deployment in proxy (creator allowlist) — keep global SAMEORIGIN elsewhere.
     const baseSecurityHeaders = [
       { key: "X-Content-Type-Options", value: "nosniff" },
