@@ -19,7 +19,7 @@ import {
 } from "@/lib/types"
 
 export const FORK_MIN_BRANCHES = 2
-export const FORK_MAX_BRANCHES = 4
+export const FORK_MAX_BRANCHES = 12
 
 export type ForkJoin = "product" | "assemble" | "merge"
 

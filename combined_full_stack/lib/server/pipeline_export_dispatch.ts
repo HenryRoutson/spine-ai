@@ -24,7 +24,6 @@ import {
   exportSchemaExprGo,
   exportSchemaExprPy,
   exportSchemaExprRust,
-  exportSchemaExprTs,
   exportStepLlmSchemaJson,
   exportStringLiteral,
   fallbacksFirstComment,
@@ -277,7 +276,7 @@ const emitLlm: Record<ExportLang, StepBodyEmitter> = {
       `const _model = ${typeof model === "string" && model.startsWith("/*") ? `"${DEFAULT_MODEL}"` : JSON.stringify(model)};`,
       `void _model;`,
       `const userPrompt = ${JSON.stringify(prompt)} + "\\n\\nINPUT DATA:\\n" + JSON.stringify(input, null, 2);`,
-      `const schema = ${exportSchemaExprTs(exportStepLlmSchemaJson(ctx.project, ctx.m))};`,
+      `const schema = ${exportStepLlmSchemaJson(ctx.project, ctx.m)};`,
       `return await llmStructured<${ctx.outType}>(userPrompt, schema);`,
     ].join("\n");
   },
@@ -343,7 +342,7 @@ const emitLlmBatch: Record<ExportLang, StepBodyEmitter> = {
       exportComment(TS, llmBatchComment(outName)),
       "const items = Array.isArray(input) ? input : [input];",
       `const promptFor = (item: unknown) => ${JSON.stringify(prompt)} + "\\n\\nITEM:\\n" + JSON.stringify(item, null, 2);`,
-      `const schema = ${exportSchemaExprTs(exportStepLlmSchemaJson(ctx.project, ctx.m))};`,
+      `const schema = ${exportStepLlmSchemaJson(ctx.project, ctx.m)};`,
       `return await llmBatchStructured<${tsItemType(ctx.outType)}>(items, promptFor, schema);`,
     ].join("\n");
   },
@@ -830,6 +829,34 @@ export const STEP_BODY: Record<ModuleKind, Record<ExportLang, StepBodyEmitter>> 
     py: (ctx) => exportWebhookStepBodyPy(ctx.m, ctx.outType),
     go: (ctx) => exportWebhookStepBodyGo(ctx.m, goZeroValue(ctx.outType)),
     rs: () => exportWebhookStepBodyRust(),
+  },
+  [ModuleKind.N8n]: {
+    ts: (ctx) =>
+      [
+        exportComment(TS, `n8n piece ${ctx.m.n8nNodeType ?? ""} — local Code-node JS, typed spine in/out`),
+        ...(ctx.m.n8nCode?.trim()
+          ? [commentForeignCode(TS, "n8n Code", ctx.m.n8nCode), tsCast(ctx.outType)]
+          : [`return input as unknown as ${ctx.outType};`]),
+      ].join("\n"),
+    py: (ctx) =>
+      [
+        exportComment(PY, `n8n piece ${ctx.m.n8nNodeType ?? ""}`),
+        ...(ctx.m.n8nCode?.trim()
+          ? [commentForeignCode(PY, "n8n Code", ctx.m.n8nCode), pyCast(ctx, "input")]
+          : [pyCast(ctx, "input")]),
+      ].join("\n"),
+    go: (ctx) =>
+      [
+        exportComment(C, `n8n piece ${ctx.m.n8nNodeType ?? ""}`),
+        ...(ctx.m.n8nCode?.trim() ? [commentForeignCode(C, "n8n Code", ctx.m.n8nCode)] : []),
+        "return input, nil",
+      ].join("\n"),
+    rs: (ctx) =>
+      [
+        exportComment(C, `n8n piece ${ctx.m.n8nNodeType ?? ""}`),
+        ...(ctx.m.n8nCode?.trim() ? [commentForeignCode(C, "n8n Code", ctx.m.n8nCode)] : []),
+        "Ok(input)",
+      ].join("\n"),
   },
   [ModuleKind.Output]: {
     ts: (ctx) => {

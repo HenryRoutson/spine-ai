@@ -134,6 +134,27 @@ export async function runLinearStepsFrom(
               });
             }
           }
+          // AI : always run nested lanes so cached forks still emit per-step spreadsheet rows.
+          if (m.kind === ModuleKind.Fork) {
+            const forkPrev = ctx.prevModuleId;
+            await Promise.all(
+              forkBranchesOf(m).map((b) =>
+                runLinearStepsFrom(
+                  {
+                    ...params,
+                    ctx: { ...ctx, prevModuleId: forkPrev },
+                    modules: b.modules,
+                    forkId: m.id,
+                    branchId: b.id,
+                  },
+                  0,
+                ).then((laneStatus) => {
+                  if (laneStatus === "error") throw new Error(`fork lane "${b.label}" failed`);
+                }),
+              ),
+            );
+            ctx.prevModuleId = forkPrev;
+          }
           if (cached) {
             applyModuleSideEffects(m, ctx, ctx.store, log);
             if (m.kind === "doc-to-text") {
@@ -145,26 +166,6 @@ export async function runLinearStepsFrom(
             result = resultFromCache(m, cached, ctx);
             log.info(`cache HIT`, { moduleId: m.id, key, savedCents: savedCostCents });
           } else {
-            if (m.kind === ModuleKind.Fork) {
-              const forkPrev = ctx.prevModuleId;
-              await Promise.all(
-                forkBranchesOf(m).map((b) =>
-                  runLinearStepsFrom(
-                    {
-                      ...params,
-                      ctx: { ...ctx, prevModuleId: forkPrev },
-                      modules: b.modules,
-                      forkId: m.id,
-                      branchId: b.id,
-                    },
-                    0,
-                  ).then((status) => {
-                    if (status === "error") throw new Error(`fork lane "${b.label}" failed`);
-                  }),
-                ),
-              );
-              ctx.prevModuleId = forkPrev;
-            }
             result = await execModule(m, ctx, log);
             // AI : passthrough steps (output/assert/human-review) are validated against inStructureId,
             // not outStructureId — outStructureId on those kinds is display-only and may be stale.

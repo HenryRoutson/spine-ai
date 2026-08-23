@@ -97,6 +97,7 @@ import {
 import { ResizableSplit } from "@/components/resizable-split"
 import { inferenceSidebarSplit } from "@/lib/layout-split-settings"
 import { usePersistedLeadingWidth } from "@/lib/use-persisted-leading-width"
+import { findPipelineModule } from "@/lib/fork-pipeline"
 import { cn } from "@/lib/utils"
 import { DocLabel, InputType } from "@/lib/types"
 import type { DocId, DocRef, ModelId, Project } from "@/lib/types"
@@ -598,7 +599,7 @@ export function Inference({ simple }: { simple?: boolean } = {}) {
           }
           trailing={
             <ScrollArea className="min-h-0 min-w-0 flex-1">
-              <div className="mx-auto max-w-4xl space-y-6 p-5">
+              <div className="mx-auto max-w-6xl space-y-6 p-5">
               {vibeSimple ? null : (
                 <SimpleViewToggle checked={isSimple} onCheckedChange={setSimple} className="max-w-xs" />
               )}
@@ -763,7 +764,7 @@ export function Inference({ simple }: { simple?: boolean } = {}) {
                 {run.pendingHumanReview && (
                   <HumanReviewPanel
                     spec={run.pendingHumanReview}
-                    module={modules.find((m) => m.id === run.pendingHumanReview!.moduleId)}
+                    module={findPipelineModule(modules, run.pendingHumanReview!.moduleId)}
                     onApprove={() => run.resolveHumanReview("approved")}
                     onReject={() => run.resolveHumanReview("rejected")}
                   />
@@ -771,7 +772,7 @@ export function Inference({ simple }: { simple?: boolean } = {}) {
                 {run.pendingChatbot && run.activeJobId && (
                   <ChatbotPanel
                     spec={run.pendingChatbot}
-                    module={modules.find((m) => m.id === run.pendingChatbot!.moduleId)}
+                    module={findPipelineModule(modules, run.pendingChatbot!.moduleId)}
                     jobId={run.activeJobId}
                     onComplete={(result) => run.resolveChatbot(result)}
                   />

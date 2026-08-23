@@ -1,0 +1,17 @@
+{
+  "id": "n8n-nodes-base.removeDuplicates",
+  "n8nNodeType": "n8n-nodes-base.removeDuplicates",
+  "displayName": "Remove duplicates",
+  "description": "Drop items that share a key field.",
+  "category": "core",
+  "props": [
+    {
+      "name": "field",
+      "displayName": "Key field",
+      "type": "string",
+      "required": true,
+      "default": "id"
+    }
+  ],
+  "n8nCode": "const field = String($parameter.field ?? \"id\");\nconst seen = new Set();\nreturn items.filter((item) => {\n  const key = String(item.json?.[field] ?? \"\");\n  if (seen.has(key)) return false;\n  seen.add(key);\n  return true;\n});"
+}

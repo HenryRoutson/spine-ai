@@ -1,4 +1,5 @@
-import { createHash } from "node:crypto";
+import { hashContent } from "@/lib/content-hash";
+export { hashContent };
 import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, unlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { dataDir } from "./config";
@@ -52,10 +53,6 @@ function parserCacheDir(): string {
 }
 
 // AI : content hash == doc id, so identical uploads dedupe to one ref (Documents tab).
-// AI : TODO (arch-hash-content) — SpineSession has a private twin; session should import this.
-export function hashContent(content: string): DocId {
-  return ("sha_" + createHash("sha256").update(content).digest("hex").slice(0, 16)) as DocId;
-}
 
 function docsDir(): string {
   return join(dataDir(), "docs");
@@ -297,6 +294,58 @@ export interface Store {
   loadOriginalDocBytes?(id: DocId): Promise<OriginalDocBytes | undefined>;
   /** AI : HEAD /file — existence + mime without downloading bytes. */
   loadOriginalDocMeta?(id: DocId): Promise<OriginalDocMeta | undefined>;
+}
+
+// AI : in-memory extra docs on top of a Store — shared-link sessions and hosted API runs.
+export function overlayStore(
+  base: Store,
+  extraDocs: Map<DocId, DocRef>,
+  extraContent: Map<DocId, string>,
+): Store {
+  return {
+    projects: () => base.projects(),
+    project: (id) => base.project(id),
+    saveProject: (p) => base.saveProject(p),
+    deleteProject: (id) => base.deleteProject(id),
+    docs: () => [...extraDocs.values(), ...base.docs()],
+    docContent: (id) => extraContent.get(id) ?? base.docContent(id),
+    parserCacheGetByFileHash: (h, p) => base.parserCacheGetByFileHash(h, p),
+    parserCacheGetByDoc: (id) => base.parserCacheGetByDoc(id),
+    parserCacheSet: (row) => base.parserCacheSet(row),
+    visionCacheGet: (key) => base.visionCacheGet(key),
+    visionCacheSet: (row) => base.visionCacheSet(row),
+    visionCachesForDoc: (id) => base.visionCachesForDoc(id),
+    addDoc: (name, type, content, label) => {
+      const id = hashContent(content);
+      const doc: DocRef = {
+        id,
+        name,
+        type,
+        label,
+        sizeKb: Math.max(1, Math.round(content.length / 1024)),
+        uploadedAt: Date.now(),
+        preview: content.slice(0, 180),
+      };
+      extraDocs.set(id, doc);
+      extraContent.set(id, content);
+      return doc;
+    },
+    repointDocName: (id, name) => {
+      const extra = extraDocs.get(id);
+      if (extra) {
+        extraDocs.set(id, { ...extra, name });
+        return true;
+      }
+      return base.repointDocName(id, name);
+    },
+    removeDoc: (id) => extraDocs.delete(id) || base.removeDoc(id),
+    runs: (pid) => base.runs(pid),
+    findRunByFingerprint: (pid, fp) => base.findRunByFingerprint(pid, fp),
+    addRun: (pid, run) => base.addRun(pid, run),
+    updateRunNotes: (rid, notes) => base.updateRunNotes(rid, notes),
+    updateRunTest: (rid, test) => base.updateRunTest(rid, test),
+    flush: () => base.flush(),
+  };
 }
 
 // AI : prefer memory, then DB sync on warm SupabaseStore — JsonStore has no lag.

@@ -7,9 +7,7 @@ import { HTTP, unknownDoc } from "@/lib/server/api-errors";
 import { parseSharedLinkId } from "@/lib/server/api_schemas";
 import { getSharedLink } from "@/lib/server/shared_links";
 import { resolveSharedDocSessionForRequest } from "@/lib/server/shared-link-doc-session";
-import { resolveSharedDocParserText, parseSharedDocId, parseSharedSessionId } from "@/lib/server/shared-link-session";
-
-const SESSION_COOKIE = "shared_run_session";
+import { resolveSharedDocParserText, parseSharedDocId, parseSharedSessionId, SHARED_RUN_SESSION_COOKIE } from "@/lib/server/shared-link-session";
 
 // AI : unauthenticated parser text for shared-link session + default docs.
 export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string; docId: string }> }) {
@@ -33,7 +31,7 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string;
   }
 
   const jar = await cookies();
-  const cookieSessionId = parseSharedSessionId(jar.get(SESSION_COOKIE)?.value);
+  const cookieSessionId = parseSharedSessionId(jar.get(SHARED_RUN_SESSION_COOKIE)?.value);
   const sessionId = await resolveSharedDocSessionForRequest(
     link,
     new URL(req.url).searchParams.get("sessionId"),

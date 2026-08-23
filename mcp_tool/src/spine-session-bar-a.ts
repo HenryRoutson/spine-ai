@@ -22,9 +22,10 @@ import { askAgent } from "@/lib/cli/agent"
 import { inspectCatalogDocs } from "@/lib/sql-id-index"
 import type { ProjectProposal } from "@/lib/project-assistant-types"
 import { filterRunsByErrorStatus } from "@/lib/run-error-log"
+import { testReportPassed } from "@/lib/testing-files"
 import { exclusionReasonForInputModule, exclusionReasonLabel } from "@/lib/inference-input-picker"
 // AI : import enums from server/types — tsx ESM drops named values through lib/types `export *`.
-import { DocLabel, InputType, type Project } from "@/lib/server/types"
+import { DocLabel, InputType, RunStatus, type PipelineRun, type Project, type RunId } from "@/lib/server/types"
 
 const askAgentJobs = new Map<string, Promise<unknown>>()
 
@@ -68,11 +69,63 @@ export async function startRunFromSession(opts: {
   testDocName?: string
   testing?: boolean
 }) {
-  // AI : TODO (mcp-run-loop) — wait until terminal + hydrateRunDetail; GUI polls until step outputs exist.
-  // AI :   pinpoint_failure needs that JSON. start_run/run_test matching GUI Run/Testing → Run is incomplete without this.
   const session = openMcpSession(opts.sessionPath, false)
   const run = opts.testing ? await session.runTest(opts.testDocName) : await session.startRun()
   return { id: run.id, status: run.status, source: run.source }
+}
+
+function compactRun(run: PipelineRun) {
+  return {
+    id: run.id,
+    status: run.status,
+    totalMs: run.totalMs,
+    steps: run.steps.map((s) => ({
+      moduleId: s.moduleId,
+      label: s.label,
+      kind: s.kind,
+      status: s.status,
+      ...(s.failures?.length ? { failures: s.failures } : {}),
+      ...(s.status !== "ok" && s.outputPreview ? { outputPreview: s.outputPreview.slice(0, 400) } : {}),
+    })),
+    ...(run.test ? { testPassed: testReportPassed(run.test, run), testDocName: run.test.testDocName } : {}),
+  }
+}
+
+function runIsTerminal(status: string): boolean {
+  return status === RunStatus.Ok || status === RunStatus.Error
+}
+
+export async function waitForRunFromSession(opts: {
+  sessionPath?: string
+  runId?: string
+  timeoutMs?: number
+}) {
+  // AI : GUI Logging polls hydrateRunDetail until steps exist; Claude Code needs the same wait.
+  const session = openMcpSession(opts.sessionPath, false)
+  const timeoutMs = Math.min(Math.max(opts.timeoutMs ?? 45_000, 1_000), 90_000)
+  const deadline = Date.now() + timeoutMs
+  let runId = opts.runId as RunId | undefined
+  if (!runId) {
+    const latest = session.runs[0]
+    if (!latest) throw new Error("no run to wait for — call start_run or run_test first")
+    runId = latest.id
+  }
+  while (true) {
+    await session.hydrateRunDetail(runId)
+    const run = session.runs.find((r) => r.id === runId)
+    if (run && runIsTerminal(run.status)) {
+      return { ...compactRun(run), timedOut: false }
+    }
+    if (Date.now() >= deadline) {
+      if (!run) throw new Error(`run ${runId} not found after hydrate`)
+      return {
+        ...compactRun(run),
+        timedOut: true,
+        next: "Run still running. Call wait_for_run again with the same runId.",
+      }
+    }
+    await new Promise((resolve) => setTimeout(resolve, 1_500))
+  }
 }
 
 export function sessionLogs(sessionPath?: string, errorsOnly = false) {
@@ -212,12 +265,42 @@ export function addStepFromSession(
 
 export function patchStepFromSession(
   id: string,
-  patch: { label?: string; prompt?: string; note?: string },
+  patch: { label?: string; prompt?: string; note?: string } & Record<string, unknown>,
   sessionPath?: string,
 ) {
   const session = openMcpSession(sessionPath, true)
-  const step = patchStep(session, id, patch)
-  return { id: step.id, label: step.label, kind: step.kind }
+  const step = patchStep(session, id, patch as Parameters<typeof patchStep>[2])
+  return { id: step.id, label: step.label, kind: step.kind, n8nNodeType: step.n8nNodeType }
+}
+
+export function configureN8nStepFromSession(opts: {
+  stepId: string
+  n8nNodeType?: string
+  parametersJson?: string
+  n8nCode?: string
+  sessionPath?: string
+}) {
+  const session = openMcpSession(opts.sessionPath, true)
+  let parameters: Record<string, unknown> | undefined
+  if (opts.parametersJson?.trim()) {
+    const parsed: unknown = JSON.parse(opts.parametersJson)
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+      throw new Error("parametersJson must be a JSON object")
+    }
+    parameters = parsed as Record<string, unknown>
+  }
+  const patch: Parameters<typeof patchStep>[2] = {}
+  if (opts.n8nNodeType) patch.n8nNodeType = opts.n8nNodeType
+  if (parameters) patch.n8nParameters = parameters
+  if (opts.n8nCode !== undefined) patch.n8nCode = opts.n8nCode || undefined
+  const step = patchStep(session, opts.stepId, patch)
+  return {
+    id: step.id,
+    label: step.label,
+    kind: step.kind,
+    n8nNodeType: step.n8nNodeType,
+    n8nParameters: step.n8nParameters,
+  }
 }
 
 export function removeStepFromSession(id: string, sessionPath?: string) {
@@ -359,6 +442,10 @@ export type SessionActionArgs = {
   testDocName?: string
   testing?: boolean
   relation?: string
+  forkId?: string
+  branchId?: string
+  runId?: string
+  timeoutMs?: number
 }
 
 export async function runSessionAction(args: SessionActionArgs): Promise<unknown> {
@@ -451,6 +538,9 @@ export async function runSessionAction(args: SessionActionArgs): Promise<unknown
     case "testing.run":
     case "run_test":
       return startRunFromSession({ sessionPath, testDocName: args.testDocName, testing: true })
+    case "logging.hydrate":
+    case "wait_for_run":
+      return waitForRunFromSession({ sessionPath, runId: args.runId, timeoutMs: args.timeoutMs })
     case "nav.billing":
     case "billing.refresh":
       return refreshBillingFromSession(sessionPath)
@@ -481,7 +571,7 @@ export async function runSessionAction(args: SessionActionArgs): Promise<unknown
     case "logging.errors-only":
       return sessionLogs(sessionPath, true)
     // AI : TODO (mcp-capability) — GUI ids with SpineSession methods but no MCP case yet:
-    // AI :   documents.remove → removeDoc, quotes.link → linkQuotes, logging.hydrate → hydrateRunDetail,
+    // AI :   documents.remove → removeDoc, quotes.link → linkQuotes,
     // AI :   docs/project bind → setDocProjects, assistant approve-to-run → executeProposedActions,
     // AI :   session pull/push → pullRemoteState/flushPendingSave, project.resync-examples → resyncExamples.
     // AI :   Host-bound (no session method): inference.stop, jobs.stop, inference.human-review.*,

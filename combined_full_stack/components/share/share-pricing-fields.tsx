@@ -90,3 +90,15 @@ export function parseSharePricing(
   }
   return { ok: true, billingMultiple: +multiple.toFixed(4), flatFeeCents }
 }
+
+export function parseSpendLimitUsd(
+  enabled: boolean,
+  usd: string,
+): { ok: true; spendLimitCents: number | undefined } | { ok: false; error: string } {
+  if (!enabled) return { ok: true, spendLimitCents: undefined }
+  const parsed = Number.parseFloat(usd)
+  if (!Number.isFinite(parsed) || parsed <= 0) {
+    return { ok: false, error: "Enter a valid spending limit greater than $0" }
+  }
+  return { ok: true, spendLimitCents: Math.round(parsed * 100) }
+}

@@ -1,0 +1,3 @@
+{
+  "csv": "vendor,amount,status\nAcme,40,open\nBeta,12,closed\nAcme,9,open\nDelta,100,open"
+}

@@ -47,7 +47,7 @@ export function combineGroupAt(
 
 // AI : combine steps consume pipeline state + a secondary input module immediately before them —
 // AI : group input (+ auto parse llm) so the linear canvas shows where the extra document feeds in.
-// AI : nested forks in a lane render as a single step card (v1 UI: flatten first).
+// AI : nested forks in a lane render as fork boxes (series-parallel DAG).
 export function segmentPipeline(
   modules: PipelineModule[],
   opts?: { nestedForkAsStep?: boolean },
@@ -78,7 +78,7 @@ export function segmentPipeline(
             id: b.id,
             label: b.label,
             modules: b.modules,
-            segments: segmentPipeline(b.modules, { nestedForkAsStep: true }),
+            segments: segmentPipeline(b.modules, { nestedForkAsStep: false }),
           })),
         })
       } else {

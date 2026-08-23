@@ -58,7 +58,7 @@ export function JsonPreviewPanel({
       </div>
       <JsonViewerEmbed
         json={json}
-        className="min-h-0 flex-1"
+        className={excelOnly ? "h-full min-h-[16rem] flex-1" : "min-h-0 flex-1"}
         defaultView={view}
         lockedView={excelOnly ? "table" : undefined}
         onFullscreen={onFullscreen}

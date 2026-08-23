@@ -36,6 +36,7 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { StepInputDescription, moduleInputDescription } from "@/components/step-input-description"
+import { flattenPipelineModules } from "@/lib/fork-pipeline"
 import { isMultiDocInputModule, inputTypeLabel } from "@/lib/inference-input"
 import { validateNamedInputs } from "@/lib/inference-setup-files"
 import { validateInferenceDocAssignment } from "@/lib/inference-validity"
@@ -106,7 +107,7 @@ export function draftFromTest(test: SpineTestFile, project: Project): TestDraft 
     const key = labelAsStateKey(label)
     if (seen.has(key)) continue
     seen.add(key)
-    const mod = project.modules.find((m) => labelAsStateKey(m.label) === key)
+    const mod = flattenPipelineModules(project.modules).find((m) => labelAsStateKey(m.label) === key)
     const schema = mod && isComparableStep(mod) ? stepOutputJsonSchema(project, key) : null
     const root = schema ? jsonSchemaToFormRoot(schema) : null
     const value = root && v !== null ? applySchemaDefaults(v, root) : v
@@ -245,7 +246,7 @@ function sameStep(a: step_label_string, b: step_label_string): boolean {
 function draftAlignmentInput(draft: TestDraft, project: Project): Pick<SpineTestFile, "inputs" | "expectedOutputs"> {
   const expectedOutputs: Record<step_label_string, unknown> = {}
   for (const row of draft.expected) {
-    const mod = project.modules.find((m) => labelAsStateKey(m.label) === labelAsStateKey(row.label))
+    const mod = flattenPipelineModules(project.modules).find((m) => labelAsStateKey(m.label) === labelAsStateKey(row.label))
     if (!mod || !isComparableStep(mod)) continue
     const parsed = tryParseJson(row.text, { trim: true })
     expectedOutputs[row.label] = parsed.ok ? parsed.value : null
@@ -433,7 +434,7 @@ export function draftHasErrors(draft: TestDraft, project: Project, projectDocs: 
     return true
   }
   return draft.expected.some((row) => {
-    const mod = project.modules.find((m) => sameStep(m.label, row.label))
+    const mod = flattenPipelineModules(project.modules).find((m) => sameStep(m.label, row.label))
     if (!mod || !isComparableStep(mod)) return false
     return expectedIssue(row, project, false)?.level === "error"
   })
@@ -709,7 +710,7 @@ export function TestFileEditor({
                   {alignment.orphanedExpected.map(({ label, remapCandidates }) => {
                     const row = draft.expected.find((r) => sameStep(r.label, label))
                     if (!row) return null
-                    const mod = project.modules.find((m) => sameStep(m.label, label))
+                    const mod = flattenPipelineModules(project.modules).find((m) => sameStep(m.label, label))
                     const notScored = mod && !isComparableStep(mod)
                     return (
                       <div key={label} className="space-y-2">

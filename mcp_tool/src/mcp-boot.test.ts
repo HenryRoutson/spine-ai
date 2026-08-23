@@ -10,7 +10,14 @@ const APP = resolve(REPO, "combined_full_stack")
 
 type JsonRpc = { jsonrpc: "2.0"; id?: number; result?: unknown; error?: { message: string } }
 
-async function handshake(): Promise<{ init: JsonRpc; tools: JsonRpc; prompts: JsonRpc; stderr: string }> {
+async function handshake(): Promise<{
+  init: JsonRpc
+  tools: JsonRpc
+  prompts: JsonRpc
+  badApply: JsonRpc
+  pieces: JsonRpc
+  stderr: string
+}> {
   // AI : Cursor MCP spawn ignores cwd and starts from $HOME — use absolute tsx + tsconfig.
   const nodeBin = process.execPath
   const tsxCli = resolve(MCP_ROOT, "node_modules/tsx/dist/cli.mjs")
@@ -81,13 +88,33 @@ async function handshake(): Promise<{ init: JsonRpc; tools: JsonRpc; prompts: Js
   const prompts = await wait(3)
   replies.push(prompts)
 
+  child.stdin.write(
+    `${JSON.stringify({
+      jsonrpc: "2.0",
+      id: 4,
+      method: "tools/call",
+      params: { name: "apply_project_changes", arguments: { proposalJson: "not-json" } },
+    })}\n`,
+  )
+  const badApply = await wait(4)
+
+  child.stdin.write(
+    `${JSON.stringify({
+      jsonrpc: "2.0",
+      id: 5,
+      method: "tools/call",
+      params: { name: "list_pieces", arguments: {} },
+    })}\n`,
+  )
+  const pieces = await wait(5)
+
   child.kill("SIGTERM")
-  return { init, tools, prompts, stderr: stderrChunks.join("") }
+  return { init, tools, prompts, badApply, pieces, stderr: stderrChunks.join("") }
 }
 
 describe("MCP stdio boot", () => {
   it("initialize + tools/list + prompts/list over newline JSON-RPC", async () => {
-    const { init, tools, prompts } = await handshake()
+    const { init, tools, prompts, badApply, pieces } = await handshake()
     expect(init.error, JSON.stringify(init.error)).toBeUndefined()
     const result = init.result as
       | { serverInfo?: { name?: string }; instructions?: string }
@@ -101,6 +128,11 @@ describe("MCP stdio boot", () => {
     expect(names).toContain("get_project")
     expect(names).toContain("pinpoint_failure")
     expect(names).toContain("ask_agent")
+    expect(names).toContain("list_pieces")
+    expect(names).toContain("configure_n8n_step")
+    expect(names).toContain("import_piece")
+    expect(names).toContain("export_piece")
+    expect(names).toContain("wait_for_run")
     expect(prompts.error, JSON.stringify(prompts.error)).toBeUndefined()
     const promptNames = ((prompts.result as { prompts?: Array<{ name: string }> })?.prompts ?? []).map(
       (p) => p.name,
@@ -108,5 +140,16 @@ describe("MCP stdio boot", () => {
     expect(promptNames).toContain("vibe_loop")
     expect(promptNames).toContain("fix_test")
     expect(promptNames).toContain("add_pipeline_step")
+    expect(promptNames).toContain("connect_spine")
+    expect(promptNames).toContain("n8n_piece")
+    expect(promptNames).toContain("fork_dag")
+    expect(badApply.error, JSON.stringify(badApply.error)).toBeUndefined()
+    const applyText = (badApply.result as { content?: Array<{ text?: string }>; isError?: boolean }) ?? {}
+    expect(applyText.isError).toBe(true)
+    expect(applyText.content?.[0]?.text).toContain('"ok": false')
+    expect(applyText.content?.[0]?.text).toContain("next")
+    const piecesText = (pieces.result as { content?: Array<{ text?: string }> })?.content?.[0]?.text ?? ""
+    expect(piecesText).toContain("n8n-nodes-base.set")
+    expect(piecesText).toContain("n8n-nodes-base.filter")
   })
 })

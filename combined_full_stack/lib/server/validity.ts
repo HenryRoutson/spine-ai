@@ -2,8 +2,8 @@
 // AI : TODO (linter-first) — shrink computeInvalid: generate pipeline.py or pipeline.rs with typed step chain,
 // AI :   run pyright / cargo check; surface diagnostics in UI instead of custom stepAcceptsSpineType rules.
 // AI : Types + messages → validity-types.ts / validity-messages.ts / validity-inspect.ts.
-// AI : TODO (arch-validity-split) — this file still mixes graph I/O, n8n, canRunStep, billedCents notes.
-// AI :   Keep computeInvalid as the graph checker; move n8n/canRunStep to own modules (messages already split).
+// AI : TODO (arch-validity-split) — this file still mixes graph I/O, n8n, billedCents notes.
+// AI :   Keep computeInvalid as the graph checker; n8n messages already split.
 // AI : TODO (spec) — derive dependency graph from step() refs in custom code; flag unused/isolated steps (linear spine only today).
 // AI : DONE (allow-pipeline-non-linear-fork) — computeInvalid walks Fork lanes with synthetic predecessor; join product is next spine.
 // AI : TODO security — runs.data is user-writable via RLS; billedCents in JSON can be forged for display.
@@ -17,6 +17,7 @@ import type {
   TypeAlias,
 } from "./types";
 import { ModuleKind, FieldType } from "./types";
+import { getN8nNode, missingN8nParams } from "@/lib/n8n-catalog";
 import { customCodeEntriesForModule } from "@/lib/custom_code_entries";
 import { tryCompileCustomCodeEntry } from "@/lib/custom_code";
 import { usesPassthroughStructure, isLlmKind, isMergeModuleKind, stepRequiresNote } from "@/lib/module-kinds";
@@ -49,7 +50,6 @@ import {
   FORK_MIN_BRANCHES,
   flattenPipelineModules,
   forkBranchesOf,
-  forkContainsNestedFork,
   forkJoinOf,
   forkProductField,
   isForkKind,
@@ -821,8 +821,35 @@ function computeWebhookInvalid(modules: PipelineModule[]): InvalidMap {
   return invalid;
 }
 
-// AI : TODO (n8n-stage-A-api) — computeN8nInvalid: require n8nNodeType in catalog; reject trigger-only nodes;
-// AI :   require credential env when description.credentials required (see lib/server/n8n-roadmap.ts).
+function computeN8nInvalid(modules: PipelineModule[]): InvalidMap {
+  const invalid: InvalidMap = new Map();
+  for (const m of flattenPipelineModules(modules)) {
+    if (m.kind !== ModuleKind.N8n) continue;
+    const type = m.n8nNodeType?.trim();
+    if (!type) {
+      pushInvalid(invalid, { moduleId: m.id, kind: InvalidKind.MissingN8nNodeType });
+      continue;
+    }
+    const entry = getN8nNode(type);
+    if (!entry) {
+      pushInvalid(invalid, {
+        moduleId: m.id,
+        kind: InvalidKind.StructureField,
+        structureMessage: `unknown n8n piece "${type}" — use list_pieces`,
+      });
+      continue;
+    }
+    const missing = missingN8nParams(entry, m.n8nParameters);
+    if (missing.length) {
+      pushInvalid(invalid, {
+        moduleId: m.id,
+        kind: InvalidKind.StructureField,
+        structureMessage: `${entry.displayName} needs: ${missing.join(", ")}`,
+      });
+    }
+  }
+  return invalid;
+}
 
 function computeForkInvalid(
   modules: PipelineModule[],
@@ -880,13 +907,6 @@ function computeForkInvalid(
         });
       }
     }
-    if (forkContainsNestedFork(m)) {
-      pushInvalid(invalid, {
-        moduleId: m.id,
-        kind: InvalidKind.StructureField,
-        structureMessage: "flatten nested forks first — v1 canvas is one nesting level",
-      });
-    }
     const join = forkJoinOf(m);
     if (join === "assemble") {
       const loc = locatePipelineModule(modules, m.id);
@@ -930,6 +950,7 @@ export function computeInvalid(
   const invalid = computeLabelInvalid(flat);
   mergeInvalid(invalid, computeNoteInvalid(flat));
   mergeInvalid(invalid, computeWebhookInvalid(flat));
+  mergeInvalid(invalid, computeN8nInvalid(modules));
   mergeInvalid(invalid, computeExampleSelectInvalid(flat, models));
   mergeInvalid(invalid, computeMergeStateInvalid(flat, models));
   mergeInvalid(invalid, computeAssembleInvalid(flat, models, opts?.typeAliases ?? []));
@@ -1358,30 +1379,3 @@ export function pipelineOutputModel(project: Project): StructureModel {
   return m;
 }
 
-export function isPipelineValid(
-  modules: PipelineModule[],
-  models: StructureModel[] = [],
-  typeAliases: TypeAlias[] = [],
-): boolean {
-  return computeInvalid(modules, models, { typeAliases }).size === 0;
-}
-
-// AI : a step's run button is enabled only when the pipeline is valid AND the step is
-// AI : cached or has an input ready (demo_outline: "run button on each step which has a cached or input").
-// AI : TODO refactor — fix canRunStep semantics or remove API if per-step run stays unsupported.
-// AI : TODO bug — "cached" here is the m.cached CONFIG toggle, not whether a cache artifact
-// AI : actually exists for the step's key (run_engine readCache); a cached:true step with no
-// AI : cache file lights up with nothing to serve. Also: there is no per-step run entry point
-// AI : in the engine at all — only the whole-pipeline runPipeline (demo_outline §2/§4).
-export function canRunStep(
-  modules: PipelineModule[],
-  moduleId: ModuleId,
-  hasInput: boolean,
-  models: StructureModel[] = [],
-  typeAliases: TypeAlias[] = [],
-): boolean {
-  if (!isPipelineValid(modules, models, typeAliases)) return false;
-  const m = modules.find((x) => x.id === moduleId);
-  if (!m) return false;
-  return m.cached || m.kind === ModuleKind.Input || hasInput;
-}

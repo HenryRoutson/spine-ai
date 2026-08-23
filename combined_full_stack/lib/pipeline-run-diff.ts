@@ -1,3 +1,4 @@
+import { findPipelineModule } from "@/lib/fork-pipeline"
 import { LegacyModuleKind, ModuleKind } from "@/lib/types"
 import type { PipelineModule, RunStep } from "@/lib/types"
 
@@ -23,7 +24,7 @@ export function modulesFromRunSteps(steps: RunStep[]): PipelineModule[] {
 // AI : enrich run-time modules with current I/O config when the step id still exists.
 export function enrichRunModules(runModules: PipelineModule[], current: PipelineModule[]): PipelineModule[] {
   return runModules.map((rm) => {
-    const cm = current.find((m) => m.id === rm.id)
+    const cm = findPipelineModule(current, rm.id)
     if (!cm) return rm
     return {
       ...cm,

@@ -582,6 +582,8 @@ export type McpStepReview = {
   inputType?: string | string[]
   structureIn?: string
   structureOut?: string
+  n8nNodeType?: string
+  branches?: { id: string; label: string; steps: McpStepReview[] }[]
 }
 
 function mcpFieldReview(model: StructureModel, field: StructureModel["fields"][number], models: StructureModel[]): string {
@@ -605,6 +607,14 @@ function mcpStepReview(modules: PipelineModule[], models: StructureModel[]): Mcp
   return modules.map((m) => {
     const structureIn = stepSpineInType(m)
     const structureOut = stepSpineOutType(m)
+    const branches =
+      m.kind === "fork"
+        ? (m.forkBranches ?? []).map((b) => ({
+            id: b.id,
+            label: b.label,
+            steps: mcpStepReview(b.modules, models),
+          }))
+        : undefined
     return {
       id: m.id,
       kind: m.kind,
@@ -612,6 +622,8 @@ function mcpStepReview(modules: PipelineModule[], models: StructureModel[]): Mcp
       ...(m.inputType ? { inputType: m.inputType } : {}),
       ...(structureIn ? { structureIn: formatTypeExpr(structureIn, named) } : {}),
       ...(structureOut ? { structureOut: formatTypeExpr(structureOut, named) } : {}),
+      ...(m.kind === "n8n" && m.n8nNodeType ? { n8nNodeType: m.n8nNodeType } : {}),
+      ...(branches ? { branches } : {}),
     }
   })
 }

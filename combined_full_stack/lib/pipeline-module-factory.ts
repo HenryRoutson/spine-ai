@@ -5,6 +5,7 @@ import { DEFAULT_EXAMPLE_SELECT_PROMPT } from "@/lib/example-select"
 import { DEFAULT_CUSTOM_CODE_MAX_RUN_MS } from "@/lib/custom-code-max-run"
 import { DEFAULT_LLM_STEP_COST_LIMIT_CENTS } from "@/lib/llm-cost-limit"
 import { DEFAULT_WEBHOOK_TIMEOUT_MS } from "@/lib/webhook-step"
+import { DEFAULT_N8N_TIMEOUT_MS, piecePropDefaults, getN8nNode } from "@/lib/n8n-catalog"
 import {
   DEFAULT_CHATBOT_MAX_TURNS,
   DEFAULT_CHATBOT_MODE,
@@ -55,6 +56,10 @@ export type ModuleFactoryOpts = {
   forkJoin?: import("@/lib/types").PipelineModule["forkJoin"]
   webhookMethod?: WebhookMethod
   webhookTimeoutMs?: number
+  n8nNodeType?: string
+  n8nParameters?: Record<string, unknown>
+  n8nCode?: string
+  n8nTimeoutMs?: number
   chatbotMode?: ChatbotMode
   maxTurns?: number
 }
@@ -157,7 +162,14 @@ export function createPipelineModule(
         : undefined,
     webhookMethod: kind === ModuleKind.Webhook ? (opts.webhookMethod ?? WebhookMethod.Post) : undefined,
     webhookTimeoutMs: kind === ModuleKind.Webhook ? (opts.webhookTimeoutMs ?? DEFAULT_WEBHOOK_TIMEOUT_MS) : undefined,
-    // AI : TODO (n8n-stage-A) — defaults for ModuleKind.N8n (timeout, responseMode "first", empty parameters).
+    n8nNodeType: kind === ModuleKind.N8n ? (opts.n8nNodeType ?? "n8n-nodes-base.set") : undefined,
+    n8nParameters:
+      kind === ModuleKind.N8n
+        ? (opts.n8nParameters ??
+          piecePropDefaults(getN8nNode(opts.n8nNodeType ?? "n8n-nodes-base.set") ?? { props: [], id: "", n8nNodeType: "", displayName: "", description: "", category: "", n8nCode: "" }))
+        : undefined,
+    n8nCode: kind === ModuleKind.N8n ? opts.n8nCode : undefined,
+    n8nTimeoutMs: kind === ModuleKind.N8n ? (opts.n8nTimeoutMs ?? DEFAULT_N8N_TIMEOUT_MS) : undefined,
     chatbotMode: isChatbot
       ? (opts.chatbotMode ??
         (DEFAULT_CHATBOT_MODE === "single" ? ChatbotMode.Single : ChatbotMode.UntilExit))

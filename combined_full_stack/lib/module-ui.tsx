@@ -18,6 +18,7 @@ import {
   ShieldCheck,
   UserCheck,
   Webhook,
+  Puzzle,
   MessagesSquare,
   type LucideIcon,
 } from "lucide-react"
@@ -63,7 +64,7 @@ export const KIND_ICON: Record<ModuleKind, ModuleIcon> = {
   [ModuleKind.Assert]: ShieldCheck,
   [ModuleKind.HumanReview]: UserCheck,
   [ModuleKind.Webhook]: Webhook,
-  // AI : TODO (n8n-stage-A-ui) — KIND_ICON[ModuleKind.N8n] (distinct from Webhook — catalog connector).
+  [ModuleKind.N8n]: Puzzle,
   [ModuleKind.Chatbot]: MessagesSquare,
   [ModuleKind.Output]: FileOutput,
 }
@@ -86,7 +87,7 @@ export const KIND_COLOR: Record<ModuleKind, string> = {
   [ModuleKind.Assert]: "text-chart-2",
   [ModuleKind.HumanReview]: "text-chart-1",
   [ModuleKind.Webhook]: "text-chart-4",
-  // AI : TODO (n8n-stage-A-ui) — KIND_COLOR + KIND_SURFACE for ModuleKind.N8n
+  [ModuleKind.N8n]: "text-chart-4",
   [ModuleKind.Chatbot]: "text-chart-2",
   [ModuleKind.Output]: "text-output",
 }
@@ -110,6 +111,7 @@ export const KIND_SURFACE: Record<ModuleKind, string> = {
   [ModuleKind.Assert]: "border-chart-2/40 bg-chart-2/10",
   [ModuleKind.HumanReview]: "border-chart-1/40 bg-chart-1/10",
   [ModuleKind.Webhook]: "border-chart-4/40 bg-chart-4/10",
+  [ModuleKind.N8n]: "border-chart-4/40 bg-chart-4/10",
   [ModuleKind.Chatbot]: "border-chart-2/40 bg-chart-2/10",
   [ModuleKind.Output]: "border-output/40 bg-output/10",
 }

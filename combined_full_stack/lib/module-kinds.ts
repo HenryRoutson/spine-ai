@@ -19,8 +19,7 @@ export const USER_ADDABLE_MODULE_KINDS = [
   "assert",
   "human-review",
   "webhook",
-  // AI : TODO (n8n-stage-A-ui) — "n8n" once kind exists (catalog picker, not generic webhook).
-  // AI : DONE (media-view-D-job) — async media is webhook poll + ingest, not a RemoteJob kind.
+  "n8n",
   "chatbot",
   "output",
 ] as const

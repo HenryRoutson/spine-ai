@@ -1,0 +1,17 @@
+{
+  "id": "n8n-nodes-base.limit",
+  "n8nNodeType": "n8n-nodes-base.limit",
+  "displayName": "Limit",
+  "description": "Keep the first N items.",
+  "category": "core",
+  "props": [
+    {
+      "name": "maxItems",
+      "displayName": "Max items",
+      "type": "number",
+      "required": true,
+      "default": 10
+    }
+  ],
+  "n8nCode": "const n = Number($parameter.maxItems ?? 10);\nreturn items.slice(0, Number.isFinite(n) && n > 0 ? n : 10);"
+}

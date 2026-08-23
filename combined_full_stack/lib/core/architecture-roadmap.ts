@@ -32,24 +32,23 @@
 // AI :   still walk the same spine (leave BAML alone). Next after arch-export-file.
 // AI : TODO (arch-export-stubs) — runtime libraries live in lib/export_runtime/{ts,py,go,rs}/ and are copied into zips. Generated pipeline files import them. LLM JSON schemas come from exportLlmSchemaJson.
 // AI : TUI_AREAS / BUILDER_AREAS / prefetch chunks derive from lib/app-area-windows.ts + AppWindowId.
-// AI : TODO (arch-assistant-http) — pipeline-assistant/route.ts copies project-assistant/route.ts.
+// AI : DONE (arch-assistant-http) — pipeline-assistant/route.ts re-exports project-assistant.
 // AI : TODO (arch-structure-assistant) — HTTP structure-assistant uses full project assistant;
 // AI :   CLI still calls proposeStructureChange. One path.
-// AI : TODO (arch-assistant-billing-http) — testing/diagnosis routes re-copy gate+record+model parse.
+// AI : DONE (arch-assistant-billing-http) — testing/diagnosis/summary/evaluate share parseAssistantRequestModel.
 // AI : TODO (arch-proposal-changed) — ProjectProposal.changed mirrors proposal fields.
 // AI : TODO (arch-billing-view) — BillingAccountView declared in core/types and again (richer) in store.tsx.
-// AI : TODO (arch-share-form) — share-link-form and host-api-form duplicate spend-limit / busy / copy.
+// AI : TODO (arch-share-form) — spend-limit parse is shared; busy/copy/default-docs still duplicated.
 // AI : TODO (arch-lint-types) — pipeline_lint vs pipeline_export_lint diagnostic types overlap.
-// AI : TODO (arch-validity-split) — validity.ts mixes graph I/O, n8n, canRunStep; keep computeInvalid
+// AI : TODO (arch-validity-split) — validity.ts mixes graph I/O, n8n; canRunStep removed; keep computeInvalid
 // AI :   as the graph checker (linter-first TODOs already cover replacing TS heuristics).
 // AI : TODO (arch-run-engine-name) — lib/run-engine.ts is the browser client-step shim; server engine
 // AI :   is lib/server/run_engine/. Rename the client file so "run engine" isn't two trees.
 // AI : TODO (arch-window-ids) — AppWindowId is the window catalog (pure, no React). Optional: move to
 // AI :   lib/core/windows.ts so core/view does not import from lib/app-window-id.
-// AI : TODO (arch-store-overlay) — overlayStoreForSharedRun and overlayStoreForHostedRun are the same
-// AI :   facade; one overlayStore(base, extraDocs).
+// AI : DONE (arch-store-overlay) — overlayStore(base, extraDocs, extraContent) shared by hosted + shared-link.
 // AI : TODO (arch-ephemeral-store) — landingEphemeralStore and parity ephemeralStore are copy-paste noop Stores.
-// AI : TODO (arch-hash-content) — SpineSession.hashContent twins store.hashContent; import one.
+// AI : DONE (arch-hash-content) — SpineSession and store import hashContent from lib/content-hash.
 // AI : TODO (arch-blank-project) — session blankProject twins seed.blankProject; one factory.
 // AI : TODO (arch-validate-wrap) — cli/validate_project remaps computeInvalid; wrap lintPipeline instead.
 // AI : TODO (arch-chat-turn) — SessionChatTurn identical to assistant-shared ChatTurn; one type.
@@ -61,7 +60,7 @@
 // AI : TODO (arch-consumer-run) — own-pipeline-run-panel and shared-run-panel are one ConsumerRunPanel
 // AI :   with funding/download slots.
 // AI : TODO (arch-pydantic-walk) — allModelsTo{Pydantic,Dts,Rust,Go,Baml} share a field walk; printers only.
-// AI : TODO (arch-cli-result) — flagString / ok / usage copied in run.ts, session_cli.ts, agent_cli.ts.
+// AI : DONE (arch-cli-result) — flagString / cliOk / cliUsage live in cli/types.ts.
 // AI : TODO (arch-parser-cache) — JsonStore parser/vision cache should use parser_vision_cache_index + fs adapter.
 // AI : TODO (opt-browser-tui) — optional GUI terminal mode (not required). DOM skin of Ink ViewModels
 // AI :   + extracted controller; never Ink-in-browser or a PTY. lib/cli/ink/browser-tui-roadmap.ts.

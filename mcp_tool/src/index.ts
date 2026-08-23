@@ -1,10 +1,10 @@
 #!/usr/bin/env node
 // AI : Spine MCP — GUI-equivalent *actions* on SpineSession + Testing-tab pinpoint. Not a live UI view.
 // AI : TODO (mcp-tools) — shrink to ~8 vibe tools; session_action duplicates named tools and agents pick the wrong one.
-// AI : TODO (mcp-errors) — return { ok:false, code, next } with isError instead of throwing (JSON.parse of proposalJson).
+// AI : DONE (mcp-errors) — wrapTool returns { ok:false, code, next } with isError instead of throwing (JSON.parse of proposalJson).
 // AI : TODO (mcp-workspace) — one project handle: session pull/push vs seeds vs GUI Supabase currently diverge.
-// AI : TODO (mcp-capability) — wrap remaining GUI verbs: pullRemoteState, flushPendingSave, hydrateRunDetail,
-// AI :   removeDoc, linkQuotes, setDocProjects, executeProposedActions, resyncExamples, wait_for_run,
+// AI : TODO (mcp-capability) — wrap remaining GUI verbs: pullRemoteState, flushPendingSave,
+// AI :   removeDoc, linkQuotes, setDocProjects, executeProposedActions, resyncExamples,
 // AI :   billed ask HTTP, share/hosted mint, Stripe, run cancel. Host-bound stays GUI: CodeHost, human-review, chatbot.
 
 import { resolve } from "node:path"
@@ -39,6 +39,7 @@ import {
   askAgentFromSession,
   assignInputFromSession,
   cloneProjectFromSession,
+  configureN8nStepFromSession,
   deleteProjectFromSession,
   getProjectFromSession,
   importSeedFromSession,
@@ -50,14 +51,51 @@ import {
   setDocsFromSession,
   startRunFromSession,
   validateProjectFromSession,
+  waitForRunFromSession,
 } from "./spine-session-bar-a.js"
 import { registerSpinePrompts, SPINE_MCP_INSTRUCTIONS } from "./agent-playbook.js"
+import {
+  exportPieceToDisk,
+  importPieceJson,
+  listPiecesForMcp,
+} from "@/lib/n8n-share"
 
 const REPO_ROOT = process.env.SPINE_REPO_ROOT ?? resolve(process.cwd(), "..")
+const APP_ROOT = process.env.SPINE_APP_ROOT ?? resolve(REPO_ROOT, "combined_full_stack")
 
 function textContent(data: unknown) {
   return {
     content: [{ type: "text" as const, text: JSON.stringify(data, null, 2) }],
+  }
+}
+
+function nextHint(error: string): string {
+  if (/not valid JSON|JSON\.parse/i.test(error)) return "Pass proposalJson as a JSON object string, or omit it to apply the pending Vibe proposal."
+  if (/unknown step kind/i.test(error)) return "Use add_step kind from: input, llm, llm-batch, fork, n8n, custom-code, … — list_pieces for n8n types."
+  if (/unknown n8n piece|unknown piece/i.test(error)) return "Call list_pieces and use n8nNodeType exactly."
+  if (/no active project/i.test(error)) return "Call add_project (or import_seed) then retry."
+  if (/no pending proposal/i.test(error)) return "ask_agent first, poll get_project until pendingProposal is set, then apply_project_changes with no proposalJson."
+  if (/unknown step /i.test(error)) return "get_project and use the step id or label."
+  if (/SPINE_API_URL|remote action/i.test(error)) return "Set SPINE_API_URL to the running Next app, call start_run, then wait_for_run."
+  if (/no run to wait for/i.test(error)) return "Call start_run or run_test first, then wait_for_run with that run id."
+  return "Call get_project, then validate_project. Do not re-send the same crashing payload."
+}
+
+function mcpError(err: unknown, code = "tool_error") {
+  const error = err instanceof Error ? err.message : String(err)
+  return {
+    isError: true as const,
+    content: [{ type: "text" as const, text: JSON.stringify({ ok: false, code, error, next: nextHint(error) }, null, 2) }],
+  }
+}
+
+function wrapTool<Args>(fn: (args: Args) => unknown | Promise<unknown>) {
+  return async (args: Args) => {
+    try {
+      return textContent(await fn(args))
+    } catch (err) {
+      return mcpError(err)
+    }
   }
 }
 
@@ -82,13 +120,13 @@ const server = new McpServer(
 
 server.tool(
   "pinpoint_failure",
-  "Compare a finished pipeline run against a *_testing.json file and return the first diverging step with isolated field diffs (expected vs actual only). Seed-path tool — does not mutate .spine-session.json. Use after a completed run; start_run/run_test do not wait.",
+  "Compare a finished pipeline run against a *_testing.json file and return the first diverging step with isolated field diffs (expected vs actual only). Seed-path tool — does not mutate .spine-session.json. Use after wait_for_run; start_run/run_test return immediately.",
   {
     projectSeedPath: z.string().describe("Path to the project seed JSON (e.g. seeds/homework_grader.json)"),
     testFilePath: z.string().describe("Path to the *_testing.json file with pinned per-step outputs"),
     ...runSourceSchema,
   },
-  async (args) => textContent(pinpointFailure(args, REPO_ROOT)),
+  wrapTool((args) => pinpointFailure(args, REPO_ROOT)),
 )
 
 server.tool(
@@ -99,7 +137,7 @@ server.tool(
     testFilePath: z.string(),
     ...runSourceSchema,
   },
-  async (args) => textContent(compareRunToTestReport(args, REPO_ROOT)),
+  wrapTool((args) => compareRunToTestReport(args, REPO_ROOT)),
 )
 
 server.tool(
@@ -109,7 +147,7 @@ server.tool(
     projectSeedPath: z.string(),
     testFilePath: z.string(),
   },
-  async (args) => textContent(validateTestFile(args, REPO_ROOT)),
+  wrapTool((args) => validateTestFile(args, REPO_ROOT)),
 )
 
 server.tool(
@@ -118,7 +156,7 @@ server.tool(
   {
     testFilePath: z.string(),
   },
-  async (args) => textContent(parseTestFileCommand(args.testFilePath, REPO_ROOT)),
+  wrapTool((args) => parseTestFileCommand(args.testFilePath, REPO_ROOT)),
 )
 
 server.tool(
@@ -127,7 +165,7 @@ server.tool(
   {
     projectSeedPath: z.string(),
   },
-  async (args) => textContent({ tests: listProjectTests(args.projectSeedPath, REPO_ROOT) }),
+  wrapTool((args) => ({ tests: listProjectTests(args.projectSeedPath, REPO_ROOT) })),
 )
 
 server.tool(
@@ -137,7 +175,7 @@ server.tool(
     projectSeedPath: z.string(),
     stepLabel: z.string().optional().describe("Optional step label — omit to list all steps"),
   },
-  async (args) => textContent(describePipelineSteps(args, REPO_ROOT)),
+  wrapTool((args) => describePipelineSteps(args, REPO_ROOT)),
 )
 
 server.tool(
@@ -148,7 +186,7 @@ server.tool(
     stepLabel: z.string(),
     valueJson: z.string().describe("JSON value to validate as this step's output"),
   },
-  async (args) => textContent(validateStepOutputValue(args, REPO_ROOT)),
+  wrapTool((args) => validateStepOutputValue(args, REPO_ROOT)),
 )
 
 server.tool(
@@ -159,7 +197,7 @@ server.tool(
     stepLabel: z.string(),
     sampleInputJson: z.string().optional(),
   },
-  async (args) => textContent(deriveStepPrompt(args, REPO_ROOT)),
+  wrapTool((args) => deriveStepPrompt(args, REPO_ROOT)),
 )
 
 server.tool(
@@ -168,7 +206,7 @@ server.tool(
   {
     projectSeedPath: z.string(),
   },
-  async (args) => textContent(validatePipelineWiring(args, REPO_ROOT)),
+  wrapTool((args) => validatePipelineWiring(args, REPO_ROOT)),
 )
 
 server.tool(
@@ -179,7 +217,7 @@ server.tool(
     pipelineJson: z.string().optional().describe("Inline pipeline JSON ({ models, modules, typeAliases? })"),
     includeExport: z.boolean().optional().describe("Run tsc on generated pipeline.ts (default true)"),
   },
-  async (args) => textContent(lintPipelineFromInput(args, REPO_ROOT)),
+  wrapTool((args) => lintPipelineFromInput(args, REPO_ROOT)),
 )
 
 server.tool(
@@ -189,7 +227,7 @@ server.tool(
     projectSeedPath: z.string(),
     includePipelineSignatures: z.boolean().optional().describe("Include generated step function stubs (default true)"),
   },
-  async (args) => textContent(exportPydanticProject(args, REPO_ROOT)),
+  wrapTool((args) => exportPydanticProject(args, REPO_ROOT)),
 )
 
 server.tool(
@@ -202,29 +240,25 @@ server.tool(
     docName: z.string().optional(),
     filter: z.enum(["all", "missing", "unused", "duplicate"]).optional(),
   },
-  async (args) => {
+  wrapTool((args) => {
     if (args.projectSeedPath) {
-      return textContent(
-        inspectIdsFromSeed(
-          {
-            projectSeedPath: args.projectSeedPath,
-            idType: args.idType,
-            docName: args.docName,
-            filter: args.filter,
-          },
-          REPO_ROOT,
-        ),
+      return inspectIdsFromSeed(
+        {
+          projectSeedPath: args.projectSeedPath,
+          idType: args.idType,
+          docName: args.docName,
+          filter: args.filter,
+        },
+        REPO_ROOT,
       )
     }
-    return textContent(
-      inspectIdsFromSession({
-        sessionPath: args.sessionPath,
-        idType: args.idType,
-        docName: args.docName,
-        filter: args.filter,
-      }),
-    )
-  },
+    return inspectIdsFromSession({
+      sessionPath: args.sessionPath,
+      idType: args.idType,
+      docName: args.docName,
+      filter: args.filter,
+    })
+  }),
 )
 
 server.tool(
@@ -233,7 +267,7 @@ server.tool(
   {
     sessionPath: z.string().optional().describe("Path to .spine-session.json (or SPINE_SESSION_PATH)"),
   },
-  async (args) => textContent(getProjectFromSession(args.sessionPath)),
+  wrapTool((args) => getProjectFromSession(args.sessionPath)),
 )
 
 server.tool(
@@ -242,7 +276,7 @@ server.tool(
   {
     sessionPath: z.string().optional(),
   },
-  async (args) => textContent(validateProjectFromSession(args.sessionPath)),
+  wrapTool((args) => validateProjectFromSession(args.sessionPath)),
 )
 
 server.tool(
@@ -252,33 +286,43 @@ server.tool(
     sessionPath: z.string().optional(),
     proposalJson: z.string().optional().describe("JSON ProjectProposal; omit to apply the pending Vibe proposal"),
   },
-  async (args) =>
-    textContent(
-      args.proposalJson
-        ? applyProjectChangesFromSession(JSON.parse(args.proposalJson), args.sessionPath)
-        : applyPendingProposalFromSession(args.sessionPath),
-    ),
+  wrapTool((args) =>
+    args.proposalJson
+      ? applyProjectChangesFromSession(JSON.parse(args.proposalJson), args.sessionPath)
+      : applyPendingProposalFromSession(args.sessionPath),
+  ),
 )
 
 server.tool(
   "start_run",
-  "POST /api/runs for the active session project (GUI Run). Needs SPINE_API_URL. Returns {id,status} immediately — no wait_for_run yet; pinpoint_failure needs finished run JSON.",
+  "POST /api/runs for the active session project (GUI Run). Needs SPINE_API_URL. Returns {id,status} immediately — then wait_for_run until terminal.",
   {
     sessionPath: z.string().optional(),
     testDocName: z.string().optional(),
     testing: z.boolean().optional(),
   },
-  async (args) => textContent(await startRunFromSession(args)),
+  wrapTool((args) => startRunFromSession(args)),
 )
 
 server.tool(
   "run_test",
-  "Start a Testing-tab run for the active session project (GUI Testing → Run). Needs SPINE_API_URL. Returns immediately; poll/hydrate is not an MCP tool yet.",
+  "Start a Testing-tab run for the active session project (GUI Testing → Run). Needs SPINE_API_URL. Returns immediately; call wait_for_run with the run id.",
   {
     sessionPath: z.string().optional(),
     testDocName: z.string().optional(),
   },
-  async (args) => textContent(await startRunFromSession({ ...args, testing: true })),
+  wrapTool((args) => startRunFromSession({ ...args, testing: true })),
+)
+
+server.tool(
+  "wait_for_run",
+  "Poll GET /api/runs/:id (hydrateRunDetail) until the run is ok/error or timeout. Use after start_run/run_test so pinpoint_failure has finished JSON.",
+  {
+    sessionPath: z.string().optional(),
+    runId: z.string().optional().describe("Run id from start_run; omit to wait on the latest session run"),
+    timeoutMs: z.number().optional().describe("Max wait 1s–90s (default 45s). If timedOut, call again."),
+  },
+  wrapTool((args) => waitForRunFromSession(args)),
 )
 
 server.tool(
@@ -287,12 +331,12 @@ server.tool(
   {
     sessionPath: z.string().optional(),
   },
-  async (args) => textContent(sessionLogs(args.sessionPath)),
+  wrapTool((args) => sessionLogs(args.sessionPath)),
 )
 
 server.tool(
   "session_action",
-  "Dispatch a GUI button id (data-spine-id) against the session file. Prefer named tools when they exist. Extra ids: structure.add-field/remove-field/set-relation/add-alias, pipeline.configure-step/remove-step/assign-structure, assistant.reject, billing.refresh, earnings.refresh, cache.refresh, logging.errors-only.",
+  "Dispatch a GUI button id (data-spine-id) against the session file. Prefer named tools when they exist. Extra ids: structure.add-field/remove-field/set-relation/add-alias, pipeline.configure-step/remove-step/assign-structure, assistant.reject, billing.refresh, earnings.refresh, cache.refresh, logging.errors-only, logging.hydrate / wait_for_run.",
   {
     id: z.string().describe("Parity catalog id, e.g. project.add, testing.run, assistant.send"),
     sessionPath: z.string().optional(),
@@ -318,15 +362,19 @@ server.tool(
     testDocName: z.string().optional(),
     testing: z.boolean().optional(),
     relation: z.string().optional().describe("structure.set-relation: pk | none | WorkItem.id"),
+    forkId: z.string().optional(),
+    branchId: z.string().optional(),
+    runId: z.string().optional(),
+    timeoutMs: z.number().optional(),
   },
-  async (args) => textContent(await runSessionAction(args)),
+  wrapTool(async (args) => runSessionAction(args)),
 )
 
 server.tool(
   "add_project",
   "Create a blank project in the session file — same as GUI New project / session.addProject.",
   { sessionPath: z.string().optional() },
-  async (args) => textContent(addProjectFromSession(args.sessionPath)),
+  wrapTool((args) => addProjectFromSession(args.sessionPath)),
 )
 
 server.tool(
@@ -337,42 +385,42 @@ server.tool(
     id: z.string().optional(),
     name: z.string(),
   },
-  async (args) => textContent(renameProjectFromSession(args.name, args.id, args.sessionPath)),
+  wrapTool((args) => renameProjectFromSession(args.name, args.id, args.sessionPath)),
 )
 
 server.tool(
   "delete_project",
   "Delete a project from the session file.",
   { sessionPath: z.string().optional(), id: z.string() },
-  async (args) => textContent(deleteProjectFromSession(args.id, args.sessionPath)),
+  wrapTool((args) => deleteProjectFromSession(args.id, args.sessionPath)),
 )
 
 server.tool(
   "open_project",
   "Set the active project in the session file.",
   { sessionPath: z.string().optional(), id: z.string() },
-  async (args) => textContent(openProjectFromSession(args.id, args.sessionPath)),
+  wrapTool((args) => openProjectFromSession(args.id, args.sessionPath)),
 )
 
 server.tool(
   "clone_project",
   "Clone a project in the session file.",
   { sessionPath: z.string().optional(), id: z.string().optional() },
-  async (args) => textContent(cloneProjectFromSession(args.id, args.sessionPath)),
+  wrapTool((args) => cloneProjectFromSession(args.id, args.sessionPath)),
 )
 
 server.tool(
   "import_seed",
   "Ingest a bundled seed JSON into the session — same as GUI Clone template.",
   { sessionPath: z.string().optional(), file: z.string() },
-  async (args) => textContent(importSeedFromSession(args.file, args.sessionPath)),
+  wrapTool((args) => importSeedFromSession(args.file, args.sessionPath)),
 )
 
 server.tool(
   "add_model",
   "Add a named structure model (press m in the TUI).",
   { sessionPath: z.string().optional(), name: z.string(), params: z.string().optional() },
-  async (args) => textContent(addModelFromSession(args.name, args.sessionPath, args.params)),
+  wrapTool((args) => addModelFromSession(args.name, args.sessionPath, args.params)),
 )
 
 server.tool(
@@ -380,12 +428,12 @@ server.tool(
   "Insert a pipeline step (press s in the TUI).",
   {
     sessionPath: z.string().optional(),
-    kind: z.string().describe("llm | input | combine | fork | chunk | …"),
+    kind: z.string().describe("llm | input | combine | fork | n8n | chunk | …"),
     label: z.string().optional(),
     forkId: z.string().optional().describe("Fork step id when inserting into a lane"),
     branchId: z.string().optional().describe("Lane id or label when inserting into a Fork"),
   },
-  async (args) => textContent(addStepFromSession(args.kind, args.label, args.sessionPath, { forkId: args.forkId, branchId: args.branchId })),
+  wrapTool((args) => addStepFromSession(args.kind, args.label, args.sessionPath, { forkId: args.forkId, branchId: args.branchId })),
 )
 
 server.tool(
@@ -396,14 +444,14 @@ server.tool(
     name: z.string(),
     content: z.string(),
   },
-  async (args) => textContent(addDocFromSession(args)),
+  wrapTool((args) => addDocFromSession(args)),
 )
 
 server.tool(
   "set_docs",
   "Set project markdown docs (Docs tab / press w).",
   { sessionPath: z.string().optional(), text: z.string() },
-  async (args) => textContent(setDocsFromSession(args.text, args.sessionPath)),
+  wrapTool((args) => setDocsFromSession(args.text, args.sessionPath)),
 )
 
 server.tool(
@@ -414,7 +462,7 @@ server.tool(
     module: z.string(),
     doc: z.string(),
   },
-  async (args) => textContent(assignInputFromSession(args.module, args.doc, args.sessionPath)),
+  wrapTool((args) => assignInputFromSession(args.module, args.doc, args.sessionPath)),
 )
 
 server.tool(
@@ -425,7 +473,45 @@ server.tool(
     message: z.string(),
     kind: z.string().optional().describe("vibe | structure | testing | diagnosis"),
   },
-  async (args) => textContent(await askAgentFromSession(args.message, args.sessionPath, args.kind)),
+  wrapTool((args) => askAgentFromSession(args.message, args.sessionPath, args.kind)),
+)
+
+server.tool(
+  "list_pieces",
+  "List typed n8n/Activepieces-style catalog pieces (Set, Filter, CSV, …). Local Code-node JS — no live Slack/Gmail. Use before add_step kind=n8n.",
+  {},
+  wrapTool(() => ({ pieces: listPiecesForMcp(APP_ROOT) })),
+)
+
+server.tool(
+  "import_piece",
+  "Import a shareable piece JSON (id, n8nNodeType, props, n8nCode) into combined_full_stack/pieces and the live catalog.",
+  {
+    json: z.string().describe("Shareable piece JSON"),
+  },
+  wrapTool((args) => ({ piece: importPieceJson(APP_ROOT, args.json) })),
+)
+
+server.tool(
+  "export_piece",
+  "Write a catalog piece to combined_full_stack/pieces/<id>.json so others can import it.",
+  {
+    n8nNodeType: z.string().describe("Catalog id, e.g. n8n-nodes-base.set"),
+  },
+  wrapTool((args) => exportPieceToDisk(APP_ROOT, args.n8nNodeType)),
+)
+
+server.tool(
+  "configure_n8n_step",
+  "Set n8nNodeType, parameters, and optional Code-node JS on an n8n step. Auto UI is generated from the piece props schema.",
+  {
+    sessionPath: z.string().optional(),
+    stepId: z.string().describe("Step id or label"),
+    n8nNodeType: z.string().optional(),
+    parametersJson: z.string().optional().describe("JSON object of piece params"),
+    n8nCode: z.string().optional().describe("Optional n8n Code-node JS override"),
+  },
+  wrapTool((args) => configureN8nStepFromSession(args)),
 )
 
 registerSpinePrompts(server)

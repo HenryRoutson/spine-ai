@@ -9,6 +9,7 @@ import {
   inputDocsByModuleFromAssignment,
   type InputDocsAssignment,
 } from "@/lib/inference-input"
+import { flattenPipelineModules } from "@/lib/fork-pipeline"
 import { logsByModuleFromRun, partitionLogsByModule } from "@/lib/step-logs"
 import { useRunProgressUi } from "@/lib/use-run-progress-ui"
 import { readAllowDuplicateRuns } from "@/lib/inference-settings"
@@ -218,7 +219,7 @@ export function useInferenceRunProgress({
     try {
       // AI : flush any debounced project save before starting — prevents stale server state causing 400.
       await flushPendingSave?.()
-      const { jobId } = await startRun(
+      const started = await startRun(
         projectId,
         primary,
         model,
@@ -226,6 +227,36 @@ export function useInferenceRunProgress({
         byModule,
         readAllowDuplicateRuns(),
       )
+      if (signal.aborted) return
+      if (started.run) {
+        const finished = started.run
+        const fromRun = new Map<ModuleId, StepUiState>()
+        for (const step of finished.steps) {
+          fromRun.set(step.moduleId, {
+            status: step.status,
+            outputPreview: step.outputPreview,
+            inputDescriptionCheck: step.inputDescriptionCheck,
+            descriptionCheckLlmCalls: step.descriptionCheckLlmCalls,
+            descriptionCheckCostCents: step.descriptionCheckCostCents,
+          })
+        }
+        localSteps = fromRun
+        runJobs.completeJob(trackId, { runId: finished.id })
+        const notes = runNotesRef.current.trim() || undefined
+        const withNotes = notes ? { ...finished, notes } : finished
+        savedNotesRef.current = notes
+        if (!runsRef.current.some((r) => r.id === finished.id)) addRun(withNotes)
+        if (!isAttached(trackId)) return
+        stepStatesRef.current = localSteps
+        setStepStates(localSteps)
+        setRun(withNotes)
+        setDeduped(false)
+        setPhase(RunPhase.Done)
+        activeTrackIdRef.current = null
+        setAttachedTrackId(null)
+        return
+      }
+      const { jobId } = started
       if (signal.aborted) return
       runJobs.bindJobId(trackId, jobId)
       cancellable.trackJobId(runKey, jobId)
@@ -344,12 +375,12 @@ export function useInferenceRunProgress({
   } = useRunProgressUi({ modules, phase, stepStates, run, pendingHumanReview, pendingChatbot })
 
   const activeModuleId = useMemo(() => {
-    for (const m of modules) {
+    for (const m of flattenPipelineModules(modules)) {
       if (stepStates.get(m.id)?.status === "running") return m.id
     }
     return undefined
   }, [stepStates, modules])
-  const moduleIds = useMemo(() => modules.map((m) => m.id), [modules])
+  const moduleIds = useMemo(() => flattenPipelineModules(modules).map((m) => m.id), [modules])
   const logsByModule = useMemo(() => {
     if (phase === RunPhase.Done && run) {
       const fromRun = logsByModuleFromRun(run, moduleIds)

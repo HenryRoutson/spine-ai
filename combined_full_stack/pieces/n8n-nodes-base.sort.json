@@ -1,0 +1,33 @@
+{
+  "id": "n8n-nodes-base.sort",
+  "n8nNodeType": "n8n-nodes-base.sort",
+  "displayName": "Sort",
+  "description": "Sort a list of items by a field.",
+  "category": "core",
+  "props": [
+    {
+      "name": "field",
+      "displayName": "Field",
+      "type": "string",
+      "required": true,
+      "default": "name"
+    },
+    {
+      "name": "direction",
+      "displayName": "Direction",
+      "type": "select",
+      "default": "asc",
+      "options": [
+        {
+          "value": "asc",
+          "label": "ascending"
+        },
+        {
+          "value": "desc",
+          "label": "descending"
+        }
+      ]
+    }
+  ],
+  "n8nCode": "const field = String($parameter.field ?? \"\");\nconst dir = String($parameter.direction ?? \"asc\") === \"desc\" ? -1 : 1;\nreturn [...items].sort((a, b) => {\n  const av = String(a.json?.[field] ?? \"\");\n  const bv = String(b.json?.[field] ?? \"\");\n  return av < bv ? -dir : av > bv ? dir : 0;\n});"
+}

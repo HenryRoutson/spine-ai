@@ -120,18 +120,11 @@ type ProjectAssistantContextValue = {
 
 const ProjectAssistantContext = createContext<ProjectAssistantContextValue | null>(null)
 
-function welcomeMessage(
-  chatId: string,
-  initialMessage: string,
-): AssistantChatMessage<ProjectProposal> {
-  return { id: `${chatId}-welcome`, role: "assistant", content: initialMessage }
-}
-
 function defaultMessages(
   chatId: string,
   initialMessage: string,
 ): AssistantChatMessage<ProjectProposal>[] {
-  return [welcomeMessage(chatId, initialMessage)]
+  return [{ id: `${chatId}-welcome`, role: "assistant", content: initialMessage }]
 }
 
 function formatChatDate(ts: number): string {

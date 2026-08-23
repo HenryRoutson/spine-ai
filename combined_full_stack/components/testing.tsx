@@ -50,6 +50,7 @@ import { RunJobSource } from "@/lib/run-jobs-types"
 import { activeStepLabelFromStepStates, progressPctFromStepStates } from "@/lib/run-jobs-progress"
 import { computeWorkspaceValidity } from "@/lib/workspace-validity-ui"
 import { docTextContent, fetchDocText, invalidateDocText } from "@/lib/doc-text-cache"
+import { flattenPipelineModules } from "@/lib/fork-pipeline"
 import { labelAsStateKey } from "@/lib/server/pipeline_state"
 import { docsForProject } from "@/lib/project-docs"
 import { awaitRun, isRunBillingError, mergeStepStates, pollIntervalForParallelJobs, startRunWithRetry, type StepUiState } from "@/lib/run-engine"
@@ -1331,7 +1332,7 @@ function TestDetail({
     const m = new Map<ModuleId, NonNullable<TestStepResult["inputDescriptionCheck"]>>()
     for (const r of results ?? []) {
       if (!r.inputDescriptionCheck) continue
-      const mod = modules.find((x) => labelAsStateKey(x.label) === labelAsStateKey(r.label))
+      const mod = flattenPipelineModules(modules).find((x) => labelAsStateKey(x.label) === labelAsStateKey(r.label))
       if (mod) m.set(mod.id, r.inputDescriptionCheck)
     }
     return m

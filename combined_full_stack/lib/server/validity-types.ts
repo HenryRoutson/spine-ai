@@ -1,5 +1,5 @@
 // AI : Shared validity types and pure query helpers — imported by validity.ts, validity-messages.ts, validity-inspect.ts.
-import type { ModuleId, PipelineModule, StructureModel, StructureModelId } from "./types";
+import type { ModuleId, PipelineModule, StructureModelId } from "./types";
 import { locatePipelineModule } from "@/lib/fork-pipeline";
 
 export enum InvalidKind {
@@ -21,6 +21,7 @@ export enum InvalidKind {
   StructureField = "structure-field",
   MissingCombineBeforeInput = "missing-combine-before-input",
   MissingWebhookUrl = "missing-webhook-url",
+  MissingN8nNodeType = "missing-n8n-node-type",
 }
 
 export interface InvalidStep {
@@ -78,9 +79,7 @@ export function invalidIssuesForModule(invalid: InvalidMap, moduleId: ModuleId):
   return invalid.get(moduleId) ?? [];
 }
 
-export function modelName(models: StructureModel[], id?: StructureModelId): string | undefined {
-  return models.find((m) => m.id === id)?.name;
-}
+export { modelName } from "./type_expr";
 
 export function prevModuleId(modules: PipelineModule[], moduleId: ModuleId): ModuleId | undefined {
   return locatePipelineModule(modules, moduleId)?.predecessor?.id;

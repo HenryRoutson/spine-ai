@@ -1,5 +1,5 @@
 // AI : spine CLI dispatcher — subcommands return structured results; exit codes for agents.
-// AI : TODO (arch-cli-result) — flagString copied in session_cli.ts / agent_cli.ts; share helpers from cli/types.ts.
+// AI : DONE (arch-cli-result) — flagString / cliOk / cliUsage live in cli/types.ts.
 
 import { resolve } from "node:path"
 import { loadProjectContext } from "@/lib/cli/project_context"
@@ -15,7 +15,7 @@ import { profileLandingCommand } from "@/lib/cli/profile_landing"
 import { runSessionCommand } from "@/lib/cli/session_cli"
 import { runAgentCommand } from "@/lib/cli/agent_cli"
 import { runDemoCommand } from "@/lib/cli/demo"
-import type { CliCommandResult } from "@/lib/cli/types"
+import { flagString, type CliCommandResult } from "@/lib/cli/types"
 
 export const SPINE_CLI_HELP = `spine — validate Spine projects and run the headless workspace / agent
 
@@ -93,11 +93,6 @@ function usageError(message: string): CliCommandResult {
     issues: [{ level: "error", where: "argv", message }],
     data: { help: SPINE_CLI_HELP },
   }
-}
-
-function flagString(flags: Record<string, string | boolean>, key: string): string | undefined {
-  const v = flags[key]
-  return typeof v === "string" ? v : undefined
 }
 
 function flagNumber(flags: Record<string, string | boolean>, key: string, fallback: number): number {

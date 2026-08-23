@@ -1,0 +1,9 @@
+{
+  "id": "n8n-nodes-base.code",
+  "n8nNodeType": "n8n-nodes-base.code",
+  "displayName": "Code",
+  "description": "Run n8n-style JavaScript on typed items. Prefer a catalog piece when one fits.",
+  "category": "core",
+  "props": [],
+  "n8nCode": "return items;"
+}

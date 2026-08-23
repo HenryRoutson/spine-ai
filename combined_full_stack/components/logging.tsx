@@ -23,7 +23,7 @@ import { runBilledCents, runSavedCents, runTotalMs, isSlimPipelineRun } from "@/
 import { useStatusPalette } from "@/lib/chart-colors"
 import { isSharedRun } from "@/lib/shared-link-types"
 import { ResizableSplit } from "@/components/resizable-split"
-import { loggingPipelineCanvasSplit, loggingSidebarSplit } from "@/lib/layout-split-settings"
+import { loggingSidebarSplit } from "@/lib/layout-split-settings"
 import { usePersistedLeadingWidth } from "@/lib/use-persisted-leading-width"
 import { cn } from "@/lib/utils"
 import { COPY_FEEDBACK_MS } from "@/lib/ui-timing"
@@ -35,10 +35,7 @@ import { API_ROUTES } from "@/lib/api-routes"
 import { stepDocId, stepDocLinkLabels, stepSourceDocId, isDocReferenceOutputJson } from "@/lib/step-doc"
 import { descriptionCheckLlmCallsFromStep, llmCallsFromStep } from "@/lib/llm-distribution"
 import { ExampleSelectVerdictsSection } from "@/components/example-select-verdicts"
-import { enrichRunModules, modulesFromRunSteps } from "@/lib/pipeline-run-diff"
-import { PipelineCanvas } from "@/components/pipeline-canvas"
-import { PipelineInspector } from "@/components/pipeline-inspector"
-import type { InvalidMap } from "@/lib/validity"
+import { PipelineRunGraph } from "@/components/pipeline-run-graph"
 import { RunNotesEditor } from "@/components/run-notes-editor"
 import { StepServerLogsSection } from "@/components/server-logs-panel"
 import { StepInputDescription, resolveStepInputDescription } from "@/components/step-input-description"
@@ -91,7 +88,6 @@ export function Logging({
   const [query, setQuery] = useState("")
   const [selectedRun, setSelectedRun] = useState<string | null>(null)
   const [popup, setPopup] = useState<PopupPayload | null>(null)
-  const [selectedPipelineModuleId, setSelectedPipelineModuleId] = useState<ModuleId | undefined>()
   const [compareOpen, setCompareOpen] = useState(false)
   const [errorsOnly, setErrorsOnly] = useState(false)
   // AI : Vibe defaults compact (time + ok/error); toggle restores the full file/model/cost row.
@@ -101,16 +97,10 @@ export function Logging({
   const [pendingScrollAnchor, setPendingScrollAnchor] = useState<"validation-errors" | null>(null)
   const { width: sidebarWidth, setWidth: setSidebarWidth, commitWidth: commitSidebarWidth } =
     usePersistedLeadingWidth(loggingSidebarSplit)
-  const {
-    width: pipelineCanvasWidth,
-    setWidth: setPipelineCanvasWidth,
-    commitWidth: commitPipelineCanvasWidth,
-  } = usePersistedLeadingWidth(loggingPipelineCanvasSplit)
 
   useEffect(() => {
     if (!focusRunId) return
     setSelectedRun(focusRunId)
-    setSelectedPipelineModuleId(undefined)
     if (focusRunAnchor) setPendingScrollAnchor(focusRunAnchor)
     clearFocusRun()
   }, [focusRunId, focusRunAnchor, clearFocusRun])
@@ -187,17 +177,11 @@ export function Logging({
   }, [active])
   const runPipeline = useMemo(() => {
     if (!active) return null
-    const modulesAtRun = enrichRunModules(modulesFromRunSteps(active.steps), modules)
     const stepStatus = new Map<ModuleId, RunStepStatus>(
       active.steps.map((s) => [s.moduleId, s.status]),
     )
-    return { modules: modulesAtRun, stepStatus }
+    return { modules, stepStatus }
   }, [active, modules])
-
-  // AI : historical runs use current models for I/O enrichment — skip live invalid overlay (misleading after edits).
-  const runPipelineInvalid = useMemo((): InvalidMap => new Map(), [])
-
-  const selectedPipelineModule = runPipeline?.modules.find((m) => m.id === selectedPipelineModuleId)
 
   if (pipelineEmpty && runs.length === 0) {
     return (
@@ -289,13 +273,11 @@ export function Logging({
                         tabIndex={0}
                         onClick={() => {
                           setSelectedRun(run.id)
-                          setSelectedPipelineModuleId(undefined)
                         }}
                         onKeyDown={(e) => {
                           if (e.key === "Enter" || e.key === " ") {
                             e.preventDefault()
                             setSelectedRun(run.id)
-                            setSelectedPipelineModuleId(undefined)
                           }
                         }}
                         className={cn(
@@ -768,7 +750,7 @@ export function Logging({
                           Pipeline at run time
                         </h3>
                         <p className="mt-0.5 font-mono text-[10px] text-muted-foreground">
-                          Same layout as the Pipeline tab — click a step to inspect its config.
+                          Fork graph as-run — click a step for its spreadsheet. Lanes stay nested, not flattened.
                         </p>
                       </div>
                       <Button
@@ -783,38 +765,12 @@ export function Logging({
                         compare_logs
                       </Button>
                     </div>
-                    <div className="min-h-[20rem]">
-                      <ResizableSplit
-                        className="h-full min-h-[20rem]"
-                        leadingWidth={pipelineCanvasWidth}
-                        onLeadingWidthChange={setPipelineCanvasWidth}
-                        onLeadingWidthCommit={commitPipelineCanvasWidth}
-                        minLeading={loggingPipelineCanvasSplit.min}
-                        maxLeading={loggingPipelineCanvasSplit.max}
-                        leading={
-                          <div className="min-h-0 overflow-x-auto px-4 py-6">
-                            <PipelineCanvas
-                              modules={runPipeline.modules}
-                              models={models}
-                              selectedId={selectedPipelineModuleId}
-                              onSelect={setSelectedPipelineModuleId}
-                              stepStatus={runPipeline.stepStatus}
-                              invalid={runPipelineInvalid}
-                            />
-                          </div>
-                        }
-                        trailing={
-                          <aside className="flex min-h-0 flex-col overflow-hidden">
-                            <PipelineInspector
-                              module={selectedPipelineModule}
-                              models={models}
-                              typeAliases={typeAliases}
-                              modules={runPipeline.modules}
-                            />
-                          </aside>
-                        }
-                      />
-                    </div>
+                    <PipelineRunGraph
+                      modules={runPipeline.modules}
+                      models={models}
+                      run={active}
+                      stepStatus={runPipeline.stepStatus}
+                    />
                   </div>
                 )}
 

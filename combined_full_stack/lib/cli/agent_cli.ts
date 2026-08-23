@@ -1,10 +1,10 @@
 // AI : CLI adapter for the four in-app assistants (vibe, structure, testing, diagnosis).
-// AI : TODO (arch-cli-result) — ok / usage / flagString copied in session_cli.ts / run.ts; share helpers from cli/types.ts.
+// AI : DONE (arch-cli-result) — ok / usage come from cli/types (cliOk / cliUsage).
 
 import { readFileSync } from "node:fs"
 import { toAgentView, toSessionSummary } from "@/lib/core/view"
 import type { ProjectProposal } from "@/lib/project-assistant-types"
-import type { CliCommandResult } from "@/lib/cli/types"
+import { cliOk as ok, cliUsage, flagString, type CliCommandResult } from "@/lib/cli/types"
 import { openCliSession } from "@/lib/cli/session_open"
 import { applyPendingAgent, askAgent, type AgentKind } from "@/lib/cli/agent"
 
@@ -24,22 +24,8 @@ Usage:
 --run      after apply, execute proposedActions (startRun / runTest via SPINE_API_URL)
 `
 
-function ok(command: string, data: Record<string, unknown>): CliCommandResult {
-  return { ok: true, command, issues: [], data }
-}
-
 function usage(message: string): CliCommandResult {
-  return {
-    ok: false,
-    command: "usage",
-    issues: [{ level: "error", where: "argv", message }],
-    data: { help: SPINE_AGENT_HELP },
-  }
-}
-
-function flagString(flags: Record<string, string | boolean>, key: string): string | undefined {
-  const v = flags[key]
-  return typeof v === "string" ? v : undefined
+  return cliUsage(message, SPINE_AGENT_HELP)
 }
 
 function parseKind(raw?: string): AgentKind {

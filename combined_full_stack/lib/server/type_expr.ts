@@ -235,12 +235,8 @@ export function expandNamedTypeExpr(expr: TypeExpr, typeAliases: TypeAlias[] = [
   return walk(expr);
 }
 
-export function typeExprIsList(expr: TypeExpr): boolean {
-  return expr.kind === TypeExprKind.List;
-}
-
 export function fieldIsListType(field: ModelFieldTypeSourcePick & Pick<ModelField, "minItems">): boolean {
-  return typeExprIsList(fieldToTypeExpr(field));
+  return isListRoot(fieldToTypeExpr(field));
 }
 
 export function fieldIsSetType(field: ModelFieldTypeSourcePick): boolean {

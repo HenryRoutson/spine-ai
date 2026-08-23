@@ -33,14 +33,13 @@ import {
   revokeSharedLink,
   verifySharedProgressToken,
 } from "@/lib/server/shared_links";
-import { overlayStoreForSharedRun, parseSharedSessionId } from "@/lib/server/shared-link-session";
+import { overlayStoreForSharedRun, parseSharedSessionId, SHARED_RUN_SESSION_COOKIE } from "@/lib/server/shared-link-session";
 import { logger } from "@/lib/server/server_logger";
 import type { JobLogEntry } from "@/lib/run-types";
 
 export const maxDuration = 300;
 export const dynamic = "force-dynamic";
 
-const SESSION_COOKIE = "shared_run_session";
 const apiLog = logger("api:shared-links:client-step");
 
 export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
@@ -77,7 +76,7 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
   const reserveCents = link.spendLimitCents != null ? PUBLIC_RUN_SPEND_RESERVE_CENTS : 0;
 
   const jar = await cookies();
-  const sessionId = parseSharedSessionId(jar.get(SESSION_COOKIE)?.value);
+  const sessionId = parseSharedSessionId(jar.get(SHARED_RUN_SESSION_COOKIE)?.value);
   if (!sessionId) return apiError("session required", 400);
 
   const jobId = body.jobId as RunJobId;

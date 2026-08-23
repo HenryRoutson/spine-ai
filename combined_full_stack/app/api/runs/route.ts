@@ -85,6 +85,7 @@ export async function POST(req: NextRequest) {
       : source === "assistant"
         ? RunSource.Assistant
         : undefined;
+  // AI : demo/seed ids are not in the signed-in store — /demo posts to /api/demo/runs instead.
   const pid = projectId as ProjectId;
   const primaryDocId = inputDocId as DocId;
 

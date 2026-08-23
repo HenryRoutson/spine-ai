@@ -290,7 +290,7 @@ export function buildAssistantStructuredResponsePromptBlock(): string {
 export function buildPipelineRulesPromptBlock(globalModel: ModelId): string {
   // AI : Assemble zips state labels → flat product (not Combine); dynamic N → llm-batch; avoid zip∘zip.
   return `Pipeline rules:
-- Pipelines are series-parallel. The outer spine is linear. Fork is a boxed segment: 2–4 linear lanes share the previous spine, then join. Each lane step consumes ONLY the previous step in that lane (first lane step consumes fork.in). combine is the side-feed exception: it reads pipeline state (by structure name) plus the document input immediately before it. assemble zips spine + state["Label"] (or path) bindings into one flat structure (no LLM). parallel runs fixed LLM branches on the same spine input concurrently and joins into one structure.
+- Pipelines are series-parallel DAGs. The outer spine is linear. Fork is a boxed segment: 2–12 linear lanes share the previous spine, then join. Nest another Fork inside a lane for a generic DAG (no cycles). Each lane step consumes ONLY the previous step in that lane (first lane step consumes fork.in). combine is the side-feed exception: it reads pipeline state (by structure name) plus the document input immediately before it. assemble zips spine + state["Label"] (or path) bindings into one flat structure (no LLM). parallel runs fixed LLM branches on the same spine input concurrently and joins into one structure.
 - Prefer assemble over custom-code when joining two prior LLM outputs into one object. Prefer N-way assemble over nesting assemble steps. Prefer parallel when independent LLM-only extractions share one input and wall-clock matters. Prefer Fork when lanes need mixed kinds (assert, webhook, transform, llm-batch, nested combine) or their own step sequences. Dynamic N same-schema calls → llm-batch, not assemble/parallel/fork.
 - Every step needs an output structure (structureOut). Input steps only need structureOut. Fork product join auto-derives sm_fork_<id> (one field per lane).
 
@@ -308,7 +308,8 @@ ${buildLlmCallStrategyPromptBlock()}
 - combine: see Combine Inputs rules above — structureIn is required; side input is explicit input step OR auto-inserted when combine stands alone.
 - assemble: set structureOut (or leave unset for auto-derived product) and assembleBindings mapping each field to spine, a prior step label, or a path into either. At least one binding must use spine.
 - parallel: fixed author-time branches (field + prompt + structureOut each); shared spine input; server joins into one auto product.
-- fork: set forkJoin (product | assemble | merge) and forkBranches (2–4, each { label, modules: [...] }). Lanes are linear module arrays. Product join auto-derives one field per lane. Do not nest Fork in v1 UI (flatten first). llm-batch is map-over-list, not a fork.
+- fork: set forkJoin (product | assemble | merge) and forkBranches (2–12, each { label, modules: [...] }). Lanes are linear module arrays. Nest Fork inside a lane when you need a DAG. Product join auto-derives one field per lane. llm-batch is map-over-list, not a fork.
+- n8n: typed catalog piece (Set, Filter, Sort, Limit, CSV, Hash, HTML, Markdown, DateTime, Item Lists, Code). Set n8nNodeType + n8nParameters. Runs local n8n Code-node JavaScript against the typed spine — do NOT call live Slack/Gmail. Share pieces as JSON. Auto UI is generated from the piece props schema. Prefer n8n over custom-code for field maps/filters.
 - llm steps with tuple[text,quote] outputs get a Link Quotes step auto-inserted after them — do NOT emit quote steps yourself.
 - PDF/word/image/web inputs get a locked Convert to text step auto-inserted after the input (parser or OCR). Omit it from modules JSON and seeds — do NOT emit it yourself. A locked Parse to structure LLM step is auto-inserted when structureOut is not Document — do NOT emit that either.
 - transform reshapes upstream data. When a list feeds a single-object output, include a list field on that structure (prefer list[model] ref = input structure) so transform can wrap items automatically, or use custom-code.
@@ -403,7 +404,7 @@ ${JSON.stringify(catalog, null, 2)}
 }
 
 /** AI : blank / placeholder-only projects — landing + first app message share greenfield user prompt. */
-export function isGreenfieldProject(project: Project, _history: ChatTurn[] = []): boolean {
+export function isGreenfieldProject(project: Project): boolean {
   // AI : graph-only — leftover chat on a still-blank pipeline must still get the greenfield wrapper.
   if (project.models.length > 0) return false;
   const mods = project.modules;
@@ -431,7 +432,7 @@ export function resolveAssistantUserMessage(
 ): string {
   const trimmed = message.trim();
   if (opts?.fixValidationErrors?.trim() || opts?.forceFix) return trimmed;
-  if (isGreenfieldProject(project, history)) return buildGreenfieldPipelineUserMessage(trimmed);
+  if (isGreenfieldProject(project)) return buildGreenfieldPipelineUserMessage(trimmed);
   return `${trimmed}
 
 If this is a small fix to existing steps, set modules to null and use modulePatch (0-based index + only changed fields). Emit a full modules array only when the spine topology must change. Do not invent {state.X} / {field} prompt templates — spine JSON is appended at runtime.`;

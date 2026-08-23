@@ -90,9 +90,10 @@ import { useTeamRealtime } from "@/lib/use-team-realtime"
 import { DEMO_DEFAULT_PROJECT_ID } from "@/lib/demo-constants"
 import { setDemoMode } from "@/lib/demo-mode"
 import { overlayOptimisticProjects as mergeOptimisticProjects, confirmCreatedInMap, reseedCreatedFromLocal, shouldKeepLocalProject } from "@/lib/core/realtime"
+import type { ProjectCreateOpts, EarningsAccountView } from "@/lib/core/types"
 import { ProjectPickerSkeleton, StoreShellSkeleton } from "@/components/store-shell-skeletons"
 
-export type ProjectCreateOpts = { open?: boolean }
+export type { ProjectCreateOpts, EarningsAccountView }
 
 export enum StoreMode {
   Workspace = "workspace",
@@ -203,12 +204,6 @@ export type BillingAccountView = {
   subCentsPerMonth: number
   billingCapCents: number
   creditHistory: BillingCreditHistoryEntry[]
-}
-
-export type EarningsAccountView = {
-  balanceCents: number
-  totalEarnedCents: number
-  totalWithdrawnCents: number
 }
 
 const DEMO_BILLING: BillingAccountView = {
@@ -420,8 +415,11 @@ export function StoreProvider({
   const [activeProjectId, setActiveProjectId] = useState<string>(() => {
     if (mode === StoreMode.Demo) {
       if (typeof window !== "undefined") {
-        const buildId = new URLSearchParams(window.location.search).get("buildId")
+        const qs = new URLSearchParams(window.location.search)
+        const buildId = qs.get("buildId")
         if (buildId) return buildId
+        const urlProjectId = qs.get("projectId")
+        if (urlProjectId) return urlProjectId
       }
       return DEMO_DEFAULT_PROJECT_ID
     }
@@ -577,6 +575,8 @@ export function StoreProvider({
         // AI : SECURITY — forward signed landing-build access token to /api/demo/state.
         const accessToken = qs.get("accessToken")
         if (accessToken) params.set("accessToken", accessToken)
+        const urlProjectId = qs.get("projectId")
+        if (urlProjectId && !params.get("projectId")) params.set("projectId", urlProjectId)
       }
       const q = params.toString() ? `?${params}` : ""
       const route = mode === StoreMode.Demo ? API_ROUTES.demoState : API_ROUTES.state

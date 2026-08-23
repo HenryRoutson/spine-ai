@@ -1,5 +1,5 @@
 // AI : CLI adapter over SpineSession — method names match useStore().
-// AI : TODO (arch-cli-result) — ok / usage / flagString copied in agent_cli.ts / run.ts; share helpers from cli/types.ts.
+// AI : DONE (arch-cli-result) — ok / usage come from cli/types (cliOk / cliUsage).
 
 import { readFileSync } from "node:fs"
 import { basename } from "node:path"
@@ -23,7 +23,7 @@ import {
 } from "@/lib/core/view"
 import { exclusionReasonForInputModule, exclusionReasonLabel } from "@/lib/inference-input-picker"
 import { SESSION_ACTION_IDS } from "@/lib/core/actions"
-import type { CliCommandResult } from "@/lib/cli/types"
+import { cliOk as ok, cliUsage, flagString, type CliCommandResult } from "@/lib/cli/types"
 import { openCliSession } from "@/lib/cli/session_open"
 import {
   addModelField,
@@ -83,17 +83,8 @@ SPINE_API_URL / SPINE_API_TOKEN  HTTP egress for pull/push/start-run/billing
 // AI :   run cancel, human-review elicitation, Node custom-code host
 // AI :   inference *_setup.json editor; testing visual editor + alignment
 
-function ok(command: string, data: Record<string, unknown>): CliCommandResult {
-  return { ok: true, command, issues: [], data }
-}
-
 function usage(message: string): CliCommandResult {
-  return {
-    ok: false,
-    command: "usage",
-    issues: [{ level: "error", where: "argv", message }],
-    data: { help: SPINE_SESSION_HELP },
-  }
+  return cliUsage(message, SPINE_SESSION_HELP)
 }
 
 export async function runSessionCommand(
@@ -463,9 +454,4 @@ async function runSessionCommandInner(
   }
 
   return usage(`unknown session command: ${sub}`)
-}
-
-function flagString(flags: Record<string, string | boolean>, key: string): string | undefined {
-  const v = flags[key]
-  return typeof v === "string" ? v : undefined
 }

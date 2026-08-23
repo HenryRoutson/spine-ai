@@ -159,9 +159,18 @@ const moduleSpecSchema = z
         }),
       )
       .min(2)
-      .max(4)
+      .max(12)
       .optional()
-      .describe("fork only — 2–4 linear lanes that share the previous spine, then join"),
+      .describe("fork only — 2–12 linear lanes; nest Fork in a lane for a DAG"),
+    n8nNodeType: z
+      .string()
+      .optional()
+      .describe("n8n only — catalog id e.g. n8n-nodes-base.set (list_pieces)"),
+    n8nParameters: z
+      .record(z.string(), z.unknown())
+      .optional()
+      .describe("n8n only — piece params matching the auto-generated form"),
+    n8nCode: z.string().optional().describe("n8n only — optional Code-node JS override"),
   })
   .superRefine((spec, ctx) => {
     if (stepRequiresNote(asModuleKind(spec.kind)) && !spec.note?.trim()) {
@@ -223,7 +232,7 @@ const moduleSpecSchema = z
       if (!spec.forkBranches || spec.forkBranches.length < 2) {
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
-          message: "fork requires forkBranches (2–4 linear lanes)",
+          message: "fork requires forkBranches (2–12 linear lanes)",
           path: ["forkBranches"],
         });
       }
@@ -454,6 +463,9 @@ function makeModuleFromSpec(
       parallelBranches,
       forkJoin: spec.kind === ModuleKind.Fork ? (spec.forkJoin ?? "product") : undefined,
       forkBranches,
+      n8nNodeType: spec.kind === "n8n" ? spec.n8nNodeType : undefined,
+      n8nParameters: spec.kind === "n8n" ? spec.n8nParameters : undefined,
+      n8nCode: spec.kind === "n8n" ? spec.n8nCode : undefined,
     },
     models,
     globalModel,

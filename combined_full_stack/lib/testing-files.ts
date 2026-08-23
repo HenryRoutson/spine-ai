@@ -10,6 +10,7 @@ import { collectTestDiffFields, testValuesDiffPath, testValuesEqual, type TestCo
 import { jsonUnifiedDiff } from "@/lib/json-diff"
 import { resolveNamedRunInputs, type ResolvedNamedInputs } from "@/lib/inference-presets"
 import { validateNamedInputs, isInferenceSetupFileName } from "@/lib/inference-setup-files"
+import { flattenPipelineModules } from "@/lib/fork-pipeline"
 import { labelAsStateKey, validatePipelineStateEntry } from "@/lib/server/pipeline_state"
 import { fieldToTypeExpr, PrimName, stepSpineOutType, TypeExprKind } from "@/lib/server/type_expr"
 import { tryParseJson } from "@/lib/json-utils"
@@ -95,11 +96,11 @@ export function parseTestFile(content: string): TestParseResult {
 
 
 function moduleByLabel(modules: PipelineModule[], label: string): PipelineModule | undefined {
-  return modules.find((m) => labelAsStateKey(m.label) === labelAsStateKey(label))
+  return flattenPipelineModules(modules).find((m) => labelAsStateKey(m.label) === labelAsStateKey(label))
 }
 
 export function inputModulesOf(modules: PipelineModule[]): PipelineModule[] {
-  return modules.filter((m) => m.kind === ModuleKind.Input)
+  return flattenPipelineModules(modules).filter((m) => m.kind === ModuleKind.Input)
 }
 
 // AI : input/combine steps are not scored — run log stores the full value (same shape as expected).
@@ -276,7 +277,7 @@ export function analyzeTestPipelineAlignment(
     project,
   )
   const tracked = trackedExpectedKeys(sanitized.expectedOutputs)
-  const stepRows = project.modules.map((module) => {
+  const stepRows = flattenPipelineModules(project.modules).map((module) => {
     const key = labelAsStateKey(module.label)
     let trackStatus: TestStepTrackStatus
     if (module.kind === ModuleKind.Input) trackStatus = "input"
@@ -683,7 +684,7 @@ export function probabilisticEvalPayloads(
   const out: ProbabilisticEvalPayload[] = []
   for (const r of deterministicResults) {
     if (r.status !== RunTestStepStatus.Pass || !r.ignoredPaths?.length) continue
-    const m = project.modules.find((mod) => labelAsStateKey(mod.label) === labelAsStateKey(r.label))
+    const m = moduleByLabel(project.modules, r.label)
     if (!m) continue
     const expected = expectedByKey.get(labelAsStateKey(r.label))
     const step = run.steps.find((s) => labelAsStateKey(s.label) === labelAsStateKey(r.label))
@@ -917,16 +918,6 @@ export function testPipelineStableSig(
   pipeline?: { modules: PipelineModule[]; models: StructureModel[]; typeAliases: TypeAlias[] },
 ): string {
   return stableJson(pipelinePayload(project, model, pipeline))
-}
-
-// AI : legacy combined sig — older runs only; new runs store testContentSig + pipelineSig separately.
-export function testRunContextSig(
-  content: string,
-  project: Project,
-  model: ModelId | undefined,
-  pipeline?: { modules: PipelineModule[]; models: StructureModel[]; typeAliases: TypeAlias[] },
-): string {
-  return hashStableJson(runContextPayload(content, project, model, pipeline))
 }
 
 export function testRunContextStableSig(

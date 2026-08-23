@@ -20,6 +20,7 @@ import {
   saveSessionUpload,
   sessionUploadBytes,
   sessionUploadCount,
+  SHARED_RUN_SESSION_COOKIE,
 } from "@/lib/server/shared-link-session";
 import { secureSessionCookieOptions } from "@/lib/server/cookie_options";
 import { isEmbedLinkId } from "@/lib/server/embed_origins";
@@ -29,8 +30,6 @@ import {
   verifyEmbedSessionToken,
 } from "@/lib/server/embed_session";
 import type { ModuleId } from "@/lib/server/types";
-
-const SESSION_COOKIE = "shared_run_session";
 
 function requiresEmbedSession(link: { id: string; allowedOrigins?: string[] | null }): boolean {
   return isEmbedLinkId(link.id) || (link.allowedOrigins?.length ?? 0) > 0;
@@ -80,7 +79,7 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
   if (uploadErr) return apiError(uploadErr.message, uploadErr.status);
 
   const jar = await cookies();
-  let sessionId = parseSharedSessionId(jar.get(SESSION_COOKIE)?.value) ?? newSessionId();
+  let sessionId = parseSharedSessionId(jar.get(SHARED_RUN_SESSION_COOKIE)?.value) ?? newSessionId();
   if (sessionUploadCount(link.id, sessionId) >= MAX_SHARED_SESSION_DOCS) {
     return apiError(`session upload limit reached (max ${MAX_SHARED_SESSION_DOCS} files)`, HTTP.BAD_REQUEST);
   }
@@ -110,6 +109,6 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
     inputModule ? isMultiDocInputModule(inputModule) : false,
   );
   const res = NextResponse.json(doc);
-  res.cookies.set(SESSION_COOKIE, sessionId, secureSessionCookieOptions(60 * 60 * 24 * 30));
+  res.cookies.set(SHARED_RUN_SESSION_COOKIE, sessionId, secureSessionCookieOptions(60 * 60 * 24 * 30));
   return res;
 }

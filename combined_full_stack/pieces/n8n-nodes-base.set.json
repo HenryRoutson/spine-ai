@@ -1,0 +1,27 @@
+{
+  "id": "n8n-nodes-base.set",
+  "n8nNodeType": "n8n-nodes-base.set",
+  "displayName": "Set fields",
+  "description": "Copy or rename fields on each item — typed Set node (no HTTP).",
+  "category": "core",
+  "props": [
+    {
+      "name": "keepOnlySet",
+      "displayName": "Keep only set fields",
+      "type": "boolean",
+      "default": false,
+      "description": "Drop fields that are not in assignments"
+    },
+    {
+      "name": "assignments",
+      "displayName": "Assignments",
+      "type": "json",
+      "required": true,
+      "default": {
+        "name": "={{ $json.name }}"
+      },
+      "description": "Map output field → source field or literal"
+    }
+  ],
+  "n8nCode": "const keepOnlySet = Boolean($parameter.keepOnlySet);\nconst assignments = $parameter.assignments && typeof $parameter.assignments === \"object\" ? $parameter.assignments : {};\nreturn items.map((item) => {\n  const src = item.json && typeof item.json === \"object\" ? item.json : {};\n  const next = keepOnlySet ? {} : { ...src };\n  for (const [key, raw] of Object.entries(assignments)) {\n    const expr = typeof raw === \"string\" ? raw : String(raw ?? \"\");\n    const m = expr.match(/^=\\{\\{\\s*\\$json\\.([A-Za-z0-9_]+)\\s*\\}\\}$/) || expr.match(/^\\{\\{\\s*\\$json\\.([A-Za-z0-9_]+)\\s*\\}\\}$/);\n    next[key] = m ? src[m[1]] : expr.replace(/^=/, \"\");\n    void m;\n  }\n  return { json: next };\n});"
+}

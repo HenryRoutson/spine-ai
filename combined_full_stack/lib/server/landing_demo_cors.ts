@@ -1,3 +1,5 @@
+import { NextResponse } from "next/server";
+
 // AI : CORS for landing page → app API calls.
 
 const ALLOWED_ORIGINS = new Set([
@@ -35,4 +37,19 @@ export function withLandingDemoCors(req: Request, init?: ResponseInit): Response
     ...init,
     headers: { ...landingDemoCorsHeaders(req), ...(init?.headers ?? {}) },
   };
+}
+
+export function landingDemoJson(req: Request, body: unknown, status = 200): NextResponse {
+  return NextResponse.json(body, { status, headers: landingDemoCorsHeaders(req) });
+}
+
+export function landingDemoOptions(req: Request): NextResponse {
+  return new NextResponse(null, { status: 204, headers: landingDemoCorsHeaders(req) });
+}
+
+export async function landingDemoRateLimited(req: Request, limited: NextResponse): Promise<NextResponse> {
+  return NextResponse.json(await limited.json(), {
+    status: limited.status,
+    headers: { ...landingDemoCorsHeaders(req), ...Object.fromEntries(limited.headers.entries()) },
+  });
 }

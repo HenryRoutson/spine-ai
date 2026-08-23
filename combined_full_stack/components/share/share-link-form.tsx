@@ -10,7 +10,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { ShareDefaultFiles } from "@/components/share/share-default-files"
 import { ShareFundingPicker } from "@/components/share/share-funding-flow"
-import { parseSharePricing, SharePricingFields } from "@/components/share/share-pricing-fields"
+import { parseSharePricing, parseSpendLimitUsd, SharePricingFields } from "@/components/share/share-pricing-fields"
 import { API_ROUTES } from "@/lib/api-routes"
 import { apiJson, JSON_HEADERS } from "@/lib/api-client"
 import { shareDefaultDocsByModule } from "@/lib/share-default-docs"
@@ -94,16 +94,13 @@ export function ShareLinkForm({
   async function createLink() {
     setBusy(true)
     setError(null)
-    let spendLimitCents: number | undefined
-    if (spendLimitEnabled) {
-      const parsed = Number.parseFloat(spendLimitUsd)
-      if (!Number.isFinite(parsed) || parsed <= 0) {
-        setError("Enter a valid spending limit greater than $0")
-        setBusy(false)
-        return
-      }
-      spendLimitCents = Math.round(parsed * 100)
+    const spend = parseSpendLimitUsd(spendLimitEnabled, spendLimitUsd)
+    if (!spend.ok) {
+      setError(spend.error)
+      setBusy(false)
+      return
     }
+    const spendLimitCents = spend.spendLimitCents
     const pricing = viewerFunds
       ? parseSharePricing(billingMultiple, flatFeeEnabled, flatFeeUsd)
       : { ok: true as const, billingMultiple: 1, flatFeeCents: 0 }

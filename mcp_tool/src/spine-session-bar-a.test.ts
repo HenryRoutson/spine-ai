@@ -117,6 +117,28 @@ describe("MCP Bar A session tools", () => {
     }
   })
 
+  it("add_step kind=n8n inserts a typed catalog piece", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "mcp-n8n-"))
+    const sessionPath = join(dir, "session.json")
+    try {
+      const session = createSpineSession({ persist: createFilePersist(sessionPath) })
+      session.addProject({ open: true })
+      const { addStepFromSession, configureN8nStepFromSession } = await import("./spine-session-bar-a.js")
+      const added = addStepFromSession("n8n", "Set fields", sessionPath)
+      expect(added[0]?.kind).toBe("n8n")
+      const configured = configureN8nStepFromSession({
+        stepId: added[0]!.id,
+        n8nNodeType: "n8n-nodes-base.set",
+        parametersJson: JSON.stringify({ keepOnlySet: true, assignments: { name: "={{ $json.name }}" } }),
+        sessionPath,
+      })
+      expect(configured.n8nNodeType).toBe("n8n-nodes-base.set")
+      expect(configured.n8nParameters?.keepOnlySet).toBe(true)
+    } finally {
+      rmSync(dir, { recursive: true, force: true })
+    }
+  })
+
   it("ask_agent returns inFlight without waiting for the agent", async () => {
     const dir = mkdtempSync(join(tmpdir(), "mcp-ask-"))
     const sessionPath = join(dir, "session.json")

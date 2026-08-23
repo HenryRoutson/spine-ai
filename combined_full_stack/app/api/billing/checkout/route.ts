@@ -2,10 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { apiError, billingResponse, requireAuthStore } from "@/lib/server/api_context";
 import { HTTP } from "@/lib/server/api-errors";
 import { billingCheckoutBodySchema, parseRequestJson } from "@/lib/server/api_schemas";
-import {
-  type BillingUserKey,
-  createCheckoutSession,
-} from "@/lib/server/billing_account";
+import { billingKeyForUser, createCheckoutSession } from "@/lib/server/billing_account";
 import { STRIPE_ENABLED } from "@/lib/stripe-enabled";
 
 export async function POST(req: NextRequest) {
@@ -18,7 +15,7 @@ export async function POST(req: NextRequest) {
   const { mode, amountCents } = parsed;
 
   try {
-    const key = ctx.auth.userId as unknown as BillingUserKey;
+    const key = billingKeyForUser(ctx.auth.userId);
     const session = await createCheckoutSession(key, mode, req.nextUrl.origin, amountCents);
     return NextResponse.json(session);
   } catch (err) {

@@ -3,7 +3,7 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { isAbsolute, join, relative, resolve } from "node:path";
 import { dataDir } from "./config";
-import { EXT_MIME, hashContent, ORIGINAL_DOC_EXTS, saveOriginalDocBytes, type Store } from "./store";
+import { EXT_MIME, hashContent, ORIGINAL_DOC_EXTS, overlayStore, saveOriginalDocBytes, type Store } from "./store";
 import { shouldSaveOriginalBytes } from "./doc_upload_parse";
 import { DocLabel } from "./types";
 import { InputType, type DocId, type DocRef, type ModuleId, type SharedLinkId } from "./types";
@@ -15,6 +15,7 @@ export const MAX_SHARED_SESSION_BYTES = 100 * 1024 * 1024;
 
 export const SHARED_SESSION_ID_RE = /^[a-f0-9]{32}$/;
 export const SHARED_DOC_ID_RE = /^sha_[a-f0-9]{16}$/;
+export const SHARED_RUN_SESSION_COOKIE = "shared_run_session";
 
 export function parseSharedSessionId(raw: string | undefined | null): string | undefined {
   if (!raw || !SHARED_SESSION_ID_RE.test(raw)) return undefined;
@@ -262,7 +263,6 @@ export function resolveSharedDocOriginalFile(
 }
 
 // AI : overlay session + default docs onto the sharer's store for runPipeline.
-// AI : TODO (arch-store-overlay) — same facade as overlayStoreForHostedRun; one overlayStore(base, extraDocs).
 export function overlayStoreForSharedRun(
   base: Store,
   linkId: SharedLinkId,
@@ -305,48 +305,5 @@ export function overlayStoreForSharedRun(
     extraContent.set(meta.id, content);
   }
 
-  return {
-    projects: () => base.projects(),
-    project: (id) => base.project(id),
-    saveProject: (p) => base.saveProject(p),
-    deleteProject: (id) => base.deleteProject(id),
-    docs: () => [...extraDocs.values(), ...base.docs()],
-    docContent: (id) => extraContent.get(id) ?? base.docContent(id),
-    parserCacheGetByFileHash: (h, p) => base.parserCacheGetByFileHash(h, p),
-    parserCacheGetByDoc: (id) => base.parserCacheGetByDoc(id),
-    parserCacheSet: (row) => base.parserCacheSet(row),
-    visionCacheGet: (key) => base.visionCacheGet(key),
-    visionCacheSet: (row) => base.visionCacheSet(row),
-    visionCachesForDoc: (id) => base.visionCachesForDoc(id),
-    addDoc: (name, type, content, label) => {
-      const id = hashContent(content);
-      const doc: DocRef = {
-        id,
-        name,
-        type,
-        label,
-        sizeKb: Math.max(1, Math.round(content.length / 1024)),
-        uploadedAt: Date.now(),
-        preview: content.slice(0, 180),
-      };
-      extraDocs.set(id, doc);
-      extraContent.set(id, content);
-      return doc;
-    },
-    repointDocName: (id, name) => {
-      const extra = extraDocs.get(id);
-      if (extra) {
-        extraDocs.set(id, { ...extra, name });
-        return true;
-      }
-      return base.repointDocName(id, name);
-    },
-    removeDoc: (id) => extraDocs.delete(id) || base.removeDoc(id),
-    runs: (pid) => base.runs(pid),
-    findRunByFingerprint: (pid, fp) => base.findRunByFingerprint(pid, fp),
-    addRun: (pid, run) => base.addRun(pid, run),
-    updateRunNotes: (rid, notes) => base.updateRunNotes(rid, notes),
-    updateRunTest: (rid, test) => base.updateRunTest(rid, test),
-    flush: () => base.flush(),
-  };
+  return overlayStore(base, extraDocs, extraContent);
 }

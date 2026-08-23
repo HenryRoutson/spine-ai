@@ -286,7 +286,7 @@ export function materializeLandingExampleDocs(
 }
 
 // AI : TODO (arch-ephemeral-store) — copy of pipeline_export_parity.ephemeralStore; one ephemeralStore(project, docs).
-function landingEphemeralStore(project: Project, docs: LandingExampleDoc[]): Store {
+export function ephemeralPipelineStore(project: Project, docs: LandingExampleDoc[]): Store {
   const docMap = new Map(docs.map((d) => [d.ref.id, d]));
   const runs: PipelineRun[] = [];
   const runProjects: Record<string, ProjectId> = {};
@@ -346,7 +346,7 @@ export async function runLandingPipelineWithExamples(
       return { ...m, inputType: [...types, InputTypeEnum.Text] };
     }),
   };
-  const store = landingEphemeralStore(runProject, exampleDocs);
+  const store = ephemeralPipelineStore(runProject, exampleDocs);
   const inputMods = orderedInputModules(runProject.modules);
   const assignment = buildDefaultInputDocs(
     exampleDocs.map((d) => d.ref),

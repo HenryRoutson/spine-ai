@@ -1,6 +1,6 @@
 // AI : landing page demo — budget gate + Supabase call log for pipeline builds.
 
-import { createHash, randomUUID } from "node:crypto";
+import { randomUUID } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import {
@@ -11,6 +11,7 @@ import {
   type landing_demo_tag,
 } from "@/lib/landing_demo_config";
 import { createAdminClient } from "@/lib/server/supabase_admin";
+import { hashLandingDemoIp } from "@/lib/server/landing_page_signups";
 import { dataDir } from "@/lib/server/config";
 import { logger } from "@/lib/server/server_logger";
 import type { ModelId, ProjectId } from "@/lib/server/types";
@@ -55,14 +56,6 @@ function previewText(text: string, max = LANDING_DEMO_PREVIEW_CHARS): string {
   const trimmed = text.trim();
   if (trimmed.length <= max) return trimmed;
   return `${trimmed.slice(0, max - 1)}…`;
-}
-
-function hashIp(ip: string): string {
-  const salt = process.env.LANDING_DEMO_IP_SALT;
-  if (process.env.VERCEL && !salt) {
-    throw new Error("LANDING_DEMO_IP_SALT required on Vercel");
-  }
-  return createHash("sha256").update(`${salt ?? "landing-demo"}:${ip}`).digest("hex").slice(0, 16);
 }
 
 function localBudgetFile(): string {
@@ -242,7 +235,7 @@ async function recordCall(params: {
       completion_tokens: row.completionTokens,
       cost_cents: row.costCents,
       latency_ms: row.latencyMs,
-      ip_hash: hashIp(params.ip),
+      ip_hash: hashLandingDemoIp(params.ip),
     });
     if (insertError) demoLog.warn("landing_page_calls insert failed", { error: insertError.message });
     else {

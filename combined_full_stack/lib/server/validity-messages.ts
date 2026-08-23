@@ -90,6 +90,9 @@ export function invalidStepMessage(
   if (issue.kind === InvalidKind.MissingWebhookUrl) {
     return "set a webhook URL (HTTPS or env:VAR)";
   }
+  if (issue.kind === InvalidKind.MissingN8nNodeType) {
+    return "pick an n8n piece (Set, Filter, CSV, …) — list_pieces names them";
+  }
   return "invalid step";
 }
 

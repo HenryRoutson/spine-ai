@@ -13,6 +13,7 @@ import { migrateProjectModules } from "./validity";
 import {
   fieldToTypeExpr,
   labelToPyKey,
+  modelName as typeExprModelName,
   stepEmitsList,
   stepSpineInType,
   stepSpineOutType,
@@ -58,9 +59,6 @@ export function exportStepLlmSchemaJson(project: Project, m: PipelineModule): st
   return exportLlmSchemaJson(project, m.outStructureId, itemSchema ? false : stepEmitsList(m));
 }
 
-export function exportSchemaExprTs(json: string): string {
-  return json;
-}
 
 export function exportSchemaExprPy(json: string): string {
   return `json.loads(${JSON.stringify(json)})`;
@@ -433,8 +431,7 @@ export function pipelineStatePyTypedDictForExport(project: Project): string {
 }
 
 export function modelName(project: Project, id: StructureModelId | undefined): string | undefined {
-  if (!id) return undefined;
-  return project.models.find((m) => m.id === id)?.name;
+  return typeExprModelName(project.models, id);
 }
 
 export function upstreamLabelForCombine(m: PipelineModule, project: Project): StepLabel | undefined {
@@ -948,7 +945,7 @@ export function generateAssembleStepBodyPy(m: PipelineModule, _project: Project,
 export function generateParallelStepBodyTs(m: PipelineModule, project: Project, outTs: string): string {
   const branches = (m.parallelBranches ?? []).filter((b) => b.field.trim());
   const calls = branches.map((b) => {
-    const schema = exportSchemaExprTs(exportLlmSchemaJson(project, b.outStructureId, false));
+    const schema = exportLlmSchemaJson(project, b.outStructureId, false);
     return `${JSON.stringify(b.field.trim())}: await llmStructured(${JSON.stringify(b.prompt || "Process the input.")} + "\\n\\nINPUT DATA:\\n" + JSON.stringify(input), ${schema} as never)`;
   });
   return [
@@ -1717,10 +1714,6 @@ const ENV_KEY_NAME_PATTERNS: RegExp[] = [
   /\bNEXT_PUBLIC_SUPABASE_[A-Z0-9_]+\b/,
   /\bOPENROUTER_[A-Z0-9_]+\b/,
   /\bSTRIPE_[A-Z0-9_]+\b/,
-  /\bOPENROUTER_API_KEY\b/,
-  /\bSUPABASE_SERVICE_ROLE_KEY\b/,
-  /\bSTRIPE_SECRET_KEY\b/,
-  /\bSTRIPE_WEBHOOK_SECRET\b/,
   /\bSEED_USER_ID\b/,
 ];
 

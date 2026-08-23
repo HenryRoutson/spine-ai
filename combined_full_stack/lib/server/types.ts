@@ -200,7 +200,8 @@ export enum ModuleKind {
   Assert = "assert", // AI : validate pipeline state — passthrough spine; code reads step["Label"] keys
   HumanReview = "human-review", // AI : pause in Inference — operator approves or rejects before continuing
   Webhook = "webhook", // AI : server-side HTTP call — search APIs, Zapier, internal services (generic URL)
-  // AI : TODO (n8n-stage-A) — add N8n = "n8n" — 1:1 wrap of one n8n node type (see lib/server/n8n-roadmap.ts).
+  // AI : DONE (n8n-stage-A) — N8n = typed catalog piece + local Code-node JS (no live vendor APIs).
+  N8n = "n8n",
   // AI : DONE (media-view-D-job) — no RemoteJob kind. Async media = webhook poll + ingest (pipeline, not a connector catalog).
   Chatbot = "chatbot", // AI : pause for prompted chat — spine in ChatbotPrompt, out ChatbotResult
   Output = "output",
@@ -397,9 +398,14 @@ export interface PipelineModule {
   // AI : fetch a media URL from the terminal JSON into document.blob; spine becomes VideoClip-shaped.
   webhookIngestUrlPath?: string;
   webhookIngestInputType?: InputType; // video | audio | image
-  // AI : TODO (n8n-stage-A) — n8nNodeType / n8nNodeVersion / n8nParameters / n8nCredentialEnv /
-  // AI :   n8nBaseUrlEnv / n8nApiKeyEnv / n8nTimeoutMs / n8nResponseMode / n8nResponsePath
-  // AI :   (1:1 n8n node; catalog from OSS nodes-base — see lib/server/n8n-roadmap.ts).
+  // AI : n8n — typed catalog piece (Activepieces-style). Local Code-node JS; no live Slack/Gmail.
+  n8nNodeType?: string
+  n8nNodeVersion?: number
+  n8nParameters?: Record<string, unknown>
+  n8nCode?: string
+  n8nTimeoutMs?: number
+  n8nResponseMode?: "first" | "all" | "jsonPath"
+  n8nResponsePath?: string
   // AI : DONE (media-view-D-job) — async media is webhook poll + ingest, not ModuleKind.RemoteJob / Higgsfield step.
   // AI : chatbot — prompt is spine ChatbotPrompt.prompt (no module.prompt).
   chatbotMode?: ChatbotMode;
@@ -905,7 +911,11 @@ export const MODULE_META: Record<ModuleKind, { label: string; description: strin
     description:
       "HTTP call with typed spine in/out — optional poll of a status URL and fetch of a media URL into Documents. Not a vendor catalog.",
   },
-  // AI : TODO (n8n-stage-A) — MODULE_META[ModuleKind.N8n] = { label: "n8n", description: "Run one n8n node (Slack, Gmail, …) via self-hosted n8n" }
+  [ModuleKind.N8n]: {
+    label: "n8n piece",
+    description:
+      "Typed catalog piece with n8n Code-node JavaScript — Set, Filter, CSV, Hash, … Auto UI from the piece schema. Share the JSON; does not call live integrations.",
+  },
   [ModuleKind.Chatbot]: {
     label: "Chatbot",
     description: "Pause for prompted chat (single or until Exit) — input is locked ChatbotPrompt",

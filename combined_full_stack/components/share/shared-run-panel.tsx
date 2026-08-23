@@ -24,6 +24,7 @@ import {
   RunErrorSummary,
 } from "@/components/inference/inference-run-chrome"
 import { InferenceStepTracePanel } from "@/components/inference/inference-step-trace-panel"
+import { findPipelineModule } from "@/lib/fork-pipeline"
 import { downloadBlob } from "@/lib/download-blob"
 import { formatErrorForClipboard } from "@/lib/error-copy"
 import { fetchSharedDownload } from "@/lib/shared-run-client"
@@ -196,7 +197,7 @@ export function SharedRunPanel({
       {run.pendingHumanReview && (
         <HumanReviewPanel
           spec={run.pendingHumanReview}
-          module={link.modules.find((m) => m.id === run.pendingHumanReview!.moduleId)}
+          module={findPipelineModule(link.modules, run.pendingHumanReview!.moduleId)}
           onApprove={() => run.resolveHumanReview("approved")}
           onReject={() => run.resolveHumanReview("rejected")}
         />

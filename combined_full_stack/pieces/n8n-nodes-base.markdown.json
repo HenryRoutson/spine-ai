@@ -1,0 +1,30 @@
+{
+  "id": "n8n-nodes-base.markdown",
+  "n8nNodeType": "n8n-nodes-base.markdown",
+  "displayName": "Markdown",
+  "description": "Wrap a text field as a markdown heading block (local, not a renderer API).",
+  "category": "transform",
+  "props": [
+    {
+      "name": "field",
+      "displayName": "Text field",
+      "type": "string",
+      "required": true,
+      "default": "body"
+    },
+    {
+      "name": "outputField",
+      "displayName": "Output field",
+      "type": "string",
+      "required": true,
+      "default": "markdown"
+    },
+    {
+      "name": "heading",
+      "displayName": "Heading",
+      "type": "string",
+      "default": "Note"
+    }
+  ],
+  "n8nCode": "const field = String($parameter.field ?? \"body\");\nconst outField = String($parameter.outputField ?? \"markdown\");\nconst heading = String($parameter.heading ?? \"Note\");\nreturn items.map((item) => ({\n  json: { ...item.json, [outField]: \"## \" + heading + \"\\n\\n\" + String(item.json?.[field] ?? \"\") },\n}));"
+}

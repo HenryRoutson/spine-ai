@@ -1,0 +1,151 @@
+{
+  "id": "p_content_ops_n8n",
+  "name": "Content Ops Nested Fork",
+  "kind": "content",
+  "models": [
+    {
+      "id": "m_post",
+      "name": "RawPost",
+      "description": "Blog HTML plus a date.",
+      "fields": [
+        { "id": "f_html", "name": "html", "type": "text", "optional": false, "description": "HTML body" },
+        { "id": "f_body", "name": "body", "type": "text", "optional": false, "description": "Plain body" },
+        { "id": "f_created", "name": "created_at", "type": "text", "optional": false, "description": "Created" }
+      ]
+    },
+    {
+      "id": "m_text",
+      "name": "ExtractedText",
+      "description": "HTML stripped to text.",
+      "fields": [
+        { "id": "f_t_html", "name": "html", "type": "text", "optional": false, "description": "HTML body" },
+        { "id": "f_t_body", "name": "body", "type": "text", "optional": false, "description": "Plain body" },
+        { "id": "f_t_created", "name": "created_at", "type": "text", "optional": false, "description": "Created" },
+        { "id": "f_t_text", "name": "text", "type": "text", "optional": false, "description": "Stripped text" }
+      ]
+    },
+    {
+      "id": "m_md",
+      "name": "MarkdownPost",
+      "description": "Body wrapped as markdown.",
+      "fields": [
+        { "id": "f_m_html", "name": "html", "type": "text", "optional": false, "description": "HTML body" },
+        { "id": "f_m_body", "name": "body", "type": "text", "optional": false, "description": "Plain body" },
+        { "id": "f_m_created", "name": "created_at", "type": "text", "optional": false, "description": "Created" },
+        { "id": "f_m_md", "name": "markdown", "type": "text", "optional": false, "description": "Markdown" }
+      ]
+    },
+    {
+      "id": "m_dated",
+      "name": "DatedPost",
+      "description": "Post with ISO date.",
+      "fields": [
+        { "id": "f_d_html", "name": "html", "type": "text", "optional": false, "description": "HTML body" },
+        { "id": "f_d_body", "name": "body", "type": "text", "optional": false, "description": "Plain body" },
+        { "id": "f_d_created", "name": "created_at", "type": "text", "optional": false, "description": "Created" },
+        { "id": "f_d_iso", "name": "iso", "type": "text", "optional": false, "description": "ISO datetime" }
+      ]
+    }
+  ],
+  "modules": [
+    {
+      "id": "mod_in",
+      "kind": "input",
+      "label": "Raw Post",
+      "note": "HTML post JSON",
+      "inputType": "json",
+      "inputNameContains": "raw_post",
+      "outStructureId": "m_post",
+      "inputDescription": "Post JSON"
+    },
+    {
+      "id": "mod_outer",
+      "kind": "fork",
+      "label": "Prepare",
+      "note": "Date on one lane; nested fork for HTML + markdown",
+      "forkJoin": "product",
+      "forkBranches": [
+        {
+          "id": "fbr_date",
+          "label": "Date",
+          "modules": [
+            {
+              "id": "mod_date",
+              "kind": "n8n",
+              "label": "Format Date",
+              "note": "n8n DateTime",
+              "inStructureId": "m_post",
+              "outStructureId": "m_dated",
+              "n8nNodeType": "n8n-nodes-base.dateTime",
+              "n8nParameters": { "field": "created_at", "outputField": "iso" },
+              "inputDescription": "Raw post"
+            }
+          ]
+        },
+        {
+          "id": "fbr_copy",
+          "label": "Copy",
+          "modules": [
+            {
+              "id": "mod_inner",
+              "kind": "fork",
+              "label": "Rewrite",
+              "note": "Nested fork: strip HTML and wrap markdown",
+              "forkJoin": "product",
+              "forkBranches": [
+                {
+                  "id": "fbr_html",
+                  "label": "HTML",
+                  "modules": [
+                    {
+                      "id": "mod_html",
+                      "kind": "n8n",
+                      "label": "Strip HTML",
+                      "note": "n8n HTML extract",
+                      "inStructureId": "m_post",
+                      "outStructureId": "m_text",
+                      "n8nNodeType": "n8n-nodes-base.html",
+                      "n8nParameters": { "field": "html", "outputField": "text" },
+                      "inputDescription": "Raw post"
+                    }
+                  ]
+                },
+                {
+                  "id": "fbr_md",
+                  "label": "Markdown",
+                  "modules": [
+                    {
+                      "id": "mod_md",
+                      "kind": "n8n",
+                      "label": "To Markdown",
+                      "note": "n8n Markdown",
+                      "inStructureId": "m_post",
+                      "outStructureId": "m_md",
+                      "n8nNodeType": "n8n-nodes-base.markdown",
+                      "n8nParameters": { "field": "body", "outputField": "markdown", "heading": "Post" },
+                      "inputDescription": "Raw post"
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "mod_out",
+      "kind": "output",
+      "label": "Prepared Post",
+      "inStructureId": "sm_fork_mod_outer",
+      "outStructureId": "sm_fork_mod_outer",
+      "inputDescription": "Nested fork product"
+    }
+  ],
+  "strategies": [
+    { "id": "s_single", "kind": "single-llm", "name": "Single LLM Call", "enabled": true, "model": "deepseek-v4", "accuracy": 78, "latencyMs": 400, "costCents": 1, "passRate": 90 }
+  ],
+  "docs": [
+    { "name": "raw_post.json", "type": "json", "label": "inference", "file": "content_ops_n8n/raw_post.json" }
+  ]
+}

@@ -1,9 +1,9 @@
 "use client"
 
-import { SimpleStepTrace, simpleTraceStepsFromRun } from "@/components/simple-step-trace"
+import { PipelineRunGraph } from "@/components/pipeline-run-graph"
 import { formatCostCents } from "@/lib/format"
 import { formatRunErrorForDisplay } from "@/lib/run-errors"
-import { isSlimPipelineRun, runBilledCents } from "@/lib/run-metrics"
+import { runBilledCents } from "@/lib/run-metrics"
 import { timeAgo } from "@/lib/time-ago"
 import { uiContextTargetProps } from "@/lib/ui-context-dom"
 import type { PipelineModule, PipelineRun, StructureModel } from "@/lib/types"
@@ -47,11 +47,7 @@ export function SimpleLoggingTrace({
           <p className="text-sm text-destructive">{runError.message}</p>
         ) : null}
       </div>
-      <SimpleStepTrace
-        steps={simpleTraceStepsFromRun(run, modules)}
-        models={models}
-        loading={isSlimPipelineRun(run)}
-      />
+      <PipelineRunGraph modules={modules} models={models} run={run} />
     </div>
   )
 }

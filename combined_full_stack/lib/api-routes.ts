@@ -7,7 +7,6 @@ export const API_ROUTES = {
   earningsWithdraw: "/api/earnings/withdraw",
   billingConfirm: "/api/billing/confirm",
   billingCheckout: "/api/billing/checkout",
-  billingEarningsWithdraw: "/api/earnings/withdraw",
   billingKeys: "/api/billing/keys",
   secrets: "/api/secrets",
   billingWebhook: "/api/billing/webhook",
@@ -29,7 +28,6 @@ export const API_ROUTES = {
   cache: "/api/cache",
   cacheEntry: (key: string) => `/api/cache/${encodeURIComponent(key)}`,
   abtest: "/api/abtest",
-  pipelineAssistant: "/api/pipeline-assistant",
   projectAssistant: "/api/project-assistant",
   assistantChats: "/api/assistant-chats",
   assistantChat: (id: string) => `/api/assistant-chats/${id}`,
@@ -37,7 +35,6 @@ export const API_ROUTES = {
   pipelineLint: "/api/pipeline-lint",
   pipelineExportDocuments: "/api/pipeline-export/documents",
   diagnosisAssistant: "/api/diagnosis-assistant",
-  structureAssistant: "/api/structure-assistant",
   testingAssistant: "/api/testing-assistant",
   testingEvaluate: "/api/testing-evaluate",
   docsContent: "/api/docs/content",
@@ -81,6 +78,7 @@ export const API_ROUTES = {
   landingDemoSignup: "/api/landing-demo/signup",
   landingDemoSessionReplay: "/api/landing-demo/session-replay",
   demoState: "/api/demo/state",
+  demoRuns: "/api/demo/runs",
   demoDocText: (id: string, layer: "parser" | "vision" = "parser") =>
     `/api/demo/docs/${id}/text${layer === "vision" ? "?layer=vision" : ""}`,
   teams: "/api/teams",
@@ -116,7 +114,11 @@ function isLandingDemoPublicApi(pathname: string): boolean {
 }
 
 function isDemoPublicApi(pathname: string): boolean {
-  return pathname === API_ROUTES.demoState || /^\/api\/demo\/docs\/[^/]+\/text$/.test(pathname);
+  return (
+    pathname === API_ROUTES.demoState ||
+    pathname === API_ROUTES.demoRuns ||
+    /^\/api\/demo\/docs\/[^/]+\/text$/.test(pathname)
+  )
 }
 
 export function isPublicApiPath(pathname: string, method = "GET"): boolean {

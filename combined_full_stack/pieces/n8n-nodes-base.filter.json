@@ -1,0 +1,47 @@
+{
+  "id": "n8n-nodes-base.filter",
+  "n8nNodeType": "n8n-nodes-base.filter",
+  "displayName": "Filter",
+  "description": "Keep items where a field matches an operator — typed Filter node.",
+  "category": "core",
+  "props": [
+    {
+      "name": "field",
+      "displayName": "Field",
+      "type": "string",
+      "required": true,
+      "default": "status"
+    },
+    {
+      "name": "operator",
+      "displayName": "Operator",
+      "type": "select",
+      "default": "equals",
+      "options": [
+        {
+          "value": "equals",
+          "label": "equals"
+        },
+        {
+          "value": "notEquals",
+          "label": "not equals"
+        },
+        {
+          "value": "contains",
+          "label": "contains"
+        },
+        {
+          "value": "exists",
+          "label": "exists"
+        }
+      ]
+    },
+    {
+      "name": "value",
+      "displayName": "Value",
+      "type": "string",
+      "default": ""
+    }
+  ],
+  "n8nCode": "const field = String($parameter.field ?? \"\");\nconst op = String($parameter.operator ?? \"equals\");\nconst want = String($parameter.value ?? \"\");\nreturn items.filter((item) => {\n  const got = item.json?.[field];\n  if (op === \"exists\") return got != null && got !== \"\";\n  const text = String(got ?? \"\");\n  if (op === \"contains\") return text.includes(want);\n  if (op === \"notEquals\") return text !== want;\n  return text === want;\n});"
+}

@@ -67,6 +67,7 @@ export function publicApiTier(pathname: string): RateLimitTier | null {
   if (pathname === "/api/supabase-env") return "public";
   // AI : SECURITY — public demo preview reads; tighter than authenticated read tier.
   if (pathname === "/api/demo/state") return "public";
+  if (pathname === "/api/demo/runs") return "public";
   if (/^\/api\/demo\/docs\/[^/]+\/text$/.test(pathname)) return "public";
   if (pathname.startsWith("/api/hosted-apis/")) {
     if (/\/invoke$/.test(pathname)) return "hosted_api";

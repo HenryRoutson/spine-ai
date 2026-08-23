@@ -26,7 +26,7 @@ import {
 } from "@/lib/client-step-payload"
 import { readApiErrorBody, formatApiError, logApiFailure, JSON_HEADERS, FETCH_NO_STORE } from "@/lib/api-client"
 import { API_ROUTES } from "@/lib/api-routes"
-import { RATE_LIMITS } from "@/lib/rate_limit_config"
+import { isDemoMode } from "@/lib/demo-mode"
 import type {
   DocId,
   JobLogEntry,
@@ -141,6 +141,7 @@ function throwApiError(context: string, res: Response, body: Awaited<ReturnType<
 export type StartRunResult = {
   jobId: RunJobId;
   fingerprint?: string;
+  run?: PipelineRun;
 };
 
 export async function startRun(
@@ -152,7 +153,22 @@ export async function startRun(
   allowDuplicateRuns = false,
   source?: RunSource.Testing | RunSource.Assistant,
 ): Promise<StartRunResult> {
-  const res = await fetch(API_ROUTES.runs, {
+  const demo = isDemoMode()
+  const url = demo ? API_ROUTES.demoRuns : API_ROUTES.runs
+  const demoQs =
+    demo && typeof window !== "undefined"
+      ? (() => {
+          const qs = new URLSearchParams(window.location.search)
+          const params = new URLSearchParams()
+          const buildId = qs.get("buildId")
+          const accessToken = qs.get("accessToken")
+          if (buildId) params.set("buildId", buildId)
+          if (accessToken) params.set("accessToken", accessToken)
+          const q = params.toString()
+          return q ? `?${q}` : ""
+        })()
+      : ""
+  const res = await fetch(`${url}${demoQs}`, {
     method: "POST",
     headers: JSON_HEADERS,
     body: JSON.stringify({
@@ -167,7 +183,7 @@ export async function startRun(
   })
   if (!res.ok) {
     const body = await readApiErrorBody(res)
-    logApiFailure(API_ROUTES.runs, res, body, "POST")
+    logApiFailure(url, res, body, "POST")
     throw new RunStartError(
       formatApiError(
         `Failed to start pipeline for project ${projectId}, doc ${inputDocId}, model ${model}`,
@@ -179,6 +195,10 @@ export async function startRun(
     )
   }
   const body = (await res.json()) as StartRunResult
+  if (demo) {
+    invariant(body.run, `POST ${url} missing run for project ${projectId}`)
+    return { jobId: (body.jobId ?? body.run.id) as RunJobId, run: body.run, fingerprint: body.fingerprint }
+  }
   invariant(body.jobId, `POST /api/runs missing jobId for project ${projectId}`)
   return body
 }

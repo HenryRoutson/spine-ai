@@ -4,6 +4,7 @@ import { useState } from "react"
 import { AlertTriangle, CheckCircle2, ChevronDown, Circle, Loader2 } from "lucide-react"
 import { JsonPreviewPanel } from "@/components/json-preview-panel"
 import { PopupModal, type PopupPayload } from "@/components/logging/popup-modal"
+import { findPipelineModule, flattenPipelineModules } from "@/lib/fork-pipeline"
 import { moduleInputDescription, resolveStepInputDescription } from "@/components/step-input-description"
 import { simpleStepDescription } from "@/lib/plain-step-description"
 import { Progress } from "@/components/ui/progress"
@@ -40,7 +41,7 @@ function statusFrom(step: RunStep | undefined, ui: StepUiState | undefined): Sim
 
 export function simpleTraceStepsFromRun(run: PipelineRun, modules: PipelineModule[]): SimpleTraceStep[] {
   return run.steps
-    .filter((step) => includeModule(modules.find((m) => m.id === step.moduleId), step.kind))
+    .filter((step) => includeModule(findPipelineModule(modules, step.moduleId), step.kind))
     .map((step) => ({
       id: step.moduleId,
       label: step.label,
@@ -60,7 +61,7 @@ export function simpleTraceStepsFromLive({
   stepStates: Map<ModuleId, StepUiState>
   run: PipelineRun | null
 }): SimpleTraceStep[] {
-  return modules.filter((m) => includeModule(m)).map((module) => {
+  return flattenPipelineModules(modules).filter((m) => includeModule(m)).map((module) => {
     const runStep = run?.steps.find((s) => s.moduleId === module.id)
     const ui = stepStates.get(module.id)
     const status = statusFrom(runStep, ui)

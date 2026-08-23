@@ -54,8 +54,8 @@ export function ForkModuleFields({ selected, edit, onUpdate }: ForkModuleFieldsP
   return (
     <>
       {nested && (
-        <p className="rounded-md border border-amber-500/40 bg-amber-500/10 px-2.5 py-2 font-mono text-[10px] leading-relaxed text-amber-800 dark:text-amber-200">
-          Nested forks are stored but v1 canvas flattens them to a card. Flatten first (move inner steps onto this fork&apos;s lanes).
+        <p className="rounded-md border border-chart-4/40 bg-chart-4/10 px-2.5 py-2 font-mono text-[10px] leading-relaxed text-muted-foreground">
+          Nested fork: this lane contains another fork. The canvas draws it as a box inside this lane (series-parallel DAG).
         </p>
       )}
       <PipelineField label="Join" hint={JOIN_HINT[join]}>
@@ -76,7 +76,7 @@ export function ForkModuleFields({ selected, edit, onUpdate }: ForkModuleFieldsP
       </PipelineField>
       <PipelineField
         label="Lanes"
-        hint={`2–${FORK_MAX_BRANCHES} linear lanes. Each starts from the previous spine.`}
+        hint={`${FORK_MIN_BRANCHES}–${FORK_MAX_BRANCHES} lanes. Each starts from the previous spine. Nest another Fork in a lane for a DAG.`}
       >
         <div className="flex flex-col gap-2">
           {branches.map((b, i) => (

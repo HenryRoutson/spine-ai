@@ -284,7 +284,7 @@ const pipelineModulePatchSchema = z
           })
           .strict(),
       )
-      .max(4)
+      .max(12)
       .optional(),
     // AI : example-select — allowlisted on PUT so .strict() does not reject builder saves
     exampleContextLabel: z.string().max(200).optional(),
@@ -307,9 +307,13 @@ const pipelineModulePatchSchema = z
     webhookPollFailWhen: z.array(z.string().max(64)).max(16).optional(),
     webhookIngestUrlPath: z.string().max(512).optional(),
     webhookIngestInputType: z.nativeEnum(InputType).optional(),
-    // AI : TODO (n8n-stage-A-api) — allowlist n8nNodeType, n8nNodeVersion, n8nParameters (record),
-    // AI :   n8nCredentialEnv, n8nBaseUrlEnv, n8nApiKeyEnv, n8nTimeoutMs, n8nResponseMode, n8nResponsePath
-    // AI :   (see lib/server/n8n-roadmap.ts).
+    n8nNodeType: z.string().max(256).optional(),
+    n8nNodeVersion: z.number().int().min(1).max(99).optional(),
+    n8nParameters: z.record(z.string().max(128), z.unknown()).optional(),
+    n8nCode: z.string().max(MAX_MODULE_STRING_CHARS).optional(),
+    n8nTimeoutMs: z.number().int().min(1_000).max(600_000).optional(),
+    n8nResponseMode: z.enum(["first", "all", "jsonPath"]).optional(),
+    n8nResponsePath: z.string().max(512).optional(),
     // AI : TODO (media-view-B-api) — view: ViewBinding on modules.
     chatbotMode: z.enum(["single", "until-exit"]).optional(),
     maxTurns: z.number().int().min(1).max(200).optional(),

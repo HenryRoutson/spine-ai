@@ -1,23 +1,22 @@
-# Spine Pinpoint MCP
+# Spine MCP
 
-MCP server that reuses Spine's Testing-tab logic to **pinpoint which pipeline step diverged** from pinned `*_testing.json` outputs. Returns isolated field diffs (expected vs actual) — not full run logs, not cache stats.
+Schema-first pipeline builder for Claude Code / Cursor. **You do not need the repo** — connect this MCP and follow server instructions (`connect_spine` prompt).
 
-Deterministic field compare only today; probabilistic (LLM-checked) fields and benchmarks are intentionally out of scope for now.
+Spine adds **types** (Pydantic/Zod structures) and **automatic UI** on top of n8n-style automation. Catalog pieces run local n8n Code-node JavaScript. They do **not** call Slack/Gmail. Share pieces as JSON (`list_pieces` / `import_piece` / `export_piece`). Fork steps are a series-parallel DAG (nested forks render as boxes).
 
-## Tools
+## Claude Code
 
-| Tool | Purpose |
-|------|---------|
-| `pinpoint_failure` | First diverging step + isolated diff text/JSON + schema validation on actual output |
-| `compare_run_to_test` | Full per-step comparison report |
-| `validate_test` | Validate a test file against the live pipeline |
-| `parse_test` | Parse a `*_testing.json` file |
-| `list_project_tests` | List test files in a seed |
-| `describe_pipeline_steps` | Per-step pydantic models, JSON schemas, spine I/O types, derived LLM prompts |
-| `validate_step_output` | Validate JSON against a step's pydantic / pipeline-state schema |
-| `derive_step_prompt` | Build the structured LLM prompt (user prompt + JSON Schema suffix) |
-| `validate_pipeline_wiring` | Linear spine I/O validity (`computeInvalid`) |
-| `export_pydantic` | Export all pydantic models + generated step signatures |
+```bash
+claude mcp add spine -- \
+  env SPINE_REPO_ROOT="$PWD" \
+  SPINE_APP_ROOT="$PWD/combined_full_stack" \
+  SPINE_SESSION_PATH="$PWD/combined_full_stack/.spine-session.json" \
+  node "$PWD/mcp_tool/node_modules/tsx/dist/cli.mjs" \
+  --tsconfig "$PWD/mcp_tool/tsconfig.json" \
+  "$PWD/mcp_tool/src/index.ts"
+```
+
+Then: `get_project` → `list_pieces` → `add_step kind=n8n` or `kind=fork`. After `start_run` / `run_test`, call `wait_for_run`.
 
 ## Setup (Cursor)
 
@@ -31,7 +30,8 @@ Add to `.cursor/mcp.json` in the repo root:
       "args": ["run", "start", "--prefix", "mcp_tool"],
       "env": {
         "SPINE_REPO_ROOT": "/absolute/path/to/antler_vc_hackathon",
-        "SPINE_APP_ROOT": "/absolute/path/to/antler_vc_hackathon/combined_full_stack"
+        "SPINE_APP_ROOT": "/absolute/path/to/antler_vc_hackathon/combined_full_stack",
+        "SPINE_SESSION_PATH": "/absolute/path/to/antler_vc_hackathon/combined_full_stack/.spine-session.json"
       }
     }
   }
@@ -44,13 +44,13 @@ Install once:
 npm install --prefix mcp_tool
 ```
 
-## Example
+## Tools
 
-After a run fails in the app, export or copy the run JSON, then ask the agent:
+Session (mutate `.spine-session.json`): `get_project`, `validate_project`, `add_step`, `add_model`, `ask_agent`, `apply_project_changes`, `list_pieces`, `configure_n8n_step`, `import_piece`, `export_piece`, `wait_for_run`, …
 
-> Use `pinpoint_failure` with `combined_full_stack/seeds/homework_grader.json`, `combined_full_stack/documents/homework_grader/homework_grader_testing.json`, and the run at `path/to/run.json`.
+Seed/testing (read-only): `pinpoint_failure`, `lint_pipeline`, `export_pydantic`, …
 
-The response names the first bad step and lists only the fields that differ.
+Broken JSON and unknown step kinds return `{ ok: false, code, error, next }` instead of crashing the MCP session.
 
 ## Development
 
@@ -59,20 +59,3 @@ npm install --prefix mcp_tool
 npm test --prefix mcp_tool
 npm run typecheck --prefix mcp_tool
 ```
-
-## Benchmark (DeepSeek vs Spine MCP)
-
-Compare **DeepSeek alone** vs **DeepSeek + Spine tool logic** (`derive_step_prompt`, `validate_step_output`) on pinned `*_testing.json` benchmarks:
-
-```bash
-# list runnable benchmarks (golden expectedOutputs filled)
-python3 scripts/benchmark_mcp_deepseek.py --list
-
-# quick run — Batch LLM Example only
-python3 scripts/benchmark_mcp_deepseek.py --benchmark batch_llm --limit 1
-
-# full suite (homework grader tests are slow / many LLM calls)
-python3 scripts/benchmark_mcp_deepseek.py --output /tmp/spine_bench.json
-```
-
-Requires `OPENROUTER_API_KEY` in repo `.env`. Uses `mcp_tool/scripts/benchmark_bridge.ts` for prepare/score (same compare rules as the Testing tab).

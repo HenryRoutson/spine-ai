@@ -40,7 +40,7 @@
 //   Fork header: add/remove branch (min 2, cap 4). Join row at the bottom of the box.
 //   No free positioning. Width grows; horizontal scroll if needed. max-w-xl stays
 //   for purely linear pipelines.
-//   v1 UI: one fork nesting level. Data model may nest; inspector says "flatten first".
+//   v1 UI: nested forks render as boxes in the lane (series-parallel DAG).
 //
 // Run:
 //   runLinearStepsFrom stays. Fork → Promise.all(lane runners) sharing ctx.outputs /
@@ -72,8 +72,8 @@ export {}
 // AI :   Ink list with indent.
 // AI : DONE (allow-pipeline-non-linear-fork) — stage F seeds: contract_diligence_fork, invoice_triage_fork,
 // AI :   lead_notify_fork (+ docs).
-// AI : TODO (allow-pipeline-non-linear-fork) — later: router (one lane), sinks join, nested fork UI,
-// AI :   optional Parallel-as-Fork sugar.
+// AI : TODO (allow-pipeline-non-linear-fork) — later: router (one lane), sinks join, PipelineRef, React Flow.
+// AI : DONE (allow-pipeline-non-linear-fork) — nested fork UI: canvas recurses fork boxes; max 12 lanes.
 
 // ---------------------------------------------------------------------------
 // Example pipelines to seed in fork-stage-F (author against the Fork model).

@@ -12,7 +12,7 @@ import {
   BILLING_CAP_CENTS,
   SUB_CENTS_PER_MONTH,
   TOPUP_OPTIONS_CENTS,
-  type BillingUserKey,
+  billingKeyForUser,
   loadBillingAccount,
   loadBillingCreditHistory,
 } from "@/lib/server/billing_account";
@@ -25,7 +25,7 @@ export async function GET() {
   const ctx = await requireAuthStore("billing");
   if (ctx instanceof NextResponse) return ctx;
 
-  const key = ctx.auth.userId as unknown as BillingUserKey;
+  const key = billingKeyForUser(ctx.auth.userId);
   try {
     const [account, creditHistory, freeCredits] = await Promise.all([
       loadBillingAccount(key),

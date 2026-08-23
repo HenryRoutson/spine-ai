@@ -26,7 +26,6 @@ import {
   inferenceInputIssueMessage,
 } from "@/lib/inference-validity";
 import { sharedRunNotes } from "@/lib/shared-link-types";
-import { hashContent } from "@/lib/server/store";
 import { PipelinePausedError } from "@/lib/server/run_checkpoint";
 import { runPipeline } from "@/lib/server/run_engine";
 import { computeRunFingerprintForRequest } from "@/lib/server/run_fingerprint";
@@ -67,22 +66,19 @@ import {
   parseSharedSessionId,
   sessionDocContent,
   sessionDocsForModule,
+  defaultDocIdForLink,
+  SHARED_RUN_SESSION_COOKIE,
 } from "@/lib/server/shared-link-session";
 import { optionalAuthSession, type user_id_string } from "@/lib/server/require_auth";
 import { logger } from "@/lib/server/server_logger";
 import { DocLabel, RunSource } from "@/lib/server/types";
 import type { DocId, DocRef, ModuleId, SharedLinkId } from "@/lib/server/types";
+import { MAX_UPLOAD_BYTES } from "@/lib/server/upload_constants";
 
 export const maxDuration = 300;
 export const dynamic = "force-dynamic";
 
-const SESSION_COOKIE = "shared_run_session";
 const runLog = logger("api:shared-links:run");
-import { MAX_UPLOAD_BYTES } from "@/lib/server/upload_constants";
-
-function defaultDocId(linkId: SharedLinkId, moduleId: ModuleId, filename: string): DocId {
-  return hashContent(`shared_default:${linkId}:${moduleId}:${filename}`);
-}
 
 async function resolveAssignment(
   linkId: SharedLinkId,
@@ -112,7 +108,7 @@ async function resolveAssignment(
       for (const def of defs) {
         const loaded = loadDefaultDocContent(linkId, m.id, def.filename, link.defaultDocs);
         if (!loaded) continue;
-        const id = defaultDocId(linkId, m.id, def.filename);
+        const id = defaultDocIdForLink(linkId, m.id, def.filename);
         const doc: DocRef = {
           id,
           name: loaded.name,
@@ -149,7 +145,7 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
   if (!link) return apiError("link not found", 404);
 
   const jar = await cookies();
-  let sessionId = parseSharedSessionId(jar.get(SESSION_COOKIE)?.value) ?? newSessionId();
+  let sessionId = parseSharedSessionId(jar.get(SHARED_RUN_SESSION_COOKIE)?.value) ?? newSessionId();
 
   const parsed = await parseRequestJson(req, sharedLinkRunBodySchema, {});
   if ("validationError" in parsed) return apiError(parsed.validationError, HTTP.BAD_REQUEST);
@@ -290,7 +286,7 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
   }
 
   const res = NextResponse.json({ jobId, progressToken, sessionId });
-  res.cookies.set(SESSION_COOKIE, sessionId, secureSessionCookieOptions(60 * 60 * 24 * 30));
+  res.cookies.set(SHARED_RUN_SESSION_COOKIE, sessionId, secureSessionCookieOptions(60 * 60 * 24 * 30));
 
   after(async () => {
     await withJobLogging(link.ownerId, jobId, jobDb, async () => {

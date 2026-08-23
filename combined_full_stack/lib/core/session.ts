@@ -2,7 +2,7 @@
 // AI : TODO (arch-thin-store) — GUI useStore should call these methods instead of reimplementing
 // AI :   rename/delete/apply; React still owns hydration/debounce/billing (docs/parity.md §8.5).
 
-import { createHash } from "node:crypto"
+import { hashContent } from "@/lib/content-hash"
 import { uid } from "@/lib/id"
 import { UNNAMED_PROJECT_NAME, AUTHORED_PROJECT_KIND } from "@/lib/project-assistant-types"
 import { findQuote } from "@/lib/quotes"
@@ -144,10 +144,6 @@ function blankProject(now: number): Project {
   }
 }
 
-// AI : TODO (arch-hash-content) — twins store.hashContent; import that (or a shared hash helper).
-function hashContent(content: string): DocId {
-  return (`sha_${createHash("sha256").update(content).digest("hex").slice(0, 16)}`) as DocId
-}
 
 function nextNumberedCloneName(baseName: string, existingNames: Iterable<string>): string {
   const names = new Set(existingNames)

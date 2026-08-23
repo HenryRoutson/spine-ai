@@ -8,6 +8,7 @@ import { ScrollArea } from "@/components/ui/scroll-area"
 import { RunStopButton } from "@/components/run-with-stop-button"
 import { InferenceStepTracePanel } from "@/components/inference/inference-step-trace-panel"
 import { ChatbotPanel, GoToLoggingButton, HumanReviewPanel } from "@/components/inference/inference-run-chrome"
+import { findPipelineModule, flattenPipelineModules } from "@/lib/fork-pipeline"
 import { useRunJobs } from "@/lib/run-jobs-context"
 import { useOptionalStore } from "@/lib/store"
 import { useAppShell } from "@/lib/app-shell"
@@ -35,21 +36,21 @@ export function RunningJobDetail({ job }: { job: TrackedRunJob }) {
   )
 
   const activeModuleId = useMemo(() => {
-    for (const m of modules) {
+    for (const m of flattenPipelineModules(modules)) {
       if (job.stepStates.get(m.id)?.status === "running") return m.id
     }
     return undefined
   }, [job.stepStates, modules])
 
   const logsByModule = useMemo(
-    () => partitionLogsByModule(job.debugLogs, modules.map((m) => m.id), activeModuleId),
+    () => partitionLogsByModule(job.debugLogs, flattenPipelineModules(modules).map((m) => m.id), activeModuleId),
     [job.debugLogs, modules, activeModuleId],
   )
 
   const pendingModule = job.pendingHumanReview
-    ? modules.find((m) => m.id === job.pendingHumanReview!.moduleId)
+    ? findPipelineModule(modules, job.pendingHumanReview.moduleId)
     : job.pendingChatbot
-      ? modules.find((m) => m.id === job.pendingChatbot!.moduleId)
+      ? findPipelineModule(modules, job.pendingChatbot.moduleId)
       : undefined
   const doneRunId = job.runId
 
@@ -82,7 +83,7 @@ export function RunningJobDetail({ job }: { job: TrackedRunJob }) {
       </div>
 
       <ScrollArea className="min-h-0 flex-1">
-        <div className="mx-auto w-full max-w-3xl space-y-4 p-4">
+        <div className="mx-auto w-full max-w-6xl space-y-4 p-4">
           {job.pendingHumanReview && (
             <HumanReviewPanel
               spec={job.pendingHumanReview}

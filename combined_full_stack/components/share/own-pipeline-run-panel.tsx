@@ -25,6 +25,7 @@ import {
   RunErrorSummary,
 } from "@/components/inference/inference-run-chrome"
 import { InferenceStepTracePanel } from "@/components/inference/inference-step-trace-panel"
+import { findPipelineModule } from "@/lib/fork-pipeline"
 import { MIN_RUN_BALANCE_CENTS } from "@/lib/billing_config"
 import { useDocViewer } from "@/lib/doc-viewer"
 import { docsForInputModule } from "@/lib/inference-input"
@@ -324,7 +325,7 @@ export function OwnPipelineRunPanel({
       {runHook.pendingHumanReview && (
         <HumanReviewPanel
           spec={runHook.pendingHumanReview}
-          module={data.modules.find((m) => m.id === runHook.pendingHumanReview!.moduleId)}
+          module={findPipelineModule(data.modules, runHook.pendingHumanReview!.moduleId)}
           onApprove={() => runHook.resolveHumanReview("approved")}
           onReject={() => runHook.resolveHumanReview("rejected")}
         />

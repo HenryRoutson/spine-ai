@@ -175,7 +175,7 @@ export function PipelineBuilder() {
     const issue = invalidForModule(invalid, moduleId as ModuleId)
     if (!issue || (issue.kind !== InvalidKind.IoMismatch && issue.kind !== InvalidKind.CardinalityMismatch)) return
     if (kind === IoMismatchFixKind.AdoptUpstream && issue.upstreamEmits) {
-      const m = modules.find((x) => x.id === moduleId)
+      const m = findPipelineModule(modules, moduleId)
       const patch: Partial<PipelineModule> = { inStructureId: issue.upstreamEmits }
       if (m?.kind === ModuleKind.Output) patch.outStructureId = issue.upstreamEmits
       update(moduleId, patch)

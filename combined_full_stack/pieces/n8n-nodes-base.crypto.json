@@ -1,0 +1,24 @@
+{
+  "id": "n8n-nodes-base.crypto",
+  "n8nNodeType": "n8n-nodes-base.crypto",
+  "displayName": "Hash field",
+  "description": "Add a deterministic hash of a field (local, not a vendor API).",
+  "category": "transform",
+  "props": [
+    {
+      "name": "field",
+      "displayName": "Field",
+      "type": "string",
+      "required": true,
+      "default": "email"
+    },
+    {
+      "name": "outputField",
+      "displayName": "Output field",
+      "type": "string",
+      "required": true,
+      "default": "hash"
+    }
+  ],
+  "n8nCode": "function djb2(text) {\n  let h = 5381;\n  for (let i = 0; i < text.length; i++) h = ((h << 5) + h) + text.charCodeAt(i);\n  return (h >>> 0).toString(16).padStart(8, \"0\");\n}\nconst field = String($parameter.field ?? \"email\");\nconst outField = String($parameter.outputField ?? \"hash\");\nreturn items.map((item) => ({\n  json: { ...item.json, [outField]: djb2(String(item.json?.[field] ?? \"\")) },\n}));"
+}
