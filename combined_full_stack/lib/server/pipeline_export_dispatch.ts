@@ -58,6 +58,10 @@ import {
   generateForkStepBodyPy,
   generateForkStepBodyRust,
   generateForkStepBodyTs,
+  generateQuoteStepBodyGo,
+  generateQuoteStepBodyPy,
+  generateQuoteStepBodyRust,
+  generateQuoteStepBodyTs,
   goZeroValue,
   humanReviewComment,
   llmBatchComment,
@@ -65,7 +69,6 @@ import {
   passthroughCustomComment,
   primaryExportCustomCode,
   pyCustomCodeCall,
-  quoteLinkComment,
   reshapeStepComment,
   snapshotComment,
   structuredLlmComment,
@@ -703,33 +706,10 @@ export const STEP_BODY: Record<ModuleKind, Record<ExportLang, StepBodyEmitter>> 
   [ModuleKind.LlmBatch]: emitLlmBatch,
   [ModuleKind.ExampleSelect]: emitExampleSelect,
   [ModuleKind.Quote]: {
-    ts: (ctx) =>
-      [exportComment(TS, quoteLinkComment()), `return resolveQuotes(input, "", "") as unknown as ${ctx.outType};`].join(
-        "\n",
-      ),
-    py: (ctx) => [exportComment(PY, quoteLinkComment()), pyCast(ctx, "resolve_quotes(input, '', '')")].join("\n"),
-    go: (ctx) => {
-      const zero = goZeroValue(ctx.outType);
-      return [
-        exportComment(C, quoteLinkComment()),
-        'linked, err := resolveQuotes(input, "", "")',
-        "if err != nil {",
-        `\treturn ${zero}, err`,
-        "}",
-        `var out ${ctx.outType}`,
-        "if err := json.Unmarshal(linked, &out); err != nil {",
-        `\treturn ${zero}, err`,
-        "}",
-        "return out, nil",
-      ].join("\n");
-    },
-    rs: (ctx) =>
-      [
-        exportComment(C, quoteLinkComment()),
-        "let linked = resolve_quotes(&input, \"\", \"\")?;",
-        `let out: ${ctx.outType} = serde_json::from_value(linked)?;`,
-        "Ok(out)",
-      ].join("\n"),
+    ts: (ctx) => generateQuoteStepBodyTs(ctx.m, ctx.project, ctx.outType),
+    py: (ctx) => generateQuoteStepBodyPy(ctx.m, ctx.project, ctx.outType),
+    go: (ctx) => generateQuoteStepBodyGo(ctx.m, ctx.project, ctx.outType),
+    rs: (ctx) => generateQuoteStepBodyRust(ctx.m, ctx.project, ctx.outType),
   },
   [ModuleKind.Combine]: {
     ts: (ctx) => generateCombineStepBodyTs(ctx.m, ctx.project, ctx.outType),
@@ -828,7 +808,7 @@ export const STEP_BODY: Record<ModuleKind, Record<ExportLang, StepBodyEmitter>> 
     ts: (ctx) => exportWebhookStepBodyTs(ctx.m, ctx.outType),
     py: (ctx) => exportWebhookStepBodyPy(ctx.m, ctx.outType),
     go: (ctx) => exportWebhookStepBodyGo(ctx.m, goZeroValue(ctx.outType)),
-    rs: () => exportWebhookStepBodyRust(),
+    rs: (ctx) => exportWebhookStepBodyRust(ctx.m),
   },
   [ModuleKind.N8n]: {
     ts: (ctx) =>

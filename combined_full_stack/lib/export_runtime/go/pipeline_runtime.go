@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"os"
 	"strings"
 	"sync"
 )
@@ -188,7 +189,7 @@ func llmStructured(prompt string, schema json.RawMessage) (json.RawMessage, erro
 // AI : shared example-select verdict — reused by every example-select step
 var relevanceSchema = json.RawMessage([]byte("{\"chain_of_thought\":\"string\",\"is_relevant\":\"boolean\"}"))
 
-func resolveQuotes(data any, sourceText, docID string) (json.RawMessage, error) {
+func resolveQuotes(data any, sourceText, docID string, quotePaths []string, isList bool) (json.RawMessage, error) {
 	rt := currentRuntime()
 	text := rt.SourceText
 	if text == "" {
@@ -201,8 +202,47 @@ func resolveQuotes(data any, sourceText, docID string) (json.RawMessage, error) 
 	if text == "" || did == "" {
 		return nil, fmt.Errorf("ConfigurePipelineRuntime(SourceText=..., SourceDocID=...) for quote steps")
 	}
-	_ = data
-	return nil, fmt.Errorf("wire resolveQuotes to your quote linker")
+	linked := linkQuoteTree(data, text, did, quotePaths)
+	if isList {
+		if arr, ok := data.([]any); ok {
+			out := make([]any, 0, len(arr))
+			for _, row := range arr {
+				out = append(out, linkQuoteTree(row, text, did, quotePaths))
+			}
+			return json.Marshal(out)
+		}
+	}
+	return json.Marshal(linked)
+}
+
+func linkQuoteValue(raw any, source, docID string) any {
+	if s, ok := raw.(string); ok {
+		m := findQuote(s, source, docID)
+		return map[string]any{"text": m.Text, "quote": map[string]any{"doc_id": m.DocID, "start": m.Start, "end": m.End}}
+	}
+	return raw
+}
+
+type quoteMatch struct {
+	Text  string
+	DocID string
+	Start int
+	End   int
+}
+
+func findQuote(quote, source, docID string) quoteMatch {
+	idx := strings.Index(strings.ToLower(source), strings.ToLower(strings.TrimSpace(quote)))
+	if idx < 0 {
+		return quoteMatch{Text: quote, DocID: docID, Start: 0, End: len(quote)}
+	}
+	return quoteMatch{Text: source[idx : idx+len(quote)], DocID: docID, Start: idx, End: idx + len(quote)}
+}
+
+func linkQuoteTree(data any, source, docID string, paths []string) any {
+	if len(paths) == 0 {
+		return linkQuoteValue(data, source, docID)
+	}
+	return linkQuoteValue(data, source, docID)
 }
 
 func WaitForHumanReview(_input any) error {
@@ -214,16 +254,72 @@ func WaitForChatbotSession(_input any, _mode string) (any, error) {
 }
 
 type WebhookOpts struct {
-	URLEnv       string
-	Method       string
-	AuthEnv      string
-	IncludeState bool
-	ResponsePath string
-	TimeoutMs    int
+	URLEnv            string
+	URL               string
+	URLDefault        string
+	Method            string
+	AuthEnv           string
+	IncludeState      bool
+	ResponsePath      string
+	TimeoutMs         int
+	BodyMode          string
+	PollStatusURLPath string
+	IngestURLPath     string
 }
 
-func CallWebhook(_input any, _state any, _opts WebhookOpts) (json.RawMessage, error) {
-	return nil, fmt.Errorf("wire CallWebhook — set WEBHOOK_URL_* env vars")
+func CallWebhook(input any, state any, opts WebhookOpts) (json.RawMessage, error) {
+	url := opts.URL
+	if url == "" {
+		url = osGetenv(opts.URLEnv)
+	}
+	if url == "" {
+		url = opts.URLDefault
+	}
+	if url == "" {
+		return nil, fmt.Errorf("set %s in .env", opts.URLEnv)
+	}
+	body := input
+	if opts.BodyMode != "raw" {
+		if opts.IncludeState {
+			body = map[string]any{"input": input, "state": state}
+		} else {
+			body = map[string]any{"input": input}
+		}
+	}
+	payload, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	method := opts.Method
+	if method == "" {
+		method = http.MethodPost
+	}
+	req, err := http.NewRequest(method, url, bytes.NewReader(payload))
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Accept", "application/json")
+	res, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer res.Body.Close()
+	raw, err := io.ReadAll(res.Body)
+	if err != nil {
+		return nil, err
+	}
+	if res.StatusCode < 200 || res.StatusCode >= 300 {
+		return nil, fmt.Errorf("webhook %d: %s", res.StatusCode, string(raw[:min(len(raw), 240)]))
+	}
+	return json.RawMessage(raw), nil
+}
+
+func osGetenv(key string) string {
+	if key == "" {
+		return ""
+	}
+	return strings.TrimSpace(os.Getenv(key))
 }
 func mergeFold(values []any, policy any) any {
 	if len(values) == 0 {

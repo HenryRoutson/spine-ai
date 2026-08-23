@@ -1,4 +1,6 @@
 import { NextResponse } from "next/server";
+import { headers } from "next/headers";
+import { createClient as createSupabaseJsClient } from "@supabase/supabase-js";
 import { AUTH_SIGN_IN_REQUIRED } from "@/lib/auth-messages";
 import { createClient } from "@/utils/supabase/server";
 import { getSupabasePublicEnv } from "@/utils/supabase/env";
@@ -33,6 +35,30 @@ function emailFromClaims(claims: Record<string, unknown> | undefined): string | 
   if (!claims) return undefined;
   const email = claims.email;
   return typeof email === "string" ? email : undefined;
+}
+
+async function sessionFromBearer(): Promise<AuthSession | null> {
+  let token = "";
+  try {
+    const headerList = await headers();
+    const raw = headerList.get("authorization") ?? "";
+    if (!/^bearer\s+/i.test(raw)) return null;
+    token = raw.replace(/^bearer\s+/i, "").trim();
+  } catch {
+    return null;
+  }
+  if (!token) return null;
+  const env = getSupabasePublicEnv();
+  if (!env) return null;
+  const supabase = createSupabaseJsClient(env.url, env.key, {
+    auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
+  });
+  const { data, error } = await supabase.auth.getUser(token);
+  if (error || !data.user?.id) return null;
+  return {
+    userId: data.user.id as user_id_string,
+    email: typeof data.user.email === "string" ? data.user.email : undefined,
+  };
 }
 
 async function sessionFromClaims(): Promise<AuthSession | null> {
@@ -70,12 +96,14 @@ export async function optionalAuthSession(): Promise<AuthSession | null> {
   }
 }
 
-// AI : TODO (mcp-auth) — accept Authorization: Bearer (Supabase access token or PAT) so CLI/MCP can sign in without cookies.
-// AI : production + Supabase-configured deploys require a signed-in session — no shared anon store.
+// AI : MCP/CLI send Authorization: Bearer (Supabase access token). GUI requests have no Bearer and still use cookies.
 export async function requireAuth(): Promise<AuthSession | NextResponse> {
   if (isVercelWithoutSupabase()) {
     return NextResponse.json({ error: MISCONFIGURED }, { status: 503 });
   }
+
+  const bearer = await sessionFromBearer();
+  if (bearer) return bearer;
 
   if (isLocalDevMode()) {
     try {

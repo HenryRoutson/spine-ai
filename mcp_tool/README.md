@@ -1,38 +1,44 @@
 # Spine MCP
 
-Schema-first pipeline builder for Claude Code / Cursor. **You do not need the repo** — connect this MCP and follow server instructions (`connect_spine` prompt).
+Schema-first pipeline builder for Claude Code / Cursor. **You do not need the rest of the repo** — connect this MCP and follow server instructions (`connect_spine` prompt, or call `auth_status`).
 
 Spine adds **types** (Pydantic/Zod structures) and **automatic UI** on top of n8n-style automation. Catalog pieces run local n8n Code-node JavaScript. They do **not** call Slack/Gmail. Share pieces as JSON (`list_pieces` / `import_piece` / `export_piece`). Fork steps are a series-parallel DAG (nested forks render as boxes).
 
 ## Claude Code
 
+From this repository (install once: `npm install --prefix mcp_tool`):
+
 ```bash
-claude mcp add spine -- \
-  env SPINE_REPO_ROOT="$PWD" \
-  SPINE_APP_ROOT="$PWD/combined_full_stack" \
-  SPINE_SESSION_PATH="$PWD/combined_full_stack/.spine-session.json" \
-  node "$PWD/mcp_tool/node_modules/tsx/dist/cli.mjs" \
-  --tsconfig "$PWD/mcp_tool/tsconfig.json" \
-  "$PWD/mcp_tool/src/index.ts"
+claude mcp add spine -- node "$PWD/mcp_tool/spine-mcp.mjs"
 ```
 
-Then: `get_project` → `list_pieces` → `add_step kind=n8n` or `kind=fork`. After `start_run` / `run_test`, call `wait_for_run`.
+Or drop `.mcp.json` in the project root:
+
+```json
+{
+  "mcpServers": {
+    "spine": {
+      "command": "node",
+      "args": ["mcp_tool/spine-mcp.mjs"]
+    }
+  }
+}
+```
+
+The launcher sets `SPINE_REPO_ROOT`, `SPINE_APP_ROOT`, and `SPINE_SESSION_PATH` from its own location.
+
+Then: `auth_status` → `get_project` → `list_pieces` → `add_step kind=n8n` or `kind=fork`. After `start_run` / `run_test`, call `wait_for_run`.
 
 ## Setup (Cursor)
 
-Add to `.cursor/mcp.json` in the repo root:
+Add to `.cursor/mcp.json` (absolute path — Cursor may spawn from `$HOME`):
 
 ```json
 {
   "mcpServers": {
     "spine-pinpoint": {
-      "command": "npm",
-      "args": ["run", "start", "--prefix", "mcp_tool"],
-      "env": {
-        "SPINE_REPO_ROOT": "/absolute/path/to/antler_vc_hackathon",
-        "SPINE_APP_ROOT": "/absolute/path/to/antler_vc_hackathon/combined_full_stack",
-        "SPINE_SESSION_PATH": "/absolute/path/to/antler_vc_hackathon/combined_full_stack/.spine-session.json"
-      }
+      "command": "node",
+      "args": ["/absolute/path/to/antler_vc_hackathon/mcp_tool/spine-mcp.mjs"]
     }
   }
 }
@@ -46,7 +52,7 @@ npm install --prefix mcp_tool
 
 ## Tools
 
-Session (mutate `.spine-session.json`): `get_project`, `validate_project`, `add_step`, `add_model`, `ask_agent`, `apply_project_changes`, `list_pieces`, `configure_n8n_step`, `import_piece`, `export_piece`, `wait_for_run`, …
+Session (mutate `.spine-session.json`): `auth_status`, `get_project`, `validate_project`, `add_step`, `add_model`, `ask_agent`, `apply_project_changes`, `list_pieces`, `configure_n8n_step`, `import_piece`, `export_piece`, `wait_for_run`, `get_run`, …
 
 Seed/testing (read-only): `pinpoint_failure`, `lint_pipeline`, `export_pydantic`, …
 

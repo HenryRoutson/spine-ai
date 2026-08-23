@@ -58,4 +58,17 @@ describe("pipeline export dispatch", () => {
     expect(generatePipelineSourceGo(project)).toMatch(/func step_/);
     expect(generatePipelineSourceRust(project)).toMatch(/async fn step_/);
   });
+
+  it("fork merge join uses mergeFold on lane outputs", () => {
+    const m = stubModule(ModuleKind.Fork);
+    m.forkJoin = "merge";
+    m.forkBranches = [
+      { id: "a", label: "A", modules: [{ ...stubModule(ModuleKind.Llm), id: "mod_a" as ModuleId, label: "Lane A" }] },
+      { id: "b", label: "B", modules: [{ ...stubModule(ModuleKind.Llm), id: "mod_b" as ModuleId, label: "Lane B" }] },
+    ];
+    const ctx = { m, project: stubProject(m), inType: "unknown", outType: "Merged" };
+    expect(emitStepBody("ts", ctx)).toMatch(/mergeFold\(/);
+    expect(emitStepBody("ts", ctx)).toMatch(/state\["Lane A"\]/);
+    expect(emitStepBody("ts", ctx)).not.toMatch(/Object\.values\(state\)/);
+  });
 });

@@ -27,8 +27,8 @@ type ForkModuleFieldsProps = {
 }
 
 const JOIN_HINT: Record<ForkJoin, string> = {
-  product: "auto structure with one field per lane (like Parallel)",
-  assemble: "zip spine + lane labels into a flat structure (like Assemble)",
+  product: "joined object with one field per lane (lane label → field slug)",
+  assemble: "zip spine + lane labels into named fields",
   merge: "fold lane outputs with the merge policy",
 }
 

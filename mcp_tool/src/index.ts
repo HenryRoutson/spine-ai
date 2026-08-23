@@ -38,10 +38,12 @@ import {
   applyProjectChangesFromSession,
   askAgentFromSession,
   assignInputFromSession,
+  authStatusFromSession,
   cloneProjectFromSession,
   configureN8nStepFromSession,
   deleteProjectFromSession,
   getProjectFromSession,
+  getRunFromSession,
   importSeedFromSession,
   inspectIdsFromSession,
   openProjectFromSession,
@@ -70,15 +72,16 @@ function textContent(data: unknown) {
 }
 
 function nextHint(error: string): string {
-  if (/not valid JSON|JSON\.parse/i.test(error)) return "Pass proposalJson as a JSON object string, or omit it to apply the pending Vibe proposal."
-  if (/unknown step kind/i.test(error)) return "Use add_step kind from: input, llm, llm-batch, fork, n8n, custom-code, … — list_pieces for n8n types."
+  if (/not valid JSON|JSON\.parse|session file is not valid JSON/i.test(error)) return "Pass proposalJson as a JSON object string, or omit it to apply the pending Vibe proposal. If the session file is corrupt, delete it and call add_project."
+  if (/unknown step kind/i.test(error)) return "Use add_step kind from: input, llm, llm-batch, fork, n8n, custom-code, webhook, … — list_pieces for n8n types."
   if (/unknown n8n piece|unknown piece/i.test(error)) return "Call list_pieces and use n8nNodeType exactly."
   if (/no active project/i.test(error)) return "Call add_project (or import_seed) then retry."
   if (/no pending proposal/i.test(error)) return "ask_agent first, poll get_project until pendingProposal is set, then apply_project_changes with no proposalJson."
   if (/unknown step /i.test(error)) return "get_project and use the step id or label."
+  if (/401|sign in required/i.test(error)) return "start_run needs a signed-in API. Local npm run dev without Supabase works. Remote: set SPINE_API_TOKEN to a Supabase access token, then retry."
   if (/SPINE_API_URL|remote action/i.test(error)) return "Set SPINE_API_URL to the running Next app, call start_run, then wait_for_run."
   if (/no run to wait for/i.test(error)) return "Call start_run or run_test first, then wait_for_run with that run id."
-  return "Call get_project, then validate_project. Do not re-send the same crashing payload."
+  return "Call auth_status, then get_project, then validate_project. Do not re-send the same crashing payload."
 }
 
 function mcpError(err: unknown, code = "tool_error") {
@@ -262,6 +265,13 @@ server.tool(
 )
 
 server.tool(
+  "auth_status",
+  "First call after connect. Returns session path, whether a project exists, and whether start_run can reach SPINE_API_URL. Do not read the repo.",
+  { sessionPath: z.string().optional() },
+  wrapTool((args) => authStatusFromSession(args.sessionPath)),
+)
+
+server.tool(
   "get_project",
   "Active session project review: kind, field types, inputType, docs, pendingProposal. Same SpineSession as CLI.",
   {
@@ -316,13 +326,23 @@ server.tool(
 
 server.tool(
   "wait_for_run",
-  "Poll GET /api/runs/:id (hydrateRunDetail) until the run is ok/error or timeout. Use after start_run/run_test so pinpoint_failure has finished JSON.",
+  "Poll GET /api/runs/:id until ok/error or timeout. Use after start_run/run_test. Terminal result includes runJson for pinpoint_failure.",
   {
     sessionPath: z.string().optional(),
     runId: z.string().optional().describe("Run id from start_run; omit to wait on the latest session run"),
     timeoutMs: z.number().optional().describe("Max wait 1s–90s (default 45s). If timedOut, call again."),
   },
   wrapTool((args) => waitForRunFromSession(args)),
+)
+
+server.tool(
+  "get_run",
+  "Return the latest (or specified) session run plus runJson for pinpoint_failure. Call wait_for_run first if the run is still running.",
+  {
+    sessionPath: z.string().optional(),
+    runId: z.string().optional(),
+  },
+  wrapTool((args) => getRunFromSession(args)),
 )
 
 server.tool(
@@ -364,6 +384,7 @@ server.tool(
     relation: z.string().optional().describe("structure.set-relation: pk | none | WorkItem.id"),
     forkId: z.string().optional(),
     branchId: z.string().optional(),
+    forkJoin: z.string().optional().describe("pipeline.configure-step on a fork: product | assemble | merge"),
     runId: z.string().optional(),
     timeoutMs: z.number().optional(),
   },
@@ -516,7 +537,7 @@ server.tool(
 
 registerSpinePrompts(server)
 
-// AI : TODO (mcp-auth-tool) — add auth_status / mcp_auth; GUI sign-in is cookies, MCP has no login.
+// AI : auth_status is the connect probe; Bearer SPINE_API_TOKEN is accepted by requireAuth().
 
 async function main() {
   // AI : JSON-RPC is stdout — npm banners and console.log break Cursor's handshake.

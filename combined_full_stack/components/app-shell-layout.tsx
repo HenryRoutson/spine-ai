@@ -73,6 +73,9 @@ const Testing = dynamic(() => import("@/components/testing").then((m) => ({ defa
 const Inference = dynamic(() => import("@/components/inference").then((m) => ({ default: m.Inference })), {
   loading: () => <PanelLoading label="loading inference…" /> },
 )
+const Schedule = dynamic(() => import("@/components/schedule-page").then((m) => ({ default: m.SchedulePage })), {
+  loading: () => <PanelLoading label="loading schedule…" /> },
+)
 const Share = dynamic(() => import("@/components/share/share-page").then((m) => ({ default: m.SharePage })), {
   loading: () => <RunPanelSkeleton /> },
 )
@@ -139,6 +142,8 @@ function renderWindowPanel(windowId: AppWindowId): ReactNode {
       return <Testing />
     case AppWindowId.Inference:
       return <Inference />
+    case AppWindowId.Schedule:
+      return <Schedule />
     case AppWindowId.Share:
       return <Share />
     case AppWindowId.Earnings:

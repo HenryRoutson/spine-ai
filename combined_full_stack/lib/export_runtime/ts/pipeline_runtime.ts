@@ -1,6 +1,13 @@
 // AI : export runtime library — copied into pipeline zips as pipeline_runtime.ts (not generated).
 // AI : generated *_pipeline.ts imports this file.
-// @ts-nocheck
+// AI : standalone zip — no @/ imports; Node bits are declared so tsc can lint without @types/node.
+
+type buffer_bytes = Uint8Array & { toString(enc: string): string };
+declare const Buffer: {
+  from(data: Uint8Array | string, enc?: string): buffer_bytes;
+};
+declare const process: { env: Record<string, string | undefined> };
+declare function require(mod: string): unknown;
 
 // === runtime config (load .env in your runner — pass values here, not in this file) ===
 export type PipelineRuntime = {
@@ -251,29 +258,29 @@ export async function selectRelevant(
 }
 
 // AI : merge runtime — written once in this library, not generated per pipeline.
-function __itemKeyFn(keyPath) {
+function __itemKeyFn(keyPath: string) {
   const parts = String(keyPath).split(".").filter(Boolean);
-  return (item) => {
-    let cur = item;
+  return (item: unknown) => {
+    let cur: unknown = item;
     for (const part of parts) {
-      if (!cur || typeof cur !== "object" || !(part in cur)) throw new TypeError("itemKey \"" + keyPath + "\" missing");
-      cur = cur[part];
+      if (!cur || typeof cur !== "object" || !(part in (cur as object))) throw new TypeError("itemKey \"" + keyPath + "\" missing");
+      cur = (cur as Record<string, unknown>)[part];
     }
     if (cur == null) throw new TypeError("itemKey \"" + keyPath + "\" missing");
     return cur;
   };
 }
-function __cmpKey(item, keyFn) {
+function __cmpKey(item: unknown, keyFn?: (item: unknown) => unknown) {
   if (keyFn) return keyFn(item);
   if (item == null || typeof item === "string" || typeof item === "number" || typeof item === "boolean") return item;
   return JSON.stringify(item);
 }
-function __pathForItem(path, ck, index) {
+function __pathForItem(path: unknown[], ck: unknown, index: number) {
   if (typeof ck === "string" || typeof ck === "number") return [...path, ck];
   return [...path, index];
 }
-function __zipMerge(left, right, resolver, path) {
-  const n = Math.max(left.length, right.length), out = [];
+function __zipMerge(left: unknown[], right: unknown[], resolver: { resolve: (path: unknown[]) => any }, path: unknown[]) {
+  const n = Math.max(left.length, right.length), out: unknown[] = [];
   for (let i = 0; i < n; i++) {
     const child = [...path, i];
     if (i < left.length && i < right.length) out.push(__mergePair(left[i], right[i], resolver, child));
@@ -281,12 +288,12 @@ function __zipMerge(left, right, resolver, path) {
   }
   return out;
 }
-function __dedupeMerge(items, keyFn, resolver, path) {
-  const seen = new Map(), out = [];
+function __dedupeMerge(items: unknown[], keyFn: ((item: unknown) => unknown) | undefined, resolver: { resolve: (path: unknown[]) => any }, path: unknown[]) {
+  const seen = new Map<unknown, number>(), out: unknown[] = [];
   for (const item of items) {
     const k = __cmpKey(item, keyFn);
     if (seen.has(k)) {
-      const idx = seen.get(k);
+      const idx = seen.get(k) ?? 0;
       out[idx] = __mergePair(out[idx], item, resolver, __pathForItem(path, k, idx));
       continue;
     }
@@ -295,8 +302,8 @@ function __dedupeMerge(items, keyFn, resolver, path) {
   }
   return out;
 }
-function __assertNoDupes(items, keyFn, path) {
-  const seen = new Set(), out = [];
+function __assertNoDupes(items: unknown[], keyFn: ((item: unknown) => unknown) | undefined, path: unknown[]) {
+  const seen = new Set<unknown>(), out: unknown[] = [];
   const label = path.length ? path.join(".") : "<root>";
   for (const item of items) {
     const k = __cmpKey(item, keyFn);
@@ -306,29 +313,29 @@ function __assertNoDupes(items, keyFn, path) {
   }
   return out;
 }
-function __setOp(left, right, keyFn, resolver, path, op) {
+function __setOp(left: unknown[], right: unknown[], keyFn: ((item: unknown) => unknown) | undefined, resolver: { resolve: (path: unknown[]) => any }, path: unknown[], op: string) {
   const lk = left.map((i) => __cmpKey(i, keyFn)), rk = right.map((i) => __cmpKey(i, keyFn));
   const ls = new Set(lk), rs = new Set(rk);
   const wanted = op === "union" ? new Set([...ls, ...rs]) : new Set([...lk].filter((k) => rs.has(k)));
-  const order = [];
-  const seen = new Set();
+  const order: unknown[] = [];
+  const seen = new Set<unknown>();
   for (const k of [...lk, ...rk]) {
     if (wanted.has(k) && !seen.has(k)) { seen.add(k); order.push(k); }
   }
-  const map = new Map(), idx = new Map();
+  const map = new Map<unknown, unknown>(), idx = new Map<unknown, number>();
   left.forEach((item, i) => {
     const k = lk[i];
     if (!map.has(k)) { map.set(k, item); idx.set(k, i); }
-    else map.set(k, __mergePair(map.get(k), item, resolver, __pathForItem(path, k, idx.get(k))));
+    else map.set(k, __mergePair(map.get(k), item, resolver, __pathForItem(path, k, idx.get(k) ?? i)));
   });
   right.forEach((item, i) => {
     const k = rk[i];
     if (!map.has(k)) { map.set(k, item); idx.set(k, left.length + i); }
-    else map.set(k, __mergePair(map.get(k), item, resolver, __pathForItem(path, k, idx.get(k))));
+    else map.set(k, __mergePair(map.get(k), item, resolver, __pathForItem(path, k, idx.get(k) ?? left.length + i)));
   });
   return order.map((k) => map.get(k));
 }
-function __assertUnionNoOverlap(left, right, keyFn, path) {
+function __assertUnionNoOverlap(left: unknown[], right: unknown[], keyFn: ((item: unknown) => unknown) | undefined, path: unknown[]) {
   const lk = left.map((i) => __cmpKey(i, keyFn));
   const ls = new Set(lk);
   const label = path.length ? path.join(".") : "<root>";
@@ -338,7 +345,7 @@ function __assertUnionNoOverlap(left, right, keyFn, path) {
   }
   return [...left, ...right];
 }
-function __assertIntersectSubset(left, right, keyFn, path) {
+function __assertIntersectSubset(left: unknown[], right: unknown[], keyFn: ((item: unknown) => unknown) | undefined, path: unknown[]) {
   const rs = new Set(right.map((i) => __cmpKey(i, keyFn)));
   const label = path.length ? path.join(".") : "<root>";
   for (const item of left) {
@@ -347,24 +354,24 @@ function __assertIntersectSubset(left, right, keyFn, path) {
   }
   return left;
 }
-function __assertReplaceEmptyLeft(left, right, path) {
+function __assertReplaceEmptyLeft(left: unknown[], right: unknown[], path: unknown[]) {
   const label = path.length ? path.join(".") : "<root>";
   if (left.length) throw new TypeError("replace assert: left list must be empty at path " + label + " (got " + left.length + " items)");
   return [...right];
 }
-function __assertPrependEmptyRight(left, right, path) {
+function __assertPrependEmptyRight(left: unknown[], right: unknown[], path: unknown[]) {
   const label = path.length ? path.join(".") : "<root>";
   if (right.length) throw new TypeError("prepend assert: right list must be empty at path " + label + " (got " + right.length + " items)");
   return [...left];
 }
-function __suffixMatch(pattern, path) {
+function __suffixMatch(pattern: string[], path: unknown[]) {
   if (pattern.length !== path.length) return false;
   for (let i = 0; i < pattern.length; i++) {
     if (pattern[i] !== "*" && String(pattern[i]) !== String(path[i])) return false;
   }
   return true;
 }
-function __globstarFrom(pattern, path, pi, si) {
+function __globstarFrom(pattern: string[], path: unknown[], pi: number, si: number): number | null {
   if (pi === pattern.length) return si === path.length ? path.length : null;
   if (pattern[pi] === "**") {
     let best = null;
@@ -378,7 +385,7 @@ function __globstarFrom(pattern, path, pi, si) {
   if (pattern[pi] !== "*" && String(pattern[pi]) !== String(path[si])) return null;
   return __globstarFrom(pattern, path, pi + 1, si + 1);
 }
-function __patternDepth(pattern, path) {
+function __patternDepth(pattern: string, path: unknown[]) {
   const parts = pattern.split(".").filter(Boolean);
   if (!parts.length) return path.length ? null : 0;
   if (parts.includes("**")) return __globstarFrom(parts, path, 0, 0);
@@ -386,17 +393,17 @@ function __patternDepth(pattern, path) {
   const offset = path.length - parts.length;
   return __suffixMatch(parts, path.slice(offset)) ? parts.length : null;
 }
-const __mergePair = function(left, right, resolver, path) {
+const __mergePair = function(left: unknown, right: unknown, resolver: { resolve: (path: unknown[]) => any }, path: unknown[]): unknown {
   if (left == null) return right;
   if (right == null) return left;
   const layer = resolver.resolve(path);
-  const isObj = (v) => v && typeof v === "object" && !Array.isArray(v);
-  const isScalar = (v) => v == null || typeof v === "string" || typeof v === "number" || typeof v === "boolean";
+  const isObj = (v: unknown): v is Record<string, unknown> => !!(v && typeof v === "object" && !Array.isArray(v));
+  const isScalar = (v: unknown) => v == null || typeof v === "string" || typeof v === "number" || typeof v === "boolean";
   if (isObj(left) && isObj(right)) {
     if (layer.dict === "replace") return { ...right };
     if (layer.dict === "shallow") return { ...left, ...right };
     const keys = new Set([...Object.keys(left), ...Object.keys(right)]);
-    const out = {};
+    const out: Record<string, unknown> = {};
     for (const key of keys) {
       const child = [...path, key];
       if (key in left && key in right) out[key] = __mergePair(left[key], right[key], resolver, child);
@@ -429,7 +436,9 @@ const __mergePair = function(left, right, resolver, path) {
   throw new TypeError("cannot merge " + typeof left + " with " + typeof right);
 };
 const __resolve = class {
-  constructor(policy) {
+  default: { list: string; dict: string; scalar: string; keyFn?: (item: unknown) => unknown };
+  rules: { pattern: string; policy: { list: string; dict: string; scalar: string; keyFn?: (item: unknown) => unknown } }[];
+  constructor(policy: any) {
     const def = policy?.default ?? {};
     this.default = {
       list: def.list ?? "concat",
@@ -437,7 +446,7 @@ const __resolve = class {
       scalar: def.scalar ?? "last",
       keyFn: def.itemKey ? __itemKeyFn(def.itemKey) : undefined,
     };
-    this.rules = (policy?.rules ?? []).map((r) => ({
+    this.rules = (policy?.rules ?? []).map((r: any) => ({
       pattern: r.path,
       policy: {
         list: r.policy?.list ?? this.default.list,
@@ -447,8 +456,9 @@ const __resolve = class {
       },
     }));
   }
-  resolve(path) {
-    let matched, depth = -1;
+  resolve(path: unknown[]) {
+    let matched: { list: string; dict: string; scalar: string; keyFn?: (item: unknown) => unknown } | undefined;
+    let depth = -1;
     for (const { pattern, policy } of this.rules) {
       const d = __patternDepth(pattern, path);
       if (d != null && d > depth) { matched = policy; depth = d; }
@@ -576,7 +586,7 @@ type ExportDocument = { content?: string | null; filename: string };
 
 function readDocsFile(filename: string): { bytes: Uint8Array; mime: string } {
   const dir = runtime.docsDir ?? "docs";
-  const { readFileSync } = require("node:fs") as { readFileSync: (p: string) => Buffer };
+  const { readFileSync } = require("node:fs") as { readFileSync: (p: string) => Uint8Array };
   const { join } = require("node:path") as { join: (...p: string[]) => string };
   const bytes = new Uint8Array(readFileSync(join(dir, filename)));
   return { bytes, mime: mimeFromFilename(filename) };
@@ -603,14 +613,149 @@ export async function convertDocToText(
 /** @deprecated use convertDocToText — kept so older generated steps compile */
 export async function visionOcr(bytes: VisionOcrBytes, purpose = "general transcription"): Promise<string> {
   const raw = Buffer.from(bytes.base64, "base64");
-  return ocrBytes(new Uint8Array(raw), bytes.mime, purpose);
+  return ocrBytes(raw, bytes.mime, purpose);
 }
 
-export function resolveQuotes<T>(_data: unknown, _sourceText: string, _docId: string): T {
+export function resolveQuotes<T>(
+  data: unknown,
+  _sourceText: string,
+  _docId: string,
+  quotePaths: string[] = [],
+  isList = false,
+): T {
   const text = runtime.sourceText ?? _sourceText;
   const docId = runtime.sourceDocId ?? _docId;
   if (!text || !docId) throw new Error("configurePipelineRuntime({ sourceText, sourceDocId }) for quote steps");
-  throw new Error("wire resolveQuotes to your quote linker");
+  const apply = (row: unknown) => linkQuoteTree(row, text, docId, quotePaths);
+  if (isList && Array.isArray(data)) return data.map(apply) as T;
+  return apply(data) as T;
+}
+
+// AI : same algorithm as lib/server/quotation.ts findQuote — keep in this file so the zip stays standalone.
+export function findQuote(
+  quote: string,
+  source: string,
+  docId: string,
+): { text: string; docId: string; start: number; end: number; exact: boolean; score: number } {
+  const nQuote = quote.replace(/\s+/g, " ").trim().replace(/[A-Z]/g, (c) => c.toLowerCase());
+  const nSource = source.replace(/\s+/g, " ").trim().replace(/[A-Z]/g, (c) => c.toLowerCase());
+  const denormOffset = (normIndex: number): number => {
+    let seen = 0;
+    let i = 0;
+    let prevSpace = false;
+    for (; i < source.length; i++) {
+      const isSpace = /\s/.test(source[i]!);
+      if (isSpace) {
+        if (prevSpace) continue;
+        prevSpace = true;
+      } else {
+        prevSpace = false;
+      }
+      if (seen === normIndex && !(isSpace && seen === 0)) return i;
+      if (!(isSpace && seen === 0)) seen++;
+      if (seen > normIndex) return i;
+    }
+    return i;
+  };
+  const exactIdx = nSource.indexOf(nQuote);
+  if (exactIdx !== -1) {
+    const start = denormOffset(exactIdx);
+    const end = denormOffset(exactIdx + nQuote.length);
+    return { text: source.slice(start, end), docId, start, end, exact: true, score: 1 };
+  }
+  const tokens = (s: string) => s.split(" ").map((t) => t.replace(/[^\p{L}\p{N}]/gu, "")).filter(Boolean);
+  const tokenOverlap = (q: string, window: string) => {
+    const qt = tokens(q);
+    const wt = new Set(tokens(window));
+    if (qt.length === 0) return 0;
+    return qt.filter((t) => wt.has(t)).length / qt.length;
+  };
+  const words = nSource.split(" ");
+  const span = Math.max(1, nQuote.split(" ").length);
+  let best = { score: -1, normStart: 0, normLen: nQuote.length };
+  let cursor = 0;
+  for (let i = 0; i < words.length; i++) {
+    const window = words.slice(i, i + span).join(" ");
+    const score = tokenOverlap(nQuote, window);
+    if (score > best.score) best = { score, normStart: cursor, normLen: window.length };
+    cursor += words[i]!.length + 1;
+  }
+  const start = denormOffset(best.normStart);
+  const end = denormOffset(best.normStart + best.normLen);
+  return { text: source.slice(start, end), docId, start, end, exact: false, score: Math.max(0, best.score) };
+}
+
+type linked_quote = { text: string; quote: { doc_id: string; start: number; end: number } };
+
+function isLinkedQuote(v: unknown): v is linked_quote {
+  if (!v || typeof v !== "object") return false;
+  const o = v as linked_quote;
+  return (
+    typeof o.text === "string" &&
+    typeof o.quote?.doc_id === "string" &&
+    typeof o.quote.start === "number" &&
+    typeof o.quote.end === "number"
+  );
+}
+
+function linkQuoteValue(raw: unknown, source: string, docId: string): unknown {
+  if (typeof raw === "string") {
+    const m = findQuote(raw, source, docId);
+    return { text: m.text, quote: { doc_id: m.docId, start: m.start, end: m.end } };
+  }
+  if (isLinkedQuote(raw)) return raw;
+  if (raw && typeof raw === "object" && !Array.isArray(raw)) {
+    const o = raw as { text?: unknown; quote?: unknown };
+    if (typeof o.quote === "string") {
+      const m = findQuote(o.quote, source, docId);
+      return {
+        text: typeof o.text === "string" ? o.text : m.text,
+        quote: { doc_id: m.docId, start: m.start, end: m.end },
+      };
+    }
+  }
+  if (Array.isArray(raw)) return raw.map((item) => linkQuoteValue(item, source, docId));
+  return raw;
+}
+
+function setAtPath(root: unknown, segments: string[], source: string, docId: string): unknown {
+  if (!segments.length) return linkQuoteValue(root, source, docId);
+  const [head, ...rest] = segments;
+  const list = head!.endsWith("[]");
+  const key = list ? head!.slice(0, -2) : head!;
+  if (root == null || typeof root !== "object") return root;
+  if (Array.isArray(root)) {
+    return root.map((item) => setAtPath(item, segments, source, docId));
+  }
+  const obj = root as Record<string, unknown>;
+  if (!(key in obj)) return root;
+  const next = obj[key];
+  if (list && Array.isArray(next)) {
+    return { ...obj, [key]: next.map((item) => setAtPath(item, rest, source, docId)) };
+  }
+  return { ...obj, [key]: setAtPath(next, rest, source, docId) };
+}
+
+function linkQuoteTree(data: unknown, source: string, docId: string, quotePaths: string[]): unknown {
+  if (!quotePaths.length) return linkQuoteShapes(data, source, docId);
+  let out = data;
+  for (const path of quotePaths) {
+    const segments = path.split(".").filter(Boolean);
+    out = setAtPath(out, segments, source, docId);
+  }
+  return out;
+}
+
+function linkQuoteShapes(data: unknown, source: string, docId: string): unknown {
+  if (Array.isArray(data)) return data.map((item) => linkQuoteShapes(item, source, docId));
+  if (data && typeof data === "object") {
+    const o = data as Record<string, unknown>;
+    if (typeof o.quote === "string" || isLinkedQuote(data)) return linkQuoteValue(data, source, docId);
+    const out: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(o)) out[k] = linkQuoteShapes(v, source, docId);
+    return out;
+  }
+  return data;
 }
 
 export async function waitForHumanReview<T>(input: T): Promise<void> {
@@ -636,47 +781,157 @@ export async function waitForChatbotSession(
 }
 
 export type WebhookCallOpts = {
-  urlEnv: string;
+  urlEnv?: string;
+  url?: string;
+  urlDefault?: string;
   method?: string;
   authEnv?: string;
   includeState?: boolean;
   responsePath?: string;
   timeoutMs?: number;
   bodyMode?: "wrap" | "raw";
+  pollStatusUrlPath?: string;
+  pollStatusPath?: string;
+  pollDoneWhen?: string[];
+  pollFailWhen?: string[];
+  ingestUrlPath?: string;
+  ingestInputType?: string;
 };
+
+function envVal(key: string | undefined): string {
+  return (key ? process.env[key] : undefined)?.trim() ?? "";
+}
+
+function webhookAuthHeader(auth: string): string {
+  if (/^(Bearer|Key|Basic|Digest)\s+/i.test(auth)) return auth;
+  if (/^[A-Za-z0-9._-]+:[A-Za-z0-9._-]+$/.test(auth)) return `Key ${auth}`;
+  return `Bearer ${auth}`;
+}
+
+function webhookGetAtPath(root: unknown, path: string | undefined): unknown {
+  if (!path?.trim()) return root;
+  let cur: unknown = root;
+  for (const segment of path.split(".").map((s) => s.trim()).filter(Boolean)) {
+    if (cur == null || typeof cur !== "object") throw new Error(`webhook path "${path}" failed at "${segment}"`);
+    cur = (cur as Record<string, unknown>)[segment];
+  }
+  return cur;
+}
+
+async function pollWebhookJob(
+  submitted: unknown,
+  opts: WebhookCallOpts,
+  authHeader: string | undefined,
+  deadlineMs: number,
+): Promise<unknown> {
+  const statusUrlPath = opts.pollStatusUrlPath?.trim();
+  if (!statusUrlPath) return submitted;
+  const doneWhen = (opts.pollDoneWhen ?? ["completed"]).map((s) => s.toLowerCase());
+  const failWhen = (opts.pollFailWhen ?? ["failed", "nsfw", "canceled", "cancelled"]).map((s) => s.toLowerCase());
+  const statusPath = opts.pollStatusPath?.trim() || "status";
+  let current = submitted;
+  let delayMs = 2_000;
+  while (true) {
+    const statusRaw = webhookGetAtPath(current, statusPath);
+    const status = (typeof statusRaw === "string" ? statusRaw : String(statusRaw ?? "")).toLowerCase();
+    if (doneWhen.includes(status)) return current;
+    if (failWhen.includes(status)) {
+      const err = webhookGetAtPath(current, "error");
+      throw new Error(`webhook job ${status}${err ? `: ${String(err).slice(0, 240)}` : ""}`);
+    }
+    const remain = deadlineMs - Date.now();
+    if (remain <= 0) throw new Error(`webhook poll timed out after ${opts.timeoutMs ?? 30_000}ms (last status ${status || "unknown"})`);
+    const statusUrl = webhookGetAtPath(current, statusUrlPath);
+    if (typeof statusUrl !== "string" || !statusUrl.trim()) {
+      throw new Error(`webhook poll: no URL at path "${statusUrlPath}"`);
+    }
+    await new Promise((r) => setTimeout(r, Math.min(delayMs, remain)));
+    const pollHeaders: Record<string, string> = { Accept: "application/json" };
+    if (authHeader) pollHeaders.Authorization = authHeader;
+    const res = await fetch(statusUrl.trim(), {
+      method: "GET",
+      headers: pollHeaders,
+      signal: AbortSignal.timeout(Math.min(30_000, Math.max(1_000, deadlineMs - Date.now()))),
+    });
+    if (!res.ok) {
+      const text = await res.text().catch(() => "");
+      throw new Error(`webhook poll ${res.status}${text ? `: ${text.slice(0, 240)}` : ""}`);
+    }
+    current = await res.json();
+    delayMs = Math.min(Math.round(delayMs * 1.5), 10_000);
+  }
+}
+
+function filenameFromUrl(url: string, fallback: string): string {
+  try {
+    const path = new URL(url).pathname;
+    const base = path.split("/").filter(Boolean).pop();
+    if (base && /\.[a-z0-9]+$/i.test(base)) return base;
+  } catch {
+    /* ignore */
+  }
+  return fallback;
+}
+
+async function ingestWebhookMedia(mediaUrl: string, inputType: string | undefined): Promise<unknown> {
+  const url = mediaUrl.trim();
+  const res = await fetch(url, { signal: AbortSignal.timeout(60_000) });
+  if (!res.ok) {
+    const text = await res.text().catch(() => "");
+    throw new Error(`ingest ${res.status}${text ? `: ${text.slice(0, 160)}` : ""}`);
+  }
+  const bytes = new Uint8Array(await res.arrayBuffer());
+  if (bytes.byteLength < 16) throw new Error("ingest: empty media body");
+  const filename = filenameFromUrl(
+    url,
+    inputType === "audio" ? "clip.mp3" : inputType === "image" ? "still.png" : "clip.mp4",
+  );
+  const mime =
+    res.headers.get("content-type")?.split(";")[0]?.trim() ||
+    mimeFromFilename(filename);
+  return { doc_id: hashBytes(bytes), url, filename, mime };
+}
 
 export async function callWebhook(
   input: unknown,
   state: unknown,
   opts: WebhookCallOpts,
 ): Promise<unknown> {
-  const url = process.env[opts.urlEnv]?.trim();
-  if (!url) throw new Error(`set ${opts.urlEnv} in .env`);
+  const url = (opts.url?.trim() || envVal(opts.urlEnv) || opts.urlDefault?.trim() || "");
+  if (!url) throw new Error(`set ${opts.urlEnv ?? "webhook URL"} in .env`);
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
     Accept: "application/json",
   };
+  let authHeader: string | undefined;
   if (opts.authEnv) {
-    const auth = process.env[opts.authEnv]?.trim();
+    const auth = envVal(opts.authEnv);
     if (auth) {
-      headers.Authorization = /^(Bearer|Key|Basic|Digest)\s+/i.test(auth) ? auth : `Bearer ${auth}`;
+      authHeader = webhookAuthHeader(auth);
+      headers.Authorization = authHeader;
     }
   }
   const body = opts.bodyMode === "raw" ? input : opts.includeState === false ? { input } : { input, state };
+  const timeoutMs = opts.timeoutMs ?? 30_000;
   const res = await fetch(url, {
     method: opts.method ?? "POST",
     headers,
     body: JSON.stringify(body),
-    signal: AbortSignal.timeout(opts.timeoutMs ?? 30_000),
+    signal: AbortSignal.timeout(Math.min(timeoutMs, 30_000)),
   });
   if (!res.ok) {
     const text = await res.text().catch(() => "");
     throw new Error(`webhook ${res.status}: ${text.slice(0, 240)}`);
   }
-  const raw = await res.json();
-  if (!opts.responsePath?.trim()) return raw;
-  return opts.responsePath.split(".").reduce<unknown>((cur, key) => {
-    if (cur == null || typeof cur !== "object") throw new Error(`webhook response path failed at ${key}`);
-    return (cur as Record<string, unknown>)[key];
-  }, raw);
+  const contentType = res.headers.get("content-type") ?? "";
+  const submitted = contentType.includes("application/json") ? await res.json() : await res.text();
+  const terminal = await pollWebhookJob(submitted, opts, authHeader, Date.now() + timeoutMs);
+  if (opts.ingestUrlPath?.trim()) {
+    const mediaUrl = webhookGetAtPath(terminal, opts.ingestUrlPath);
+    if (typeof mediaUrl !== "string" || !mediaUrl.trim()) {
+      throw new Error(`webhook ingest: no URL at path "${opts.ingestUrlPath}"`);
+    }
+    return ingestWebhookMedia(mediaUrl, opts.ingestInputType);
+  }
+  return webhookGetAtPath(terminal, opts.responsePath);
 }

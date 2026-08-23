@@ -1,6 +1,7 @@
 // AI : MCP Bar A — session file + HTTP, same SpineSession methods as CLI/Vibe (not seed-only).
 // AI : Goal is GUI-equivalent *actions*. get_project is a compact review, not a live UI dump.
 
+import { USER_ADDABLE_MODULE_KINDS } from "@/lib/module-kinds"
 import { createSpineSession } from "@/lib/core/session"
 import { createApiEgress, createThrowingEgress, SPINE_API_TOKEN_ENV, SPINE_API_URL_ENV } from "@/lib/core/transport"
 import { toBillingView, toCacheView, toMcpProjectReview, toSettingsView, toShareView, toValidationView } from "@/lib/core/view"
@@ -28,6 +29,7 @@ import { exclusionReasonForInputModule, exclusionReasonLabel } from "@/lib/infer
 import { DocLabel, InputType, RunStatus, type PipelineRun, type Project, type RunId } from "@/lib/server/types"
 
 const askAgentJobs = new Map<string, Promise<unknown>>()
+const askAgentErrors = new Map<string, string>()
 
 export function openMcpSession(sessionPath?: string, offline = false) {
   const persist = createFilePersist(resolveSessionPath(sessionPath))
@@ -42,8 +44,16 @@ export function openMcpSession(sessionPath?: string, offline = false) {
 
 // AI : compact graph so MCP can review Vibe proposals (inputType, fields, docs, pendingProposal).
 export function getProjectFromSession(sessionPath?: string) {
+  const path = resolveSessionPath(sessionPath)
   const session = openMcpSession(sessionPath, true)
-  return toMcpProjectReview(session.getSnapshot())
+  const snap = session.getSnapshot()
+  if (!snap.projects.length) {
+    throw new Error("no active project")
+  }
+  return {
+    ...toMcpProjectReview(snap),
+    ...(askAgentErrors.has(path) ? { assistantError: askAgentErrors.get(path) } : {}),
+  }
 }
 
 export function validateProjectFromSession(sessionPath?: string) {
@@ -74,8 +84,8 @@ export async function startRunFromSession(opts: {
   return { id: run.id, status: run.status, source: run.source }
 }
 
-function compactRun(run: PipelineRun) {
-  return {
+function compactRun(run: PipelineRun, includeJson = false) {
+  const compact = {
     id: run.id,
     status: run.status,
     totalMs: run.totalMs,
@@ -88,6 +98,24 @@ function compactRun(run: PipelineRun) {
       ...(s.status !== "ok" && s.outputPreview ? { outputPreview: s.outputPreview.slice(0, 400) } : {}),
     })),
     ...(run.test ? { testPassed: testReportPassed(run.test, run), testDocName: run.test.testDocName } : {}),
+  }
+  if (!includeJson) return compact
+  return {
+    ...compact,
+    runJson: JSON.stringify({
+      id: run.id,
+      status: run.status,
+      steps: run.steps.map((s) => ({
+        moduleId: s.moduleId,
+        label: s.label,
+        kind: s.kind,
+        status: s.status,
+        outputJson: s.outputJson,
+        outputPreview: s.outputPreview,
+        failures: s.failures,
+      })),
+      test: run.test,
+    }),
   }
 }
 
@@ -114,17 +142,55 @@ export async function waitForRunFromSession(opts: {
     await session.hydrateRunDetail(runId)
     const run = session.runs.find((r) => r.id === runId)
     if (run && runIsTerminal(run.status)) {
-      return { ...compactRun(run), timedOut: false }
+      return { ...compactRun(run, true), timedOut: false }
     }
     if (Date.now() >= deadline) {
       if (!run) throw new Error(`run ${runId} not found after hydrate`)
       return {
-        ...compactRun(run),
+        ...compactRun(run, true),
         timedOut: true,
         next: "Run still running. Call wait_for_run again with the same runId.",
       }
     }
     await new Promise((resolve) => setTimeout(resolve, 1_500))
+  }
+}
+
+export function getRunFromSession(opts: { sessionPath?: string; runId?: string }) {
+  const session = openMcpSession(opts.sessionPath, true)
+  const run = opts.runId ? session.runs.find((r) => r.id === opts.runId) : session.runs[0]
+  if (!run) throw new Error("no run to wait for — call start_run or run_test first")
+  return compactRun(run, true)
+}
+
+export function authStatusFromSession(sessionPath?: string) {
+  const path = resolveSessionPath(sessionPath)
+  const apiUrl = process.env[SPINE_API_URL_ENV] ?? null
+  const hasApiToken = Boolean(process.env[SPINE_API_TOKEN_ENV])
+  let projectCount = 0
+  let loadError: string | undefined
+  try {
+    projectCount = openMcpSession(sessionPath, true).projects.length
+  } catch (err) {
+    loadError = err instanceof Error ? err.message : String(err)
+  }
+  const canRun = Boolean(apiUrl)
+  return {
+    ok: !loadError,
+    sessionPath: path,
+    appRoot: process.env.SPINE_APP_ROOT,
+    apiUrl,
+    hasApiToken,
+    canRun,
+    projectCount,
+    ...(loadError ? { error: loadError } : {}),
+    next: loadError
+      ? "Fix or delete the session JSON, then add_project."
+      : !projectCount
+        ? "Call add_project (or import_seed), then get_project."
+        : canRun
+          ? "Call get_project. You can start_run / wait_for_run."
+          : "Call get_project. Local edits work. To run, set SPINE_API_URL to the Next app, then start_run → wait_for_run. Production also needs SPINE_API_TOKEN (Supabase access token).",
   }
 }
 
@@ -258,19 +324,19 @@ export function addStepFromSession(
 ) {
   const session = openMcpSession(sessionPath, true)
   const parsed = parseAddableKind(kind)
-  if (!parsed) throw new Error(`unknown step kind: ${kind}`)
+  if (!parsed) throw new Error(`unknown step kind: ${kind}. Use: ${USER_ADDABLE_MODULE_KINDS.join(", ")}`)
   const added = addPipelineStep(session, parsed, label, opts)
   return added.map((m) => ({ id: m.id, kind: m.kind, label: m.label }))
 }
 
 export function patchStepFromSession(
   id: string,
-  patch: { label?: string; prompt?: string; note?: string } & Record<string, unknown>,
+  patch: { label?: string; prompt?: string; note?: string; forkJoin?: string } & Record<string, unknown>,
   sessionPath?: string,
 ) {
   const session = openMcpSession(sessionPath, true)
   const step = patchStep(session, id, patch as Parameters<typeof patchStep>[2])
-  return { id: step.id, label: step.label, kind: step.kind, n8nNodeType: step.n8nNodeType }
+  return { id: step.id, label: step.label, kind: step.kind, n8nNodeType: step.n8nNodeType, forkJoin: step.forkJoin }
 }
 
 export function configureN8nStepFromSession(opts: {
@@ -364,16 +430,29 @@ export async function askAgentFromSession(message: string, sessionPath?: string,
         pending: Boolean(session.pendingProposal),
         message: "vibe still running — poll get_project",
         human: "vibe still running — poll get_project",
+        ...(askAgentErrors.has(path) ? { assistantError: askAgentErrors.get(path) } : {}),
       },
     }
   }
   const assistant =
     kind === "structure" || kind === "testing" || kind === "diagnosis" || kind === "vibe" ? kind : "vibe"
-  const job = askAgent(session, message, { kind: assistant }).catch((err) => {
-    console.error(err)
-  }).finally(() => {
-    if (askAgentJobs.get(path) === job) askAgentJobs.delete(path)
-  })
+  askAgentErrors.delete(path)
+  const job = askAgent(session, message, { kind: assistant })
+    .then((result) => {
+      if (result && result.ok === false) {
+        const msg = result.issues.map((i) => i.message).filter(Boolean).join("; ") || "ask_agent failed"
+        askAgentErrors.set(path, msg)
+      } else {
+        askAgentErrors.delete(path)
+      }
+      return result
+    })
+    .catch((err) => {
+      askAgentErrors.set(path, err instanceof Error ? err.message : String(err))
+    })
+    .finally(() => {
+      if (askAgentJobs.get(path) === job) askAgentJobs.delete(path)
+    })
   askAgentJobs.set(path, job)
   return {
     ok: true,
@@ -444,6 +523,7 @@ export type SessionActionArgs = {
   relation?: string
   forkId?: string
   branchId?: string
+  forkJoin?: string
   runId?: string
   timeoutMs?: number
 }
@@ -500,7 +580,11 @@ export async function runSessionAction(args: SessionActionArgs): Promise<unknown
       })
     case "pipeline.configure-step":
       if (!args.stepId) throw new Error("stepId required")
-      return patchStepFromSession(args.stepId, { label: args.label, prompt: args.prompt, note: args.note }, sessionPath)
+      return patchStepFromSession(
+        args.stepId,
+        { label: args.label, prompt: args.prompt, note: args.note, forkJoin: args.forkJoin },
+        sessionPath,
+      )
     case "pipeline.remove-step":
       if (!args.stepId) throw new Error("stepId required")
       return removeStepFromSession(args.stepId, sessionPath)
@@ -541,6 +625,11 @@ export async function runSessionAction(args: SessionActionArgs): Promise<unknown
     case "logging.hydrate":
     case "wait_for_run":
       return waitForRunFromSession({ sessionPath, runId: args.runId, timeoutMs: args.timeoutMs })
+    case "logging.get-run":
+    case "get_run":
+      return getRunFromSession({ sessionPath, runId: args.runId })
+    case "auth_status":
+      return authStatusFromSession(sessionPath)
     case "nav.billing":
     case "billing.refresh":
       return refreshBillingFromSession(sessionPath)

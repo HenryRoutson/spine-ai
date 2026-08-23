@@ -165,4 +165,71 @@ describe("MCP agent loop without the codebase", () => {
       rmSync(dir, { recursive: true, force: true })
     }
   })
+
+  it("connect_spine from an empty session without reading the repo", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "mcp-connect-"))
+    const sessionPath = join(dir, "session.json")
+    try {
+      await withMcp(sessionPath, async (call) => {
+        const status = parseTool(await call(2, "auth_status", { sessionPath })) as {
+          projectCount: number
+          next: string
+        }
+        expect(status.projectCount).toBe(0)
+        expect(status.next).toMatch(/add_project/)
+
+        const missing = await call(3, "get_project", { sessionPath })
+        expect((missing.result as CallResult).isError).toBe(true)
+        expect(JSON.stringify(parseTool(missing))).toMatch(/add_project/)
+
+        const created = parseTool(await call(4, "add_project", { sessionPath })) as { id: string }
+        expect(created.id).toBeTruthy()
+
+        const model = parseTool(await call(5, "add_model", { sessionPath, name: "Lead" })) as { name: string }
+        expect(model.name).toBe("Lead")
+
+        await call(6, "session_action", {
+          id: "structure.add-field",
+          sessionPath,
+          model: "Lead",
+          name: "email",
+          type: "string",
+        })
+
+        const input = parseTool(await call(7, "add_step", { sessionPath, kind: "INPUT", label: "Leads" })) as Array<{
+          kind: string
+        }>
+        expect(input[0]?.kind).toBe("input")
+
+        const llm = parseTool(await call(8, "add_step", { sessionPath, kind: "llm", label: "Extract" })) as Array<{
+          kind: string
+        }>
+        expect(llm[0]?.kind).toBe("llm")
+
+        const n8n = parseTool(await call(9, "add_step", { sessionPath, kind: "piece", label: "Set fields" })) as Array<{
+          kind: string
+          id: string
+        }>
+        expect(n8n[0]?.kind).toBe("n8n")
+        await call(10, "configure_n8n_step", {
+          sessionPath,
+          stepId: n8n[0]!.id,
+          n8nNodeType: "n8n-nodes-base.set",
+          parametersJson: JSON.stringify({ keepOnlySet: true }),
+        })
+
+        const project = parseTool(await call(11, "get_project", { sessionPath })) as {
+          models: Array<{ name: string; fields: string[] }>
+          steps: Array<{ kind: string; n8nNodeType?: string; n8nParameters?: Record<string, unknown> }>
+        }
+        expect(project.models.some((m) => m.name === "Lead" && m.fields.some((f) => f.startsWith("email:")))).toBe(true)
+        expect(project.steps.some((s) => s.kind === "n8n" && s.n8nNodeType === "n8n-nodes-base.set")).toBe(true)
+
+        const validated = parseTool(await call(12, "validate_project", { sessionPath })) as { ok?: boolean }
+        expect(validated).toHaveProperty("ok")
+      })
+    } finally {
+      rmSync(dir, { recursive: true, force: true })
+    }
+  })
 })

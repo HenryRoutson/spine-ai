@@ -17,6 +17,7 @@ export const BUILDER_AREA_WINDOWS: Record<BuilderAreaId, readonly AppWindowId[]>
     AppWindowId.Pipeline,
     AppWindowId.Testing,
     AppWindowId.Inference,
+    AppWindowId.Schedule,
     AppWindowId.Vibe,
   ],
   [AppArea.Deploy]: [AppWindowId.Share, AppWindowId.Earnings],

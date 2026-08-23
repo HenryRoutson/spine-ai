@@ -2,46 +2,48 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js"
 import { z } from "zod"
 
-export const SPINE_MCP_INSTRUCTIONS = `Spine MCP — schema-first pipeline builder (typed n8n + auto UI). You do not see the browser. Do not read the repo unless a tool fails.
+export const SPINE_MCP_INSTRUCTIONS = `Spine MCP — schema-first pipeline builder (typed n8n + auto UI). You do not see the browser. Do not clone, search, or read the repo unless a tool fails.
 
 WHAT SPINE IS
-Spine sits on top of n8n-class automation with Pydantic/Zod structures. You define models, wire steps, generate the inference form automatically, run golden tests, then share a drag-and-drop page. Data between steps is typed. n8n pieces run local Code-node JavaScript against that type — they do NOT call Slack/Gmail/HTTP live. Webhook is the generic HTTP escape hatch. Activepieces-style pieces are shareable JSON (list_pieces / import_piece / export_piece).
+Spine sits on top of n8n-class automation with Pydantic/Zod structures. You define models, wire steps, generate the inference form automatically, run golden tests, then share a drag-and-drop page. Data between steps is typed. n8n pieces run local Code-node JavaScript against that type — they do NOT call Slack/Gmail/HTTP live. Webhook is the generic HTTP escape hatch. Pieces are shareable JSON (list_pieces / import_piece / export_piece).
 
 CONNECT (Claude Code / Cursor — no codebase required)
-claude mcp add spine -- env SPINE_REPO_ROOT=<repo> SPINE_APP_ROOT=<repo>/combined_full_stack SPINE_SESSION_PATH=<repo>/combined_full_stack/.spine-session.json node <repo>/mcp_tool/node_modules/tsx/dist/cli.mjs --tsconfig <repo>/mcp_tool/tsconfig.json <repo>/mcp_tool/src/index.ts
-Or .cursor/mcp.json / .mcp.json with command node + those args + env. After connect: get_project.
+From the Spine repo: claude mcp add spine -- node "$PWD/mcp_tool/spine-mcp.mjs"
+Or commit .mcp.json { "mcpServers": { "spine": { "command": "node", "args": ["mcp_tool/spine-mcp.mjs"] } } }
+Cursor: .cursor/mcp.json command node + args [absolute path to mcp_tool/spine-mcp.mjs]. The launcher sets SPINE_* paths itself.
+You are already connected if you can call tools. First tool: auth_status. Then get_project.
 
 WORKSPACES — never mix:
-- Session tools mutate .spine-session.json (omit sessionPath → SPINE_SESSION_PATH). This is the editable project (same SpineSession as the CLI).
+- Session tools mutate .spine-session.json (omit sessionPath). This is the editable project.
 - Seed tools (pinpoint_failure, compare_run_to_test, validate_test, parse_test, list_project_tests, describe_pipeline_steps, validate_step_output, derive_step_prompt, validate_pipeline_wiring, lint_pipeline, export_pydantic, inspect_ids) read seeds/*.json + *_testing.json. They do not write the session.
-- Signed-in GUI uses Supabase cookies. pullRemoteState / flushPendingSave are not MCP tools yet.
+- Signed-in GUI uses Supabase cookies. MCP start_run sends SPINE_API_TOKEN as Bearer (Supabase access token).
 
 DEFAULT LOOP
-1. get_project — compact review (id, kind, field types, inputType, docs, pendingProposal, issues, assistantInFlight, fork branches, n8nNodeType).
-2. validate_project — same computeInvalid as the pipeline editor.
-3. Change: ask_agent (kind vibe|structure|testing|diagnosis) → poll get_project if inFlight → apply_project_changes, OR edit with add_step / add_model / add_doc / assign_input / set_docs / configure_n8n_step.
-   If ask_agent times out (MCP -32001) or returns data.inFlight, do NOT send the same message again. Poll get_project until pendingProposal or assistantInFlight is null, then validate_project.
-4. run_test or start_run (needs SPINE_API_URL). Returns {id,status} immediately — then wait_for_run until ok/error (or timedOut; call again).
-5. Finished run JSON: pinpoint_failure(projectSeedPath, testFilePath, runJson|runPath).
+1. auth_status — session path, projectCount, canRun (SPINE_API_URL). Follow next.
+2. get_project — compact review (id, kind, field types, inputType, prompt/note, docs, pendingProposal, assistantError, issues, forkJoin, n8nNodeType, n8nParameters). If no active project, add_project or import_seed.
+3. validate_project — same computeInvalid as the pipeline editor.
+4. Change: ask_agent (kind vibe|structure|testing|diagnosis) → poll get_project if inFlight (do NOT re-send). If assistantError appears, fix from that text. Then apply_project_changes, OR edit with add_step / add_model / add_doc / assign_input / set_docs / configure_n8n_step / session_action structure.add-field.
+5. run_test or start_run (needs SPINE_API_URL). Returns {id,status} immediately — then wait_for_run until ok/error (or timedOut; call again). wait_for_run / get_run include runJson.
+6. Finished run: pinpoint_failure(projectSeedPath, testFilePath, runJson) using the JSON from wait_for_run.
 
 TYPED N8N PIECES (no live integrations)
 list_pieces → add_step kind=n8n → configure_n8n_step (nodeType + parametersJson + optional n8nCode).
 Catalog: n8n-nodes-base.set | filter | sort | limit | removeDuplicates | itemLists | crypto | dateTime | html | markdown | spreadsheetFile | code.
-Each piece has a props schema → the GUI auto-generates the form. n8nCode is n8n Code-node JS: items = [{json}], return items. Prefer a catalog piece over custom-code. import_piece / export_piece share JSON (Activepieces-style).
+Each piece has a props schema → the GUI auto-generates the form. n8nCode is n8n Code-node JS: items = [{json}], return items. Prefer a catalog piece over custom-code. import_piece / export_piece share JSON.
 
 FORK DAG
-Pipelines are series-parallel. add_step kind=fork, then add_step with forkId + branchId into a lane. Nest another fork in a lane for a generic DAG (no cycles). Join: product | assemble | merge. get_project.steps[].branches shows the tree.
+Pipelines are series-parallel. add_step kind=fork, then add_step with forkId + branchId into a lane. Nest another fork in a lane for a generic DAG (no cycles). Join: product | assemble | merge via session_action pipeline.configure-step forkJoin. get_project.steps[].branches shows the tree.
 
-NON-TECHNICAL BACKEND
-Structures generate the inference UI. simpleKindBlurb / piece display names hide code. n8n code is an optional advanced override — non-technical users pick a piece and fill the auto form.
+STEP KINDS
+input, llm, llm-batch, example-select, transform, chunk, merge, assemble, fork, combine, custom-code, assert, human-review, webhook, n8n, chatbot, output.
+Aliases: code→custom-code, http→webhook, piece→n8n, dag→fork. Case-insensitive.
 
 NAMED TOOLS vs session_action:
 Prefer named tools. session_action id is the GUI data-spine-id. Extra ids: structure.add-field/remove-field/set-relation/add-alias, pipeline.configure-step/remove-step/assign-structure, assistant.reject, billing.refresh, earnings.refresh, cache.refresh, logging.errors-only.
 
-ERRORS: tools return {ok:false, code, error, next} with isError instead of crashing. Follow next.
+ERRORS: tools return {ok:false, code, error, next} with isError instead of crashing. Follow next. Never retry the same crashing payload.
 
-NOT TOOLS YET: documents.remove, quotes.link, session pull/push, run cancel, share/hosted-api/embed mint, Stripe, human-review, chatbot turn, custom-code (browser CodeHost), auth login, live n8n Cloud execute.
-ID / catalog: inspect_ids lists branded row ids. get_project.models fields include fk→ and idTypes.`
+NOT TOOLS YET: documents.remove, quotes.link, session pull/push, run cancel, share/hosted-api/embed mint, Stripe, human-review click, chatbot turn, custom-code (browser CodeHost), live n8n Cloud execute.`
 
 function userMessage(text: string) {
   return { messages: [{ role: "user" as const, content: { type: "text" as const, text } }] }
@@ -57,7 +59,7 @@ export function registerSpinePrompts(server: McpServer): void {
     },
     ({ goal }) =>
       userMessage(
-        `Goal: ${goal}\n\nFollow Spine MCP instructions. Loop: get_project → validate_project → ask_agent (kind=vibe unless this is clearly structure/testing/diagnosis). If ask_agent times out, poll get_project until pendingProposal appears (do not re-ask). Then apply_project_changes (or session_action assistant.reject) → validate_project again → run_test if SPINE_API_URL is set, then wait_for_run. Use session tools only (not seed lint) unless pinpointing a finished run against seeds/*.json.`,
+        `Goal: ${goal}\n\nFollow Spine MCP instructions. Loop: auth_status → get_project → validate_project → ask_agent (kind=vibe unless this is clearly structure/testing/diagnosis). If ask_agent times out, poll get_project until pendingProposal or assistantError appears (do not re-ask). Then apply_project_changes (or session_action assistant.reject) → validate_project again → run_test if SPINE_API_URL is set, then wait_for_run. Use session tools only (not seed lint) unless pinpointing a finished run against seeds/*.json.`,
       ),
   )
 
@@ -90,7 +92,7 @@ export function registerSpinePrompts(server: McpServer): void {
     },
     ({ kind, purpose }) =>
       userMessage(
-        `Add a ${kind} step: ${purpose}\n\nFollow Spine MCP instructions. get_project → add_step (or session_action pipeline.add-step) → session_action pipeline.configure-step / pipeline.assign-structure / configure_n8n_step as needed → validate_project. For kind=n8n, list_pieces first. For kind=fork, add_step into lanes with forkId + branchId. Do not call seed tools on the session file.`,
+        `Add a ${kind} step: ${purpose}\n\nFollow Spine MCP instructions. auth_status → get_project → add_step (or session_action pipeline.add-step) → session_action pipeline.configure-step / pipeline.assign-structure / configure_n8n_step as needed → validate_project. For kind=n8n, list_pieces first. For kind=fork, add_step into lanes with forkId + branchId. Do not call seed tools on the session file.`,
       ),
   )
 
@@ -99,11 +101,10 @@ export function registerSpinePrompts(server: McpServer): void {
     {
       title: "Connect to Spine without the codebase",
       description: "How a Claude Code / Cursor agent should attach this MCP and start building typed pipelines.",
-      argsSchema: {},
     },
     () =>
       userMessage(
-        `You are connected to Spine MCP. Do not clone or search the repo.\n\n1. get_project (create with add_project if none).\n2. Add Pydantic-like structures with add_model + session_action structure.add-field.\n3. Wire steps: input → (fork lanes and/or n8n pieces and/or llm) → output.\n4. validate_project until ok.\n5. Auto UI is the inference page from those structures — you do not hand-write forms.\n6. Share an n8n piece with export_piece; import someone else's with import_piece.\nNever call live Slack/Gmail. n8n pieces run local Code-node JS with typed in/out.`,
+        `You are connected to Spine MCP. Do not clone or search the repo.\n\n1. auth_status — follow next (add_project if projectCount is 0).\n2. get_project.\n3. Add Pydantic-like structures with add_model + session_action structure.add-field (name, type).\n4. Wire steps: input → (fork lanes and/or n8n pieces and/or llm) → output. add_step kinds are listed in server instructions.\n5. validate_project until ok.\n6. Auto UI is the inference page from those structures — you do not hand-write forms.\n7. If SPINE_API_URL is set, start_run then wait_for_run.\nShare an n8n piece with export_piece; import someone else's with import_piece.\nNever call live Slack/Gmail. n8n pieces run local Code-node JS with typed in/out.`,
       ),
   )
 
@@ -133,7 +134,7 @@ export function registerSpinePrompts(server: McpServer): void {
     },
     ({ lanes }) =>
       userMessage(
-        `Lanes: ${lanes}\n\nget_project → add_step kind=fork → add_step into each lane with forkId + branchId (kind n8n/llm/assert/…). Nest fork in a lane if a lane itself branches. validate_project. get_project.steps[].branches is the DAG tree.`,
+        `Lanes: ${lanes}\n\nget_project → add_step kind=fork → add_step into each lane with forkId + branchId (kind n8n/llm/assert/…). Nest fork in a lane if a lane itself branches. session_action pipeline.configure-step forkJoin=product|assemble|merge. validate_project. get_project.steps[].branches is the DAG tree.`,
       ),
   )
 }

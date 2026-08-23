@@ -73,6 +73,10 @@ export const API_ROUTES = {
   hostedApi: (id: string) => `/api/hosted-apis/${id}`,
   hostedApiInvoke: (id: string) => `/api/hosted-apis/${id}/invoke`,
   hostedApiProgress: (id: string) => `/api/hosted-apis/${id}/progress`,
+  schedules: "/api/schedules",
+  schedule: (id: string) => `/api/schedules/${id}`,
+  scheduleRun: (id: string) => `/api/schedules/${id}/run`,
+  schedulesTick: "/api/schedules/tick",
   // AI : Embed reuses shared-links APIs + /embed/[id] UI (origin allowlist on emb_ rows).
   landingDemoBuild: "/api/landing-demo/build-pipeline",
   landingDemoSignup: "/api/landing-demo/signup",
@@ -93,6 +97,10 @@ function isHostedApiPublicApi(pathname: string): boolean {
     /^\/api\/hosted-apis\/[^/]+\/invoke$/.test(pathname) ||
     /^\/api\/hosted-apis\/[^/]+\/progress$/.test(pathname)
   );
+}
+
+function isScheduleTickPublicApi(pathname: string): boolean {
+  return pathname === API_ROUTES.schedulesTick;
 }
 
 function isSharedLinkPublicApi(pathname: string, method: string): boolean {
@@ -126,6 +134,7 @@ export function isPublicApiPath(pathname: string, method = "GET"): boolean {
   if (isLandingDemoPublicApi(pathname)) return true
   if (isDemoPublicApi(pathname)) return true
   if (isHostedApiPublicApi(pathname)) return true
+  if (isScheduleTickPublicApi(pathname)) return true
   return isSharedLinkPublicApi(pathname, method)
 }
 

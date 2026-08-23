@@ -20,6 +20,10 @@ export function isTestingRun(run: PipelineRun): boolean {
   return run.source === RunSource.Testing
 }
 
+export function isScheduleRun(run: PipelineRun): boolean {
+  return run.source === RunSource.Schedule || !!run.scheduleId
+}
+
 export function filterRuns(runs: PipelineRun[], query: string): PipelineRun[] {
   if (!query.trim()) return runs
   const q = query.toLowerCase()
@@ -31,6 +35,7 @@ export function filterRuns(runs: PipelineRun[], query: string): PipelineRun[] {
       (r.source?.toLowerCase().includes(q) ?? false) ||
       (r.sharedLinkId?.toLowerCase().includes(q) ?? false) ||
       (r.hostedApiId?.toLowerCase().includes(q) ?? false) ||
+      (r.scheduleId?.toLowerCase().includes(q) ?? false) ||
       (r.triggerUserEmail?.toLowerCase().includes(q) ?? false) ||
       (r.triggerUserId?.toLowerCase().includes(q) ?? false) ||
       (r.viewerName?.toLowerCase().includes(q) ?? false) ||
@@ -125,6 +130,11 @@ export function RunPickerColumn({
                         {isTestingRun(run) && (
                           <Badge variant="outline" className="shrink-0 border-chart-3/40 font-mono text-[9px] text-chart-3">
                             test
+                          </Badge>
+                        )}
+                        {isScheduleRun(run) && (
+                          <Badge variant="secondary" className="shrink-0 font-mono text-[9px]">
+                            cron
                           </Badge>
                         )}
                         {runInputDocIds(run).map((docId) => (

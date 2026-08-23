@@ -155,4 +155,36 @@ describe("MCP Bar A session tools", () => {
       rmSync(dir, { recursive: true, force: true })
     }
   })
+
+  it("auth_status and kind aliases work on a fresh session file", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "mcp-status-"))
+    const sessionPath = join(dir, "session.json")
+    try {
+      const { authStatusFromSession, addProjectFromSession, addStepFromSession } = await import("./spine-session-bar-a.js")
+      const empty = authStatusFromSession(sessionPath)
+      expect(empty.projectCount).toBe(0)
+      expect(empty.next).toMatch(/add_project/)
+      addProjectFromSession(sessionPath)
+      const added = addStepFromSession("HTTP", "Call API", sessionPath)
+      expect(added[0]?.kind).toBe("webhook")
+      const code = addStepFromSession("code", "Transform", sessionPath)
+      expect(code[0]?.kind).toBe("custom-code")
+      expect(authStatusFromSession(sessionPath).projectCount).toBe(1)
+    } finally {
+      rmSync(dir, { recursive: true, force: true })
+    }
+  })
+
+  it("corrupt session JSON returns a repair hint instead of crashing the process", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "mcp-corrupt-"))
+    const sessionPath = join(dir, "session.json")
+    try {
+      const { writeFileSync } = await import("node:fs")
+      writeFileSync(sessionPath, "{not-json")
+      const { getProjectFromSession } = await import("./spine-session-bar-a.js")
+      expect(() => getProjectFromSession(sessionPath)).toThrow(/not valid JSON/)
+    } finally {
+      rmSync(dir, { recursive: true, force: true })
+    }
+  })
 })

@@ -328,12 +328,116 @@ async def vision_ocr(mime: str, base64: str, purpose: str = "general transcripti
     import base64 as b64mod
     return await _ocr_bytes(b64mod.b64decode(base64), mime, purpose)
 
-def resolve_quotes(data: Any, source_text: str, doc_id: str) -> Any:
+def resolve_quotes(data: Any, source_text: str, doc_id: str, quote_paths: list[str] | None = None, is_list: bool = False) -> Any:
     text = runtime.source_text or source_text
     did = runtime.source_doc_id or doc_id
     if not text or not did:
         raise RuntimeError("configure_pipeline_runtime(source_text=..., source_doc_id=...) for quote steps")
-    raise NotImplementedError("wire resolve_quotes to your quote linker")
+    paths = quote_paths or []
+    rows = data if is_list and isinstance(data, list) else [data]
+    linked = [_link_quote_tree(row, text, did, paths) for row in rows]
+    return linked if is_list and isinstance(data, list) else linked[0]
+
+def _norm_quote(s: str) -> str:
+    return " ".join(s.split()).strip().lower()
+
+def _denorm_offset(source: str, norm_index: int) -> int:
+    seen = 0
+    prev_space = False
+    i = 0
+    while i < len(source):
+        is_space = source[i].isspace()
+        if is_space:
+            if prev_space:
+                i += 1
+                continue
+            prev_space = True
+        else:
+            prev_space = False
+        if seen == norm_index and not (is_space and seen == 0):
+            return i
+        if not (is_space and seen == 0):
+            seen += 1
+        if seen > norm_index:
+            return i
+        i += 1
+    return i
+
+def find_quote(quote: str, source: str, doc_id: str) -> dict[str, Any]:
+    n_quote = _norm_quote(quote)
+    n_source = _norm_quote(source)
+    exact = n_source.find(n_quote)
+    if exact != -1:
+        start = _denorm_offset(source, exact)
+        end = _denorm_offset(source, exact + len(n_quote))
+        return {"text": source[start:end], "doc_id": doc_id, "start": start, "end": end, "exact": True, "score": 1.0}
+    import re
+    def tokens(s: str) -> list[str]:
+        return [re.sub(r"[^\w]", "", t, flags=re.UNICODE) for t in s.split() if re.sub(r"[^\w]", "", t, flags=re.UNICODE)]
+    qt = tokens(n_quote)
+    words = n_source.split(" ")
+    span = max(1, len(n_quote.split(" ")))
+    best = {"score": -1.0, "norm_start": 0, "norm_len": len(n_quote)}
+    cursor = 0
+    for i, word in enumerate(words):
+        window = " ".join(words[i : i + span])
+        wt = set(tokens(window))
+        score = (sum(1 for t in qt if t in wt) / len(qt)) if qt else 0.0
+        if score > best["score"]:
+            best = {"score": score, "norm_start": cursor, "norm_len": len(window)}
+        cursor += len(word) + 1
+    start = _denorm_offset(source, int(best["norm_start"]))
+    end = _denorm_offset(source, int(best["norm_start"]) + int(best["norm_len"]))
+    return {"text": source[start:end], "doc_id": doc_id, "start": start, "end": end, "exact": False, "score": max(0.0, float(best["score"]))}
+
+def _is_linked_quote(v: Any) -> bool:
+    return isinstance(v, dict) and isinstance(v.get("text"), str) and isinstance((v.get("quote") or {}).get("doc_id"), str)
+
+def _link_quote_value(raw: Any, source: str, doc_id: str) -> Any:
+    if isinstance(raw, str):
+        m = find_quote(raw, source, doc_id)
+        return {"text": m["text"], "quote": {"doc_id": m["doc_id"], "start": m["start"], "end": m["end"]}}
+    if _is_linked_quote(raw):
+        return raw
+    if isinstance(raw, dict) and isinstance(raw.get("quote"), str):
+        m = find_quote(raw["quote"], source, doc_id)
+        return {"text": raw["text"] if isinstance(raw.get("text"), str) else m["text"], "quote": {"doc_id": m["doc_id"], "start": m["start"], "end": m["end"]}}
+    if isinstance(raw, list):
+        return [_link_quote_value(item, source, doc_id) for item in raw]
+    return raw
+
+def _set_at_path(root: Any, segments: list[str], source: str, doc_id: str) -> Any:
+    if not segments:
+        return _link_quote_value(root, source, doc_id)
+    head, rest = segments[0], segments[1:]
+    is_list = head.endswith("[]")
+    key = head[:-2] if is_list else head
+    if isinstance(root, list):
+        return [_set_at_path(item, segments, source, doc_id) for item in root]
+    if not isinstance(root, dict) or key not in root:
+        return root
+    nxt = root[key]
+    if is_list and isinstance(nxt, list):
+        return {**root, key: [_set_at_path(item, rest, source, doc_id) for item in nxt]}
+    return {**root, key: _set_at_path(nxt, rest, source, doc_id)}
+
+def _link_quote_shapes(data: Any, source: str, doc_id: str) -> Any:
+    if isinstance(data, list):
+        return [_link_quote_shapes(item, source, doc_id) for item in data]
+    if isinstance(data, dict):
+        if isinstance(data.get("quote"), str) or _is_linked_quote(data):
+            return _link_quote_value(data, source, doc_id)
+        return {k: _link_quote_shapes(v, source, doc_id) for k, v in data.items()}
+    return data
+
+def _link_quote_tree(data: Any, source: str, doc_id: str, quote_paths: list[str]) -> Any:
+    if not quote_paths:
+        return _link_quote_shapes(data, source, doc_id)
+    out = data
+    for path in quote_paths:
+        segs = [s for s in path.split(".") if s]
+        out = _set_at_path(out, segs, source, doc_id)
+    return out
 
 async def wait_for_human_review(input: Any) -> None:
     if runtime.on_human_review:
@@ -348,43 +452,95 @@ async def wait_for_chatbot_session(input: Any, mode: str = 'until-exit') -> Any:
 
 async def call_webhook(
     input: Any,
-    state: PipelineState,
+    state: Any,
     *,
-    url_env: str,
+    url_env: str | None = None,
+    url: str | None = None,
+    url_default: str | None = None,
     method: str = "POST",
     auth_env: str | None = None,
     include_state: bool = True,
     response_path: str | None = None,
     timeout_ms: int = 30_000,
+    body_mode: str = "wrap",
+    poll_status_url_path: str | None = None,
+    poll_status_path: str = "status",
+    poll_done_when: list[str] | None = None,
+    poll_fail_when: list[str] | None = None,
+    ingest_url_path: str | None = None,
+    ingest_input_type: str | None = None,
 ) -> Any:
     import json
     import os
+    import time
     import urllib.request
-    url = (os.environ.get(url_env) or '').strip()
-    if not url:
-        raise RuntimeError(f'set {url_env} in .env')
+    resolved = (url or os.environ.get(url_env or "") or url_default or "").strip()
+    if not resolved:
+        raise RuntimeError(f'set {url_env or "webhook URL"} in .env')
     headers = {'Content-Type': 'application/json', 'Accept': 'application/json'}
     if auth_env:
         auth = (os.environ.get(auth_env) or '').strip()
         if auth:
-            headers['Authorization'] = auth if auth.startswith('Bearer ') else f'Bearer {auth}'
-    body = {'input': input} if not include_state else {'input': input, 'state': state}
+            if auth.lower().startswith(('bearer ', 'key ', 'basic ', 'digest ')):
+                headers['Authorization'] = auth
+            elif ":" in auth:
+                headers['Authorization'] = f'Key {auth}'
+            else:
+                headers['Authorization'] = f'Bearer {auth}'
+    payload: Any = input if body_mode == "raw" else ({"input": input} if not include_state else {"input": input, "state": state})
     req = urllib.request.Request(
-        url,
-        data=json.dumps(body).encode(),
+        resolved,
+        data=json.dumps(payload).encode(),
         headers=headers,
         method=method,
     )
-    with urllib.request.urlopen(req, timeout=timeout_ms / 1000) as res:
+    with urllib.request.urlopen(req, timeout=min(timeout_ms, 30_000) / 1000) as res:
         raw = json.loads(res.read().decode())
-    if not response_path:
-        return raw
-    cur: Any = raw
-    for key in response_path.split('.'):
-        if not isinstance(cur, dict):
-            raise RuntimeError(f'webhook response path failed at {key}')
-        cur = cur[key]
-    return cur
+    def at_path(root: Any, path: str | None) -> Any:
+        if not path:
+            return root
+        cur = root
+        for key in path.split('.'):
+            if isinstance(cur, list) and key.isdigit():
+                cur = cur[int(key)]
+            elif isinstance(cur, dict):
+                cur = cur[key]
+            else:
+                raise RuntimeError(f'webhook path failed at {key}')
+        return cur
+    current = raw
+    if poll_status_url_path:
+        done = [s.lower() for s in (poll_done_when or ["completed"])]
+        fail = [s.lower() for s in (poll_fail_when or ["failed", "nsfw", "canceled", "cancelled"])]
+        delay = 2.0
+        deadline = time.time() + timeout_ms / 1000
+        while True:
+            status = str(at_path(current, poll_status_path) or "").lower()
+            if status in done:
+                break
+            if status in fail:
+                raise RuntimeError(f"webhook job {status}")
+            if time.time() >= deadline:
+                raise RuntimeError(f"webhook poll timed out after {timeout_ms}ms")
+            status_url = at_path(current, poll_status_url_path)
+            if not isinstance(status_url, str) or not status_url.strip():
+                raise RuntimeError(f'webhook poll: no URL at path "{poll_status_url_path}"')
+            time.sleep(min(delay, max(0.1, deadline - time.time())))
+            poll_req = urllib.request.Request(status_url.strip(), headers={'Accept': 'application/json'}, method='GET')
+            with urllib.request.urlopen(poll_req, timeout=30) as poll_res:
+                current = json.loads(poll_res.read().decode())
+            delay = min(delay * 1.5, 10.0)
+    if ingest_url_path:
+        media_url = at_path(current, ingest_url_path)
+        if not isinstance(media_url, str) or not media_url.strip():
+            raise RuntimeError(f'webhook ingest: no URL at path "{ingest_url_path}"')
+        media_req = urllib.request.Request(media_url.strip(), method='GET')
+        with urllib.request.urlopen(media_req, timeout=60) as media_res:
+            blob = media_res.read()
+        name = media_url.rsplit("/", 1)[-1].split("?")[0] or ("still.png" if ingest_input_type == "image" else "clip.mp4")
+        mime = "image/png" if ingest_input_type == "image" else "video/mp4"
+        return {"doc_id": str(len(blob)), "url": media_url, "filename": name, "mime": mime}
+    return at_path(current, response_path)
 def merge_fold(values: list[Any], policy: Any) -> Any:
     if not values:
         return None

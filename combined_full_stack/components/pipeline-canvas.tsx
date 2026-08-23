@@ -6,6 +6,7 @@ import {
   ArrowRight,
   ChevronRight,
   AlertTriangle,
+  Plus,
   Zap,
 } from "lucide-react"
 import {
@@ -18,7 +19,14 @@ import {
   type PipelineInsertLoc,
   type PipelineSegment,
 } from "@/lib/pipeline-layout"
-import { forkJoinOf, pipelineHasFork } from "@/lib/fork-pipeline"
+import {
+  FORK_MAX_BRANCHES,
+  flattenPipelineModules,
+  isForkKind,
+  makeEmptyForkBranch,
+  pipelineHasFork,
+} from "@/lib/fork-pipeline"
+import { forkJoinCaption, forkLaneColumnTemplate } from "@/lib/fork-join-caption"
 import { isAutoQuoteStep } from "@/lib/quote-steps"
 import { inputTargetStructureId, isAutoDocToTextStep, isAutoStructureParseStep, isManagedLockedStep } from "@/lib/structure-parse-steps"
 import {
@@ -75,6 +83,7 @@ type PipelineCanvasProps = {
   ) => React.ReactNode
   renderBeforeEnd?: () => React.ReactNode
   renderFooter?: () => React.ReactNode
+  onPatchFork?: (forkId: ModuleId, patch: Partial<PipelineModule>) => void
   className?: string
 }
 
@@ -92,6 +101,7 @@ export function PipelineCanvas({
   renderInsertAfter,
   renderBeforeEnd,
   renderFooter,
+  onPatchFork,
   className,
 }: PipelineCanvasProps) {
   const segments = segmentPipeline(modules)
@@ -123,6 +133,7 @@ export function PipelineCanvas({
           warnings={warnings}
           editMode={editMode}
           renderInsertAfter={renderInsertAfter}
+          onPatchFork={onPatchFork}
         />
       ))}
       <div className="mx-auto flex w-full flex-col items-center">
@@ -156,6 +167,7 @@ function SegmentRow({
   editMode,
   renderInsertAfter,
   insertLoc,
+  onPatchFork,
 }: {
   seg: PipelineSegment
   modules: PipelineModule[]
@@ -172,6 +184,7 @@ function SegmentRow({
     opts: { blocked?: boolean; connectionInvalid?: boolean; forkId?: string; branchId?: string },
   ) => React.ReactNode
   insertLoc?: PipelineInsertLoc
+  onPatchFork?: (forkId: ModuleId, patch: Partial<PipelineModule>) => void
 }) {
   const insertAt = insertAfterIndex(seg)
   const blocked = blocksInsertBefore(modules, insertAt)
@@ -188,23 +201,46 @@ function SegmentRow({
     const forkIssue = invalidForModule(invalid ?? new Map(), fork.id)
     const forkInvalid = forkIssue && forkIssue.kind !== "io-mismatch" && forkIssue.kind !== "cardinality-mismatch"
     const forkIoLinked = stepIoMismatchLinked(fork.id, modules, invalid)
+    const forkIoMsg =
+      forkIoLinked && invalid ? stepIoMismatchMessage(fork.id, modules, invalid, models) : undefined
     const forkStatus = stepStatus?.get(fork.id)
     const forkCoverage = testCoverage?.get(fork.id)
     const laneSelected = modulesInForkSelected(seg, selectedId)
-    const join = forkJoinOf(fork)
+    const joinCaption = forkJoinCaption(fork)
+    const descendantIds = modulesInSegment(seg).map((m) => m.id)
+    const childInvalidCount = descendantIds.filter((id) => {
+      if (id === fork.id) return false
+      const issue = invalidForModule(invalid ?? new Map(), id)
+      return !!issue
+    }).length
+    const childErrorCount = descendantIds.filter((id) => id !== fork.id && stepStatus?.get(id) === "error").length
+    const childProblems = childInvalidCount + childErrorCount
+    const forkChromeBad = !!forkInvalid || forkIoLinked || childProblems > 0 || forkStatus === "error"
+    const forkWarnings = warnings?.get(fork.id) ?? []
+    function laneProblem(branch: (typeof branches)[number]): boolean {
+      if (branch.modules.length === 0) return true
+      const ids = flattenPipelineModules(branch.modules).map((m) => m.id)
+      return ids.some((id) => {
+        if (invalidForModule(invalid ?? new Map(), id)) return true
+        return stepStatus?.get(id) === "error"
+      })
+    }
+    const canAddLane = editMode && !!onPatchFork && branches.length < FORK_MAX_BRANCHES
+    const colTemplate = [
+      ...branches.map((b) => forkLaneColumnTemplate(flattenPipelineModules(b.modules).some((m) => isForkKind(m.kind)))),
+      ...(canAddLane ? ["minmax(7rem, 0.4fr)"] : []),
+    ].join(" ")
     return (
       <div className="mx-auto flex w-full flex-col items-center">
         <div
           className={cn(
             "w-full overflow-x-auto rounded-lg border-2 border-dashed px-3.5 py-3 transition-colors",
-            forkInvalid
+            forkChromeBad
               ? "border-destructive/70 bg-destructive/5"
-              : forkIoLinked
-                ? "border-destructive/60 bg-destructive/[0.03]"
-                : testCoverageBorder(forkCoverage, selectedId === fork.id) ??
-                  statusBorder(forkStatus) ?? (
-                    laneSelected ? "border-primary bg-primary/5" : "border-chart-4/40 bg-chart-4/5"
-                  ),
+              : testCoverageBorder(forkCoverage, selectedId === fork.id) ??
+                statusBorder(forkStatus) ?? (
+                  laneSelected ? "border-primary bg-primary/5" : "border-chart-4/40 bg-chart-4/5"
+                ),
           )}
         >
           <StepButton
@@ -224,53 +260,120 @@ function SegmentRow({
                   <StructureLink models={models} structureId={fork.inStructureId} fallback="pipeline" />
                   <span className="text-muted-foreground/60"> → </span>
                   <StructureLink models={models} structureId={fork.outStructureId} />
-                  <span className="text-muted-foreground/60"> · {join} join</span>
+                  <span className="text-muted-foreground/60"> · {joinCaption.title}</span>
                 </>
               }
             />
+            {childProblems > 0 && (
+              <Badge variant="outline" className="shrink-0 border-destructive/50 font-mono text-[9px] text-destructive">
+                {childProblems} lane issue{childProblems === 1 ? "" : "s"}
+              </Badge>
+            )}
             {fork.cached && <Zap className="h-3.5 w-3.5 shrink-0 text-primary" />}
             {forkCoverage && <TestCoverageBadge status={forkCoverage} />}
-            <StepTrailingIcon invalid={!!forkInvalid || forkIoLinked} status={forkStatus} editMode={editMode} />
+            <StepTrailingIcon invalid={forkChromeBad} status={forkStatus} editMode={editMode} />
           </StepButton>
           {fork.note && (
             <p className="mt-1.5 font-mono text-[10px] leading-relaxed text-muted-foreground">{fork.note}</p>
           )}
-          <div
-            className="mt-3 grid gap-3"
-            style={{ gridTemplateColumns: `repeat(${Math.max(1, branches.length)}, minmax(14rem, 1fr))` }}
-          >
-            {branches.map((b) => (
-              <div key={b.id} className="min-w-[14rem] rounded-md border border-border/60 bg-background/70 p-2">
-                <p className="mb-1 font-mono text-[10px] uppercase tracking-wide text-muted-foreground">{b.label}</p>
-                {editMode &&
-                  renderInsertAfter?.(0, { forkId: fork.id, branchId: b.id, blocked: false })}
-                {b.segments.map((inner) => (
-                  <SegmentRow
-                    key={pipelineSegmentKey(inner)}
-                    seg={inner}
-                    modules={b.modules}
-                    models={models}
-                    selectedId={selectedId}
-                    onSelect={onSelect}
-                    stepStatus={stepStatus}
-                    testCoverage={testCoverage}
-                    invalid={invalid}
-                    warnings={warnings}
-                    editMode={editMode}
-                    renderInsertAfter={renderInsertAfter}
-                    insertLoc={{ forkId: fork.id, branchId: b.id }}
-                  />
-                ))}
-              </div>
-            ))}
+          <div className="mt-3 grid gap-0" style={{ gridTemplateColumns: colTemplate }}>
+            {branches.map((b, i) => {
+              const empty = b.modules.length === 0
+              const problem = laneProblem(b)
+              return (
+                <div
+                  key={b.id}
+                  className={cn(
+                    "min-w-[13rem] p-2",
+                    i > 0 && "border-l-2 border-dashed border-muted-foreground/35",
+                    problem ? "bg-destructive/5" : "bg-background/70",
+                  )}
+                >
+                  <div className="mb-1 flex items-center gap-1.5">
+                    <p className={cn("font-mono text-[10px] uppercase tracking-wide", problem ? "text-destructive" : "text-muted-foreground")}>
+                      {b.label}
+                    </p>
+                    {empty && (
+                      <span className="font-mono text-[9px] text-destructive">empty</span>
+                    )}
+                    {problem && !empty && <AlertTriangle className="h-3 w-3 text-destructive" />}
+                  </div>
+                  {editMode &&
+                    renderInsertAfter?.(0, { forkId: fork.id, branchId: b.id, blocked: false })}
+                  {empty && (
+                    <p className="mt-2 font-mono text-[10px] text-destructive">Add a step to this lane.</p>
+                  )}
+                  {b.segments.map((inner) => (
+                    <SegmentRow
+                      key={pipelineSegmentKey(inner)}
+                      seg={inner}
+                      modules={b.modules}
+                      models={models}
+                      selectedId={selectedId}
+                      onSelect={onSelect}
+                      stepStatus={stepStatus}
+                      testCoverage={testCoverage}
+                      invalid={invalid}
+                      warnings={warnings}
+                      editMode={editMode}
+                      renderInsertAfter={renderInsertAfter}
+                      insertLoc={{ forkId: fork.id, branchId: b.id }}
+                      onPatchFork={onPatchFork}
+                    />
+                  ))}
+                </div>
+              )
+            })}
+            {canAddLane && (
+              <button
+                type="button"
+                className="flex min-w-[7rem] flex-col items-center justify-center gap-1 border-l-2 border-dashed border-muted-foreground/35 px-2 py-4 font-mono text-[10px] text-muted-foreground hover:bg-primary/5 hover:text-foreground"
+                onClick={() =>
+                  onPatchFork?.(fork.id, {
+                    forkBranches: [
+                      ...(fork.forkBranches ?? []),
+                      makeEmptyForkBranch(`Lane ${String.fromCharCode(65 + branches.length)}`),
+                    ],
+                  })
+                }
+              >
+                <Plus className="h-3.5 w-3.5" />
+                add lane
+              </button>
+            )}
           </div>
+          <ForkJoinRow
+            caption={joinCaption}
+            selected={selectedId === fork.id}
+            onSelect={() => onSelect?.(fork.id)}
+            forkId={fork.id}
+            label={fork.label}
+          />
         </div>
         <InvalidMessage
-          show={!!forkInvalid}
-          message={forkInvalid ? invalidStepMessage(forkIssue!, models, modules) : undefined}
+          className="text-xs"
+          show={!!forkInvalid || !!forkIoMsg || childProblems > 0}
+          message={
+            forkInvalid
+              ? invalidStepMessage(forkIssue!, models, modules)
+              : forkIoMsg
+                ? forkIoMsg
+                : childProblems > 0
+                  ? `${childProblems} issue${childProblems === 1 ? "" : "s"} inside lanes — click the failing step`
+                  : undefined
+          }
           moduleId={fork.id}
           label={fork.label}
         />
+        {!forkInvalid && forkWarnings.length > 0 && (
+          <div className="mt-1 space-y-0.5">
+            {warningStepMessages(forkWarnings, models, modules).map((msg, i) => (
+              <p key={i} className={cn("text-center font-mono text-[10px]", WARNING_TEXT_CLASS)}>
+                {msg}
+              </p>
+            ))}
+          </div>
+        )}
         {renderInsertAfter?.(insertAt, afterOpts) ?? <PipelineConnector invalid={connectionInvalid} />}
       </div>
     )
@@ -296,19 +399,25 @@ function SegmentRow({
       selectedId === input.id ||
       selectedId === convert?.id ||
       selectedId === parse?.id
+    const innerIds = [input.id, convert?.id, parse?.id].filter((id): id is typeof input.id => !!id)
+    const innerInvalidCount = innerIds.filter((id) => !!invalidForModule(invalid ?? new Map(), id)).length
+    const innerErrorCount = innerIds.filter((id) => stepStatus?.get(id) === "error").length
+    const innerProblems = innerInvalidCount + innerErrorCount
+    const combineChromeBad = !!combineInvalid || combineIoLinked || innerProblems > 0 || combineStatus === "error"
+    const inputIssue = invalidForModule(invalid ?? new Map(), input.id)
+    const convertIssue = convert ? invalidForModule(invalid ?? new Map(), convert.id) : undefined
+    const parseIssue = parse ? invalidForModule(invalid ?? new Map(), parse.id) : undefined
     return (
       <div className="mx-auto flex w-full flex-col items-center">
         <div
           className={cn(
             "w-full rounded-lg border-2 border-dashed px-3.5 py-3 transition-colors",
-            combineInvalid
+            combineChromeBad
               ? "border-destructive/70 bg-destructive/5"
-              : combineIoLinked
-                ? "border-destructive/60 bg-destructive/[0.03]"
-                : testCoverageBorder(combineCoverage, selectedId === combine.id) ??
-                  statusBorder(combineStatus) ?? (
-                    groupSelected ? "border-primary bg-primary/5" : "border-chart-3/40 bg-chart-3/5"
-                  ),
+              : testCoverageBorder(combineCoverage, selectedId === combine.id) ??
+                statusBorder(combineStatus) ?? (
+                  groupSelected ? "border-primary bg-primary/5" : "border-chart-3/40 bg-chart-3/5"
+                ),
           )}
         >
           <StepButton
@@ -339,8 +448,13 @@ function SegmentRow({
             />
             {combine.cached && <Zap className="h-3.5 w-3.5 shrink-0 text-primary" />}
             {combineCoverage && <TestCoverageBadge status={combineCoverage} />}
+            {innerProblems > 0 && (
+              <span className="shrink-0 rounded border border-destructive/50 px-1.5 py-0.5 font-mono text-[9px] text-destructive">
+                {innerProblems} inner issue{innerProblems === 1 ? "" : "s"}
+              </span>
+            )}
             <StepTrailingIcon
-              invalid={combineInvalid || combineIoLinked}
+              invalid={combineChromeBad}
               status={combineStatus}
               editMode={editMode}
             />
@@ -358,9 +472,11 @@ function SegmentRow({
               "mt-2 flex w-full items-start gap-3 rounded-md border bg-card px-3 py-2.5 text-left transition-colors",
               selectedId === input.id
                 ? "border-primary"
-                : testCoverageBorder(inputCoverage, selectedId === input.id) ??
-                  statusBorder(inputStatus) ??
-                  "border-border hover:border-muted-foreground/40",
+                : inputIssue || inputStatus === "error"
+                  ? "border-destructive/70 bg-destructive/5"
+                  : testCoverageBorder(inputCoverage, selectedId === input.id) ??
+                    statusBorder(inputStatus) ??
+                    "border-border hover:border-muted-foreground/40",
             )}
           >
             <KindIcon kind={ModuleKind.Input} size="sm" />
@@ -376,8 +492,18 @@ function SegmentRow({
               }
             />
             {inputCoverage && <TestCoverageBadge status={inputCoverage} />}
-            {!editMode && <RunStatusIcon status={inputStatus} />}
+            <StepTrailingIcon
+              invalid={!!inputIssue}
+              status={inputStatus}
+              editMode={editMode}
+            />
           </StepButton>
+          <InvalidMessage
+            show={!!inputIssue && inputIssue.kind !== "io-mismatch" && inputIssue.kind !== "cardinality-mismatch"}
+            message={inputIssue ? invalidStepMessage(inputIssue, models, modules) : undefined}
+            moduleId={input.id}
+            label={input.label}
+          />
           {convert && (
             <StepButton
               onClick={() => onSelect?.(convert.id)}
@@ -389,7 +515,9 @@ function SegmentRow({
                 "mt-2 flex w-full items-start gap-3 rounded-md border border-dashed border-chart-3/50 bg-chart-3/5 px-3 py-2.5 text-left transition-colors",
                 selectedId === convert.id
                   ? "border-primary"
-                  : statusBorder(convertStatus) ?? "hover:border-chart-3",
+                  : convertIssue || convertStatus === "error"
+                    ? "border-destructive/70 bg-destructive/5"
+                    : statusBorder(convertStatus) ?? "hover:border-chart-3",
               )}
             >
               <KindIcon kind={ModuleKind.DocToText} size="sm" />
@@ -399,8 +527,20 @@ function SegmentRow({
                 detail={convertToTextDetail(convert)}
               />
               <AutoDocToTextLock />
-              {!editMode && <RunStatusIcon status={convertStatus} />}
+              <StepTrailingIcon
+                invalid={!!convertIssue}
+                status={convertStatus}
+                editMode={editMode}
+              />
             </StepButton>
+          )}
+          {convert && (
+            <InvalidMessage
+              show={!!convertIssue && convertIssue.kind !== "io-mismatch" && convertIssue.kind !== "cardinality-mismatch"}
+              message={convertIssue ? invalidStepMessage(convertIssue, models, modules) : undefined}
+              moduleId={convert.id}
+              label={convert.label}
+            />
           )}
           {/* AI : spec §input — llm convert step is visualised inside the combine group when the side input maps to a non-Document structure */}
           {parse && (
@@ -414,7 +554,9 @@ function SegmentRow({
                 "mt-2 flex w-full items-start gap-3 rounded-md border border-dashed border-chart-3/50 bg-chart-3/5 px-3 py-2.5 text-left transition-colors",
                 selectedId === parse.id
                   ? "border-primary"
-                  : statusBorder(parseStatus) ?? "hover:border-chart-3",
+                  : parseIssue || parseStatus === "error"
+                    ? "border-destructive/70 bg-destructive/5"
+                    : statusBorder(parseStatus) ?? "hover:border-chart-3",
               )}
             >
               <KindIcon kind={ModuleKind.Llm} size="sm" />
@@ -430,16 +572,33 @@ function SegmentRow({
                 }
               />
               <AutoStructureParseLock />
-              {!editMode && <RunStatusIcon status={parseStatus} />}
+              <StepTrailingIcon
+                invalid={!!parseIssue}
+                status={parseStatus}
+                editMode={editMode}
+              />
             </StepButton>
+          )}
+          {parse && (
+            <InvalidMessage
+              show={!!parseIssue && parseIssue.kind !== "io-mismatch" && parseIssue.kind !== "cardinality-mismatch"}
+              message={parseIssue ? invalidStepMessage(parseIssue, models, modules) : undefined}
+              moduleId={parse.id}
+              label={parse.label}
+            />
           )}
         </div>
         <InvalidMessage
-          show={!!combineInvalid || !!combineIoMsg}
+          className="text-xs"
+          show={!!combineInvalid || !!combineIoMsg || innerProblems > 0}
           message={
             combineInvalid
               ? invalidStepMessage(combineIssue!, models, modules)
               : combineIoMsg
+                ? combineIoMsg
+                : innerProblems > 0
+                  ? `${innerProblems} issue${innerProblems === 1 ? "" : "s"} inside this group — click the failing step`
+                  : undefined
           }
           moduleId={combine.id}
           label={combine.label}
@@ -750,6 +909,57 @@ function StepBody({
         {detail}
       </p>
     </div>
+  )
+}
+
+function ForkJoinRow({
+  caption,
+  selected,
+  onSelect,
+  forkId,
+  label,
+}: {
+  caption: ReturnType<typeof forkJoinCaption>
+  selected: boolean
+  onSelect: () => void
+  forkId: ModuleId
+  label: string
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onSelect}
+      className={cn(
+        "mt-3 w-full rounded-md border border-dashed px-2.5 py-2 text-left transition-colors",
+        selected ? "border-primary bg-primary/5" : "border-chart-4/50 bg-background/60 hover:border-chart-4",
+      )}
+    >
+      <p className="font-mono text-[10px] uppercase tracking-wide text-muted-foreground">
+        merge · {caption.mappings.length > 0 ? `${caption.mappings.length} lanes · ` : ""}{caption.title}
+      </p>
+      <p className="mt-0.5 font-mono text-[10px] text-muted-foreground">{caption.detail}</p>
+      {caption.mappings.length > 0 && (
+        <>
+          <div
+            className="mt-2 grid gap-1"
+            style={{ gridTemplateColumns: `repeat(${caption.mappings.length}, minmax(0, 1fr))` }}
+          >
+            {caption.mappings.map((m) => (
+              <div key={`${m.lane}->${m.into}`} className="flex min-w-0 flex-col items-center gap-0.5">
+                <span className="w-full truncate rounded border border-border bg-card px-1 py-0.5 text-center font-mono text-[10px]">
+                  {m.lane}
+                </span>
+                <span className="font-mono text-[9px] text-muted-foreground">↓</span>
+                <span className="w-full truncate rounded border border-chart-4/40 bg-chart-4/10 px-1 py-0.5 text-center font-mono text-[10px]">
+                  {m.into}
+                </span>
+              </div>
+            ))}
+          </div>
+          <div className="mt-1.5 h-1 rounded-full bg-chart-4/50" />
+        </>
+      )}
+    </button>
   )
 }
 

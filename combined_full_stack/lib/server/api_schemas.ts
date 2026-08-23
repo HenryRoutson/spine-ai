@@ -42,6 +42,7 @@ const MAX_STRUCTURE_PAYLOAD_CHARS = 50_000;
 // AI : pub_ = public link, emb_ = website Embed (same shared_links table + run stack).
 export const sharedLinkIdSchema = z.string().regex(/^(pub|emb)_[a-z0-9]{10,32}$/i);
 export const hostedApiIdSchema = z.string().regex(/^api_[a-z0-9]{10,32}$/i);
+export const pipelineScheduleIdSchema = z.string().regex(/^cron_[a-z0-9]{10,32}$/i);
 export const marketplaceListingIdSchema = z.string().regex(/^mkt_[a-z0-9]{10,32}$/i);
 export const teamIdSchema = z.string().regex(/^team_[a-z0-9]{10,32}$/i);
 export const teamInviteTokenSchema = z.string().regex(/^tinv_[a-z0-9]{10,32}$/i);
@@ -106,6 +107,11 @@ export function parseSharedLinkId(raw: string): SharedLinkId | null {
 export function parseHostedApiId(raw: string): import("./types").HostedApiId | null {
   const parsed = hostedApiIdSchema.safeParse(raw);
   return parsed.success ? (parsed.data as import("./types").HostedApiId) : null;
+}
+
+export function parsePipelineScheduleId(raw: string): import("./types").PipelineScheduleId | null {
+  const parsed = pipelineScheduleIdSchema.safeParse(raw);
+  return parsed.success ? (parsed.data as import("./types").PipelineScheduleId) : null;
 }
 
 export function parseMarketplaceListingId(raw: string): MarketplaceListingId | null {
@@ -760,6 +766,48 @@ export const hostedApiInvokeBodySchema = z
       .optional(),
   })
   .strict();
+
+export const createPipelineScheduleBodySchema = z
+  .object({
+    projectId: projectIdSchema,
+    name: z.string().trim().min(1).max(80),
+    cron: z.string().trim().min(5).max(64),
+    timezone: z.string().trim().min(1).max(64),
+    defaultModel: z.string().max(128).optional(),
+    defaultDocsByModule: inputDocsByModuleSchema,
+    enabled: z.boolean().optional(),
+    tickUrl: z.string().trim().url().max(512).optional(),
+  })
+  .strict();
+
+export const pipelineScheduleRuntimeBodySchema = z
+  .object({
+    tickUrl: z.string().trim().url().max(512),
+  })
+  .strict();
+
+export const patchPipelineScheduleBodySchema = z
+  .object({
+    name: z.string().trim().min(1).max(80).optional(),
+    cron: z.string().trim().min(5).max(64).optional(),
+    timezone: z.string().trim().min(1).max(64).optional(),
+    defaultModel: z.string().max(128).nullable().optional(),
+    defaultDocsByModule: inputDocsByModuleSchema,
+    enabled: z.boolean().optional(),
+    tickUrl: z.string().trim().url().max(512).optional(),
+  })
+  .strict()
+  .refine(
+    (data) =>
+      data.name !== undefined ||
+      data.cron !== undefined ||
+      data.timezone !== undefined ||
+      data.defaultModel !== undefined ||
+      data.defaultDocsByModule !== undefined ||
+      data.enabled !== undefined ||
+      data.tickUrl !== undefined,
+    { message: "Provide at least one field to update" },
+  );
 
 export const sharedLinkClientStepBodySchema = z
   .object({

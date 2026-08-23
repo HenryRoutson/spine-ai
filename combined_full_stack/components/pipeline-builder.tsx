@@ -39,6 +39,7 @@ import {
   deriveForkStepTypes,
   findPipelineModule,
   flattenPipelineModules,
+  pipelineHasFork,
   insertPipelineModules,
   locatePipelineModule,
   removePipelineModules,
@@ -68,7 +69,7 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 
-import { USER_ADDABLE_MODULE_KINDS, asModuleKind } from "@/lib/module-kinds"
+import { asModuleKind, builderInsertModuleKinds } from "@/lib/module-kinds"
 import { syncListOpsStepModule } from "@/lib/list-ops-steps"
 import { deriveAssembleStepTypes, deriveParallelStepTypes } from "@/lib/assemble-type-expr"
 import { COPY_FEEDBACK_MS } from "@/lib/ui-timing"
@@ -321,7 +322,7 @@ export function PipelineBuilder() {
           maxLeading={PIPELINE_INSPECTOR_MAX}
           leading={
             <div className="min-h-0 min-w-0 flex-1 overflow-auto">
-              <div className="mx-auto flex min-h-full w-full max-w-4xl flex-col items-stretch px-6 py-8">
+              <div className={cn("mx-auto flex min-h-full w-full flex-col items-stretch px-6 py-8", pipelineHasFork(modules) ? "max-w-none" : "max-w-4xl")}>
                 <PipelineCanvas
                   modules={modules}
                   models={models}
@@ -329,6 +330,7 @@ export function PipelineBuilder() {
                   onSelect={setSelectedId}
                   invalid={invalidMap}
                   warnings={warningMap}
+                  onPatchFork={(id, patch) => update(id, patch)}
                   renderInsertBefore={(insertAt) => (
                     <InsertSlot insertAt={insertAt} onInsert={insertModule} blocked={editingBlocked} />
                   )}
@@ -549,7 +551,7 @@ function AddStepMenu({
           </DropdownMenuLabel>
         </DropdownMenuGroup>
         <DropdownMenuGroup className="space-y-0.5">
-          {USER_ADDABLE_MODULE_KINDS.map((k) => (
+          {builderInsertModuleKinds({ inForkLane: !!loc, rootInsertAt: insertAt }).map((k) => (
             <DropdownMenuItem
               key={k}
               onClick={() => onInsert(asModuleKind(k), insertAt, loc)}

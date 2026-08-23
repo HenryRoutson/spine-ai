@@ -14,6 +14,7 @@ export type RateLimitTier =
   | "upload"
   | "shared_run"
   | "hosted_api"
+  | "cron_tick"
   | "landing_demo_build"
   | "landing_demo_signup"
   | "landing_demo_replay"
@@ -39,6 +40,7 @@ export const RATE_LIMITS: Record<RateLimitTier, { windowMs: number; max: number 
   shared_run: { windowMs: 600_000, max: 5 },
   // AI : bearer-key pipeline invoke — per-api + IP cap.
   hosted_api: { windowMs: 600_000, max: 30 },
+  cron_tick: { windowMs: 60_000, max: 8 },
   // AI : landing pipeline builds — budget-gated; IP capped alongside budget.
   landing_demo_build: { windowMs: 600_000, max: 12 },
   // AI : landing email signup — low volume gate before demo use.

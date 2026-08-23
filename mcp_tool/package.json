@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "start": "node ./node_modules/tsx/dist/cli.mjs --tsconfig tsconfig.json src/index.ts",
+    "start": "node ./spine-mcp.mjs",
     "benchmark-bridge": "tsx --tsconfig tsconfig.json scripts/benchmark_bridge.ts",
     "typecheck": "tsc --noEmit",
     "test": "vitest run"

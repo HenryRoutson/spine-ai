@@ -5,6 +5,7 @@ export const AppWindowId = {
   Pipeline: "pipeline",
   Testing: "testing",
   Inference: "inference",
+  Schedule: "schedule",
   Share: "share",
   Earnings: "earnings",
   Logging: "logging",

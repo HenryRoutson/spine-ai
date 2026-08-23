@@ -21,7 +21,7 @@ export type ExportRuntimeNeeds = {
   visionOcr: boolean;
   docToText: boolean;
   inputModules: { label: string; filenameHint?: string; inputType?: string }[];
-  webhookEnvKeys: { label: string; envKey: string; authEnv?: string }[];
+  webhookEnvKeys: { label: string; envKey: string; authEnv?: string; optional?: boolean }[];
 };
 
 export type { PipelineSetupFile } from "./pipeline_export_shared";
@@ -48,6 +48,7 @@ export function analyzeExportRuntimeNeeds(project: Project): ExportRuntimeNeeds 
     if (m.kind === ModuleKind.LlmBatch || m.kind === ModuleKind.ExampleSelect) llmBatch = true;
     if (m.kind === ModuleKind.ExampleSelect) exampleSelect = true;
     if (isMergeModuleKind(m.kind) && !m.mergeCustom?.trim()) merge = true;
+    if (m.kind === ModuleKind.Fork && m.forkJoin === "merge") merge = true;
     if (m.kind === ModuleKind.Quote) quote = true;
     if (m.kind === ModuleKind.HumanReview) humanReview = true;
     if (m.kind === ModuleKind.Chatbot) chatbot = true;
@@ -142,8 +143,8 @@ export function generateEnvExample(project: Project): string {
   if (needs.webhook && needs.webhookEnvKeys.length) {
     lines.push("# Webhook steps — external integrations (n8n, search APIs, Zapier, …)");
     for (const w of needs.webhookEnvKeys) {
-      lines.push(`# Step "${w.label}"`, `${w.envKey}=""`);
-      if (w.authEnv) lines.push(`${w.authEnv}=""`);
+      lines.push(`# Step "${w.label}"${w.optional ? " (optional — public default in generated code)" : ""}`);
+      lines.push(`${w.envKey}=""`);
       lines.push("");
     }
   }

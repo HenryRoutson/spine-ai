@@ -7,6 +7,7 @@ export enum AppWindowStepLabel {
   Pipeline = "02 / Pipeline",
   Testing = "03 / Testing",
   Inference = "04 / Inference",
+  Schedule = "C / Schedule",
   Share = "05 / Share",
   Earnings = "06 / Earnings",
   Logging = "07 / Logging",
@@ -29,6 +30,7 @@ export enum AppWindowTitle {
   Pipeline = "Linear Pipeline",
   Testing = "Pipeline Tests",
   Inference = "Run Pipeline",
+  Schedule = "Cron schedules",
   Share = "Share & Monetize",
   Logging = "Run History",
   Documents = "Document Store",
@@ -117,6 +119,11 @@ const BUILDER_WINDOW_HEADERS: Record<AppWindowId, WindowHeaderCopy> = {
     title: AppWindowTitle.Inference,
     description: "Save named input setups, then run the pipeline. Final output appears when the run finishes.",
   },
+  schedule: {
+    step: AppWindowStepLabel.Schedule,
+    title: AppWindowTitle.Schedule,
+    description: "n8n-style cron — Supabase pg_cron fires this pipeline on a schedule, including confidential self-host.",
+  },
   share: {
     step: AppWindowStepLabel.Share,
     title: AppWindowTitle.Share,
@@ -180,16 +187,17 @@ export function windowPanelHeader(windowId: AppWindowId): WindowHeaderCopy {
 
 // AI : "07 / Logging" → "07" (nav hint). Non-numbered steps (· / Vibe) return "".
 export function windowStepHint(step: AppWindowStepLabel): string {
-  const match = /^(\d{2})/.exec(step)
+  const match = /^(\d{2}|[A-Z])/.exec(step)
   return match?.[1] ?? ""
 }
 
-// AI : "07 / Logging" → "7"; "10 / Docs" → "0". 11+ and unnumbered steps have no digit key.
+// AI : "07 / Logging" → "7"; "10 / Docs" → "0"; "C / Schedule" → "c". 11+ use [ / ].
 export function windowStepHotkey(step: AppWindowStepLabel): string | null {
   const hint = windowStepHint(step)
   if (hint === "10") return "0"
   if (hint === "11") return "["
   if (hint === "12") return "]"
   if (/^0[1-9]$/.test(hint)) return hint.slice(1)
+  if (/^[A-Z]$/.test(hint)) return hint.toLowerCase()
   return null
 }

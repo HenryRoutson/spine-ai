@@ -3,18 +3,12 @@
     "spine-pinpoint": {
       "command": "/Users/henry/.nvm/versions/node/v20.17.0/bin/node",
       "args": [
-        "/Users/henry/Documents/documents.nosync/Git.nosync/antler_vc_hackathon/mcp_tool/node_modules/tsx/dist/cli.mjs",
-        "--tsconfig",
-        "/Users/henry/Documents/documents.nosync/Git.nosync/antler_vc_hackathon/mcp_tool/tsconfig.json",
-        "/Users/henry/Documents/documents.nosync/Git.nosync/antler_vc_hackathon/mcp_tool/src/index.ts"
+        "/Users/henry/Documents/documents.nosync/Git.nosync/antler_vc_hackathon/mcp_tool/spine-mcp.mjs"
       ],
-      "cwd": "/Users/henry/Documents/documents.nosync/Git.nosync/antler_vc_hackathon/mcp_tool",
+      "cwd": "/Users/henry/Documents/documents.nosync/Git.nosync/antler_vc_hackathon",
       "env": {
         "PATH": "/Users/henry/.nvm/versions/node/v20.17.0/bin:/usr/bin:/bin",
-        "DOTENV_CONFIG_QUIET": "true",
-        "SPINE_REPO_ROOT": "/Users/henry/Documents/documents.nosync/Git.nosync/antler_vc_hackathon",
-        "SPINE_APP_ROOT": "/Users/henry/Documents/documents.nosync/Git.nosync/antler_vc_hackathon/combined_full_stack",
-        "SPINE_SESSION_PATH": "/Users/henry/Documents/documents.nosync/Git.nosync/antler_vc_hackathon/combined_full_stack/.spine-session.json"
+        "DOTENV_CONFIG_QUIET": "true"
       }
     }
   }

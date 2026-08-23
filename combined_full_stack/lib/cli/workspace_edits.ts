@@ -9,7 +9,7 @@ import type { TypeExpr } from "@/lib/server/type_expr"
 import type { SpineSession } from "@/lib/core/session"
 import { uid } from "@/lib/id"
 import { makeModule } from "@/lib/pipeline-module-factory"
-import { USER_ADDABLE_MODULE_KINDS, asModuleKind, usesPassthroughStructure } from "@/lib/module-kinds"
+import { asModuleKind, parseUserAddableKind, usesPassthroughStructure } from "@/lib/module-kinds"
 import {
   findPipelineModule,
   flattenPipelineModules,
@@ -97,7 +97,7 @@ export function importSeed(session: SpineSession, fileOrId: string) {
 }
 
 export function parseAddableKind(raw: string): ModuleKind | undefined {
-  const k = USER_ADDABLE_MODULE_KINDS.find((kind) => kind === raw)
+  const k = parseUserAddableKind(raw)
   return k ? asModuleKind(k) : undefined
 }
 

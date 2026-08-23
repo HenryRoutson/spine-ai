@@ -26,7 +26,7 @@ export function createThrowingEgress(): EgressPort {
 
 export const SPINE_API_URL_ENV = "SPINE_API_URL"
 export const SPINE_API_TOKEN_ENV = "SPINE_API_TOKEN"
-// AI : TODO (mcp-auth) — Bearer SPINE_API_TOKEN is sent here but requireAuth() only reads Supabase cookies.
+// AI : Bearer SPINE_API_TOKEN is sent here; requireAuth() accepts that header or Supabase cookies.
 
 type FetchLike = (url: string, init?: RequestInit) => Promise<Response>
 

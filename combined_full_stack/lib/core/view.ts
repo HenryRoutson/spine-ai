@@ -9,7 +9,7 @@ import { invalidStepMessage } from "@/lib/server/validity-messages"
 import { withSharedModels, formatTypeExpr, stepSpineInType, stepSpineOutType } from "@/lib/structure"
 import { quoteHref, type QuoteMatch } from "@/lib/quotes"
 import { isTestingFileName, lastTestRunVerdictForDoc, testReportPassed } from "@/lib/testing-files"
-import { flattenPipelineModules } from "@/lib/fork-pipeline"
+import { flattenPipelineModules, forkJoinOf } from "@/lib/fork-pipeline"
 import { derivePipelineMermaid } from "@/lib/pipeline-mermaid"
 import { formatTypeExprPy } from "@/lib/type-expr-parse"
 import { formatParametricName } from "@/lib/type-params"
@@ -272,6 +272,7 @@ export const TUI_TABS: TuiTab[] = Object.values(AppWindowId)
 
 export const TUI_TAB_ALIASES: Record<string, TuiTab> = {
   build: AppWindowId.Pipeline,
+  cron: AppWindowId.Schedule,
   agent: AppWindowId.Vibe,
   tests: AppWindowId.Testing,
   logs: AppWindowId.Logging,
@@ -316,6 +317,7 @@ const TUI_TAB_EMPTY: Record<TuiTab, string> = {
   pipeline: "no project — press n to create one",
   testing: "no *_testing.json files — add one in Documents, then press t to run",
   inference: "no documents assigned — add a file in Documents, then press i to run",
+  schedule: "no cron jobs — create one in the web UI (Supabase pg_cron)",
   share: "no published links — create them in the web UI, then session pull",
   earnings: "no account — session pull / SPINE_API_URL",
   logging: "no runs yet — press i to run inference, or t to run a test",
@@ -583,6 +585,11 @@ export type McpStepReview = {
   structureIn?: string
   structureOut?: string
   n8nNodeType?: string
+  n8nParameters?: Record<string, unknown>
+  forkJoin?: string
+  prompt?: string
+  note?: string
+  inputDescription?: string
   branches?: { id: string; label: string; steps: McpStepReview[] }[]
 }
 
@@ -623,6 +630,11 @@ function mcpStepReview(modules: PipelineModule[], models: StructureModel[]): Mcp
       ...(structureIn ? { structureIn: formatTypeExpr(structureIn, named) } : {}),
       ...(structureOut ? { structureOut: formatTypeExpr(structureOut, named) } : {}),
       ...(m.kind === "n8n" && m.n8nNodeType ? { n8nNodeType: m.n8nNodeType } : {}),
+      ...(m.kind === "n8n" && m.n8nParameters ? { n8nParameters: m.n8nParameters } : {}),
+      ...(m.kind === "fork" ? { forkJoin: forkJoinOf(m) } : {}),
+      ...(m.prompt?.trim() ? { prompt: m.prompt.trim().slice(0, 240) } : {}),
+      ...(m.note?.trim() ? { note: m.note.trim().slice(0, 160) } : {}),
+      ...(m.inputDescription?.trim() ? { inputDescription: m.inputDescription.trim().slice(0, 160) } : {}),
       ...(branches ? { branches } : {}),
     }
   })

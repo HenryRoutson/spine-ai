@@ -75,12 +75,15 @@ function httpRunHandlerTs(slug: string, multi: boolean): string {
       "  for (const slot of body.inputs ?? []) {",
       "    if (slot?.label && slot.document) inputs[slot.label] = slot.document;",
       "  }",
+      "  const first = Object.values(inputs)[0];",
+      "  if (first) configurePipelineRuntime({ sourceText: first.content, sourceDocId: first.filename });",
       "  const result = await runPipeline(inputs);",
     ].join("\n");
   }
   return [
     "  const doc = body.initialInput ?? body.initial_input;",
     '  if (!doc?.content) throw new Error("initialInput.content required");',
+    "  configurePipelineRuntime({ sourceText: doc.content, sourceDocId: doc.filename });",
     "  const result = await runPipeline(doc);",
   ].join("\n");
 }
@@ -92,12 +95,15 @@ function grpcRunHandlerTs(multi: boolean): string {
       "  for (const slot of call.request.inputs ?? []) {",
       "    if (slot?.label && slot.document) inputs[slot.label] = slot.document;",
       "  }",
+      "  const first = Object.values(inputs)[0];",
+      "  if (first) configurePipelineRuntime({ sourceText: first.content, sourceDocId: first.filename });",
       "  const result = await runPipeline(inputs);",
     ].join("\n");
   }
   return [
     "  const doc = call.request.initialInput ?? call.request.initial_input;",
     '  if (!doc?.content) return cb({ code: grpc.status.INVALID_ARGUMENT, message: "initialInput.content required" });',
+    "  configurePipelineRuntime({ sourceText: doc.content, sourceDocId: doc.filename });",
     "  const result = await runPipeline(doc);",
   ].join("\n");
 }
@@ -210,6 +216,9 @@ function httpRunHandlerPy(multi: boolean): string {
       "        for slot in (body.get('inputs') or [])",
       "        if slot.get('label') and slot.get('document')",
       "    }",
+      "    first = next(iter(inputs.values()), None)",
+      "    if first:",
+      '        configure_pipeline_runtime(source_text=first.get("content"), source_doc_id=first.get("filename"))',
       "    result = await run_pipeline(inputs)",
     ].join("\n");
   }
@@ -217,6 +226,7 @@ function httpRunHandlerPy(multi: boolean): string {
     "    doc = body.get('initialInput') or body.get('initial_input')",
     "    if not doc or not doc.get('content'):",
     '        raise ValueError("initialInput.content required")',
+    '    configure_pipeline_runtime(source_text=doc.get("content"), source_doc_id=doc.get("filename"))',
     "    result = await run_pipeline(doc)",
   ].join("\n");
 }
@@ -229,6 +239,9 @@ function grpcRunHandlerPy(multi: boolean): string {
       "                for slot in request.inputs",
       "                if slot.label and slot.document",
       "            }",
+      "            first = next(iter(inputs.values()), None)",
+      "            if first:",
+      '                configure_pipeline_runtime(source_text=first.get("content"), source_doc_id=first.get("filename"))',
       "            result = await run_pipeline(inputs)",
     ].join("\n");
   }
@@ -238,6 +251,7 @@ function grpcRunHandlerPy(multi: boolean): string {
     '                context.set_code(grpc.StatusCode.INVALID_ARGUMENT)',
     '                context.set_details("initialInput.content required")',
     "                return pipeline_connector_pb2.RunPipelineResponse(error='initialInput.content required')",
+    '            configure_pipeline_runtime(source_text=doc.content, source_doc_id=doc.filename)',
     "            result = await run_pipeline({'content': doc.content, 'filename': doc.filename})",
   ].join("\n");
 }

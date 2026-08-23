@@ -640,6 +640,7 @@ export type RunFingerprint = string & { __brand: "RunFingerprint" };
 export type SharedLinkId = string & { __brand: "SharedLinkId" };
 export type HostedApiId = string & { __brand: "HostedApiId" };
 export type MarketplaceListingId = string & { __brand: "MarketplaceListingId" };
+export type PipelineScheduleId = string & { __brand: "PipelineScheduleId" };
 // AI : Testing — run started from the Testing tab; flagged in Logging (spec § Testing).
 export enum RunSource {
   App = "app",
@@ -647,6 +648,7 @@ export enum RunSource {
   HostedApi = "hosted_api",
   Assistant = "assistant",
   Testing = "testing",
+  Schedule = "schedule",
 }
 
 // AI : persisted test verdict — expected vs actual per pinned step, attached to the run
@@ -749,6 +751,7 @@ export interface PipelineRun {
 
   sharedLinkId?: SharedLinkId;
   hostedApiId?: HostedApiId;
+  scheduleId?: PipelineScheduleId;
   viewerName?: string;
   viewerSessionId?: string;
   triggerUserId?: string;
@@ -879,13 +882,13 @@ export const MODULE_META: Record<ModuleKind, { label: string; description: strin
   },
   [ModuleKind.Parallel]: {
     label: "Parallel LLM",
-    description: "Run fixed LLM branches on the same spine input concurrently, then join into one structure",
+    description: "Legacy — prefer Fork with product join (fixed LLM-only branches on the same spine)",
   },
   [ModuleKind.Fork]: {
     label: "Fork",
-    description: "Run independent linear lanes on the same spine input, then join (product, assemble, or merge)",
+    description: "Split into 2–12 lanes, then join: product (field per lane), assemble (named zip), or merge (fold)",
   },
-  [ModuleKind.Combine]: { label: "Combine Inputs", description: "Merge a new input with the pipeline state" },
+  [ModuleKind.Combine]: { label: "Combine Inputs", description: "Bring in another document and merge it with the spine" },
   [ModuleKind.Chunk]: {
     label: "Chunk",
     description: "Split document text into a list of chunks — size, overlap, and source field are configurable",

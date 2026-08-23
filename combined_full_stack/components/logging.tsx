@@ -57,7 +57,7 @@ import { StepPromptSection } from "@/components/step-prompt-section"
 import { StepCodeExecPreview } from "@/components/step-code-exec-preview"
 import { StepValidationErrorsSection } from "@/components/step-validation-errors-section"
 import { STEP_TRACE_IO_INDENT_MARGIN } from "@/lib/step-trace-layout"
-import { filterRuns, isTestingRun, RunNotesPreview } from "@/components/logging/run-picker-column"
+import { filterRuns, isScheduleRun, isTestingRun, RunNotesPreview } from "@/components/logging/run-picker-column"
 import { filterRunsByErrorStatus, runHasErrors } from "@/lib/run-error-log"
 import { IsolatedErrorActions } from "@/components/logging/isolated-error-actions"
 import { InferenceHtmlDownloadButton } from "@/components/inference/inference-html-download-button"
@@ -95,6 +95,7 @@ export function Logging({
   const [logCopied, setLogCopied] = useState(false)
   const [jsonCopied, setJsonCopied] = useState(false)
   const [pendingScrollAnchor, setPendingScrollAnchor] = useState<"validation-errors" | null>(null)
+  const [selectedStepId, setSelectedStepId] = useState<ModuleId | undefined>()
   const { width: sidebarWidth, setWidth: setSidebarWidth, commitWidth: commitSidebarWidth } =
     usePersistedLeadingWidth(loggingSidebarSplit)
 
@@ -175,6 +176,16 @@ export function Logging({
       }))
       .filter((g) => g.calls.length > 0)
   }, [active])
+
+  useEffect(() => {
+    if (!active) {
+      setSelectedStepId(undefined)
+      return
+    }
+    const failed = active.steps.find((s) => s.status === "error")
+    setSelectedStepId((failed?.moduleId ?? active.steps[0]?.moduleId) as ModuleId | undefined)
+  }, [active?.id])
+
   const runPipeline = useMemo(() => {
     if (!active) return null
     const stepStatus = new Map<ModuleId, RunStepStatus>(
@@ -326,6 +337,11 @@ export function Logging({
                                 {isTestingRun(run) && (
                                   <Badge variant="outline" className="shrink-0 border-chart-3/40 font-mono text-[9px] text-chart-3">
                                     test
+                                  </Badge>
+                                )}
+                                {isScheduleRun(run) && (
+                                  <Badge variant="secondary" className="shrink-0 font-mono text-[9px]">
+                                    cron
                                   </Badge>
                                 )}
                                 {runInputDocIds(run).map((docId) => (
@@ -500,14 +516,63 @@ export function Logging({
                   <LlmCallDistribution callGroups={activeLlmCallGroups} />
                 )}
 
+                {runPipeline && (
+                  <div className="rounded-lg border border-border bg-card" {...HTML_EXPORT_SKIP_PROPS}>
+                    <div className="flex items-start justify-between gap-3 border-b border-border px-4 py-2.5">
+                      <div>
+                        <h3 className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                          Step trace
+                        </h3>
+                        <p className="mt-0.5 font-mono text-[10px] text-muted-foreground">
+                          Nested fork graph — click a lane step for its spreadsheet. Join rows show how lanes combine.
+                        </p>
+                      </div>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="shrink-0 font-mono text-[10px]"
+                        onClick={() => setCompareOpen(true)}
+                        disabled={runs.length < 2}
+                      >
+                        <GitCompareArrows className="mr-1.5 h-3.5 w-3.5" />
+                        compare_logs
+                      </Button>
+                    </div>
+                    {active.steps.some((s) => s.status === "error") && (
+                      <div className="flex flex-wrap gap-1.5 border-b border-destructive/30 bg-destructive/5 px-4 py-2">
+                        {active.steps.filter((s) => s.status === "error").map((s) => (
+                          <button
+                            key={s.moduleId}
+                            type="button"
+                            onClick={() => setSelectedStepId(s.moduleId)}
+                            className="rounded border border-destructive/50 px-1.5 py-0.5 font-mono text-[10px] text-destructive hover:bg-destructive/10"
+                          >
+                            {s.label}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                    <PipelineRunGraph
+                      modules={runPipeline.modules}
+                      models={models}
+                      run={active}
+                      stepStatus={runPipeline.stepStatus}
+                      selectedId={selectedStepId}
+                      onSelect={setSelectedStepId}
+                      typeAliases={typeAliases}
+                    />
+                  </div>
+                )}
+
                 <div>
                   <div className="mb-2">
                     <h3 className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                      Step trace
+                      Selected step
                     </h3>
                   </div>
                   <ol className="space-y-1.5">
-                    {active.steps.map((step, i) => {
+                    {active.steps.filter((step) => step.moduleId === selectedStepId).map((step, i) => {
                       const Icon = stepKindIcon(step.kind)
                       const { inTitle, outTitle } = stepIoLabels(step.kind)
                       const stepLlmCalls = llmCallsFromStep(step)
@@ -740,39 +805,11 @@ export function Logging({
                       )
                     })}
                   </ol>
+                  {!selectedStepId && (
+                    <p className="font-mono text-[11px] text-muted-foreground">Click a step on the graph to inspect it.</p>
+                  )}
                 </div>
 
-                {runPipeline && (
-                  <div className="rounded-lg border border-border bg-card" {...HTML_EXPORT_SKIP_PROPS}>
-                    <div className="flex items-start justify-between gap-3 border-b border-border px-4 py-2.5">
-                      <div>
-                        <h3 className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                          Pipeline at run time
-                        </h3>
-                        <p className="mt-0.5 font-mono text-[10px] text-muted-foreground">
-                          Fork graph as-run — click a step for its spreadsheet. Lanes stay nested, not flattened.
-                        </p>
-                      </div>
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        className="shrink-0 font-mono text-[10px]"
-                        onClick={() => setCompareOpen(true)}
-                        disabled={runs.length < 2}
-                      >
-                        <GitCompareArrows className="mr-1.5 h-3.5 w-3.5" />
-                        compare_logs
-                      </Button>
-                    </div>
-                    <PipelineRunGraph
-                      modules={runPipeline.modules}
-                      models={models}
-                      run={active}
-                      stepStatus={runPipeline.stepStatus}
-                    />
-                  </div>
-                )}
 
                 <div {...HTML_EXPORT_SKIP_PROPS}>
                   <StepProfiling runs={runs} stepOrder={active.steps} />

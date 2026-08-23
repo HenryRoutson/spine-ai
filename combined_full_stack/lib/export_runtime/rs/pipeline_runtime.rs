@@ -208,15 +208,26 @@ pub async fn select_relevant(
     Ok(out)
 }
 
-pub fn resolve_quotes(data: &impl serde::Serialize, source_text: &str, doc_id: &str) -> anyhow::Result<Value> {
+pub fn resolve_quotes(data: &impl serde::Serialize, source_text: &str, doc_id: &str, _quote_paths: &[String], _is_list: bool) -> anyhow::Result<Value> {
     let rt = runtime();
     let text = rt.source_text.as_deref().unwrap_or(source_text);
     let did = rt.source_doc_id.as_deref().unwrap_or(doc_id);
     if text.is_empty() || did.is_empty() {
         anyhow::bail!("configure_pipeline_runtime(source_text=..., source_doc_id=...) for quote steps");
     }
-    let _ = data;
-    anyhow::bail!("wire resolve_quotes to your quote linker")
+    let value = serde_json::to_value(data)?;
+    Ok(link_quote_value(value, text, did))
+}
+
+fn link_quote_value(raw: Value, source: &str, doc_id: &str) -> Value {
+    match raw {
+        Value::String(s) => {
+            let start = source.to_lowercase().find(&s.to_lowercase()).unwrap_or(0);
+            let end = start + s.len();
+            serde_json::json!({ "text": source.get(start..end).unwrap_or(&s), "quote": { "doc_id": doc_id, "start": start, "end": end } })
+        }
+        other => other,
+    }
 }
 
 pub async fn wait_for_human_review<T: serde::Serialize>(_input: &T) -> anyhow::Result<()> {
@@ -227,8 +238,40 @@ pub async fn wait_for_chatbot_session<T: serde::Serialize>(_input: &T) -> anyhow
     anyhow::bail!("wire wait_for_chatbot_session")
 }
 
-pub async fn call_webhook(_input: &serde_json::Value, _state: &serde_json::Value) -> anyhow::Result<serde_json::Value> {
-    anyhow::bail!("wire call_webhook — set WEBHOOK_URL_* env vars and HTTP client")
+#[derive(Debug, Clone, Default)]
+pub struct WebhookOpts {
+    pub url_env: Option<String>,
+    pub url: Option<String>,
+    pub url_default: Option<String>,
+    pub method: String,
+    pub auth_env: Option<String>,
+    pub include_state: bool,
+    pub body_mode: String,
+    pub poll_status_url_path: Option<String>,
+    pub ingest_url_path: Option<String>,
+}
+
+pub async fn call_webhook(input: &serde_json::Value, state: &serde_json::Value, opts: WebhookOpts) -> anyhow::Result<serde_json::Value> {
+    let url = opts
+        .url
+        .or(std::env::var(opts.url_env.unwrap_or_default()).ok())
+        .or(opts.url_default)
+        .unwrap_or_default();
+    if url.is_empty() {
+        anyhow::bail!("set webhook URL in .env");
+    }
+    let body = if opts.body_mode == "raw" {
+        input.clone()
+    } else if opts.include_state {
+        serde_json::json!({ "input": input, "state": state })
+    } else {
+        serde_json::json!({ "input": input })
+    };
+    let method = if opts.method.is_empty() { "POST".to_string() } else { opts.method };
+    let client = reqwest::Client::new();
+    let res = client.request(method.parse().unwrap_or(reqwest::Method::POST), url).json(&body).send().await?;
+    let value: Value = res.json().await?;
+    Ok(value)
 }
 pub fn merge_fold(values: Vec<Value>, policy: &Value) -> Value {
     if values.is_empty() {

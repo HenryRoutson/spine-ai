@@ -121,6 +121,15 @@ export const PARITY_ROWS: ParityRow[] = [
     y("session.startRun()"),
   ),
   row(
+    "nav.window.schedule",
+    "schedule",
+    { label: "Schedule", file: "components/app-window-nav.tsx" },
+    y("Ink: press c", "tab-schedule"),
+    y("POST /api/schedules", "/api/schedules"),
+    n("not exposed; use HTTP"),
+    n("HTTP /api/schedules"),
+  ),
+  row(
     "nav.window.share",
     "share",
     { label: "Share", file: "components/app-window-nav.tsx" },

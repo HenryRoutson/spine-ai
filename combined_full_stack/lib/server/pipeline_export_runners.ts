@@ -65,8 +65,8 @@ export function generateRunExampleTs(project: Project, slug: string): string {
     "",
     "async function main() {",
     ...(multi
-      ? ["  const result = await runPipeline({", ...loadLines, "  });"]
-      : [...loadLines, "  const result = await runPipeline(doc);"]),
+      ? ["  const inputs = {", ...loadLines, "  };", "  const first = Object.values(inputs)[0] as { content: string; filename: string } | undefined;", "  if (first) configurePipelineRuntime({ sourceText: first.content, sourceDocId: first.filename });", "  const result = await runPipeline(inputs);"]
+      : [...loadLines, "  configurePipelineRuntime({ sourceText: doc.content, sourceDocId: doc.filename });", "  const result = await runPipeline(doc);"]),
     "  console.log(JSON.stringify(result, null, 2));",
     '  console.log("\\n--- step trace ---");',
     "  for (const step of getLastRunTrace()) {",
@@ -101,6 +101,9 @@ export function generateRunExamplePy(project: Project, slug: string): string {
           return `    ${JSON.stringify(label)}: read_doc(${JSON.stringify(`documents/${file}`)}),`;
         }),
         "}",
+        "first = next(iter(inputs.values()), None)",
+        "if first:",
+        '    configure_pipeline_runtime(source_text=first["content"], source_doc_id=first["filename"])',
         "result = await run_pipeline(inputs)",
       ]
     : [
@@ -113,6 +116,7 @@ export function generateRunExamplePy(project: Project, slug: string): string {
             "input.txt"
           }`,
         )})`,
+        'configure_pipeline_runtime(source_text=doc["content"], source_doc_id=doc["filename"])',
         "result = await run_pipeline(doc)",
       ];
 

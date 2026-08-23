@@ -40,7 +40,7 @@ export interface RunOptions {
   projectOverride?: Project;
   runMeta?: Pick<
     PipelineRun,
-    "source" | "sharedLinkId" | "hostedApiId" | "viewerName" | "viewerSessionId" | "triggerUserId" | "triggerUserEmail" | "notes"
+    "source" | "sharedLinkId" | "hostedApiId" | "scheduleId" | "viewerName" | "viewerSessionId" | "triggerUserId" | "triggerUserEmail" | "notes"
   >;
 }
 

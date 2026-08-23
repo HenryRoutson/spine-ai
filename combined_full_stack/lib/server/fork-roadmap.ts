@@ -37,7 +37,7 @@
 // UI (on rails):
 //   New PipelineSegment kind "fork": dashed box like combine.
 //   Inside: 2..N columns, each a mini linear canvas (insert + / move / remove).
-//   Fork header: add/remove branch (min 2, cap 4). Join row at the bottom of the box.
+//   Fork header: add/remove branch (min 2, cap 12). Join row at the bottom of the box (product/assemble/merge map).
 //   No free positioning. Width grows; horizontal scroll if needed. max-w-xl stays
 //   for purely linear pipelines.
 //   v1 UI: nested forks render as boxes in the lane (series-parallel DAG).

@@ -6,6 +6,7 @@ import { DEFAULT_MERGE_POLICY } from "@/lib/merger";
 import { usesPassthroughStructure } from "@/lib/module-kinds";
 import { modelExportIdentifierGo, modelExportIdentifierRust, rustFieldIdent } from "@/lib/structure-shape";
 import { webhookStepUsesPipelineState } from "@/lib/webhook-step";
+import { quoteFieldPaths } from "./quote_schema";
 import { BUILTIN_DOCUMENT_ID, withSharedModels } from "./builtin_models";
 import { labelAsStateKey } from "./pipeline_state";
 import { forkBranchesOf, forkJoinOf, forkProductField, laneLastModule, locatePipelineModule, flattenPipelineModules } from "@/lib/fork-pipeline";
@@ -175,6 +176,57 @@ export function exampleSelectComment(outLabel: string): string {
 
 export function quoteLinkComment(): string {
   return "Match LLM quote strings against source document byte offsets (no LLM cost)";
+}
+
+function quoteExportArgs(project: Project, m: PipelineModule): { paths: string[]; isList: boolean } {
+  const model = project.models.find((x) => x.id === m.outStructureId);
+  return {
+    paths: model ? quoteFieldPaths(model, project.models) : [],
+    isList: stepEmitsList(m),
+  };
+}
+
+export function generateQuoteStepBodyTs(m: PipelineModule, project: Project, outTs: string): string {
+  const { paths, isList } = quoteExportArgs(project, m);
+  return [
+    exportComment("//", quoteLinkComment()),
+    `return resolveQuotes(input, "", "", ${JSON.stringify(paths)}, ${isList}) as unknown as ${outTs};`,
+  ].join("\n");
+}
+
+export function generateQuoteStepBodyPy(m: PipelineModule, project: Project, outPy: string): string {
+  const { paths, isList } = quoteExportArgs(project, m);
+  return [
+    exportComment("#", quoteLinkComment()),
+    `return cast(${outPy}, cast(object, resolve_quotes(input, "", "", ${JSON.stringify(paths)}, ${isList ? "True" : "False"})))`,
+  ].join("\n");
+}
+
+export function generateQuoteStepBodyGo(m: PipelineModule, project: Project, outGo: string): string {
+  const { paths, isList } = quoteExportArgs(project, m);
+  const zero = goZeroValue(outGo);
+  return [
+    exportComment("//", quoteLinkComment()),
+    `linked, err := resolveQuotes(input, "", "", []string{${paths.map((p) => JSON.stringify(p)).join(", ")}}, ${isList})`,
+    "if err != nil {",
+    `\treturn ${zero}, err`,
+    "}",
+    `var out ${outGo}`,
+    "if err := json.Unmarshal(linked, &out); err != nil {",
+    `\treturn ${zero}, err`,
+    "}",
+    "return out, nil",
+  ].join("\n");
+}
+
+export function generateQuoteStepBodyRust(m: PipelineModule, project: Project, outRust: string): string {
+  const { paths, isList } = quoteExportArgs(project, m);
+  return [
+    exportComment("//", quoteLinkComment()),
+    `let linked = resolve_quotes(&input, "", "", &[${paths.map((p) => `${JSON.stringify(p)}.to_string()`).join(", ")}], ${isList})?;`,
+    `let out: ${outRust} = serde_json::from_value(linked)?;`,
+    "Ok(out)",
+  ].join("\n");
 }
 
 export function parallelBranchesComment(): string {
@@ -1037,14 +1089,24 @@ export function generateParallelStepBodyGo(m: PipelineModule, project: Project, 
   ].join("\n");
 }
 
+function forkLaneLastStateExprsTs(m: PipelineModule): string[] {
+  return forkBranchesOf(m).flatMap((b) => {
+    const last = laneLastModule(b);
+    if (!last) return [];
+    return [`state[${JSON.stringify(last.label.trim())}]`];
+  });
+}
+
 export function generateForkStepBodyTs(m: PipelineModule, _project: Project, outTs: string): string {
   const join = forkJoinOf(m);
   if (join === "assemble") return generateAssembleStepBodyTs(m, _project, outTs);
   if (join === "merge") {
+    const policyJson = JSON.stringify(m.mergePolicy ?? DEFAULT_MERGE_POLICY);
+    const exprs = forkLaneLastStateExprsTs(m);
     return [
       exportComment("//", forkJoinComment()),
-      "const values = Object.values(state);",
-      `return values[values.length - 1] as ${outTs};`,
+      `const values = [${exprs.join(", ")}].filter((v) => v != null);`,
+      `return mergeFold(values, ${policyJson}) as ${outTs};`,
     ].join("\n");
   }
   const fields = forkBranchesOf(m).flatMap((b) => {
@@ -1063,9 +1125,16 @@ export function generateForkStepBodyPy(m: PipelineModule, _project: Project, out
   const join = forkJoinOf(m);
   if (join === "assemble") return generateAssembleStepBodyPy(m, _project, outPy);
   if (join === "merge") {
+    const policyJson = JSON.stringify(m.mergePolicy ?? DEFAULT_MERGE_POLICY);
+    const exprs = forkBranchesOf(m).flatMap((b) => {
+      const last = laneLastModule(b);
+      if (!last) return [];
+      return [`state.get(${JSON.stringify(last.label.trim())})`];
+    });
     return [
       exportComment("#", forkJoinComment()),
-      `return cast(${outPy}, list(state.values())[-1] if state else input)`,
+      `values = [v for v in [${exprs.join(", ")}] if v is not None]`,
+      `return cast(${outPy}, cast(object, merge_fold(values, ${policyJson})))`,
     ].join("\n");
   }
   const fields = forkBranchesOf(m).flatMap((b) => {
@@ -1083,6 +1152,33 @@ export function generateForkStepBodyGo(m: PipelineModule, project: Project, outG
   const join = forkJoinOf(m);
   if (join === "assemble") return generateAssembleStepBodyGo(m, project, outGo);
   const zero = goZeroValue(outGo);
+  if (join === "merge") {
+    const policyJson = JSON.stringify(m.mergePolicy ?? DEFAULT_MERGE_POLICY);
+    const pushes = forkBranchesOf(m).flatMap((b) => {
+      const last = laneLastModule(b);
+      if (!last) return [];
+      return [`\tif v, ok := state[${JSON.stringify(last.label.trim())}]; ok { values = append(values, v) }`];
+    });
+    return [
+      exportComment("//", forkJoinComment()),
+      `var policy any`,
+      `if err := json.Unmarshal([]byte(${JSON.stringify(policyJson)}), &policy); err != nil {`,
+      `\treturn ${zero}, err`,
+      `}`,
+      `values := []any{}`,
+      ...pushes,
+      `merged := mergeFold(values, policy)`,
+      `b, err := json.Marshal(merged)`,
+      `if err != nil {`,
+      `\treturn ${zero}, err`,
+      `}`,
+      `var out ${outGo}`,
+      `if err := json.Unmarshal(b, &out); err != nil {`,
+      `\treturn ${zero}, err`,
+      `}`,
+      `return out, nil`,
+    ].join("\n");
+  }
   const inserts = forkBranchesOf(m).flatMap((b) => {
     const last = laneLastModule(b);
     if (!last) return [];
@@ -1109,6 +1205,25 @@ export function generateForkStepBodyGo(m: PipelineModule, project: Project, outG
 export function generateForkStepBodyRust(m: PipelineModule, project: Project, outRust: string): string {
   const join = forkJoinOf(m);
   if (join === "assemble") return generateAssembleStepBodyRust(m, project, outRust);
+  if (join === "merge") {
+    const policyJson = JSON.stringify(m.mergePolicy ?? DEFAULT_MERGE_POLICY);
+    const pushes = forkBranchesOf(m).flatMap((b) => {
+      const last = laneLastModule(b);
+      if (!last) return [];
+      return [
+        `if let Some(v) = state.get(${JSON.stringify(last.label.trim())}) { values.push(v.clone()); }`,
+      ];
+    });
+    return [
+      exportComment("//", forkJoinComment()),
+      `let policy: Value = serde_json::from_str(${JSON.stringify(policyJson)}).unwrap_or(Value::Null);`,
+      "let mut values: Vec<Value> = Vec::new();",
+      ...pushes,
+      "let merged = merge_fold(values, &policy);",
+      `let out: ${outRust} = serde_json::from_value(merged)?;`,
+      "Ok(out)",
+    ].join("\n");
+  }
   const inserts = forkBranchesOf(m).flatMap((b) => {
     const last = laneLastModule(b);
     if (!last) return [];
@@ -1653,42 +1768,51 @@ export function generateOrchestratorGo(project: Project, stepFnName: (m: Pipelin
   lines.push("    state := make(PipelineState)", "    var spine json.RawMessage", "    var err error", "");
 
   const indexById = orchestratorIndexById(project);
-  for (const m of project.modules) {
+  lines.push(...emitGoOrchestratorWalk(project.modules, project, stepFnName, indexById, multi, "    "));
+
+  lines.push("    return spine, nil", "}", "");
+  return lines.join("\n");
+}
+
+function emitGoOrchestratorWalk(
+  modules: PipelineModule[],
+  project: Project,
+  stepFnName: (m: PipelineModule, i: number) => string,
+  indexById: Map<string, number>,
+  multi: boolean,
+  indent: string,
+): string[] {
+  const lines: string[] = [];
+  for (const m of modules) {
     const i = indexById.get(m.id) ?? 0;
     const fn = stepFnName(m, i);
     const label = labelAsStateKey(m.label);
     const inGo = exportSpineInGo(m, project, i);
     if (m.kind === ModuleKind.Fork) {
-      lines.push(`    // ${i + 1}. ${m.label} (fork lanes sequential in export)`);
-      lines.push("    forkIn := append(json.RawMessage(nil), spine...)");
+      lines.push(`${indent}// ${i + 1}. ${m.label} (fork lanes sequential in export)`);
+      lines.push(`${indent}forkIn := append(json.RawMessage(nil), spine...)`);
       for (const b of forkBranchesOf(m)) {
-        lines.push("    {");
-        lines.push("        spine = append(json.RawMessage(nil), forkIn...)");
-        for (const laneM of b.modules) {
-          const li = indexById.get(laneM.id) ?? 0;
-          const lfn = stepFnName(laneM, li);
-          const lLabel = labelAsStateKey(laneM.label);
-          const lIn = exportSpineInGo(laneM, project, li);
-          lines.push(`        // ${li + 1}. ${laneM.label}`);
-          lines.push(orchestratorInvokeLine(laneM, lfn, "go", !multi, lIn).split("\n").map((l) => "    " + l).join("\n"));
-          if (lLabel) {
-            lines.push(`        state[${JSON.stringify(lLabel)}] = append(json.RawMessage(nil), spine...)`);
-          }
-        }
-        lines.push("    }");
+        lines.push(`${indent}{`);
+        lines.push(`${indent}    spine = append(json.RawMessage(nil), forkIn...)`);
+        lines.push(...emitGoOrchestratorWalk(b.modules, project, stepFnName, indexById, multi, indent + "    "));
+        lines.push(`${indent}}`);
       }
-      lines.push("    spine = forkIn");
+      lines.push(`${indent}spine = forkIn`);
+      lines.push(orchestratorInvokeLine(m, fn, "go", !multi, inGo).split("\n").map((l) => indent + l.trimStart()).join("\n"));
+      if (label) {
+        lines.push(`${indent}state[${JSON.stringify(label)}] = append(json.RawMessage(nil), spine...)`);
+      }
+      lines.push("");
+      continue;
     }
-    lines.push(`    // ${i + 1}. ${m.label}`);
-    lines.push(orchestratorInvokeLine(m, fn, "go", !multi, inGo));
+    lines.push(`${indent}// ${i + 1}. ${m.label}`);
+    lines.push(orchestratorInvokeLine(m, fn, "go", !multi, inGo).split("\n").map((l) => indent + l.trimStart()).join("\n"));
     if (label) {
-      lines.push(`    state[${JSON.stringify(label)}] = append(json.RawMessage(nil), spine...)`);
+      lines.push(`${indent}state[${JSON.stringify(label)}] = append(json.RawMessage(nil), spine...)`);
     }
     lines.push("");
   }
-
-  lines.push("    return spine, nil", "}", "");
-  return lines.join("\n");
+  return lines;
 }
 
 export { generateCustomCodeStepBodyTs, tsCustomCodeCall, tsCustomCodeFnDecl, pyCustomCodeCall };

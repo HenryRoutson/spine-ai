@@ -3,6 +3,7 @@ import { spawn } from "node:child_process"
 import { createInterface } from "node:readline"
 import { resolve } from "node:path"
 import { describe, expect, it } from "vitest"
+import { isMcpStdoutChunk } from "./bootstrap-env.js"
 
 const MCP_ROOT = resolve(import.meta.dirname, "..")
 const REPO = resolve(MCP_ROOT, "..")
@@ -113,6 +114,12 @@ async function handshake(): Promise<{
 }
 
 describe("MCP stdio boot", () => {
+  it("keeps only JSON-RPC on stdout", () => {
+    expect(isMcpStdoutChunk('{"jsonrpc":"2.0","id":1}\n')).toBe(true)
+    expect(isMcpStdoutChunk('Content-Length: 12\r\n\r\n')).toBe(true)
+    expect(isMcpStdoutChunk('{"level":"info","msg":"boot"}\n')).toBe(false)
+    expect(isMcpStdoutChunk("tsx compiling...\n")).toBe(false)
+  })
   it("initialize + tools/list + prompts/list over newline JSON-RPC", async () => {
     const { init, tools, prompts, badApply, pieces } = await handshake()
     expect(init.error, JSON.stringify(init.error)).toBeUndefined()
@@ -121,11 +128,14 @@ describe("MCP stdio boot", () => {
       | undefined
     expect(result?.serverInfo?.name).toBe("spine-pinpoint")
     expect(result?.instructions).toContain("get_project")
+    expect(result?.instructions).toContain("auth_status")
     expect(result?.instructions).toContain("session_action")
     expect(result?.instructions).toContain("do not see the browser")
+    expect(result?.instructions).toContain("spine-mcp.mjs")
     expect(tools.error, JSON.stringify(tools.error)).toBeUndefined()
     const names = ((tools.result as { tools?: Array<{ name: string }> })?.tools ?? []).map((t) => t.name)
     expect(names).toContain("get_project")
+    expect(names).toContain("auth_status")
     expect(names).toContain("pinpoint_failure")
     expect(names).toContain("ask_agent")
     expect(names).toContain("list_pieces")
@@ -133,6 +143,7 @@ describe("MCP stdio boot", () => {
     expect(names).toContain("import_piece")
     expect(names).toContain("export_piece")
     expect(names).toContain("wait_for_run")
+    expect(names).toContain("get_run")
     expect(prompts.error, JSON.stringify(prompts.error)).toBeUndefined()
     const promptNames = ((prompts.result as { prompts?: Array<{ name: string }> })?.prompts ?? []).map(
       (p) => p.name,
@@ -151,5 +162,48 @@ describe("MCP stdio boot", () => {
     const piecesText = (pieces.result as { content?: Array<{ text?: string }> })?.content?.[0]?.text ?? ""
     expect(piecesText).toContain("n8n-nodes-base.set")
     expect(piecesText).toContain("n8n-nodes-base.filter")
+  })
+
+  it("launcher + official SDK client works without SPINE_* env", async () => {
+    const { Client } = await import("@modelcontextprotocol/sdk/client/index.js")
+    const { StdioClientTransport } = await import("@modelcontextprotocol/sdk/client/stdio.js")
+    const { mkdtempSync, rmSync } = await import("node:fs")
+    const { tmpdir } = await import("node:os")
+    const { join } = await import("node:path")
+    const dir = mkdtempSync(join(tmpdir(), "mcp-sdk-"))
+    const sessionPath = join(dir, "session.json")
+    const transport = new StdioClientTransport({
+      command: process.execPath,
+      args: [resolve(MCP_ROOT, "spine-mcp.mjs")],
+      cwd: process.env.HOME ?? "/",
+      stderr: "pipe",
+      env: {
+        PATH: `${resolve(process.execPath, "..")}:${process.env.PATH ?? ""}`,
+        DOTENV_CONFIG_QUIET: "true",
+        SPINE_SESSION_PATH: sessionPath,
+      },
+    })
+    const client = new Client({ name: "mcp-sdk-test", version: "0" })
+    try {
+      await client.connect(transport)
+      const instructions = client.getInstructions() ?? ""
+      expect(instructions).toContain("auth_status")
+      expect(instructions).toContain("Do not clone")
+      const tools = await client.listTools()
+      expect(tools.tools.some((t) => t.name === "auth_status")).toBe(true)
+      const status = await client.callTool({ name: "auth_status", arguments: { sessionPath } })
+      const text = (status.content as Array<{ text?: string }>)[0]?.text ?? "{}"
+      const body = JSON.parse(text) as { projectCount: number; next: string; appRoot?: string }
+      expect(body.projectCount).toBe(0)
+      expect(body.next).toMatch(/add_project/)
+      expect(String(body.appRoot)).toMatch(/combined_full_stack$/)
+      const prompt = await client.getPrompt({ name: "connect_spine" })
+      const promptText = JSON.stringify(prompt)
+      expect(promptText).toContain("Do not clone or search the repo")
+      expect(promptText).toContain("auth_status")
+    } finally {
+      await client.close()
+      rmSync(dir, { recursive: true, force: true })
+    }
   })
 })

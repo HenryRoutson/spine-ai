@@ -16,6 +16,7 @@ import {
   Library,
   UserCircle,
   Settings2,
+  Clock,
 } from "lucide-react"
 import { SpineNavIcon } from "@/components/spine-mark"
 import { AppWindowId } from "@/lib/app-window-id"
@@ -44,6 +45,7 @@ export const BuildStepId = {
   Pipeline: AppWindowId.Pipeline,
   Testing: AppWindowId.Testing,
   Inference: AppWindowId.Inference,
+  Schedule: AppWindowId.Schedule,
 } as const
 
 export type BuildStepId = (typeof BuildStepId)[keyof typeof BuildStepId]
@@ -75,6 +77,7 @@ export const BUILD_STEPS: BuildStepConfig[] = [
   { id: BuildStepId.Pipeline, label: "Pipeline", hint: windowStepHint(AppWindowStepLabel.Pipeline), icon: SpineNavIcon },
   { id: BuildStepId.Testing, label: "Testing", hint: windowStepHint(AppWindowStepLabel.Testing), icon: SquareCheck },
   { id: BuildStepId.Inference, label: "Inference", hint: windowStepHint(AppWindowStepLabel.Inference), icon: Play },
+  { id: BuildStepId.Schedule, label: "Schedule", hint: windowStepHint(AppWindowStepLabel.Schedule), icon: Clock },
 ]
 
 export const BUILD_STEP_IDS = new Set<BuildStepId>(BUILD_STEPS.map((s) => s.id))
@@ -139,6 +142,7 @@ export const BUILDER_NAV_ITEMS: AppNavItem[] = [
   { id: AppWindowId.Pipeline, label: "Pipeline", hint: windowStepHint(AppWindowStepLabel.Pipeline), icon: SpineNavIcon },
   { id: AppWindowId.Testing, label: "Testing", hint: windowStepHint(AppWindowStepLabel.Testing), icon: SquareCheck },
   { id: AppWindowId.Inference, label: "Inference", hint: windowStepHint(AppWindowStepLabel.Inference), icon: Play },
+  { id: AppWindowId.Schedule, label: "Schedule", hint: windowStepHint(AppWindowStepLabel.Schedule), icon: Clock },
   { id: AppWindowId.Share, label: "Share", hint: windowStepHint(AppWindowStepLabel.Share), icon: SquareArrowUp },
   { id: AppWindowId.Earnings, label: "Earnings", hint: windowStepHint(AppWindowStepLabel.Earnings), icon: Wallet },
   { id: AppWindowId.Logging, label: "Logging", hint: windowStepHint(AppWindowStepLabel.Logging), icon: ScrollText },

@@ -127,6 +127,7 @@ export function lintPipelineExportTs(project: Project): PipelineExportLintResult
             moduleResolution: "bundler",
             target: "ES2022",
             module: "ESNext",
+            lib: ["ES2022", "DOM"],
             pretty: false,
           },
           include: ["pipeline.ts", "pipeline_runtime.ts"],

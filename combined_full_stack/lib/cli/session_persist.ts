@@ -2,7 +2,7 @@
 // AI : set SPINE_API_URL for pull/push/start-run against the same HTTP API as the GUI.
 
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs"
-import { dirname } from "node:path"
+import { dirname, isAbsolute, resolve } from "node:path"
 import type { PersistPort, SessionSnapshot } from "@/lib/core/types"
 import { emptySessionSnapshot, migrateSessionChat } from "@/lib/core/session"
 import type { Project } from "@/lib/types"
@@ -11,7 +11,10 @@ export const SPINE_SESSION_ENV = "SPINE_SESSION_PATH"
 export const DEFAULT_SESSION_FILE = ".spine-session.json"
 
 export function resolveSessionPath(flagPath?: string): string {
-  return flagPath || process.env[SPINE_SESSION_ENV] || DEFAULT_SESSION_FILE
+  const raw = flagPath || process.env[SPINE_SESSION_ENV] || DEFAULT_SESSION_FILE
+  if (isAbsolute(raw)) return raw
+  const appRoot = process.env.SPINE_APP_ROOT
+  return appRoot ? resolve(appRoot, raw) : resolve(raw)
 }
 
 type SessionFile = Partial<SessionSnapshot> & { pendingCreateIds?: string[] }
@@ -53,7 +56,14 @@ export function createFilePersist(path: string): PersistPort {
   return {
     load() {
       if (!existsSync(path)) return emptySessionSnapshot()
-      const raw = JSON.parse(readFileSync(path, "utf8")) as SessionFile
+      let parsed: unknown
+      try {
+        parsed = JSON.parse(readFileSync(path, "utf8"))
+      } catch (err) {
+        const detail = err instanceof Error ? err.message : String(err)
+        throw new Error(`session file is not valid JSON (${path}): ${detail}. Fix or delete it, then add_project.`)
+      }
+      const raw = parsed as SessionFile
       const projects = raw.projects ?? []
       return {
         ...emptySessionSnapshot(),

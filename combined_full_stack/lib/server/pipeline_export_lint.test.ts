@@ -9,6 +9,12 @@ import { generateCombineStepBodyTs, prepareExportProject } from "@/lib/server/pi
 import { SEEDS_DIR } from "@/lib/server/seed";
 import { BUILTIN_DOCUMENT_ID } from "@/lib/server/builtin_models";
 import { ModuleKind, type ModuleId, type PipelineModule } from "@/lib/server/types";
+import { findQuote as uiFindQuote } from "@/lib/server/quotation";
+import {
+  configurePipelineRuntime,
+  findQuote as exportFindQuote,
+  resolveQuotes,
+} from "@/lib/export_runtime/ts/pipeline_runtime";
 
 describe("pipeline TS export lint", () => {
   // AI : TODO (linter-first) — mirror this suite for pyright (pipeline.py) and cargo check (pipeline.rs); make Py/Rust primary.
@@ -105,5 +111,49 @@ describe("pipeline TS export lint", () => {
     expect(src.match(/mergeFold\(/g)?.length).toBe(1);
     expect(src).not.toMatch(/function __itemKeyFn/);
     expect(src).toMatch(/from "\.\/pipeline_runtime"/);
+  });
+
+  it("emits builtin VideoClip / ImageStill types for media seeds", () => {
+    const clip = generatePipelineSourceTs(loadProjectSeed(resolve(SEEDS_DIR, "generate_clip.json")).project);
+    expect(clip).toMatch(/export type VideoClip = /);
+    expect(clip).toMatch(/await callWebhook\(input, undefined,/);
+    expect(clip).toMatch(/urlEnv: "HIGGSFIELD_GENERATE_URL"/);
+    expect(clip).toMatch(/pollStatusUrlPath: "status_url"/);
+    expect(clip).toMatch(/ingestUrlPath: "video.url"/);
+    const story = generatePipelineSourceTs(loadProjectSeed(resolve(SEEDS_DIR, "storyboard_short.json")).project);
+    expect(story).toMatch(/export type ImageStill = /);
+    expect(story).toMatch(/export type VideoClip = /);
+  });
+
+  it("quote export calls resolveQuotes with field paths", () => {
+    const { project } = loadProjectSeed(resolve(SEEDS_DIR, "company_legal_evaluation.json"));
+    const src = generatePipelineSourceTs(project);
+    expect(src).toMatch(/resolveQuotes\(input, "", "",/);
+    expect(src).not.toMatch(/wire resolveQuotes/);
+  });
+
+  it("export findQuote matches the UI linker", () => {
+    const source = "The tenant shall pay rent on the first day of each month.";
+    const quote = "pay rent on the first day";
+    const ui = uiFindQuote(quote, source, "doc-1");
+    const exp = exportFindQuote(quote, source, "doc-1");
+    expect(exp).toEqual({
+      text: ui.text,
+      docId: ui.docId,
+      start: ui.start,
+      end: ui.end,
+      exact: ui.exact,
+      score: ui.score,
+    });
+  });
+
+  it("resolveQuotes links text_quote objects the same way as the UI", () => {
+    const source = "Alpha beta gamma";
+    configurePipelineRuntime({ sourceText: source, sourceDocId: "d1" });
+    const out = resolveQuotes({ rule: { text: "beta", quote: "beta" } }, "", "", ["rule"], false) as {
+      rule: { text: string; quote: { doc_id: string; start: number; end: number } };
+    };
+    expect(out.rule.quote.doc_id).toBe("d1");
+    expect(source.slice(out.rule.quote.start, out.rule.quote.end).toLowerCase()).toContain("beta");
   });
 });

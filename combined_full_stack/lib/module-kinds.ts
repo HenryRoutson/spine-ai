@@ -26,6 +26,35 @@ export const USER_ADDABLE_MODULE_KINDS = [
 
 export type UserAddableModuleKind = (typeof USER_ADDABLE_MODULE_KINDS)[number]
 
+const ADDABLE_KIND_ALIASES: Record<string, UserAddableModuleKind> = {
+  code: "custom-code",
+  js: "custom-code",
+  javascript: "custom-code",
+  llmbatch: "llm-batch",
+  http: "webhook",
+  piece: "n8n",
+  dag: "fork",
+}
+
+export function parseUserAddableKind(raw: string): UserAddableModuleKind | undefined {
+  const key = raw.trim().toLowerCase().replace(/[\s_]+/g, "-")
+  if ((USER_ADDABLE_MODULE_KINDS as readonly string[]).includes(key)) return key as UserAddableModuleKind
+  return ADDABLE_KIND_ALIASES[key]
+}
+
+// AI : builder picker — Parallel is Fork+product; extra files go through Combine, not a second Input.
+export function builderInsertModuleKinds(opts: {
+  inForkLane: boolean
+  rootInsertAt: number
+}): UserAddableModuleKind[] {
+  return USER_ADDABLE_MODULE_KINDS.filter((kind) => {
+    if (kind === "parallel") return false
+    if (opts.inForkLane) return kind !== "input"
+    if (opts.rootInsertAt === 0) return kind !== "combine"
+    return kind !== "input"
+  })
+}
+
 // AI : string-enum ModuleKind is nominal — literals need a cast at the enum boundary.
 export function asModuleKind(kind: UserAddableModuleKind): ModuleKind {
   return kind as ModuleKind

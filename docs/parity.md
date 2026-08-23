@@ -570,6 +570,7 @@ Grep an id (example): `rg 'project.add' combined_full_stack docs mcp_tool`.
 | `nav.window.pipeline` | Pipeline | Ink: press 2 | PUT /api/projects/:id (modules) | describe_pipeline_steps | session.setModules / addPipelineStep |
 | `nav.window.testing` | Testing | Ink: press 3 | POST /api/runs (testing) + POST /api/testing-evaluate | run_test / validate_test | session.runTest(testDocName) |
 | `nav.window.inference` | Inference | Ink: press 4 | POST /api/runs | start_run | session.startRun() |
+| `nav.window.schedule` | Schedule | Ink: press c | POST /api/schedules | not exposed; use HTTP | HTTP /api/schedules |
 | `nav.window.share` | Share | Ink: press 5 | POST /api/shared-links | session_action lists shareLinkIds [P] | session.getSnapshot().shareLinkIds |
 | `nav.window.earnings` | Earnings | Ink: press 6 | GET /api/earnings | session_action id=earnings.refresh [P] | session.refreshEarnings() |
 | `nav.window.logging` | Logging | Ink: press 7 | GET /api/runs | session_logs | toLogsView(session.getSnapshot()) |

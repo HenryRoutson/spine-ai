@@ -225,68 +225,122 @@ export function webhookStepUsesPipelineState(m: PipelineModule): boolean {
   return spec.bodyMode !== WebhookBodyMode.Raw && spec.includeState;
 }
 
+export function webhookUrlEnvKey(url: string | undefined): string | undefined {
+  const raw = url?.trim() ?? "";
+  if (raw.startsWith("env:")) return raw.slice(4).trim() || undefined;
+  const envRef = raw.match(/^\$\{([A-Za-z_][A-Za-z0-9_]*)\}$/);
+  return envRef?.[1];
+}
+
 type webhook_export_opts = {
-  urlEnv: string;
+  urlEnv?: string;
+  url?: string;
+  urlDefault?: string;
   method: WebhookMethod;
   authEnv?: string;
   includeState: boolean;
   responsePath?: string;
   timeoutMs: number;
+  bodyMode: WebhookBodyMode;
+  pollStatusUrlPath?: string;
+  pollStatusPath: string;
+  pollDoneWhen: string[];
+  pollFailWhen: string[];
+  ingestUrlPath?: string;
+  ingestInputType: InputType;
 };
 
 function webhookExportOpts(m: PipelineModule): webhook_export_opts {
   const spec = webhookCallSpecFromModule(m);
+  const envKey = webhookUrlEnvKey(m.webhookUrl) ?? (spec.url.startsWith("http") ? undefined : webhookEnvKeyForLabel(m.label));
+  const literal = !envKey && spec.url.startsWith("http") ? spec.url : undefined;
   return {
-    urlEnv: webhookEnvKeyForLabel(m.label),
+    urlEnv: envKey,
+    url: literal,
+    urlDefault: envKey ? WEBHOOK_URL_DEFAULTS[envKey] : undefined,
     method: spec.method,
     authEnv: spec.authEnv,
     includeState: spec.includeState,
     responsePath: spec.responsePath,
     timeoutMs: spec.timeoutMs,
+    bodyMode: spec.bodyMode,
+    pollStatusUrlPath: spec.pollStatusUrlPath,
+    pollStatusPath: spec.pollStatusPath,
+    pollDoneWhen: spec.pollDoneWhen,
+    pollFailWhen: spec.pollFailWhen,
+    ingestUrlPath: spec.ingestUrlPath,
+    ingestInputType: spec.ingestInputType,
   };
+}
+
+function webhookExportCallFieldsTs(o: webhook_export_opts): string[] {
+  return [
+    o.urlEnv ? `urlEnv: ${JSON.stringify(o.urlEnv)}` : "",
+    o.url ? `url: ${JSON.stringify(o.url)}` : "",
+    o.urlDefault ? `urlDefault: ${JSON.stringify(o.urlDefault)}` : "",
+    `method: ${JSON.stringify(o.method)}`,
+    o.authEnv ? `authEnv: ${JSON.stringify(o.authEnv)}` : "",
+    o.includeState ? "" : "includeState: false",
+    o.responsePath ? `responsePath: ${JSON.stringify(o.responsePath)}` : "",
+    o.timeoutMs !== DEFAULT_WEBHOOK_TIMEOUT_MS ? `timeoutMs: ${o.timeoutMs}` : "",
+    o.bodyMode === WebhookBodyMode.Raw ? `bodyMode: "raw"` : "",
+    o.pollStatusUrlPath ? `pollStatusUrlPath: ${JSON.stringify(o.pollStatusUrlPath)}` : "",
+    o.pollStatusUrlPath ? `pollStatusPath: ${JSON.stringify(o.pollStatusPath)}` : "",
+    o.pollStatusUrlPath ? `pollDoneWhen: ${JSON.stringify(o.pollDoneWhen)}` : "",
+    o.pollStatusUrlPath ? `pollFailWhen: ${JSON.stringify(o.pollFailWhen)}` : "",
+    o.ingestUrlPath ? `ingestUrlPath: ${JSON.stringify(o.ingestUrlPath)}` : "",
+    o.ingestUrlPath ? `ingestInputType: ${JSON.stringify(o.ingestInputType)}` : "",
+  ].filter(Boolean);
 }
 
 export function exportWebhookStepBodyTs(m: PipelineModule, outTs: string): string {
   const o = webhookExportOpts(m);
-  const spec = webhookCallSpecFromModule(m);
-  const parts = [
-    `urlEnv: "${o.urlEnv}"`,
-    `method: "${o.method}"`,
-    o.authEnv ? `authEnv: "${o.authEnv}"` : "",
-    o.includeState ? "" : "includeState: false",
-    o.responsePath ? `responsePath: "${o.responsePath}"` : "",
-    o.timeoutMs !== DEFAULT_WEBHOOK_TIMEOUT_MS ? `timeoutMs: ${o.timeoutMs}` : "",
-    spec.bodyMode === WebhookBodyMode.Raw ? `bodyMode: "raw"` : "",
-  ].filter(Boolean);
+  const stateArg = webhookStepUsesPipelineState(m) ? "state" : "undefined";
   return [
-    `const raw = await callWebhook(input, state, { ${parts.join(", ")} });`,
+    `const raw = await callWebhook(input, ${stateArg}, { ${webhookExportCallFieldsTs(o).join(", ")} });`,
     `return raw as unknown as ${outTs};`,
   ].join("\n");
 }
 
 export function exportWebhookStepBodyPy(m: PipelineModule, outPy: string): string {
   const o = webhookExportOpts(m);
+  const stateArg = webhookStepUsesPipelineState(m) ? "state" : "None";
   const kwargs = [
-    `url_env="${o.urlEnv}"`,
-    `method="${o.method}"`,
-    o.authEnv ? `auth_env="${o.authEnv}"` : "",
+    o.urlEnv ? `url_env=${JSON.stringify(o.urlEnv)}` : "",
+    o.url ? `url=${JSON.stringify(o.url)}` : "",
+    o.urlDefault ? `url_default=${JSON.stringify(o.urlDefault)}` : "",
+    `method=${JSON.stringify(o.method)}`,
+    o.authEnv ? `auth_env=${JSON.stringify(o.authEnv)}` : "",
     o.includeState ? "" : "include_state=False",
-    o.responsePath ? `response_path="${o.responsePath}"` : "",
+    o.responsePath ? `response_path=${JSON.stringify(o.responsePath)}` : "",
     o.timeoutMs !== DEFAULT_WEBHOOK_TIMEOUT_MS ? `timeout_ms=${o.timeoutMs}` : "",
+    o.bodyMode === WebhookBodyMode.Raw ? `body_mode="raw"` : "",
+    o.pollStatusUrlPath ? `poll_status_url_path=${JSON.stringify(o.pollStatusUrlPath)}` : "",
+    o.pollStatusUrlPath ? `poll_status_path=${JSON.stringify(o.pollStatusPath)}` : "",
+    o.pollStatusUrlPath ? `poll_done_when=${JSON.stringify(o.pollDoneWhen)}` : "",
+    o.pollStatusUrlPath ? `poll_fail_when=${JSON.stringify(o.pollFailWhen)}` : "",
+    o.ingestUrlPath ? `ingest_url_path=${JSON.stringify(o.ingestUrlPath)}` : "",
+    o.ingestUrlPath ? `ingest_input_type=${JSON.stringify(o.ingestInputType)}` : "",
   ].filter(Boolean);
-  return [`raw = await call_webhook(input, state, ${kwargs.join(", ")})`, `return raw  # type: ignore[return-value]  # ${outPy}`].join("\n");
+  return [`raw = await call_webhook(input, ${stateArg}, ${kwargs.join(", ")})`, `return raw  # type: ignore[return-value]  # ${outPy}`].join("\n");
 }
 
 export function exportWebhookStepBodyGo(m: PipelineModule, zero: string): string {
   const o = webhookExportOpts(m);
+  const stateArg = webhookStepUsesPipelineState(m) ? "state" : "nil";
   return [
-    `raw, err := CallWebhook(input, state, WebhookOpts{`,
-    `\tURLEnv: "${o.urlEnv}",`,
-    `\tMethod: "${o.method}",`,
-    ...(o.authEnv ? [`\tAuthEnv: "${o.authEnv}",`] : []),
+    `raw, err := CallWebhook(input, ${stateArg}, WebhookOpts{`,
+    ...(o.urlEnv ? [`\tURLEnv: ${JSON.stringify(o.urlEnv)},`] : []),
+    ...(o.url ? [`\tURL: ${JSON.stringify(o.url)},`] : []),
+    ...(o.urlDefault ? [`\tURLDefault: ${JSON.stringify(o.urlDefault)},`] : []),
+    `\tMethod: ${JSON.stringify(o.method)},`,
+    ...(o.authEnv ? [`\tAuthEnv: ${JSON.stringify(o.authEnv)},`] : []),
     ...(!o.includeState ? [`\tIncludeState: false,`] : []),
-    ...(o.responsePath ? [`\tResponsePath: "${o.responsePath}",`] : []),
+    ...(o.responsePath ? [`\tResponsePath: ${JSON.stringify(o.responsePath)},`] : []),
     ...(o.timeoutMs !== DEFAULT_WEBHOOK_TIMEOUT_MS ? [`\tTimeoutMs: ${o.timeoutMs},`] : []),
+    ...(o.bodyMode === WebhookBodyMode.Raw ? [`\tBodyMode: "raw",`] : []),
+    ...(o.pollStatusUrlPath ? [`\tPollStatusURLPath: ${JSON.stringify(o.pollStatusUrlPath)},`] : []),
+    ...(o.ingestUrlPath ? [`\tIngestURLPath: ${JSON.stringify(o.ingestUrlPath)},`] : []),
     "})",
     "if err != nil {",
     `\treturn ${zero}, err`,
@@ -295,18 +349,36 @@ export function exportWebhookStepBodyGo(m: PipelineModule, zero: string): string
   ].join("\n");
 }
 
-export function exportWebhookStepBodyRust(): string {
-  return ["let raw = call_webhook(&input, &state).await?;", "Ok(raw)"].join("\n");
+export function exportWebhookStepBodyRust(m: PipelineModule): string {
+  const o = webhookExportOpts(m);
+  const stateArg = webhookStepUsesPipelineState(m) ? "&state" : "&serde_json::json!({})";
+  const fields = [
+    o.urlEnv ? `url_env: Some(${JSON.stringify(o.urlEnv)}.to_string())` : "url_env: None",
+    o.url ? `url: Some(${JSON.stringify(o.url)}.to_string())` : "url: None",
+    o.urlDefault ? `url_default: Some(${JSON.stringify(o.urlDefault)}.to_string())` : "url_default: None",
+    `method: ${JSON.stringify(o.method)}.to_string()`,
+    o.authEnv ? `auth_env: Some(${JSON.stringify(o.authEnv)}.to_string())` : "auth_env: None",
+    `include_state: ${o.includeState}`,
+    o.bodyMode === WebhookBodyMode.Raw ? `body_mode: "raw".to_string()` : `body_mode: "wrap".to_string()`,
+    o.pollStatusUrlPath ? `poll_status_url_path: Some(${JSON.stringify(o.pollStatusUrlPath)}.to_string())` : "poll_status_url_path: None",
+    o.ingestUrlPath ? `ingest_url_path: Some(${JSON.stringify(o.ingestUrlPath)}.to_string())` : "ingest_url_path: None",
+  ];
+  return [
+    `let raw = call_webhook(&input, ${stateArg}, WebhookOpts { ${fields.join(", ")} }).await?;`,
+    "Ok(raw)",
+  ].join("\n");
 }
 
 export function collectWebhookExportEnvKeys(
   modules: PipelineModule[],
-): { label: string; envKey: string; authEnv?: string }[] {
+): { label: string; envKey: string; authEnv?: string; optional?: boolean }[] {
   return modules
     .filter((m) => m.kind === "webhook")
-    .map((m) => ({
-      label: m.label,
-      envKey: webhookEnvKeyForLabel(m.label),
-      authEnv: m.webhookAuthEnv?.trim() || undefined,
-    }));
+    .flatMap((m) => {
+      const o = webhookExportOpts(m);
+      const rows: { label: string; envKey: string; authEnv?: string; optional?: boolean }[] = [];
+      if (o.urlEnv) rows.push({ label: m.label, envKey: o.urlEnv, optional: !!o.urlDefault });
+      if (o.authEnv) rows.push({ label: m.label, envKey: o.authEnv });
+      return rows;
+    });
 }
