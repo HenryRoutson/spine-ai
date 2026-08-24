@@ -8,7 +8,7 @@
     "dev": "npm run sync:shared && npm run ensure-monaco && next dev",
     "build": "npm run sync:shared && npm run ensure-monaco && next build",
     "start": "next start",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "tsc --noEmit -p tsconfig.typecheck.json",
     "typecheck-project": "tsx scripts/typecheck_project.ts",
     "check-openrouter": "node scripts/check_openrouter_key.mjs",
     "benchmark-parallel": "node scripts/benchmark_parallel_openrouter.mjs",

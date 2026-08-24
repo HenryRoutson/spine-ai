@@ -27,6 +27,8 @@ import {
 import { readApiErrorBody, formatApiError, logApiFailure, JSON_HEADERS, FETCH_NO_STORE } from "@/lib/api-client"
 import { API_ROUTES } from "@/lib/api-routes"
 import { isDemoMode } from "@/lib/demo-mode"
+// AI : poll tier max only — rate_limit_config has no Upstash/server deps (safe in this client shim).
+import { RATE_LIMITS } from "@/lib/rate_limit_config"
 import type {
   DocId,
   JobLogEntry,
