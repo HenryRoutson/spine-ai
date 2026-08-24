@@ -49,6 +49,13 @@ import { LoggingPanel } from "@/lib/cli/ink/logging-view"
 
 export type { TuiPrompt }
 
+function formatSessionPathLabel(path?: string): string {
+  if (!path) return "memory"
+  const base = path.split(/[/\\]/).pop() ?? path
+  if (base.length <= 40) return base
+  return `…${base.slice(-36)}`
+}
+
 export type WorkspaceViewProps = {
   snap: SessionSnapshot
   pipeline: PipelineView | null
@@ -187,7 +194,7 @@ export function WorkspaceView({
           Spine
         </Text>
         <Text dimColor>  tui  </Text>
-        <Text dimColor>{sessionPath ?? "memory"}</Text>
+        <Text dimColor>{formatSessionPathLabel(sessionPath)}</Text>
         <Text dimColor>  {areaForTuiTab(tab)}/{tab}</Text>
         {runBusy ? <Text color="yellow">  running…</Text> : null}
       </Box>

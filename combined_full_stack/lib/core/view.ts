@@ -535,10 +535,10 @@ export function toSettingsView(snap: SessionSnapshot): SettingsView {
   }
 }
 
-export function toMermaidView(snap: SessionSnapshot): string {
+export function toMermaidView(snap: SessionSnapshot, theme: "light" | "dark" = "light"): string {
   const project = snap.projects.find((p) => p.id === snap.activeProjectId) ?? snap.projects[0]
   if (!project) return "flowchart LR\n  empty[No project]"
-  return derivePipelineMermaid(project.modules, project.models)
+  return derivePipelineMermaid(project.modules, project.models, theme)
 }
 
 export function toQuoteView(match: QuoteMatch): QuoteView {

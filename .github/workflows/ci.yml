@@ -1,4 +1,4 @@
-# CI — unit tests; live OpenRouter parity when OPENROUTER_API_KEY is available
+# CI — unit tests; MCP vibe perf; live OpenRouter parity when OPENROUTER_API_KEY is available
 name: ci
 
 on:
@@ -41,3 +41,29 @@ jobs:
             exit 0
           fi
           npm run test:parity
+
+  # AI : mcp_tool aliases into combined_full_stack — install both; catch vibe context/latency regressions.
+  mcp:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: |
+            combined_full_stack/package-lock.json
+            mcp_tool/package-lock.json
+      - name: Install app deps
+        working-directory: combined_full_stack
+        run: npm ci
+      - name: Install MCP deps
+        working-directory: mcp_tool
+        run: npm ci
+      - name: MCP typecheck
+        working-directory: mcp_tool
+        run: npm run typecheck
+      - name: MCP tests (incl. vibe perf budgets)
+        working-directory: mcp_tool
+        run: npm test

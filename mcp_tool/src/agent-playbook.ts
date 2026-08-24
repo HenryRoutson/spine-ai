@@ -43,7 +43,7 @@ Prefer named tools. session_action id is the GUI data-spine-id. Extra ids: struc
 
 ERRORS: tools return {ok:false, code, error, next} with isError instead of crashing. Follow next. Never retry the same crashing payload.
 
-NOT TOOLS YET: quotes.link, session pull/push, run cancel, share/hosted-api/embed mint, Stripe, human-review click, chatbot turn, custom-code (browser CodeHost), live n8n Cloud execute.`
+NOT TOOLS YET: run cancel, share/hosted-api/embed mint, Stripe, human-review click, chatbot turn, custom-code (browser CodeHost), live n8n Cloud execute. session.pull / session.push / quotes.link / project.resync-examples / pipeline.move-step / documents.set-projects are session_action ids.`
 
 function userMessage(text: string) {
   return { messages: [{ role: "user" as const, content: { type: "text" as const, text } }] }

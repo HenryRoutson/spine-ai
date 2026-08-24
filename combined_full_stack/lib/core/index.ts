@@ -2,6 +2,8 @@
 export type { SessionSnapshot, ProjectCreateOpts, ProjectPatch, PersistPort, locality_t, SessionChatTurn, AssistantInFlight } from "@/lib/core/types"
 export { chatForActiveProject } from "@/lib/core/types"
 export { SpineSession, createSpineSession, createMemoryPersist, emptySessionSnapshot, migrateSessionChat, ASSISTANT_IN_FLIGHT_STALE_MS } from "@/lib/core/session"
+export { sessionSnapshotFromStore } from "@/lib/core/store-snapshot"
+export type { StoreSnapshotParts } from "@/lib/core/store-snapshot"
 export {
   overlayOptimisticProjects,
   overlayOptimisticRuns,

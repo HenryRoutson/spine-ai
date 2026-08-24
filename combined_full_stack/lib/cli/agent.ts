@@ -57,6 +57,36 @@ export async function defaultAgentPropose(
   })
 }
 
+// AI : billed GUI path when SPINE_API_URL + token reach a project that exists on the server; else null → in-process.
+export async function proposeViaHttpEgress(
+  session: SpineSession,
+  project: Project,
+  message: string,
+  history: SessionChatTurn[],
+): Promise<PipelineAssistantResult | null> {
+  const egress = session.egress
+  if (!egress || egress.blocked) return null
+  const res = await egress.request("/api/pipeline-assistant", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      projectId: project.id,
+      message,
+      history,
+      model: session.model,
+      stream: false,
+      humanSurface: "vibe",
+      ...(session.pendingProposal ? { pendingProposal: session.pendingProposal } : {}),
+    }),
+  })
+  if (res.status === 401 || res.status === 404) return null
+  if (!res.ok) {
+    const body = (await res.json().catch(() => ({}))) as { error?: string }
+    throw new Error(body.error ?? `pipeline-assistant HTTP ${res.status}`)
+  }
+  return (await res.json()) as PipelineAssistantResult
+}
+
 function changedKeys(proposal: ProjectProposal): string[] {
   return (Object.entries(proposal.changed) as [string, boolean | undefined][])
     .filter(([, v]) => v)
@@ -168,13 +198,16 @@ async function askVibeAgent(
     }
     const propose =
       opts.propose ??
-      ((project, message, history, model) =>
-        proposePipelineChange(project, message, history, model as ModelId, {
+      (async (project, message, history, model) => {
+        const viaHttp = await proposeViaHttpEgress(session, project, message, history)
+        if (viaHttp) return viaHttp
+        return proposePipelineChange(project, message, history, model as ModelId, {
           humanSurface: "vibe",
           testDocsCatalog: testDocsCatalogFromSession(session),
           recentRuns: recentRunsForAssistant(session.runs),
           lastFailedRun: lastFailedRunForAssistant(session.runs),
-        }))
+        })
+      })
     const prevPending = session.pendingProposal
     const result = await propose(
       overlayProposalOnProject(live, prevPending),

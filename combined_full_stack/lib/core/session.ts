@@ -31,6 +31,7 @@ import {
   type TeamRealtimeHandlers,
 } from "@/lib/core/realtime"
 import { toQuoteView, toValidationView, type QuoteView, type ValidationView } from "@/lib/core/view"
+import { renamedProjects, withProjectDocumentation } from "@/lib/core/project-ops"
 import {
   inferenceInputIssueMessage,
   issuesForSavedInferenceAssignment,
@@ -348,12 +349,15 @@ export class SpineSession {
   }
 
   renameProject(id: string, name: string): void {
-    const trimmed = name.trim()
-    if (!trimmed) return
+    const next = renamedProjects(this.snap.projects, id, name)
+    if (!next) return
     this.commit({
       ...this.snap,
-      projects: this.snap.projects.map((p) => (p.id === id ? { ...p, name: trimmed } : p)),
-      pendingCreates: this.snap.pendingCreates.map((p) => (p.id === id ? { ...p, name: trimmed } : p)),
+      projects: next,
+      pendingCreates: this.snap.pendingCreates.map((p) => {
+        const updated = next.find((q) => q.id === p.id)
+        return updated ?? p
+      }),
     })
   }
 
@@ -428,7 +432,11 @@ export class SpineSession {
   }
 
   setDocumentation(text: string): void {
-    this.patchProject({ documentation: text || undefined })
+    const project = this.project
+    if (!project) return
+    const next = withProjectDocumentation(project, text)
+    if (next === project) return
+    this.patchProject({ documentation: next.documentation })
   }
 
   setModel(m: string): void {
@@ -569,7 +577,7 @@ export class SpineSession {
     this.patchProject({ strategies: s })
   }
 
-  // AI : TODO (mcp-capability) — GUI document↔project binding; wrap as MCP session_action.
+  // AI : GUI document↔project binding — MCP session_action documents.set-projects / CLI set-doc-projects.
   setDocProjects(docId: DocId, projectIds: ProjectId[]): void {
     this.commit({
       ...this.snap,

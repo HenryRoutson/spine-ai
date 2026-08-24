@@ -63,5 +63,6 @@ Broken JSON and unknown step kinds return `{ ok: false, code, error, next }` ins
 ```bash
 npm install --prefix mcp_tool
 npm test --prefix mcp_tool
+npm run test:perf --prefix mcp_tool
 npm run typecheck --prefix mcp_tool
 ```

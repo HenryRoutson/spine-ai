@@ -12,7 +12,8 @@ import { Button } from "@/components/ui/button"
 import { MarkdownView } from "@/components/highlight"
 import { PanelLoading } from "@/components/panel-loading"
 import { useStore } from "@/lib/store"
-import { derivePipelineMermaid } from "@/lib/pipeline-mermaid"
+import { sessionSnapshotFromStore } from "@/lib/core/store-snapshot"
+import { toDocsView, toMermaidView } from "@/lib/core/view"
 import { ResizableSplit } from "@/components/resizable-split"
 import { docsEditorSplit } from "@/lib/layout-split-settings"
 import { usePersistedLeadingWidth } from "@/lib/use-persisted-leading-width"
@@ -43,8 +44,21 @@ Write anything the agent must always respect — these constraints are injected 
 `
 
 export function Documentation() {
-  const { documentation, setDocumentation, modules, models } = useStore()
-  const pipelineMermaid = useMemo(() => derivePipelineMermaid(modules, models, "dark"), [modules, models])
+  const { documentation, setDocumentation, modules, models, projects, activeProjectId } = useStore()
+  // AI : same ViewModels as CLI/TUI docs + mermaid — GUI must not re-derive.
+  const snap = useMemo(
+    () =>
+      sessionSnapshotFromStore({
+        projects,
+        activeProjectId,
+        documentation,
+        modules,
+        models,
+      }),
+    [projects, activeProjectId, documentation, modules, models],
+  )
+  const docsView = useMemo(() => toDocsView(snap), [snap])
+  const pipelineMermaid = useMemo(() => toMermaidView(snap, "dark"), [snap])
 
   // AI : local draft — only persisted on explicit save (avoids a PUT on every keystroke)
   const [draft, setDraft] = useState(documentation)
@@ -53,6 +67,8 @@ export function Documentation() {
   const savedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const isDirty = draft !== documentation
+  // AI : preview shows draft while editing; saved ViewModel markdown when clean.
+  const previewMd = isDirty ? draft : docsView.markdown
   const { width: editorWidth, setWidth: setEditorWidth, commitWidth: commitEditorWidth } =
     usePersistedLeadingWidth(docsEditorSplit)
 
@@ -198,8 +214,8 @@ export function Documentation() {
             }
             trailing={
               <div className={NOTES_PREVIEW_CLASS}>
-                {draft.trim() ? (
-                  <MarkdownView md={draft} inverted />
+                {previewMd.trim() ? (
+                  <MarkdownView md={previewMd} inverted />
                 ) : (
                   <p className={NOTES_EMPTY_CLASS}>Nothing to preview yet.</p>
                 )}
@@ -219,8 +235,8 @@ export function Documentation() {
             )}
             {tab === "preview" && (
               <div className={cn(NOTES_PREVIEW_CLASS, "flex-1")}>
-                {draft.trim() ? (
-                  <MarkdownView md={draft} inverted />
+                {previewMd.trim() ? (
+                  <MarkdownView md={previewMd} inverted />
                 ) : (
                   <p className={NOTES_EMPTY_CLASS}>Nothing to preview yet.</p>
                 )}

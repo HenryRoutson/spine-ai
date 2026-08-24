@@ -1,5 +1,6 @@
 "use client"
 
+// AI : parity ids — documents.set-projects
 import { useMemo, useState } from "react"
 import { useStore } from "@/lib/store"
 import { projectIdsForDoc } from "@/lib/project-docs"
@@ -52,6 +53,7 @@ export function DocProjectPicker({
     <DropdownMenu>
       <DropdownMenuTrigger
         disabled={pending}
+        data-spine-id="documents.set-projects"
         className={cn(
           "inline-flex h-7 max-w-[9rem] shrink-0 items-center gap-1 rounded-md px-2 font-mono text-[10px] text-muted-foreground transition-colors hover:bg-accent hover:text-foreground",
           className,

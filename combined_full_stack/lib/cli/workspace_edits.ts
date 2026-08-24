@@ -49,9 +49,12 @@ export function addNamedModel(session: SpineSession, name: string, params?: stri
     ],
   }
   const models = [...(session.project?.models ?? []), model]
-  const modules = session.modules.map((m) =>
-    m.kind === ModuleKind.Output ? { ...m, inStructureId: model.id, outStructureId: model.id } : m,
-  )
+  // AI : wire Input → Output on the new model so blank pipelines validate (TUI hint: "fixes Input / Output").
+  const modules = session.modules.map((m) => {
+    if (m.kind === ModuleKind.Input) return { ...m, outStructureId: model.id }
+    if (m.kind === ModuleKind.Output) return { ...m, inStructureId: model.id, outStructureId: model.id }
+    return m
+  })
   session.applyProjectChanges({ models, modules })
   return model
 }

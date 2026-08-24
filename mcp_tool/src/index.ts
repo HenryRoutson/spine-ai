@@ -3,9 +3,9 @@
 // AI : TODO (mcp-tools) — shrink to ~8 vibe tools; session_action duplicates named tools and agents pick the wrong one.
 // AI : DONE (mcp-errors) — wrapTool returns { ok:false, code, next } with isError instead of throwing (JSON.parse of proposalJson).
 // AI : TODO (mcp-workspace) — one project handle: session pull/push vs seeds vs GUI Supabase currently diverge.
-// AI : TODO (mcp-capability) — wrap remaining GUI verbs: pullRemoteState, flushPendingSave,
-// AI :   linkQuotes, setDocProjects, executeProposedActions, resyncExamples,
-// AI :   billed ask HTTP, share/hosted mint, Stripe, run cancel. Host-bound stays GUI: CodeHost, human-review, chatbot.
+// AI : session_action covers pull/push/quotes/resync/move-step/setDocProjects/execute-runs.
+// AI : ask_agent prefers POST /api/pipeline-assistant when egress+auth works; falls back in-process.
+// AI : Host-bound stays GUI: CodeHost, human-review, chatbot, share/hosted mint, Stripe, run cancel.
 
 import { resolve } from "node:path"
 import "./bootstrap-env.js"
@@ -412,7 +412,7 @@ server.tool(
 
 server.tool(
   "session_action",
-  "Dispatch a GUI button id (data-spine-id) against the session file. Prefer named tools when they exist. Extra ids: structure.add-field/remove-field/set-relation/add-alias, pipeline.configure-step/remove-step/assign-structure, assistant.reject, billing.refresh, earnings.refresh, cache.refresh, logging.errors-only, logging.hydrate / wait_for_run.",
+  "Dispatch a GUI button id (data-spine-id) against the session file. Prefer named tools when they exist. Extra ids: structure.add-field/remove-field/set-relation/add-alias, pipeline.configure-step/remove-step/move-step/assign-structure, documents.set-projects, quotes.link, session.pull, session.push, project.resync-examples, assistant.execute-runs, assistant.reject, billing.refresh, earnings.refresh, cache.refresh, logging.errors-only, logging.hydrate / wait_for_run.",
   {
     id: z.string().describe("Parity catalog id, e.g. project.add, testing.run, assistant.send"),
     sessionPath: z.string().optional(),
@@ -443,6 +443,10 @@ server.tool(
     forkJoin: z.string().optional().describe("pipeline.configure-step on a fork: product | assemble | merge"),
     runId: z.string().optional(),
     timeoutMs: z.number().optional(),
+    quote: z.string().optional(),
+    executeRuns: z.boolean().optional(),
+    at: z.number().optional().describe("pipeline.move-step index"),
+    projects: z.string().optional().describe("documents.set-projects comma-separated project ids"),
   },
   wrapTool(async (args) => runSessionAction(args)),
 )

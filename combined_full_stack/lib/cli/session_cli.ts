@@ -64,6 +64,8 @@ Usage:
   spine session remove-step --id <id|label>
   spine session move-step --id <id|label> --at <index>
   spine session add-doc --name <file> --text <content> | --file <path>
+  spine session remove-doc --doc <name|id>
+  spine session set-doc-projects --doc <name|id> --projects <id,id> | --all
   spine session docs | pipeline | mermaid | structure | pydantic | tests | logs
   spine session assign-input --module <id|label> --doc <name|id>
   spine session start-run | run-test [--file <*_testing.json>]
@@ -78,7 +80,7 @@ SPINE_API_URL / SPINE_API_TOKEN  HTTP egress for pull/push/start-run/billing
 
 // AI : TODO (gui-parity) — CLI still lacks vs GUI:
 // AI :   kind-specific patch-step fields (model, cache, webhook, parallel, chatbot, code)
-// AI :   remove-doc / setDocProjects / binary upload; cloneFromTemplate HTTP; hydrateRunDetail
+// AI :   binary upload / OCR; cloneFromTemplate HTTP; hydrateRunDetail per-run TUI
 // AI :   share mint / hosted API / marketplace; billing checkout / withdraw; teams
 // AI :   run cancel, human-review elicitation, Node custom-code host
 // AI :   inference *_setup.json editor; testing visual editor + alignment
@@ -320,6 +322,37 @@ async function runSessionCommandInner(
       label: DocLabel.Inference,
     })
     return ok("session add-doc", { action: "addDoc", doc })
+  }
+
+  if (sub === "remove-doc") {
+    const docKey = flagString(flags, "doc") ?? positional[2]
+    if (!docKey) return usage("session remove-doc requires --doc")
+    const doc = session.docs.find((d) => d.id === docKey || d.name === docKey)
+    if (!doc) return usage(`unknown doc: ${docKey}`)
+    session.removeDoc(doc.id)
+    return ok("session remove-doc", { action: "removeDoc", docId: doc.id, name: doc.name })
+  }
+
+  if (sub === "set-doc-projects") {
+    const docKey = flagString(flags, "doc")
+    if (!docKey) return usage("session set-doc-projects requires --doc")
+    const doc = session.docs.find((d) => d.id === docKey || d.name === docKey)
+    if (!doc) return usage(`unknown doc: ${docKey}`)
+    const all = flags.all === true
+    const raw = flagString(flags, "projects")
+    if (!all && raw == null) return usage("session set-doc-projects requires --projects <id,id> or --all")
+    const projectIds = all
+      ? session.projects.map((p) => p.id)
+      : raw!
+          .split(",")
+          .map((s) => s.trim())
+          .filter(Boolean)
+    session.setDocProjects(doc.id, projectIds as import("@/lib/types").ProjectId[])
+    return ok("session set-doc-projects", {
+      action: "setDocProjects",
+      docId: doc.id,
+      projectIds,
+    })
   }
 
   if (sub === "validate") {

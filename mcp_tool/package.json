@@ -7,7 +7,8 @@
     "start": "node ./spine-mcp.mjs",
     "benchmark-bridge": "tsx --tsconfig tsconfig.json scripts/benchmark_bridge.ts",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run"
+    "test": "vitest run",
+    "test:perf": "vitest run src/mcp-vibe-perf.test.ts"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.29.0",

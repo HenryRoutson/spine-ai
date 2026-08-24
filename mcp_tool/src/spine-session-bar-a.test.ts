@@ -207,6 +207,43 @@ describe("MCP Bar A session tools", () => {
     }
   })
 
+  it("linkQuotes / move-step / setDocProjects session_actions work", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "mcp-parity-"))
+    const sessionPath = join(dir, "session.json")
+    try {
+      const {
+        addProjectFromSession,
+        addDocFromSession,
+        addStepFromSession,
+        linkQuotesFromSession,
+        moveStepFromSession,
+        setDocProjectsFromSession,
+        runSessionAction,
+      } = await import("./spine-session-bar-a.js")
+      const project = addProjectFromSession(sessionPath)
+      addDocFromSession({ sessionPath, name: "lease.txt", content: "keep the premises insured at all times" })
+      const linked = linkQuotesFromSession({
+        sessionPath,
+        quote: "keep the premises insured",
+        doc: "lease.txt",
+      })
+      expect(linked.quote.exact).toBe(true)
+      const bound = setDocProjectsFromSession("lease.txt", [project.id], sessionPath)
+      expect(bound.projectIds).toEqual([project.id])
+      const added = addStepFromSession("llm", "Extract", sessionPath)
+      const moved = await runSessionAction({
+        id: "pipeline.move-step",
+        sessionPath,
+        stepId: added[0]!.id,
+        at: 0,
+      })
+      expect(moved).toBeTruthy()
+      moveStepFromSession(added[0]!.id, 1, sessionPath)
+    } finally {
+      rmSync(dir, { recursive: true, force: true })
+    }
+  })
+
   it("import_seed lists available ids when the file is missing", async () => {
     const dir = mkdtempSync(join(tmpdir(), "mcp-seed-miss-"))
     const sessionPath = join(dir, "session.json")

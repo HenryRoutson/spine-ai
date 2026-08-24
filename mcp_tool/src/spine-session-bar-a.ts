@@ -15,6 +15,7 @@ import {
   assignStepStructure,
   importSeed,
   listSeedIds,
+  moveStep,
   parseAddableKind,
   patchStep,
   removeModelField,
@@ -64,7 +65,7 @@ async function probeApi(url: string): Promise<boolean> {
 }
 
 // AI : hung Next (listen but no respond) used to stall Claude Code for minutes.
-const MCP_API_TIMEOUT_MS = 8_000
+export const MCP_API_TIMEOUT_MS = 8_000
 
 export function openMcpSession(sessionPath?: string, offline = false) {
   const persist = createFilePersist(resolveSessionPath(sessionPath))
@@ -101,7 +102,11 @@ export function getProjectFromSession(sessionPath?: string) {
     throw new Error("no active project")
   }
   const assistantError = askAgentErrors.get(path)
-  const review = toMcpProjectReview(snap)
+  // AI : askAgentJobs is MCP-local — session.assistantInFlight alone misses in-process / mocked asks.
+  const review = {
+    ...toMcpProjectReview(snap),
+    assistantInFlight: Boolean(snap.assistantInFlight) || askAgentJobs.has(path),
+  }
   return {
     ...review,
     ...(assistantError ? { assistantError } : {}),
@@ -509,6 +514,12 @@ export function removeStepFromSession(id: string, sessionPath?: string) {
   return getProjectFromSession(sessionPath)
 }
 
+export function moveStepFromSession(id: string, at: number, sessionPath?: string) {
+  const session = openMcpSession(sessionPath, true)
+  moveStep(session, id, at)
+  return getProjectFromSession(sessionPath)
+}
+
 export function assignStructureFromSession(stepId: string, model: string, sessionPath?: string) {
   const session = openMcpSession(sessionPath, true)
   const assigned = assignStepStructure(session, stepId, model)
@@ -532,6 +543,57 @@ export function removeDocFromSession(docKey: string, sessionPath?: string) {
   if (!doc) throw new Error(`unknown doc: ${docKey}`)
   session.removeDoc(doc.id)
   return getProjectFromSession(sessionPath)
+}
+
+export function setDocProjectsFromSession(docKey: string, projectIds: string[], sessionPath?: string) {
+  const session = openMcpSession(sessionPath, true)
+  const doc = session.docs.find((d) => d.id === docKey || d.name === docKey)
+  if (!doc) throw new Error(`unknown doc: ${docKey}`)
+  session.setDocProjects(doc.id, projectIds as import("@/lib/types").ProjectId[])
+  return { docId: doc.id, projectIds }
+}
+
+export function linkQuotesFromSession(input: {
+  quote: string
+  doc: string
+  text?: string
+  sessionPath?: string
+}) {
+  const session = openMcpSession(input.sessionPath, true)
+  const snap = session.getSnapshot()
+  const doc = snap.docs.find((d) => d.id === input.doc || d.name === input.doc)
+  if (!doc) throw new Error(`unknown doc: ${input.doc}`)
+  const sourceText = input.text ?? snap.docContents[doc.id]
+  if (!sourceText) throw new Error(`no content for doc: ${doc.name}`)
+  const linked = session.linkQuotes({ quote: input.quote, sourceText, docId: doc.id })
+  return { action: "linkQuotes", quote: linked }
+}
+
+export async function pullRemoteStateFromSession(sessionPath?: string) {
+  const session = openMcpSession(sessionPath)
+  await session.pullRemoteState()
+  return getProjectFromSession(sessionPath)
+}
+
+export async function pushRemoteStateFromSession(sessionPath?: string) {
+  const session = openMcpSession(sessionPath)
+  await session.flushPendingSave()
+  return getProjectFromSession(sessionPath)
+}
+
+export async function resyncExamplesFromSession(sessionPath?: string) {
+  const session = openMcpSession(sessionPath)
+  const count = await session.resyncExamples()
+  return { action: "resyncExamples", count, project: getProjectFromSession(sessionPath) }
+}
+
+export async function executeProposedActionsFromSession(sessionPath?: string) {
+  const session = openMcpSession(sessionPath)
+  const runs = await session.executeProposedActions()
+  return {
+    action: "executeProposedActions",
+    runs: runs.map((r) => ({ id: r.id, status: r.status })),
+  }
 }
 
 export function setDocsFromSession(text: string, sessionPath?: string) {
@@ -559,7 +621,7 @@ export function rejectProposalFromSession(sessionPath?: string) {
 }
 
 export async function askAgentFromSession(message: string, sessionPath?: string, kind?: string) {
-  // AI : TODO (mcp-vibe-http) — POST /api/pipeline-assistant (billed + auth) like GUI Send, not in-process proposePipelineChange.
+  // AI : askAgent tries POST /api/pipeline-assistant when egress is live; falls back to in-process propose.
   const path = resolveSessionPath(sessionPath)
   const session = openMcpSession(sessionPath, false)
   if (session.assistantInFlight || askAgentJobs.has(path)) {
@@ -668,6 +730,10 @@ export type SessionActionArgs = {
   forkJoin?: string
   runId?: string
   timeoutMs?: number
+  quote?: string
+  executeRuns?: boolean
+  at?: number
+  projects?: string
 }
 
 export async function runSessionAction(args: SessionActionArgs): Promise<unknown> {
@@ -730,6 +796,9 @@ export async function runSessionAction(args: SessionActionArgs): Promise<unknown
     case "pipeline.remove-step":
       if (!args.stepId) throw new Error("stepId required")
       return removeStepFromSession(args.stepId, sessionPath)
+    case "pipeline.move-step":
+      if (!args.stepId || args.at == null) throw new Error("stepId, at required")
+      return moveStepFromSession(args.stepId, args.at, sessionPath)
     case "pipeline.assign-structure":
       if (!args.stepId || !args.model) throw new Error("stepId, model required")
       return assignStructureFromSession(args.stepId, args.model, sessionPath)
@@ -742,6 +811,17 @@ export async function runSessionAction(args: SessionActionArgs): Promise<unknown
     case "remove_doc":
       if (!args.doc) throw new Error("doc required")
       return removeDocFromSession(args.doc, sessionPath)
+    case "documents.set-projects":
+      if (!args.doc) throw new Error("doc required")
+      {
+        const ids = args.projects
+          ? args.projects.split(",").map((s) => s.trim()).filter(Boolean)
+          : args.projectId
+            ? [args.projectId]
+            : []
+        if (!ids.length) throw new Error("projects or projectId required")
+        return setDocProjectsFromSession(args.doc, ids, sessionPath)
+      }
     case "docs.set":
     case "set_docs":
       if (args.text == null) throw new Error("text required")
@@ -759,9 +839,12 @@ export async function runSessionAction(args: SessionActionArgs): Promise<unknown
     case "assistant.approve":
     case "apply_project_changes":
       if (args.proposalJson) {
-        return applyProjectChangesFromSession(JSON.parse(args.proposalJson) as ProjectProposal, sessionPath)
+        await applyProjectChangesFromSession(JSON.parse(args.proposalJson) as ProjectProposal, sessionPath)
+      } else {
+        await applyPendingProposalFromSession(sessionPath)
       }
-      return applyPendingProposalFromSession(sessionPath)
+      if (args.executeRuns) return executeProposedActionsFromSession(sessionPath)
+      return getProjectFromSession(sessionPath)
     case "inference.start-run":
     case "start_run":
       return startRunFromSession({ sessionPath, testDocName: args.testDocName, testing: args.testing })
@@ -805,11 +888,23 @@ export async function runSessionAction(args: SessionActionArgs): Promise<unknown
       return sessionLogs(sessionPath)
     case "logging.errors-only":
       return sessionLogs(sessionPath, true)
-    // AI : TODO (mcp-capability) — GUI ids with SpineSession methods but no MCP case yet:
-    // AI :   quotes.link → linkQuotes, docs/project bind → setDocProjects,
-    // AI :   assistant approve-to-run → executeProposedActions,
-    // AI :   session pull/push → pullRemoteState/flushPendingSave, project.resync-examples → resyncExamples.
-    // AI :   Host-bound (no session method): inference.stop, jobs.stop, inference.human-review.*,
+    case "quotes.link":
+      if (!args.quote || !args.doc) throw new Error("quote, doc required")
+      return linkQuotesFromSession({
+        quote: args.quote,
+        doc: args.doc,
+        text: args.text,
+        sessionPath,
+      })
+    case "session.pull":
+      return pullRemoteStateFromSession(sessionPath)
+    case "session.push":
+      return pushRemoteStateFromSession(sessionPath)
+    case "project.resync-examples":
+      return resyncExamplesFromSession(sessionPath)
+    case "assistant.execute-runs":
+      return executeProposedActionsFromSession(sessionPath)
+    // AI : Host-bound (no session method): inference.stop, jobs.stop, inference.human-review.*,
     // AI :   inference.chatbot.send, inference.custom-code, share mint, Stripe, auth.sign-in.
     default:
       throw new Error(`unknown session_action id: ${id}`)

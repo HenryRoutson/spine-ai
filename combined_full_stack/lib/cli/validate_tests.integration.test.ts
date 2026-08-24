@@ -11,6 +11,10 @@ const seedFiles = readdirSync(SEEDS_DIR).filter((f) => f.endsWith(".json"))
 const SKIP_VALIDATE_TESTS = new Set([
   "tutoring_random_fill.json",
   "tutoring_styled_batch.json",
+  // AI : fork fixtures pin inputs only — expectedOutputs filled after a verified run.
+  "contract_diligence_fork.json",
+  "invoice_triage_fork.json",
+  "lead_notify_fork.json",
 ])
 
 describe("validate tests across seeds", () => {

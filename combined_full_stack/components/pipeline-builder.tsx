@@ -1,7 +1,8 @@
 "use client"
 
+// AI : parity ids — pipeline.add-step pipeline.move-step pipeline.validate
 // AI : TODO refactor — only extract shared pipeline chrome if a third layout consumer appears (Logging already uses PipelineCanvas).
-import { useEffect, useState, type ReactNode } from "react"
+import { useEffect, useMemo, useState, type ReactNode } from "react"
 import {
   Plus,
   Trash2,
@@ -14,6 +15,8 @@ import {
   Zap,
 } from "lucide-react"
 import { useStore } from "@/lib/store"
+import { sessionSnapshotFromStore } from "@/lib/core/store-snapshot"
+import { toPipelineView, toValidationView } from "@/lib/core/view"
 import { computeInvalidForUi, invalidOptsForDocs } from "@/lib/pipeline-validity-ui"
 import { structureIssueMessagesForUi } from "@/lib/structure-validity-ui"
 import { computeWorkspaceValidity } from "@/lib/workspace-validity-ui"
@@ -88,13 +91,43 @@ import {
 } from "@/lib/editor-split-settings"
 
 export function PipelineBuilder() {
-  const { modules, setModules, models, setModels, model: globalModel, runs, typeAliases, project, docs, inferenceInputDocIds } = useStore()
+  const {
+    modules,
+    setModules,
+    models,
+    setModels,
+    model: globalModel,
+    runs,
+    typeAliases,
+    project,
+    projects,
+    docs,
+    inferenceInputDocIds,
+  } = useStore()
   const [selectedId, setSelectedId] = useState<string>(modules[0]?.id ?? "")
   const [copied, setCopied] = useState(false)
   useRerenderOnEvent(LOGGING_SETTINGS_CHANGED_EVENT)
   const savedInspectorWidth = usePipelineInspectorWidth()
   const [inspectorWidth, setInspectorWidth] = useState(readPipelineInspectorWidth)
   useEffect(() => setInspectorWidth(savedInspectorWidth), [savedInspectorWidth])
+
+  // AI : same ViewModels as CLI/TUI — invalid badges must not drift from toPipelineView / toValidationView.
+  const snap = useMemo(
+    () =>
+      sessionSnapshotFromStore({
+        projects,
+        activeProjectId: project.id,
+        modules,
+        models,
+        typeAliases,
+        docs,
+        inferenceInputDocIds,
+      }),
+    [projects, project.id, modules, models, typeAliases, docs, inferenceInputDocIds],
+  )
+  const pipelineView = useMemo(() => toPipelineView(snap), [snap])
+  const validationView = useMemo(() => toValidationView(snap), [snap])
+  const selectedViewInvalid = pipelineView?.steps.find((s) => s.id === selectedId)?.invalid ?? []
 
   const selected = findPipelineModule(modules, selectedId)
   const { pipelineEditingBlocked: editingBlocked } = computeWorkspaceValidity(
@@ -114,6 +147,8 @@ export function PipelineBuilder() {
   const totalCost =
     okRuns.length > 0 ? okRuns.reduce((a, r) => a + runBilledCents(r), 0) / okRuns.length : null
   const cachedCount = flattenPipelineModules(modules).filter((m) => m.cached).length
+  const invalidStepCount = pipelineView?.steps.filter((s) => s.invalid.length > 0).length ?? 0
+  const validationIssueCount = validationView.issues.length
 
   function insertModule(kind: ModuleKind, at = modules.length, loc?: PipelineInsertLoc) {
     const fresh: PipelineModule[] =
@@ -268,9 +303,10 @@ export function PipelineBuilder() {
               <Badge variant="outline" className="gap-1 text-[10px]">
                 <Zap className="h-3 w-3 text-primary" /> {cachedCount} cached
               </Badge>
-              {invalid.size > 0 && (
-                <Badge variant="outline" className="gap-1 border-destructive/50 text-[10px] text-destructive">
-                  <AlertTriangle className="h-3 w-3" /> {invalid.size} invalid
+              {invalidStepCount > 0 && (
+                <Badge variant="outline" className="gap-1 border-destructive/50 text-[10px] text-destructive" {...spineActionProps("pipeline.validate")}>
+                  <AlertTriangle className="h-3 w-3" /> {invalidStepCount} invalid
+                  {validationIssueCount > invalidStepCount ? ` · ${validationIssueCount} issues` : ""}
                 </Badge>
               )}
               {warningCount > 0 && (
@@ -394,7 +430,7 @@ export function PipelineBuilder() {
                         </AutoLockTooltip>
                       ) : editingBlocked ? null : (
                         <div className="flex items-center gap-1">
-                          <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => move(selected.id, -1)}>
+                          <Button size="icon" variant="ghost" className="h-7 w-7" spineId="pipeline.move-step" onClick={() => move(selected.id, -1)}>
                             <ArrowUp className="h-3.5 w-3.5" />
                           </Button>
                           <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => move(selected.id, 1)}>

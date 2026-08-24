@@ -87,6 +87,7 @@ import { readEarningsSnapshot, writeEarningsSnapshot } from "@/lib/earnings-snap
 import { warmMarketplaceListings } from "@/lib/warm-run-data"
 import { warmSettingsAccount, warmSettingsTeams } from "@/lib/warm-settings-data"
 import { useTeamRealtime } from "@/lib/use-team-realtime"
+import { renamedProjects, withProjectDocumentation } from "@/lib/core/project-ops"
 import { DEMO_DEFAULT_PROJECT_ID } from "@/lib/demo-constants"
 import { setDemoMode } from "@/lib/demo-mode"
 import { overlayOptimisticProjects as mergeOptimisticProjects, confirmCreatedInMap, reseedCreatedFromLocal, shouldKeepLocalProject } from "@/lib/core/realtime"
@@ -1200,17 +1201,15 @@ export function StoreProvider({
       })
   }, [refresh])
 
-  // AI : discrete rename — save immediately (not debounced like builder keystrokes).
+  // AI : discrete rename — shared renamedProjects with SpineSession; save immediately.
   const renameProject = useCallback((id: string, name: string) => {
-    const trimmed = name.trim()
-    if (!trimmed) return
     setState((prev) => {
       if (!prev) return prev
-      const current = prev.projects.find((p) => p.id === id)
-      if (!current || current.name === trimmed) return prev
-      const next = { ...current, name: trimmed }
+      const nextProjects = renamedProjects(prev.projects, id, name)
+      if (!nextProjects) return prev
+      const next = nextProjects.find((p) => p.id === id)!
       void persistProject(id, serializeProjectPutBody(next))
-      return { ...prev, projects: prev.projects.map((p) => (p.id === id ? next : p)) }
+      return { ...prev, projects: nextProjects }
     })
   }, [persistProject])
 
@@ -1587,9 +1586,12 @@ export function StoreProvider({
 
   const setDocumentation = useCallback(
     (text: string) => {
-      patchProject({ documentation: text || undefined })
+      if (!project) return
+      const next = withProjectDocumentation(project, text)
+      if (next === project) return
+      patchProject({ documentation: next.documentation })
     },
-    [patchProject],
+    [patchProject, project],
   )
 
   const boundSetInferenceInputDocIds = useCallback(
