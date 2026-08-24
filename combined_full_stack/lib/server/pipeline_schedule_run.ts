@@ -7,14 +7,14 @@ import {
   collectInferenceInputIssues,
   inferenceInputIssueMessage,
 } from "@/lib/inference-validity";
+import { missingRequiredSecretsError } from "@/lib/server/secret_preflight";
 import {
   inputDocsByModuleFromAssignment,
   inputMinCountForModule,
-  moduleInputReady,
   orderedInputModules,
   type InputDocsAssignment,
 } from "@/lib/inference-input";
-import { pipelineScheduleRunNotes } from "@/lib/schedule-types";
+import { pipelineScheduleRunNotes, scheduleDocsToByModule } from "@/lib/schedule-types";
 import { PipelinePausedError } from "@/lib/server/run_checkpoint";
 import { runPipeline } from "@/lib/server/run_engine";
 import { computeRunFingerprintForRequest } from "@/lib/server/run_fingerprint";
@@ -32,7 +32,7 @@ import { openStoreForUser } from "@/lib/server/hosted_apis";
 import { markScheduleFired, type ClaimedSchedule } from "@/lib/server/pipeline_schedules";
 import { logger } from "@/lib/server/server_logger";
 import { resolveRunInputDoc, snapshotDocNamesById } from "@/lib/server/store";
-import { DEFAULT_MODEL, RunSource, type DocId, type DocRef, type ModuleId } from "@/lib/server/types";
+import { DEFAULT_MODEL, RunSource, type DocId, type DocRef } from "@/lib/server/types";
 import type { user_id_string } from "@/lib/server/require_auth";
 
 const runLog = logger("pipeline-schedules:run");
@@ -41,46 +41,44 @@ export type QueueScheduleRunResult =
   | { ok: true; jobId: string }
   | { ok: false; status: number; message: string; code?: string };
 
+async function failSchedule(
+  row: ClaimedSchedule,
+  status: number,
+  message: string,
+  code?: string,
+): Promise<QueueScheduleRunResult> {
+  await markScheduleFired(row, { runAt: Date.now(), error: message });
+  return code ? { ok: false, status, message, code } : { ok: false, status, message };
+}
+
 export async function queueScheduledRun(row: ClaimedSchedule): Promise<QueueScheduleRunResult> {
-  const ownerId = row.ownerId as user_id_string;
+  const ownerId: user_id_string = row.ownerId;
   const store = await openStoreForUser(ownerId);
   const project = store.project(row.projectId);
-  if (!project) {
-    await markScheduleFired(row, { runAt: Date.now(), error: "project missing" });
-    return { ok: false, status: HTTP.NOT_FOUND, message: "project missing" };
-  }
+  if (!project) return failSchedule(row, HTTP.NOT_FOUND, "project missing");
 
   const inputModules = orderedInputModules(project.modules);
   const namesById = snapshotDocNamesById(store);
   const assignment: InputDocsAssignment = {};
   const contentByDocId: Partial<Record<string, string>> = {};
-  const docsByModule: Partial<Record<ModuleId, DocId[]>> = {};
-  for (const doc of row.defaultDocs) {
-    const ids = docsByModule[doc.moduleId] ?? [];
-    ids.push(doc.docId);
-    docsByModule[doc.moduleId] = ids;
-  }
+  const docsByModule = scheduleDocsToByModule(row.defaultDocs);
 
   for (const m of inputModules) {
     const ids = docsByModule[m.id] ?? [];
     if (ids.length < inputMinCountForModule(m)) {
-      const message = `input "${m.label}" needs at least ${inputMinCountForModule(m)} document(s)`;
-      await markScheduleFired(row, { runAt: Date.now(), error: message });
-      return { ok: false, status: 400, message };
+      return failSchedule(
+        row,
+        400,
+        `input "${m.label}" needs at least ${inputMinCountForModule(m)} document(s)`,
+      );
     }
     const docs: DocRef[] = [];
     for (const docId of ids) {
       const resolved = await resolveRunInputDoc(store, docId, namesById);
-      if (!resolved) {
-        const message = `unknown doc ${docId}`;
-        await markScheduleFired(row, { runAt: Date.now(), error: message });
-        return { ok: false, status: HTTP.NOT_FOUND, message };
-      }
+      if (!resolved) return failSchedule(row, HTTP.NOT_FOUND, `unknown doc ${docId}`);
       const content = store.docContent(resolved.docId);
       if (content === undefined) {
-        const message = `missing content for doc ${docId}`;
-        await markScheduleFired(row, { runAt: Date.now(), error: message });
-        return { ok: false, status: HTTP.NOT_FOUND, message };
+        return failSchedule(row, HTTP.NOT_FOUND, `missing content for doc ${docId}`);
       }
       docs.push(resolved.doc);
       contentByDocId[resolved.docId] = content;
@@ -88,30 +86,23 @@ export async function queueScheduledRun(row: ClaimedSchedule): Promise<QueueSche
     assignment[m.id] = docs;
   }
 
-  for (const m of inputModules) {
-    if (!moduleInputReady(m, assignment)) {
-      const message = `input "${m.label}" needs at least ${inputMinCountForModule(m)} document(s)`;
-      await markScheduleFired(row, { runAt: Date.now(), error: message });
-      return { ok: false, status: 400, message };
-    }
-  }
   const inputIssues = collectInferenceInputIssues(inputModules, {}, contentByDocId, assignment, {
     models: project.models,
     typeAliases: project.typeAliases,
   });
   if (inputIssues.length) {
-    const message = inferenceInputIssueMessage(inputIssues, inputModules);
-    await markScheduleFired(row, { runAt: Date.now(), error: message });
-    return { ok: false, status: 400, message };
+    return failSchedule(row, 400, inferenceInputIssueMessage(inputIssues, inputModules));
+  }
+
+  const missingSecrets = await missingRequiredSecretsError(project.modules, ownerId, { teamId: project.teamId, projectName: project.name, projectOwnerId: project.teamProjectOwnerId });
+  if (missingSecrets) {
+    return failSchedule(row, 400, missingSecrets, "missing_secrets");
   }
 
   const resolvedByModule = inputDocsByModuleFromAssignment(inputModules, assignment);
   const flatIds = inputModules.flatMap((m) => (resolvedByModule[m.id] ?? []).map((d) => d as DocId));
   const [primary, ...rest] = flatIds;
-  if (!primary) {
-    await markScheduleFired(row, { runAt: Date.now(), error: "no input documents" });
-    return { ok: false, status: 400, message: "no input documents" };
-  }
+  if (!primary) return failSchedule(row, 400, "no input documents");
 
   const model = row.defaultModel ?? project.modules.find((m) => m.kind === "llm")?.model ?? DEFAULT_MODEL;
   const { fingerprint, inputDocIds: fingerprintInputDocIds } = computeRunFingerprintForRequest(
@@ -137,13 +128,12 @@ export async function queueScheduledRun(row: ClaimedSchedule): Promise<QueueSche
   }
 
   if (countActiveJobs(ownerId) >= MAX_CONCURRENT_RUNS_PER_USER) {
-    await markScheduleFired(row, { runAt: Date.now(), error: "too many concurrent runs" });
-    return {
-      ok: false,
-      status: HTTP.TOO_MANY_REQUESTS,
-      message: "Too many runs in progress — wait for one to finish.",
-      code: "concurrent_runs",
-    };
+    return failSchedule(
+      row,
+      HTTP.TOO_MANY_REQUESTS,
+      "Too many runs in progress — wait for one to finish.",
+      "concurrent_runs",
+    );
   }
 
   const jobDb = await openCrossUserJobDb();

@@ -464,7 +464,7 @@ export class SpineSession {
     return doc
   }
 
-  // AI : TODO (mcp-capability) — GUI Documents delete; wrap as session_action documents.remove.
+  // AI : GUI Documents delete — MCP remove_doc / session_action documents.remove.
   removeDoc(docId: DocId): void {
     const { [docId]: _removed, ...docContents } = this.snap.docContents
     this.commit({

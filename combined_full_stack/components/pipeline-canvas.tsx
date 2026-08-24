@@ -26,7 +26,7 @@ import {
   makeEmptyForkBranch,
   pipelineHasFork,
 } from "@/lib/fork-pipeline"
-import { forkJoinCaption, forkLaneColumnTemplate } from "@/lib/fork-join-caption"
+import { forkJoinCaption } from "@/lib/fork-join-caption"
 import { isAutoQuoteStep } from "@/lib/quote-steps"
 import { inputTargetStructureId, isAutoDocToTextStep, isAutoStructureParseStep, isManagedLockedStep } from "@/lib/structure-parse-steps"
 import {
@@ -227,7 +227,11 @@ function SegmentRow({
     }
     const canAddLane = editMode && !!onPatchFork && branches.length < FORK_MAX_BRANCHES
     const colTemplate = [
-      ...branches.map((b) => forkLaneColumnTemplate(flattenPipelineModules(b.modules).some((m) => isForkKind(m.kind)))),
+      ...branches.map((b) =>
+        flattenPipelineModules(b.modules).some((m) => isForkKind(m.kind))
+          ? "minmax(22rem, 1.6fr)"
+          : "minmax(13rem, 1fr)",
+      ),
       ...(canAddLane ? ["minmax(7rem, 0.4fr)"] : []),
     ].join(" ")
     return (
@@ -346,8 +350,6 @@ function SegmentRow({
             caption={joinCaption}
             selected={selectedId === fork.id}
             onSelect={() => onSelect?.(fork.id)}
-            forkId={fork.id}
-            label={fork.label}
           />
         </div>
         <InvalidMessage
@@ -916,14 +918,10 @@ function ForkJoinRow({
   caption,
   selected,
   onSelect,
-  forkId,
-  label,
 }: {
   caption: ReturnType<typeof forkJoinCaption>
   selected: boolean
   onSelect: () => void
-  forkId: ModuleId
-  label: string
 }) {
   return (
     <button

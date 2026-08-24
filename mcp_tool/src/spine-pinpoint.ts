@@ -32,6 +32,8 @@ export type PinpointFailureInput = {
   runJson?: string
 }
 
+export type PinpointRunSource = Pick<PinpointFailureInput, "runPath" | "runJson">
+
 export type PinpointFailureResult = {
   passed: boolean
   testFile: string
@@ -57,7 +59,7 @@ function absPath(path: string, cwd: string): string {
   return resolve(cwd, path)
 }
 
-function readRunFromInput(input: Pick<PinpointFailureInput, "runPath" | "runJson">, cwd: string): PipelineRun {
+export function readRunFromInput(input: PinpointRunSource, cwd: string): PipelineRun {
   const raw =
     input.runJson ??
     (input.runPath ? readTextFile(absPath(input.runPath, cwd)) : undefined)
@@ -136,35 +138,33 @@ function firstFailureRecord(
 }
 
 // AI : deterministic compare only — probabilistic / LLM field checks come later with benchmarks.
+export function pinpointFailureOnProject(
+  project: Project,
+  testContent: string,
+  testName: string,
+  run: PipelineRun,
+): PinpointFailureResult {
+  const parsed = parseTestFile(testContent)
+  if (!parsed.ok) throw new Error(parsed.error)
+  const results = compareRunToTest(run, parsed.test, project)
+  const deterministicPassed = testVerdictPassed(results)
+  const passed = testOutcomePassed(parsed.test, results, run, false, deterministicPassed)
+  return {
+    passed,
+    testFile: testName,
+    projectName: project.name,
+    expectFailure: parsed.test.expectFailure,
+    firstFailure: firstFailureRecord(results, run, testName, project),
+    stepSummary: results.map(compactStep),
+    note: "Deterministic field compare only — probabilistic (LLM-checked) fields and cache are ignored for now.",
+  }
+}
+
 export function pinpointFailure(input: PinpointFailureInput, cwd: string): PinpointFailureResult {
   const seedPath = absPath(input.projectSeedPath, cwd)
   const testPath = absPath(input.testFilePath, cwd)
   const ctx = loadProjectContext(seedPath)
-  const testContent = readTextFile(testPath)
-  const parsed = parseTestFile(testContent)
-  if (!parsed.ok) throw new Error(parsed.error)
-
-  const run = readRunFromInput(input, cwd)
-  const results = compareRunToTest(run, parsed.test, ctx.project)
-  const deterministicPassed = testVerdictPassed(results)
-  const passed = testOutcomePassed(
-    parsed.test,
-    results,
-    run,
-    false,
-    deterministicPassed,
-  )
-
-  const fail = firstFailureRecord(results, run, testPath, ctx.project)
-  return {
-    passed,
-    testFile: testPath,
-    projectName: ctx.project.name,
-    expectFailure: parsed.test.expectFailure,
-    firstFailure: fail,
-    stepSummary: results.map(compactStep),
-    note: "Deterministic field compare only — probabilistic (LLM-checked) fields and cache are ignored for now.",
-  }
+  return pinpointFailureOnProject(ctx.project, readTextFile(testPath), testPath, readRunFromInput(input, cwd))
 }
 
 export function compareRunToTestReport(input: PinpointFailureInput, cwd: string) {

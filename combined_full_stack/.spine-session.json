@@ -935,6 +935,315 @@
       ],
       "createdAt": 1787279241277,
       "lastOpenedAt": 1787279241277
+    },
+    {
+      "id": "p_160feb8e2634431790198d5e",
+      "name": "Lead Enrich Fork (n8n pieces)",
+      "kind": "sales-ops",
+      "models": [
+        {
+          "id": "m_lead",
+          "name": "InboundLead",
+          "description": "Website form lead.",
+          "fields": [
+            {
+              "id": "f_name",
+              "name": "name",
+              "type": "text",
+              "optional": false,
+              "description": "Contact name"
+            },
+            {
+              "id": "f_email",
+              "name": "email",
+              "type": "text",
+              "optional": false,
+              "description": "Email"
+            },
+            {
+              "id": "f_company",
+              "name": "company",
+              "type": "text",
+              "optional": false,
+              "description": "Company"
+            },
+            {
+              "id": "f_created",
+              "name": "created_at",
+              "type": "text",
+              "optional": false,
+              "description": "Created timestamp"
+            }
+          ]
+        },
+        {
+          "id": "m_hashed",
+          "name": "HashedLead",
+          "description": "Lead plus local email hash (not a vendor API).",
+          "fields": [
+            {
+              "id": "f_h_name",
+              "name": "name",
+              "type": "text",
+              "optional": false,
+              "description": "Contact name"
+            },
+            {
+              "id": "f_h_email",
+              "name": "email",
+              "type": "text",
+              "optional": false,
+              "description": "Email"
+            },
+            {
+              "id": "f_h_company",
+              "name": "company",
+              "type": "text",
+              "optional": false,
+              "description": "Company"
+            },
+            {
+              "id": "f_h_created",
+              "name": "created_at",
+              "type": "text",
+              "optional": false,
+              "description": "Created timestamp"
+            },
+            {
+              "id": "f_h_hash",
+              "name": "hash",
+              "type": "text",
+              "optional": false,
+              "description": "Local hash of email"
+            }
+          ]
+        },
+        {
+          "id": "m_named",
+          "name": "NamedLead",
+          "description": "Renamed display fields via Set.",
+          "fields": [
+            {
+              "id": "f_n_contact",
+              "name": "contact",
+              "type": "text",
+              "optional": false,
+              "description": "Display name"
+            },
+            {
+              "id": "f_n_org",
+              "name": "org",
+              "type": "text",
+              "optional": false,
+              "description": "Display company"
+            }
+          ]
+        },
+        {
+          "id": "m_dated",
+          "name": "DatedLead",
+          "description": "Lead with ISO date copy.",
+          "fields": [
+            {
+              "id": "f_d_name",
+              "name": "name",
+              "type": "text",
+              "optional": false,
+              "description": "Contact name"
+            },
+            {
+              "id": "f_d_email",
+              "name": "email",
+              "type": "text",
+              "optional": false,
+              "description": "Email"
+            },
+            {
+              "id": "f_d_company",
+              "name": "company",
+              "type": "text",
+              "optional": false,
+              "description": "Company"
+            },
+            {
+              "id": "f_d_created",
+              "name": "created_at",
+              "type": "text",
+              "optional": false,
+              "description": "Created timestamp"
+            },
+            {
+              "id": "f_d_iso",
+              "name": "iso",
+              "type": "text",
+              "optional": false,
+              "description": "ISO datetime"
+            }
+          ]
+        },
+        {
+          "id": "sm_fork_mod_fork",
+          "name": "Fork_Enrich",
+          "description": "Auto-derived fork product (one field per lane).",
+          "auto": true,
+          "fields": [
+            {
+              "id": "f_Hash",
+              "name": "Hash",
+              "type": "model",
+              "ref": "m_hashed",
+              "optional": false,
+              "description": ""
+            },
+            {
+              "id": "f_Normalize",
+              "name": "Normalize",
+              "type": "model",
+              "ref": "m_named",
+              "optional": false,
+              "description": ""
+            },
+            {
+              "id": "f_Date",
+              "name": "Date",
+              "type": "model",
+              "ref": "m_dated",
+              "optional": false,
+              "description": ""
+            }
+          ]
+        }
+      ],
+      "modules": [
+        {
+          "id": "mod_in",
+          "kind": "input",
+          "label": "Inbound Lead",
+          "note": "JSON form payload",
+          "outStructureId": "m_lead",
+          "inputType": "json",
+          "inputNameContains": "inbound_lead",
+          "inputDescription": "Lead JSON",
+          "cached": true,
+          "avgMs": 0,
+          "avgCostCents": 0
+        },
+        {
+          "id": "mod_fork",
+          "kind": "fork",
+          "label": "Enrich",
+          "note": "Hash, rename, and date-format in parallel n8n pieces",
+          "forkJoin": "product",
+          "forkBranches": [
+            {
+              "id": "fbr_hash",
+              "label": "Hash",
+              "modules": [
+                {
+                  "id": "mod_hash",
+                  "kind": "n8n",
+                  "label": "Hash Email",
+                  "note": "n8n Crypto — local djb2, not a SaaS",
+                  "inStructureId": "m_lead",
+                  "outStructureId": "m_hashed",
+                  "n8nNodeType": "n8n-nodes-base.crypto",
+                  "n8nParameters": {
+                    "field": "email",
+                    "outputField": "hash"
+                  },
+                  "inputDescription": "Inbound lead"
+                }
+              ]
+            },
+            {
+              "id": "fbr_set",
+              "label": "Normalize",
+              "modules": [
+                {
+                  "id": "mod_set",
+                  "kind": "n8n",
+                  "label": "Set Display Fields",
+                  "note": "n8n Set",
+                  "inStructureId": "m_lead",
+                  "outStructureId": "m_named",
+                  "n8nNodeType": "n8n-nodes-base.set",
+                  "n8nParameters": {
+                    "keepOnlySet": true,
+                    "assignments": {
+                      "contact": "={{ $json.name }}",
+                      "org": "={{ $json.company }}"
+                    }
+                  },
+                  "inputDescription": "Inbound lead"
+                }
+              ]
+            },
+            {
+              "id": "fbr_date",
+              "label": "Date",
+              "modules": [
+                {
+                  "id": "mod_date",
+                  "kind": "n8n",
+                  "label": "Format Date",
+                  "note": "n8n DateTime",
+                  "inStructureId": "m_lead",
+                  "outStructureId": "m_dated",
+                  "n8nNodeType": "n8n-nodes-base.dateTime",
+                  "n8nParameters": {
+                    "field": "created_at",
+                    "outputField": "iso"
+                  },
+                  "inputDescription": "Inbound lead"
+                }
+              ]
+            }
+          ],
+          "cached": true,
+          "avgMs": 0,
+          "avgCostCents": 0,
+          "inType": {
+            "kind": "ref",
+            "modelId": "m_lead"
+          },
+          "inStructureId": "m_lead",
+          "outStructureId": "sm_fork_mod_fork",
+          "outType": {
+            "kind": "ref",
+            "modelId": "sm_fork_mod_fork"
+          }
+        },
+        {
+          "id": "mod_out",
+          "kind": "output",
+          "label": "Enriched Lead",
+          "note": "",
+          "inStructureId": "sm_fork_mod_fork",
+          "outStructureId": "sm_fork_mod_fork",
+          "inputDescription": "Fork product of hash, set, date",
+          "cached": true,
+          "avgMs": 0,
+          "avgCostCents": 0
+        }
+      ],
+      "strategies": [
+        {
+          "id": "s_single",
+          "kind": "single-llm",
+          "name": "Single LLM Call",
+          "enabled": true,
+          "model": "deepseek-v4",
+          "accuracy": 78,
+          "latencyMs": 400,
+          "costCents": 1,
+          "passRate": 90
+        }
+      ],
+      "seedDocNames": [
+        "inbound_lead.json"
+      ],
+      "createdAt": 1787504027500,
+      "lastOpenedAt": 1787504027500
     }
   ],
   "docs": [
@@ -1126,6 +1435,15 @@
       "sizeKb": 1,
       "uploadedAt": 1787279241367,
       "preview": "{\n  \"description\": \"Negative test — valid pairing but wrong expected grade for Jordan Q2. expectFailure step Final Output: comparison should fail after run.\",\n "
+    },
+    {
+      "id": "sha_486bf7229d84817e",
+      "name": "inbound_lead.json",
+      "type": "json",
+      "label": "inference",
+      "sizeKb": 1,
+      "uploadedAt": 1787504027502,
+      "preview": "{\n  \"name\": \"Ada Lovelace\",\n  \"email\": \"ada@example.com\",\n  \"company\": \"Analytical Engines\",\n  \"created_at\": \"2026-08-23T10:00:00Z\"\n}\n"
     }
   ],
   "docContents": {
@@ -1149,950 +1467,14 @@
     "sha_6b54dba30b03b1e5": "{\n  \"description\": \"Homework Grader — 1st grade worksheet smoke test. score compared exactly (testTolerance 0); mistake_explanation is LLM-checked when present.\",\n  \"inputs\": {\n    \"Marking Schema\": \"homework_marking_schema_first_grade.json\",\n    \"Student Submissions\": [\n      \"homework_student_riley_first_grade.md\"\n    ]\n  },\n  \"expectedOutputs\": {\n    \"Marking Questions List\": [\n      {\n        \"question_id\": \"Q1\",\n        \"prompt\": \"Maya has 2 red apples and 3 green apples. How many apples does she have altogether?\",\n        \"max_score\": 2,\n        \"marking_criteria\": \"Exactly 2 pts for answer 5. Exactly 1 pt if counting or addition work is shown but the total is wrong. Otherwise 0.\"\n      },\n      {\n        \"question_id\": \"Q2\",\n        \"prompt\": \"What is 3 + 4?\",\n        \"max_score\": 2,\n        \"marking_criteria\": \"Exactly 2 pts for answer 7. Exactly 1 pt if a counting attempt is shown (e.g. fingers) but the answer is wrong. Otherwise 0.\"\n      },\n      {\n        \"question_id\": \"Q3\",\n        \"prompt\": \"What is 10 - 6?\",\n        \"max_score\": 2,\n        \"marking_criteria\": \"Exactly 2 pts for answer 4. Exactly 1 pt if counting-back work is shown but the final answer is wrong. Otherwise 0.\"\n      },\n      {\n        \"question_id\": \"Q4\",\n        \"prompt\": \"How many sides does a triangle have?\",\n        \"max_score\": 2,\n        \"marking_criteria\": \"Exactly 2 pts for 3. Exactly 0 otherwise.\"\n      },\n      {\n        \"question_id\": \"Q5\",\n        \"prompt\": \"Which number is bigger: 8 or 5?\",\n        \"max_score\": 2,\n        \"marking_criteria\": \"Exactly 2 pts for 8. Exactly 0 otherwise.\"\n      }\n    ],\n    \"Assemble Grader Work\": {\n      \"marking_schema\": {\n        \"filename\": \"marking_schema.json\",\n        \"content\": \"{\\\"assignment_title\\\":\\\"1st Grade Maths — Worksheet 3\\\",\\\"sections\\\":[{\\\"criteria\\\":\\\"Only the scores 0, 1, or 2 per question — no other values\\\",\\\"max_score\\\":6,\\\"questions\\\":[{\\\"marking_criteria\\\":\\\"Exactly 2 pts for answer 5. Exactly 1 pt if counting or addition work is shown but the total is wrong. Otherwise 0.\\\",\\\"max_score\\\":2,\\\"prompt\\\":\\\"Maya has 2 red apples and 3 green apples. How many apples does she have altogether?\\\",\\\"question_id\\\":\\\"Q1\\\"},{\\\"marking_criteria\\\":\\\"Exactly 2 pts for answer 7. Exactly 1 pt if a counting attempt is shown (e.g. fingers) but the answer is wrong. Otherwise 0.\\\",\\\"max_score\\\":2,\\\"prompt\\\":\\\"What is 3 + 4?\\\",\\\"question_id\\\":\\\"Q2\\\"},{\\\"marking_criteria\\\":\\\"Exactly 2 pts for answer 4. Exactly 1 pt if counting-back work is shown but the final answer is wrong. Otherwise 0.\\\",\\\"max_score\\\":2,\\\"prompt\\\":\\\"What is 10 - 6?\\\",\\\"question_id\\\":\\\"Q3\\\"}],\\\"section_id\\\":\\\"A\\\",\\\"title\\\":\\\"Section A — Counting and addition\\\"},{\\\"criteria\\\":\\\"Answer must match exactly — only 0 or 2 pts per question\\\",\\\"max_score\\\":4,\\\"questions\\\":[{\\\"marking_criteria\\\":\\\"Exactly 2 pts for 3. Exactly 0 otherwise.\\\",\\\"max_score\\\":2,\\\"prompt\\\":\\\"How many sides does a triangle have?\\\",\\\"question_id\\\":\\\"Q4\\\"},{\\\"marking_criteria\\\":\\\"Exactly 2 pts for 8. Exactly 0 otherwise.\\\",\\\"max_score\\\":2,\\\"prompt\\\":\\\"Which number is bigger: 8 or 5?\\\",\\\"question_id\\\":\\\"Q5\\\"}],\\\"section_id\\\":\\\"B\\\",\\\"title\\\":\\\"Section B — Shapes and comparing\\\"}]}\"\n      },\n      \"student_submissions\": [\n        {\n          \"filename\": \"homework_student_riley_first_grade.md\",\n          \"content\": \"# 1st Grade Maths — Worksheet 3 — Student: Riley Park\\n\\n## Section A — Counting and addition (6 pts)\\n\\n**Q1.** Maya has 2 red apples and 3 green apples. How many apples does she have altogether?  \\nStudent work: 2 + 3 = 5 apples!\\n\\n**Q2.** What is 3 + 4?  \\nStudent work: 7 (counted on fingers)\\n\\n**Q3.** What is 10 - 6?  \\nStudent work: 5 (counted back 10, 9, 8, 7, 6, 5)\\n\\n## Section B — Shapes and comparing (4 pts)\\n\\n**Q4.** How many sides does a triangle have?  \\nStudent work: 3 sides\\n\\n**Q5.** Which number is bigger: 8 or 5?  \\nStudent work: 8\\n\"\n        }\n      ]\n    },\n    \"Flatten Sections\": [\n      {\n        \"student_label\": \"Riley Park\",\n        \"section_id\": \"A\",\n        \"title\": \"Section A — Counting and addition — Q1\",\n        \"body\": \"Maya has 2 red apples and 3 green apples. How many apples does she have altogether?\\nStudent work: 2 + 3 = 5 apples!\",\n        \"max_score\": 2,\n        \"criteria\": \"Exactly 2 pts for answer 5. Exactly 1 pt if counting or addition work is shown but the total is wrong. Otherwise 0.\"\n      },\n      {\n        \"student_label\": \"Riley Park\",\n        \"section_id\": \"A\",\n        \"title\": \"Section A — Counting and addition — Q2\",\n        \"body\": \"What is 3 + 4?\\nStudent work: 7 (counted on fingers)\",\n        \"max_score\": 2,\n        \"criteria\": \"Exactly 2 pts for answer 7. Exactly 1 pt if a counting attempt is shown (e.g. fingers) but the answer is wrong. Otherwise 0.\"\n      },\n      {\n        \"student_label\": \"Riley Park\",\n        \"section_id\": \"A\",\n        \"title\": \"Section A — Counting and addition — Q3\",\n        \"body\": \"What is 10 - 6?\\nStudent work: 5 (counted back 10, 9, 8, 7, 6, 5)\",\n        \"max_score\": 2,\n        \"criteria\": \"Exactly 2 pts for answer 4. Exactly 1 pt if counting-back work is shown but the final answer is wrong. Otherwise 0.\"\n      },\n      {\n        \"student_label\": \"Riley Park\",\n        \"section_id\": \"B\",\n        \"title\": \"Section B — Shapes and comparing — Q4\",\n        \"body\": \"How many sides does a triangle have?\\nStudent work: 3 sides\",\n        \"max_score\": 2,\n        \"criteria\": \"Exactly 2 pts for 3. Exactly 0 otherwise.\"\n      },\n      {\n        \"student_label\": \"Riley Park\",\n        \"section_id\": \"B\",\n        \"title\": \"Section B — Shapes and comparing — Q5\",\n        \"body\": \"Which number is bigger: 8 or 5?\\nStudent work: 8\",\n        \"max_score\": 2,\n        \"criteria\": \"Exactly 2 pts for 8. Exactly 0 otherwise.\"\n      }\n    ],\n    \"Grade Each Section\": [\n      {\n        \"student_label\": \"Riley Park\",\n        \"section_id\": \"A\",\n        \"score\": 2,\n        \"max_score\": 2,\n        \"correct\": true,\n        \"mistake_explanation\": null\n      },\n      {\n        \"student_label\": \"Riley Park\",\n        \"section_id\": \"A\",\n        \"score\": 2,\n        \"max_score\": 2,\n        \"correct\": true,\n        \"mistake_explanation\": null\n      },\n      {\n        \"student_label\": \"Riley Park\",\n        \"section_id\": \"A\",\n        \"score\": 1,\n        \"max_score\": 2,\n        \"correct\": false,\n        \"mistake_explanation\": \"Exactly 1 pt — counting-back shown but final answer 5 is wrong (correct answer is 4).\"\n      },\n      {\n        \"student_label\": \"Riley Park\",\n        \"section_id\": \"B\",\n        \"score\": 2,\n        \"max_score\": 2,\n        \"correct\": true,\n        \"mistake_explanation\": null\n      },\n      {\n        \"student_label\": \"Riley Park\",\n        \"section_id\": \"B\",\n        \"score\": 2,\n        \"max_score\": 2,\n        \"correct\": true,\n        \"mistake_explanation\": null\n      }\n    ],\n    \"Final Output\": [\n      {\n        \"student_label\": \"Riley Park\",\n        \"section_id\": \"A\",\n        \"score\": 2,\n        \"max_score\": 2,\n        \"correct\": true,\n        \"mistake_explanation\": null\n      },\n      {\n        \"student_label\": \"Riley Park\",\n        \"section_id\": \"A\",\n        \"score\": 2,\n        \"max_score\": 2,\n        \"correct\": true,\n        \"mistake_explanation\": null\n      },\n      {\n        \"student_label\": \"Riley Park\",\n        \"section_id\": \"A\",\n        \"score\": 1,\n        \"max_score\": 2,\n        \"correct\": false,\n        \"mistake_explanation\": null\n      },\n      {\n        \"student_label\": \"Riley Park\",\n        \"section_id\": \"B\",\n        \"score\": 2,\n        \"max_score\": 2,\n        \"correct\": true,\n        \"mistake_explanation\": null\n      },\n      {\n        \"student_label\": \"Riley Park\",\n        \"section_id\": \"B\",\n        \"score\": 2,\n        \"max_score\": 2,\n        \"correct\": true,\n        \"mistake_explanation\": null\n      }\n    ],\n    \"Grade Count Check\": [\n      {\n        \"student_label\": \"Riley Park\",\n        \"section_id\": \"A\",\n        \"score\": 2,\n        \"max_score\": 2,\n        \"correct\": true,\n        \"mistake_explanation\": null\n      },\n      {\n        \"student_label\": \"Riley Park\",\n        \"section_id\": \"A\",\n        \"score\": 2,\n        \"max_score\": 2,\n        \"correct\": true,\n        \"mistake_explanation\": null\n      },\n      {\n        \"student_label\": \"Riley Park\",\n        \"section_id\": \"A\",\n        \"score\": 1,\n        \"max_score\": 2,\n        \"correct\": false,\n        \"mistake_explanation\": null\n      },\n      {\n        \"student_label\": \"Riley Park\",\n        \"section_id\": \"B\",\n        \"score\": 2,\n        \"max_score\": 2,\n        \"correct\": true,\n        \"mistake_explanation\": null\n      },\n      {\n        \"student_label\": \"Riley Park\",\n        \"section_id\": \"B\",\n        \"score\": 2,\n        \"max_score\": 2,\n        \"correct\": true,\n        \"mistake_explanation\": null\n      }\n    ]\n  }\n}\n",
     "sha_2ffe7ed1530c5004": "{\n  \"description\": \"Homework Grader — university real analysis (LaTeX). score compared exactly (testTolerance 0); mistake_explanation is LLM-checked when present.\",\n  \"inputs\": {\n    \"Marking Schema\": \"homework_marking_schema_university.json\",\n    \"Student Submissions\": [\n      \"homework_student_priya_university.md\"\n    ]\n  },\n  \"expectedOutputs\": {\n    \"Marking Questions List\": [\n      {\n        \"question_id\": \"Q1\",\n        \"prompt\": \"Evaluate \\\\(\\\\int_0^1 3x^2 e^{x^3}\\\\,dx\\\\). Show the substitution explicitly.\",\n        \"max_score\": 10,\n        \"marking_criteria\": \"Award exactly by summing (max 10): 4 pts for substitution u=x³; 4 pts for transformed bounds u:0→1; 2 pts for value e−1. Final answer alone without substitution shown: exactly 0.\"\n      },\n      {\n        \"question_id\": \"Q2\",\n        \"prompt\": \"Compute \\\\(\\\\lim_{n \\\\to \\\\infty} \\\\left(1 + \\\\frac{2}{n}\\\\right)^{n}\\\\).\",\n        \"max_score\": 10,\n        \"marking_criteria\": \"Award exactly by summing (max 10): 6 pts for reducing to an exponential limit (e.g. e^{n ln(1+2/n)}); 4 pts for value e². Final answer alone: exactly 0.\"\n      },\n      {\n        \"question_id\": \"Q3\",\n        \"prompt\": \"Determine whether \\\\(\\\\sum_{n=1}^{\\\\infty} \\\\frac{n!}{n^n}\\\\) converges. Justify with a named test.\",\n        \"max_score\": 10,\n        \"marking_criteria\": \"Award exactly by summing (max 10): 5 pts for correct ratio-test setup; 5 pts for limit 1/e<1 and convergence conclusion. Wrong test or missing limit: sum only earned components.\"\n      },\n      {\n        \"question_id\": \"Q4\",\n        \"prompt\": \"Prove that \\\\(\\\\sum_{n=2}^{\\\\infty} \\\\frac{1}{n \\\\ln^2 n}\\\\) converges.\",\n        \"max_score\": 10,\n        \"marking_criteria\": \"Award exactly by summing (max 10): 6 pts for integral test or Cauchy condensation with hypotheses checked; 4 pts for correct evaluation. Bare comparison with ∑1/n² without valid hypotheses: exactly 2 pts maximum (not 6+4).\"\n      }\n    ],\n    \"Assemble Grader Work\": {\n      \"marking_schema\": {\n        \"filename\": \"marking_schema.json\",\n        \"content\": \"{\\\"assignment_title\\\":\\\"MATH 301 Real Analysis — Problem Set 4\\\",\\\"sections\\\":[{\\\"criteria\\\":\\\"Sum rubric components exactly; final value alone earns 0 unless rubric says otherwise\\\",\\\"max_score\\\":20,\\\"questions\\\":[{\\\"marking_criteria\\\":\\\"Award exactly by summing (max 10): 4 pts for substitution u=x³; 4 pts for transformed bounds u:0→1; 2 pts for value e−1. Final answer alone without substitution shown: exactly 0.\\\",\\\"max_score\\\":10,\\\"prompt\\\":\\\"Evaluate \\\\\\\\(\\\\\\\\int_0^1 3x^2 e^{x^3}\\\\\\\\,dx\\\\\\\\). Show the substitution explicitly.\\\",\\\"question_id\\\":\\\"Q1\\\"},{\\\"marking_criteria\\\":\\\"Award exactly by summing (max 10): 6 pts for reducing to an exponential limit (e.g. e^{n ln(1+2/n)}); 4 pts for value e². Final answer alone: exactly 0.\\\",\\\"max_score\\\":10,\\\"prompt\\\":\\\"Compute \\\\\\\\(\\\\\\\\lim_{n \\\\\\\\to \\\\\\\\infty} \\\\\\\\left(1 + \\\\\\\\frac{2}{n}\\\\\\\\right)^{n}\\\\\\\\).\\\",\\\"question_id\\\":\\\"Q2\\\"}],\\\"section_id\\\":\\\"A\\\",\\\"title\\\":\\\"Section A — Integration and limits\\\"},{\\\"criteria\\\":\\\"Sum rubric components exactly; name the convergence test used\\\",\\\"max_score\\\":20,\\\"questions\\\":[{\\\"marking_criteria\\\":\\\"Award exactly by summing (max 10): 5 pts for correct ratio-test setup; 5 pts for limit 1/e<1 and convergence conclusion. Wrong test or missing limit: sum only earned components.\\\",\\\"max_score\\\":10,\\\"prompt\\\":\\\"Determine whether \\\\\\\\(\\\\\\\\sum_{n=1}^{\\\\\\\\infty} \\\\\\\\frac{n!}{n^n}\\\\\\\\) converges. Justify with a named test.\\\",\\\"question_id\\\":\\\"Q3\\\"},{\\\"marking_criteria\\\":\\\"Award exactly by summing (max 10): 6 pts for integral test or Cauchy condensation with hypotheses checked; 4 pts for correct evaluation. Bare comparison with ∑1/n² without valid hypotheses: exactly 2 pts maximum (not 6+4).\\\",\\\"max_score\\\":10,\\\"prompt\\\":\\\"Prove that \\\\\\\\(\\\\\\\\sum_{n=2}^{\\\\\\\\infty} \\\\\\\\frac{1}{n \\\\\\\\ln^2 n}\\\\\\\\) converges.\\\",\\\"question_id\\\":\\\"Q4\\\"}],\\\"section_id\\\":\\\"B\\\",\\\"title\\\":\\\"Section B — Series convergence\\\"}]}\"\n      },\n      \"student_submissions\": [\n        {\n          \"filename\": \"homework_student_priya_university.md\",\n          \"content\": \"# MATH 301 Real Analysis — Problem Set 4 — Student: Priya Nair\\n\\n## Section A — Integration and limits (20 pts)\\n\\n**Q1.** Evaluate \\\\(\\\\int_0^1 3x^2 e^{x^3}\\\\,dx\\\\). Show the substitution explicitly.  \\nStudent work: Let \\\\(u = x^3\\\\), so \\\\(du = 3x^2\\\\,dx\\\\); the bounds transform as \\\\(u : 0 \\\\to 1\\\\), giving \\\\(\\\\int_0^1 e^u\\\\,du = e - 1\\\\).\\n\\n**Q2.** Compute \\\\(\\\\lim_{n \\\\to \\\\infty} \\\\left(1 + \\\\frac{2}{n}\\\\right)^{n}\\\\).  \\nStudent work: Write \\\\(\\\\left(1 + \\\\frac{2}{n}\\\\right)^{n} = e^{n \\\\ln(1 + 2/n)}\\\\); since \\\\(n \\\\ln(1 + 2/n) \\\\to 2\\\\), the limit is \\\\(e^2\\\\).\\n\\n## Section B — Series convergence (20 pts)\\n\\n**Q3.** Determine whether \\\\(\\\\sum_{n=1}^{\\\\infty} \\\\frac{n!}{n^n}\\\\) converges. Justify with a named test.  \\nStudent work: Ratio test — \\\\(\\\\frac{a_{n+1}}{a_n} = \\\\left(\\\\frac{n}{n+1}\\\\right)^{n} \\\\to \\\\frac{1}{e} < 1\\\\), hence the series converges.\\n\\n**Q4.** Prove that \\\\(\\\\sum_{n=2}^{\\\\infty} \\\\frac{1}{n \\\\ln^2 n}\\\\) converges.  \\nStudent work: The terms are smaller than \\\\(\\\\frac{1}{n^2}\\\\), so it converges by comparison with \\\\(\\\\sum \\\\frac{1}{n^2}\\\\).\\n\"\n        }\n      ]\n    },\n    \"Flatten Sections\": [\n      {\n        \"student_label\": \"Priya Nair\",\n        \"section_id\": \"A\",\n        \"title\": \"Section A — Integration and limits — Q1\",\n        \"body\": \"Evaluate \\\\(\\\\int_0^1 3x^2 e^{x^3}\\\\,dx\\\\). Show the substitution explicitly.\\nStudent work: Let \\\\(u = x^3\\\\), so \\\\(du = 3x^2\\\\,dx\\\\); the bounds transform as \\\\(u : 0 \\\\to 1\\\\), giving \\\\(\\\\int_0^1 e^u\\\\,du = e - 1\\\\).\",\n        \"max_score\": 10,\n        \"criteria\": \"Award exactly by summing (max 10): 4 pts for substitution u=x³; 4 pts for transformed bounds u:0→1; 2 pts for value e−1. Final answer alone without substitution shown: exactly 0.\"\n      },\n      {\n        \"student_label\": \"Priya Nair\",\n        \"section_id\": \"A\",\n        \"title\": \"Section A — Integration and limits — Q2\",\n        \"body\": \"Compute \\\\(\\\\lim_{n \\\\to \\\\infty} \\\\left(1 + \\\\frac{2}{n}\\\\right)^{n}\\\\).\\nStudent work: Write \\\\(\\\\left(1 + \\\\frac{2}{n}\\\\right)^{n} = e^{n \\\\ln(1 + 2/n)}\\\\); since \\\\(n \\\\ln(1 + 2/n) \\\\to 2\\\\), the limit is \\\\(e^2\\\\).\",\n        \"max_score\": 10,\n        \"criteria\": \"Award exactly by summing (max 10): 6 pts for reducing to an exponential limit (e.g. e^{n ln(1+2/n)}); 4 pts for value e². Final answer alone: exactly 0.\"\n      },\n      {\n        \"student_label\": \"Priya Nair\",\n        \"section_id\": \"B\",\n        \"title\": \"Section B — Series convergence — Q3\",\n        \"body\": \"Determine whether \\\\(\\\\sum_{n=1}^{\\\\infty} \\\\frac{n!}{n^n}\\\\) converges. Justify with a named test.\\nStudent work: Ratio test — \\\\(\\\\frac{a_{n+1}}{a_n} = \\\\left(\\\\frac{n}{n+1}\\\\right)^{n} \\\\to \\\\frac{1}{e} < 1\\\\), hence the series converges.\",\n        \"max_score\": 10,\n        \"criteria\": \"Award exactly by summing (max 10): 5 pts for correct ratio-test setup; 5 pts for limit 1/e<1 and convergence conclusion. Wrong test or missing limit: sum only earned components.\"\n      },\n      {\n        \"student_label\": \"Priya Nair\",\n        \"section_id\": \"B\",\n        \"title\": \"Section B — Series convergence — Q4\",\n        \"body\": \"Prove that \\\\(\\\\sum_{n=2}^{\\\\infty} \\\\frac{1}{n \\\\ln^2 n}\\\\) converges.\\nStudent work: The terms are smaller than \\\\(\\\\frac{1}{n^2}\\\\), so it converges by comparison with \\\\(\\\\sum \\\\frac{1}{n^2}\\\\).\",\n        \"max_score\": 10,\n        \"criteria\": \"Award exactly by summing (max 10): 6 pts for integral test or Cauchy condensation with hypotheses checked; 4 pts for correct evaluation. Bare comparison with ∑1/n² without valid hypotheses: exactly 2 pts maximum (not 6+4).\"\n      }\n    ],\n    \"Grade Each Section\": [\n      {\n        \"student_label\": \"Priya Nair\",\n        \"section_id\": \"A\",\n        \"score\": 10,\n        \"max_score\": 10,\n        \"correct\": true,\n        \"mistake_explanation\": null\n      },\n      {\n        \"student_label\": \"Priya Nair\",\n        \"section_id\": \"A\",\n        \"score\": 10,\n        \"max_score\": 10,\n        \"correct\": true,\n        \"mistake_explanation\": null\n      },\n      {\n        \"student_label\": \"Priya Nair\",\n        \"section_id\": \"B\",\n        \"score\": 10,\n        \"max_score\": 10,\n        \"correct\": true,\n        \"mistake_explanation\": null\n      },\n      {\n        \"student_label\": \"Priya Nair\",\n        \"section_id\": \"B\",\n        \"score\": 2,\n        \"max_score\": 10,\n        \"correct\": false,\n        \"mistake_explanation\": \"Bare comparison with ∑1/n² — exactly 2 pts maximum per rubric; comparison hypotheses not satisfied.\"\n      }\n    ],\n    \"Final Output\": [\n      {\n        \"student_label\": \"Priya Nair\",\n        \"section_id\": \"A\",\n        \"score\": 10,\n        \"max_score\": 10,\n        \"correct\": true,\n        \"mistake_explanation\": null\n      },\n      {\n        \"student_label\": \"Priya Nair\",\n        \"section_id\": \"A\",\n        \"score\": 10,\n        \"max_score\": 10,\n        \"correct\": true,\n        \"mistake_explanation\": null\n      },\n      {\n        \"student_label\": \"Priya Nair\",\n        \"section_id\": \"B\",\n        \"score\": 10,\n        \"max_score\": 10,\n        \"correct\": true,\n        \"mistake_explanation\": null\n      },\n      {\n        \"student_label\": \"Priya Nair\",\n        \"section_id\": \"B\",\n        \"score\": 2,\n        \"max_score\": 10,\n        \"correct\": false,\n        \"mistake_explanation\": null\n      }\n    ],\n    \"Grade Count Check\": [\n      {\n        \"student_label\": \"Priya Nair\",\n        \"section_id\": \"A\",\n        \"score\": 10,\n        \"max_score\": 10,\n        \"correct\": true,\n        \"mistake_explanation\": null\n      },\n      {\n        \"student_label\": \"Priya Nair\",\n        \"section_id\": \"A\",\n        \"score\": 10,\n        \"max_score\": 10,\n        \"correct\": true,\n        \"mistake_explanation\": null\n      },\n      {\n        \"student_label\": \"Priya Nair\",\n        \"section_id\": \"B\",\n        \"score\": 10,\n        \"max_score\": 10,\n        \"correct\": true,\n        \"mistake_explanation\": null\n      },\n      {\n        \"student_label\": \"Priya Nair\",\n        \"section_id\": \"B\",\n        \"score\": 2,\n        \"max_score\": 10,\n        \"correct\": false,\n        \"mistake_explanation\": null\n      }\n    ]\n  }\n}\n",
     "sha_d473cd9976d66e2c": "{\n  \"description\": \"Negative test — Algebra II marking schema paired with a 1st-grade student sheet. expectFailure input-compat: run must be blocked before inference.\",\n  \"expectFailure\": \"input-compat\",\n  \"inputs\": {\n    \"Marking Schema\": \"homework_marking_schema.json\",\n    \"Student Submissions\": [\"homework_student_riley_first_grade.md\"]\n  },\n  \"expectedOutputs\": {}\n}\n",
-    "sha_3bdf5c4eabacc4f9": "{\n  \"description\": \"Negative test — valid pairing but wrong expected grade for Jordan Q2. expectFailure step Final Output: comparison should fail after run.\",\n  \"expectFailure\": { \"step\": \"Final Output\", \"reason\": \"deliberately wrong expected score for Jordan Q2\" },\n  \"inputs\": {\n    \"Marking Schema\": \"homework_marking_schema.json\",\n    \"Student Submissions\": [\"homework_student_jordan.md\"]\n  },\n  \"expectedOutputs\": {\n    \"Final Output\": [\n      {\n        \"student_label\": \"Jordan Lee\",\n        \"section_id\": \"A\",\n        \"score\": 5,\n        \"max_score\": 5,\n        \"correct\": true,\n        \"mistake_explanation\": null\n      },\n      {\n        \"student_label\": \"Jordan Lee\",\n        \"section_id\": \"A\",\n        \"score\": 99,\n        \"max_score\": 5,\n        \"correct\": false,\n        \"mistake_explanation\": \"deliberately wrong expected score for negative test\"\n      },\n      {\n        \"student_label\": \"Jordan Lee\",\n        \"section_id\": \"B\",\n        \"score\": 5,\n        \"max_score\": 5,\n        \"correct\": true,\n        \"mistake_explanation\": null\n      },\n      {\n        \"student_label\": \"Jordan Lee\",\n        \"section_id\": \"B\",\n        \"score\": 10,\n        \"max_score\": 10,\n        \"correct\": true,\n        \"mistake_explanation\": null\n      },\n      {\n        \"student_label\": \"Jordan Lee\",\n        \"section_id\": \"C\",\n        \"score\": 15,\n        \"max_score\": 15,\n        \"correct\": true,\n        \"mistake_explanation\": null\n      }\n    ]\n  }\n}\n"
+    "sha_3bdf5c4eabacc4f9": "{\n  \"description\": \"Negative test — valid pairing but wrong expected grade for Jordan Q2. expectFailure step Final Output: comparison should fail after run.\",\n  \"expectFailure\": { \"step\": \"Final Output\", \"reason\": \"deliberately wrong expected score for Jordan Q2\" },\n  \"inputs\": {\n    \"Marking Schema\": \"homework_marking_schema.json\",\n    \"Student Submissions\": [\"homework_student_jordan.md\"]\n  },\n  \"expectedOutputs\": {\n    \"Final Output\": [\n      {\n        \"student_label\": \"Jordan Lee\",\n        \"section_id\": \"A\",\n        \"score\": 5,\n        \"max_score\": 5,\n        \"correct\": true,\n        \"mistake_explanation\": null\n      },\n      {\n        \"student_label\": \"Jordan Lee\",\n        \"section_id\": \"A\",\n        \"score\": 99,\n        \"max_score\": 5,\n        \"correct\": false,\n        \"mistake_explanation\": \"deliberately wrong expected score for negative test\"\n      },\n      {\n        \"student_label\": \"Jordan Lee\",\n        \"section_id\": \"B\",\n        \"score\": 5,\n        \"max_score\": 5,\n        \"correct\": true,\n        \"mistake_explanation\": null\n      },\n      {\n        \"student_label\": \"Jordan Lee\",\n        \"section_id\": \"B\",\n        \"score\": 10,\n        \"max_score\": 10,\n        \"correct\": true,\n        \"mistake_explanation\": null\n      },\n      {\n        \"student_label\": \"Jordan Lee\",\n        \"section_id\": \"C\",\n        \"score\": 15,\n        \"max_score\": 15,\n        \"correct\": true,\n        \"mistake_explanation\": null\n      }\n    ]\n  }\n}\n",
+    "sha_486bf7229d84817e": "{\n  \"name\": \"Ada Lovelace\",\n  \"email\": \"ada@example.com\",\n  \"company\": \"Analytical Engines\",\n  \"created_at\": \"2026-08-23T10:00:00Z\"\n}\n"
   },
   "runs": [],
-  "activeProjectId": "p_558962e951314a319e092a18",
+  "activeProjectId": "p_160feb8e2634431790198d5e",
   "model": "openrouter:deepseek-v4",
   "inferenceInputDocIds": {},
-  "pendingCreates": [
-    {
-      "id": "p_77ef971e033b457e9eaea2e8",
-      "name": "Meeting Note Action Extractor",
-      "kind": "blank",
-      "createdAt": 1787027671426,
-      "lastOpenedAt": 1787027671426,
-      "models": [
-        {
-          "id": "dec3f886a25e4c31bd0a3e01",
-          "name": "MeetingNote",
-          "description": "Single meeting note document containing action items.",
-          "fields": [
-            {
-              "id": "87db5538712e4569ab1864b9",
-              "name": "content",
-              "optional": false,
-              "description": "Raw meeting note text",
-              "type": "text"
-            }
-          ]
-        },
-        {
-          "id": "b46b4505496841d786ede42a",
-          "name": "ActionItem",
-          "description": "One extracted action item from meeting notes.",
-          "fields": [
-            {
-              "id": "dee1a55f6c7d4768b5699024",
-              "name": "task",
-              "optional": false,
-              "description": "The action to be completed",
-              "type": "text"
-            },
-            {
-              "id": "4682da1cee2646529de1d0c4",
-              "name": "owner",
-              "optional": false,
-              "description": "Person responsible for the task",
-              "type": "text"
-            },
-            {
-              "id": "61c8433ceffb46b3aa81cb8e",
-              "name": "due_date",
-              "optional": true,
-              "description": "Due date if mentioned (text format)",
-              "type": "text"
-            }
-          ]
-        }
-      ],
-      "modules": [
-        {
-          "id": "7e36f18ab5274f12a0cc5533",
-          "kind": "input",
-          "label": "Meeting Notes Upload",
-          "note": "Upload multiple meeting note text files",
-          "cached": true,
-          "avgMs": 0,
-          "avgCostCents": 0,
-          "inputType": "text",
-          "inputNameContains": "meeting",
-          "inputDescription": "Text files containing meeting notes with action items",
-          "inputMinCount": 1,
-          "outStructureId": "m_builtin_document",
-          "outType": {
-            "kind": "list",
-            "item": {
-              "kind": "ref",
-              "modelId": "m_builtin_document"
-            }
-          }
-        },
-        {
-          "id": "fc1ab71b3f6240d5bae6945c",
-          "kind": "llm-batch",
-          "label": "Extract Action Items",
-          "note": "Extract structured action items from each meeting note",
-          "cached": true,
-          "avgMs": 0,
-          "avgCostCents": 0,
-          "inputDescription": "List of meeting note Documents",
-          "inStructureId": "m_builtin_document",
-          "outStructureId": "b46b4505496841d786ede42a",
-          "outType": {
-            "kind": "list",
-            "item": {
-              "kind": "ref",
-              "modelId": "b46b4505496841d786ede42a"
-            }
-          },
-          "prompt": "Extract all action items from these meeting notes. For each, identify: 1) the task, 2) person responsible (owner), and 3) due date if mentioned. Return as a list of JSON objects.",
-          "model": "openrouter:deepseek-v4",
-          "costLimitCents": 100,
-          "inType": {
-            "kind": "list",
-            "item": {
-              "kind": "ref",
-              "modelId": "m_builtin_document"
-            }
-          }
-        },
-        {
-          "id": "439afbe8eecb44f3bbd99b4f",
-          "kind": "output",
-          "label": "Action Items Output",
-          "note": "",
-          "cached": true,
-          "avgMs": 0,
-          "avgCostCents": 0,
-          "inputDescription": "List of extracted ActionItem objects",
-          "inStructureId": "b46b4505496841d786ede42a",
-          "outStructureId": "b46b4505496841d786ede42a",
-          "outType": {
-            "kind": "ref",
-            "modelId": "b46b4505496841d786ede42a"
-          },
-          "inType": {
-            "kind": "ref",
-            "modelId": "b46b4505496841d786ede42a"
-          }
-        }
-      ],
-      "strategies": [],
-      "documentation": "# Meeting Note Action Extractor\n\nUpload multiple meeting note text files → batch extract action items → output as spreadsheet-ready rows.\n\nEach action item includes:\n- Task description\n- Owner (person responsible)\n- Optional due date if mentioned\n\nThe output list is directly exportable to CSV/XLSX from the UI."
-    },
-    {
-      "id": "p_596fda01b12149038d2bf277",
-      "name": "Homework Grader",
-      "kind": "blank",
-      "createdAt": 1787027947118,
-      "lastOpenedAt": 1787027947118,
-      "models": [
-        {
-          "id": "da767da4fa854e09a6c32fee",
-          "name": "Rubric",
-          "description": "Grading rubric with questions and max scores.",
-          "fields": [
-            {
-              "id": "cbf1ae47477346b882be6e60",
-              "name": "questions",
-              "optional": false,
-              "description": "List of rubric questions",
-              "type": "list[text]"
-            },
-            {
-              "id": "56269ca191ef468abbfe0dd3",
-              "name": "max_scores",
-              "optional": false,
-              "description": "Max scores for each question",
-              "type": "json",
-              "typeExpr": {
-                "kind": "list",
-                "item": {
-                  "kind": "prim",
-                  "name": "int"
-                }
-              }
-            }
-          ]
-        },
-        {
-          "id": "06559d15816143d08f0df4e0",
-          "name": "Homework",
-          "description": "Student homework submission.",
-          "fields": [
-            {
-              "id": "074e057fd29a47b987923b13",
-              "name": "student_name",
-              "optional": false,
-              "description": "Student name",
-              "type": "text"
-            },
-            {
-              "id": "92c1009813ac4c1bbb814006",
-              "name": "content",
-              "optional": false,
-              "description": "Homework content",
-              "type": "text"
-            }
-          ]
-        },
-        {
-          "id": "6e7499df272742a68114a91c",
-          "name": "GradedRow",
-          "description": "One graded rubric item per student.",
-          "fields": [
-            {
-              "id": "8454b6430dc646df86487f92",
-              "name": "student_name",
-              "optional": false,
-              "description": "Student name",
-              "type": "text"
-            },
-            {
-              "id": "98cf9357032946d58c1dff17",
-              "name": "question",
-              "optional": false,
-              "description": "Rubric question",
-              "type": "text"
-            },
-            {
-              "id": "a5488d09a0f348f790c12358",
-              "name": "score",
-              "optional": false,
-              "description": "Assigned score",
-              "type": "int"
-            },
-            {
-              "id": "bdb3ccae94ea4ca0ab59b594",
-              "name": "comment",
-              "optional": false,
-              "description": "Grading comment",
-              "type": "text"
-            }
-          ]
-        },
-        {
-          "id": "022dbe6353b040a8b0cef2c2",
-          "name": "GradingInput",
-          "description": "Combined rubric and homework for grading.",
-          "fields": [
-            {
-              "id": "02ee841650f04bfb85db4a41",
-              "name": "rubric",
-              "optional": false,
-              "description": "Parsed rubric",
-              "type": "model",
-              "ref": "da767da4fa854e09a6c32fee"
-            },
-            {
-              "id": "8edb5ffb1589406487ba827e",
-              "name": "homework",
-              "optional": false,
-              "description": "Student homework",
-              "type": "model",
-              "ref": "06559d15816143d08f0df4e0"
-            }
-          ]
-        }
-      ],
-      "modules": [
-        {
-          "id": "0cb379ca6a48481aa1d8c7c5",
-          "kind": "input",
-          "label": "Rubric Input",
-          "note": "Single rubric file with questions and max scores.",
-          "cached": true,
-          "avgMs": 0,
-          "avgCostCents": 0,
-          "inputType": "text",
-          "inputNameContains": "rubric",
-          "inputDescription": "Text file with rubric questions and max scores",
-          "outStructureId": "m_builtin_document",
-          "outType": {
-            "kind": "ref",
-            "modelId": "m_builtin_document"
-          }
-        },
-        {
-          "id": "27f053512eba4141ac8ab91c",
-          "kind": "custom-code",
-          "label": "Parse Rubric",
-          "note": "Convert rubric text to structured Rubric model.",
-          "cached": true,
-          "avgMs": 0,
-          "avgCostCents": 0,
-          "inputDescription": "Document with rubric text",
-          "inStructureId": "m_builtin_document",
-          "outStructureId": "da767da4fa854e09a6c32fee",
-          "outType": {
-            "kind": "ref",
-            "modelId": "da767da4fa854e09a6c32fee"
-          },
-          "fallbackList": [
-            {
-              "typescript": "(doc) => {\n  const lines = doc.content.split('\\n').filter(l => l.trim());\n  const questions = lines.map(l => l.split('(')[0].trim());\n  const maxScores = lines.map(l => parseInt(l.match(/\\(max (\\d+)/)?.[1] || '0'));\n  return { questions, max_scores: maxScores };\n}"
-            }
-          ],
-          "maxRunMs": 60000,
-          "inType": {
-            "kind": "ref",
-            "modelId": "m_builtin_document"
-          }
-        },
-        {
-          "id": "6a76aaaa5daa4a97bc423d54",
-          "kind": "input",
-          "label": "Homework Uploads",
-          "note": "Many student homework files uploaded into one slot.",
-          "cached": true,
-          "avgMs": 0,
-          "avgCostCents": 0,
-          "inputType": "text",
-          "inputNameContains": "homework",
-          "inputDescription": "Text files with student homework submissions",
-          "inputMinCount": 1,
-          "outStructureId": "m_builtin_document",
-          "outType": {
-            "kind": "list",
-            "item": {
-              "kind": "ref",
-              "modelId": "m_builtin_document"
-            }
-          }
-        },
-        {
-          "id": "906c3ba1c9b740d4a789058e",
-          "kind": "custom-code",
-          "label": "Parse Homeworks",
-          "note": "Convert homework documents to structured Homework models.",
-          "cached": true,
-          "avgMs": 0,
-          "avgCostCents": 0,
-          "inputDescription": "List of Document objects - one homework file each",
-          "inStructureId": "m_builtin_document",
-          "outStructureId": "06559d15816143d08f0df4e0",
-          "outType": {
-            "kind": "list",
-            "item": {
-              "kind": "ref",
-              "modelId": "06559d15816143d08f0df4e0"
-            }
-          },
-          "fallbackList": [
-            {
-              "typescript": "(docs) => docs.map(doc => {\n  const content = doc.content;\n  const nameMatch = content.match(/Student:\\s*(.+)/);\n  return {\n    student_name: nameMatch?.[1]?.trim() || 'Unknown',\n    content: content\n  };\n})"
-            }
-          ],
-          "maxRunMs": 60000,
-          "inType": {
-            "kind": "ref",
-            "modelId": "m_builtin_document"
-          }
-        },
-        {
-          "id": "0e588759992347eaa06a69fb",
-          "kind": "llm-batch",
-          "label": "Grade Homeworks",
-          "note": "Grade each homework against the rubric.",
-          "cached": true,
-          "avgMs": 0,
-          "avgCostCents": 0,
-          "inputDescription": "Homework objects to grade against rubric",
-          "inStructureId": "06559d15816143d08f0df4e0",
-          "outStructureId": "6e7499df272742a68114a91c",
-          "outType": {
-            "kind": "list",
-            "item": {
-              "kind": "ref",
-              "modelId": "6e7499df272742a68114a91c"
-            }
-          },
-          "prompt": "Grade this homework against the rubric. For each rubric question, assign a score (0 to max) and write a brief comment. Output one GradedRow per rubric question.\n\nRubric questions: {state.Rubric.questions}\nMax scores: {state.Rubric.max_scores}",
-          "model": "openrouter:deepseek-v4",
-          "costLimitCents": 100,
-          "inType": {
-            "kind": "list",
-            "item": {
-              "kind": "ref",
-              "modelId": "06559d15816143d08f0df4e0"
-            }
-          }
-        },
-        {
-          "id": "34891f1614ec42419358dfa9",
-          "kind": "output",
-          "label": "Grades Output",
-          "note": "Final graded results.",
-          "cached": true,
-          "avgMs": 0,
-          "avgCostCents": 0,
-          "inputDescription": "List of GradedRow objects - one per student per question",
-          "inStructureId": "6e7499df272742a68114a91c",
-          "outStructureId": "6e7499df272742a68114a91c",
-          "outType": {
-            "kind": "ref",
-            "modelId": "6e7499df272742a68114a91c"
-          },
-          "inType": {
-            "kind": "ref",
-            "modelId": "6e7499df272742a68114a91c"
-          }
-        }
-      ],
-      "strategies": [],
-      "documentation": "# Homework Grader\n\n1. Upload rubric (single text file)\n2. Upload student homeworks (many text files)\n3. Pipeline parses both\n4. Grades each homework against rubric\n5. Outputs spreadsheet with one row per student-question\n\nExport results as CSV/XLSX from the viewer."
-    },
-    {
-      "id": "p_f45568e37fb040bd92c0c414",
-      "name": "Untitled Pipeline",
-      "kind": "blank",
-      "createdAt": 1787028144917,
-      "lastOpenedAt": 1787028144917,
-      "models": [],
-      "modules": [
-        {
-          "id": "mod_blank_in_p_f45568e37fb040bd92c0c414",
-          "kind": "input",
-          "label": "Input",
-          "note": "Pipeline input document",
-          "inputType": "text",
-          "cached": true,
-          "avgMs": 80,
-          "avgCostCents": 0
-        },
-        {
-          "id": "mod_blank_out_p_f45568e37fb040bd92c0c414",
-          "kind": "output",
-          "label": "Output",
-          "note": "",
-          "cached": true,
-          "avgMs": 40,
-          "avgCostCents": 0
-        }
-      ],
-      "strategies": []
-    },
-    {
-      "id": "p_558962e951314a319e092a18",
-      "name": "Homework Grader",
-      "kind": "education",
-      "models": [
-        {
-          "id": "m_rubric_q",
-          "name": "RubricQuestion",
-          "description": "One question in the marking schema.",
-          "fields": [
-            {
-              "id": "f_qid",
-              "name": "question_id",
-              "type": "text",
-              "optional": false,
-              "description": "Stable question id"
-            },
-            {
-              "id": "f_prompt",
-              "name": "prompt",
-              "type": "text",
-              "optional": false,
-              "description": "Question text"
-            },
-            {
-              "id": "f_max",
-              "name": "max_score",
-              "type": "int",
-              "optional": false,
-              "description": "Points possible"
-            },
-            {
-              "id": "f_criteria",
-              "name": "marking_criteria",
-              "type": "text",
-              "optional": false,
-              "description": "How to award marks"
-            }
-          ]
-        },
-        {
-          "id": "m_rubric_sec",
-          "name": "RubricSection",
-          "description": "One section in the derived marking schema.",
-          "fields": [
-            {
-              "id": "f_sid",
-              "name": "section_id",
-              "type": "text",
-              "optional": false,
-              "description": "Section id"
-            },
-            {
-              "id": "f_title",
-              "name": "title",
-              "type": "text",
-              "optional": false,
-              "description": "Section title"
-            },
-            {
-              "id": "f_max",
-              "name": "max_score",
-              "type": "int",
-              "optional": false,
-              "description": "Points possible for the section"
-            },
-            {
-              "id": "f_criteria",
-              "name": "criteria",
-              "type": "text",
-              "optional": false,
-              "description": "Section-level marking notes"
-            },
-            {
-              "id": "f_questions",
-              "name": "questions",
-              "type": "list[model]",
-              "optional": false,
-              "description": "Questions in this section",
-              "ref": "m_rubric_q"
-            }
-          ]
-        },
-        {
-          "id": "m_schema",
-          "name": "MarkingSchema",
-          "description": "Structured rubric — assignment sections and questions to grade against.",
-          "dynamic": true,
-          "fields": [
-            {
-              "id": "f_title",
-              "name": "assignment_title",
-              "type": "text",
-              "optional": false,
-              "description": "Homework title"
-            },
-            {
-              "id": "f_sections",
-              "name": "sections",
-              "type": "list[model]",
-              "optional": false,
-              "description": "Sections to grade",
-              "ref": "m_rubric_sec"
-            }
-          ]
-        },
-        {
-          "id": "m_hw_combined",
-          "name": "HomeworkGraderInput",
-          "description": "Auto-generated by the Combine Inputs step.",
-          "auto": true,
-          "fields": [
-            {
-              "id": "f_student_doc",
-              "name": "student_submission",
-              "type": "document",
-              "optional": false,
-              "description": "Student submission attached at combine"
-            },
-            {
-              "id": "f_questions",
-              "name": "marking_questions",
-              "type": "list[model]",
-              "optional": false,
-              "description": "Flat rubric questions from the template",
-              "ref": "m_rubric_q"
-            }
-          ]
-        },
-        {
-          "id": "m_work",
-          "name": "GraderWork",
-          "description": "Marking schema document plus student submission documents.",
-          "fields": [
-            {
-              "id": "f_schema",
-              "name": "marking_schema",
-              "type": "document",
-              "optional": false,
-              "description": "Derived rubric (JSON in content)"
-            },
-            {
-              "id": "f_subs",
-              "name": "student_submissions",
-              "type": "list[document]",
-              "optional": false,
-              "description": "Student homework sheets",
-              "minItems": 1
-            }
-          ]
-        },
-        {
-          "id": "m_gradable",
-          "name": "GradableSection",
-          "description": "One student × question row ready for batch grading.",
-          "fields": [
-            {
-              "id": "f_student",
-              "name": "student_label",
-              "type": "text",
-              "optional": false,
-              "description": "Student name or id"
-            },
-            {
-              "id": "f_sid",
-              "name": "section_id",
-              "type": "text",
-              "optional": false,
-              "description": "Matches rubric section id"
-            },
-            {
-              "id": "f_title",
-              "name": "title",
-              "type": "text",
-              "optional": false,
-              "description": "Section and question title"
-            },
-            {
-              "id": "f_body",
-              "name": "body",
-              "type": "text",
-              "optional": false,
-              "description": "Question prompt and student work"
-            },
-            {
-              "id": "f_max",
-              "name": "max_score",
-              "type": "int",
-              "optional": false,
-              "description": "Points possible"
-            },
-            {
-              "id": "f_criteria",
-              "name": "criteria",
-              "type": "text",
-              "optional": false,
-              "description": "Marking criteria for this question"
-            }
-          ]
-        },
-        {
-          "id": "m_grade",
-          "name": "SectionGrade",
-          "description": "Marks for one homework question.",
-          "fields": [
-            {
-              "id": "f_student",
-              "name": "student_label",
-              "type": "text",
-              "optional": false,
-              "description": "Student graded"
-            },
-            {
-              "id": "f_sid",
-              "name": "section_id",
-              "type": "text",
-              "optional": false,
-              "description": "Matches section id"
-            },
-            {
-              "id": "f_score",
-              "name": "score",
-              "type": "int",
-              "optional": false,
-              "description": "Points awarded",
-              "testTolerance": 1
-            },
-            {
-              "id": "f_max",
-              "name": "max_score",
-              "type": "int",
-              "optional": false,
-              "description": "Points possible"
-            },
-            {
-              "id": "f_correct",
-              "name": "correct",
-              "type": "bool",
-              "optional": false,
-              "description": "True when the student earns full marks (score equals max_score)"
-            },
-            {
-              "id": "f_mistake",
-              "name": "mistake_explanation",
-              "type": "text",
-              "optional": true,
-              "description": "When correct is false, explain what went wrong with concrete details; null when correct",
-              "deterministic": false
-            }
-          ]
-        }
-      ],
-      "modules": [
-        {
-          "id": "mod_in_schema",
-          "kind": "input",
-          "label": "Marking Schema",
-          "note": "Structured rubric JSON — sections and questions to grade against.",
-          "outStructureId": "m_schema",
-          "inputType": "json",
-          "inputNameContains": "marking_schema",
-          "inputDescription": "MarkingSchema JSON — assignment_title and sections with nested RubricQuestion lists",
-          "cached": true,
-          "avgMs": 90,
-          "avgCostCents": 0
-        },
-        {
-          "id": "mod_questions",
-          "kind": "custom-code",
-          "label": "Marking Questions List",
-          "note": "Flatten rubric questions — one list item per gradable question.",
-          "inStructureId": "m_schema",
-          "outStructureId": "m_rubric_q",
-          "outType": {
-            "kind": "list",
-            "item": {
-              "kind": "ref",
-              "modelId": "m_rubric_q"
-            }
-          },
-          "inputDescription": "MarkingSchema object — sections with nested RubricQuestion lists",
-          "cached": true,
-          "avgMs": 3,
-          "avgCostCents": 0,
-          "fallbackList": [
-            {
-              "typescript": "(schema) => (schema.sections ?? []).flatMap((s) => s.questions ?? [])"
-            }
-          ]
-        },
-        {
-          "id": "mod_in_students",
-          "kind": "input",
-          "label": "Student Submissions",
-          "note": "One or more completed student homework sheets to grade.",
-          "outStructureId": "m_builtin_document",
-          "outType": {
-            "kind": "list",
-            "item": {
-              "kind": "ref",
-              "modelId": "m_builtin_document"
-            }
-          },
-          "inputType": "text",
-          "inputNameContains": "homework_student",
-          "inputDescription": "One student's completed homework sheet — markdown with question prompts and student work answers",
-          "inputMinCount": 1,
-          "inputCompatWith": {
-            "moduleId": "mod_in_schema",
-            "keys": [
-              {
-                "label": "assignment title",
-                "upstream": {
-                  "kind": "json-path",
-                  "path": "assignment_title",
-                  "normalize": "lower-trim"
-                },
-                "local": {
-                  "kind": "text-regex",
-                  "pattern": "^#\\s*(.+?)\\s+—\\s+Student",
-                  "group": 1,
-                  "normalize": "lower-trim"
-                }
-              },
-              {
-                "label": "question IDs",
-                "compare": "set-equal",
-                "upstream": {
-                  "kind": "json-path",
-                  "path": "sections[].questions[].question_id",
-                  "normalize": "question-id-set"
-                },
-                "local": {
-                  "kind": "question-ids-text"
-                }
-              }
-            ]
-          },
-          "cached": true,
-          "avgMs": 90,
-          "avgCostCents": 0
-        },
-        {
-          "id": "mod_combine",
-          "kind": "combine",
-          "label": "Combine Inputs",
-          "note": "Merges flat marking questions with each student submission document.",
-          "inStructureId": "m_rubric_q",
-          "outStructureId": "m_hw_combined",
-          "inputDescription": "One student homework Document (new input) plus flat RubricQuestion list from Marking Questions List (pipeline state)",
-          "cached": true,
-          "avgMs": 40,
-          "avgCostCents": 0
-        },
-        {
-          "id": "mod_assemble",
-          "kind": "custom-code",
-          "label": "Assemble Grader Work",
-          "note": "Merge derived schema with all student submissions from pipeline state.",
-          "inStructureId": "m_hw_combined",
-          "outStructureId": "m_work",
-          "inputDescription": "HomeworkGraderInput from combine — schema JSON plus student submission documents in pipeline state",
-          "cached": true,
-          "avgMs": 6,
-          "avgCostCents": 0,
-          "fallbackList": [
-            {
-              "typescript": "(_combined, state) => { const stableJson = (v) => { if (v === null || typeof v !== \"object\") return JSON.stringify(v); if (Array.isArray(v)) return \"[\" + v.map(stableJson).join(\",\") + \"]\"; return \"{\" + Object.keys(v).sort().map((k) => JSON.stringify(k) + \":\" + stableJson(v[k])).join(\",\") + \"}\"; }; const schema = state[\"Marking Schema\"]; const subs = state[\"Student Submissions\"]; const list = Array.isArray(subs) ? subs : subs ? [subs] : []; const text = (s) => (typeof s?.content === \"string\" ? s.content : typeof s?.body === \"string\" ? s.body : \"\"); const name = (s, i) => (typeof s?.filename === \"string\" && s.filename ? s.filename : typeof s?.doc_id === \"string\" ? s.doc_id : `student_${i + 1}.md`); return { marking_schema: { filename: \"marking_schema.json\", content: stableJson(schema ?? {}) }, student_submissions: list.map((s, i) => ({ filename: name(s, i), content: text(s) })) }; }"
-            }
-          ]
-        },
-        {
-          "id": "mod_flatten",
-          "kind": "custom-code",
-          "label": "Flatten Sections",
-          "note": "One gradable row per student × rubric question.",
-          "inStructureId": "m_work",
-          "outStructureId": "m_gradable",
-          "outType": {
-            "kind": "list",
-            "item": {
-              "kind": "ref",
-              "modelId": "m_gradable"
-            }
-          },
-          "inputDescription": "GraderWork — marking_schema Document plus list of student submission Documents",
-          "cached": true,
-          "avgMs": 10,
-          "avgCostCents": 0,
-          "fallbackList": [
-            {
-              "typescript": "(work) => { let sections = []; const ms = work.marking_schema; if (ms?.sections) sections = ms.sections; else if (typeof ms?.content === \"string\") { try { sections = JSON.parse(ms.content).sections ?? []; } catch {} } const out = []; for (const sub of work.student_submissions ?? []) { const content = sub.content ?? \"\"; const student = (content.match(/Student:\\s*([^\\n]+)/i) || [])[1]?.trim() || sub.filename?.replace(/\\.md$/i, \"\") || \"student\"; for (const sec of sections) { for (const q of sec.questions ?? []) { const qRe = new RegExp(`\\\\*\\\\*${q.question_id}\\\\.\\\\*\\\\*[\\\\s\\\\S]*?(Student work:[^\\\\n]*)`, \"i\"); const workLine = (content.match(qRe) || [])[1]?.trim() ?? \"\"; out.push({ student_label: student, section_id: sec.section_id, title: `${sec.title} — ${q.question_id}`, body: `${q.prompt ?? \"\"}${workLine ? \"\\n\" + workLine : \"\"}`, max_score: q.max_score ?? 1, criteria: q.marking_criteria ?? sec.criteria ?? \"\" }); } } } return out; }"
-            }
-          ]
-        },
-        {
-          "id": "mod_grade",
-          "kind": "llm-batch",
-          "label": "Grade Each Section",
-          "note": "List of GradableSection objects — student_label, question body, max_score, and criteria",
-          "inStructureId": "m_gradable",
-          "outStructureId": "m_grade",
-          "outType": {
-            "kind": "list",
-            "item": {
-              "kind": "ref",
-              "modelId": "m_grade"
-            }
-          },
-          "inputDescription": "List of GradableSection objects — student_label, question body, max_score, and criteria",
-          "prompt": "Apply criteria literally and deterministically. When criteria lists alternate bands (e.g. 'award exactly N pts if…'), check those bands before summing components — pick exactly one band score, never mix. Score MUST equal the exact points from the matching band or component sum — use only point values explicitly named in criteria (no rounding, no extra credit, no in-between scores). Score is an integer from 0 to max_score inclusive. Copy max_score from input unchanged. Set correct=true iff score equals max_score; never set correct=true when score is below max_score. Copy student_label and section_id exactly from input. When correct is false, mistake_explanation must cite the rubric clause applied and state the student's wrong value vs the required value. When correct is true, mistake_explanation must be an empty string.",
-          "model": "deepseek-v4",
-          "cached": true,
-          "avgMs": 2400,
-          "avgCostCents": 6
-        },
-        {
-          "id": "mod_out",
-          "kind": "output",
-          "label": "Final Output",
-          "note": "",
-          "inStructureId": "m_grade",
-          "outStructureId": "m_grade",
-          "outType": {
-            "kind": "list",
-            "item": {
-              "kind": "ref",
-              "modelId": "m_grade"
-            }
-          },
-          "inputDescription": "List of SectionGrade rows — student_label, section_id, score, max_score, correct, mistake_explanation (one row per student × rubric question)",
-          "cached": true,
-          "avgMs": 40,
-          "avgCostCents": 0
-        },
-        {
-          "id": "mod_assert",
-          "kind": "assert",
-          "label": "Grade Count Check",
-          "note": "len(Student Submissions) × len(Marking Questions List) = len(Final Output)",
-          "inStructureId": "m_grade",
-          "outStructureId": "m_grade",
-          "outType": {
-            "kind": "list",
-            "item": {
-              "kind": "ref",
-              "modelId": "m_grade"
-            }
-          },
-          "inputDescription": "List of SectionGrade rows — student_label, section_id, score, max_score, correct, mistake_explanation (one row per student × rubric question)",
-          "cached": true,
-          "avgMs": 2,
-          "avgCostCents": 0,
-          "fallbackList": [
-            {
-              "typescript": "const nStudents = len(step(\"Student Submissions\"));\nconst nQuestions = len(step(\"Marking Questions List\"));\nconst nOut = len(step(\"Final Output\"));\nif (nStudents * nQuestions !== nOut) {\n  throw new Error(`expected ${nStudents}×${nQuestions}=${nStudents * nQuestions} grades, got ${nOut}`);\n}"
-            },
-            {
-              "python": "n_students = len_of(step('Student Submissions'))\nn_questions = len_of(step('Marking Questions List'))\nn_out = len_of(step('Final Output'))\nif n_students * n_questions != n_out:\n    raise ValueError(f'expected {n_students}×{n_questions}={n_students * n_questions} grades, got {n_out}')"
-            }
-          ]
-        }
-      ],
-      "strategies": [
-        {
-          "id": "s_single_hw",
-          "kind": "single-llm",
-          "name": "Single LLM Call",
-          "enabled": true,
-          "model": "deepseek-v4",
-          "accuracy": 78,
-          "latencyMs": 3200,
-          "costCents": 8,
-          "passRate": 90
-        },
-        {
-          "id": "s_agent_hw",
-          "kind": "claude-code",
-          "name": "Agent (Frontier)",
-          "enabled": true,
-          "model": "deepseek-v4",
-          "accuracy": 92,
-          "latencyMs": 28000,
-          "costCents": 160,
-          "passRate": 97
-        },
-        {
-          "id": "s_cheap_hw",
-          "kind": "cheap-agent",
-          "name": "Agent (Cheap Model)",
-          "enabled": true,
-          "model": "deepseek-v4",
-          "accuracy": 82,
-          "latencyMs": 18000,
-          "costCents": 12,
-          "passRate": 89
-        }
-      ],
-      "seedDocNames": [
-        "homework_marking_schema.json",
-        "homework_student_sam.md",
-        "homework_student_jordan.md",
-        "homework_student_alex.md",
-        "classroom_algebra_ii_inference.json",
-        "first_grade_inference.json",
-        "university_latex_inference.json",
-        "homework_marking_schema_first_grade.json",
-        "homework_student_riley_first_grade.md",
-        "homework_marking_schema_university.json",
-        "homework_student_priya_university.md",
-        "homework_grader_testing.json",
-        "homework_first_grade_testing.json",
-        "homework_university_testing.json",
-        "homework_wrong_pairing_testing.json",
-        "homework_wrong_grade_testing.json"
-      ],
-      "createdAt": 1787279241277,
-      "lastOpenedAt": 1787279241277
-    }
-  ],
+  "pendingCreates": [],
   "deletedProjectIds": [
     "p_847505af14944a7f8ccad718",
     "p_71d5f3db3a754f54a9ebe5ea",
@@ -2101,16 +1483,14 @@
     "p_5b017bac17fb4d6eaf480dc5",
     "p_64e3ab8303ed483db5d78653"
   ],
-  "chat": [
-    {
-      "role": "user",
-      "content": "From one uploaded contract text file, extract three things independently: a list of risks (quoted from the contract), a list of parties (quoted), and a list of key dates (quoted). Then write a one-paragraph diligence memo that uses all three lists. Include a short sample contract so I can run it."
-    },
-    {
-      "role": "assistant",
-      "content": "Pipeline: contract upload → structured extraction → memo synthesis. Sample contract included for testing."
-    }
-  ],
+  "chat": [],
+  "chatByProjectId": {
+    "p_77ef971e033b457e9eaea2e8": [],
+    "p_596fda01b12149038d2bf277": [],
+    "p_f45568e37fb040bd92c0c414": [],
+    "p_558962e951314a319e092a18": [],
+    "p_160feb8e2634431790198d5e": []
+  },
   "pendingProposal": {
     "modules": [
       {
@@ -2302,6 +1682,7 @@
       "actions": false
     }
   },
+  "assistantInFlight": null,
   "modelOptions": [],
   "billingRuns": [],
   "billingAccount": null,
@@ -2311,10 +1692,11 @@
   "shareLinkIds": [],
   "hostedApiIds": [],
   "docProjectIds": {},
-  "chatByProjectId": {
-    "p_77ef971e033b457e9eaea2e8": [],
-    "p_596fda01b12149038d2bf277": [],
-    "p_f45568e37fb040bd92c0c414": []
-  },
-  "assistantInFlight": null
+  "pendingCreateIds": [
+    "p_77ef971e033b457e9eaea2e8",
+    "p_596fda01b12149038d2bf277",
+    "p_f45568e37fb040bd92c0c414",
+    "p_558962e951314a319e092a18",
+    "p_160feb8e2634431790198d5e"
+  ]
 }

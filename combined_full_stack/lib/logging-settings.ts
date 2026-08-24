@@ -1,6 +1,6 @@
 // AI : step-trace server log visibility — stored in localStorage like json-viewer prefs.
 
-import { booleanBrowserPref } from "@/lib/browser-storage-pref"
+import { booleanBrowserPref, stringBrowserPref } from "@/lib/browser-storage-pref"
 import { appStorageKey } from "@/lib/storage-keys"
 
 export const LOGGING_SETTINGS_CHANGED_EVENT = "logging-settings-changed" as const
@@ -8,6 +8,19 @@ export const LOGGING_SETTINGS_CHANGED_EVENT = "logging-settings-changed" as cons
 export const DEFAULT_HIDE_SERVER_LOGS = true
 export const DEFAULT_HIDE_INPUT_DESCRIPTIONS = true
 export const DEFAULT_REQUIRE_INPUT_DESCRIPTIONS = false
+
+// AI : run-graph trailing pane — config (pipeline tab inspector) vs step spreadsheet.
+export type RunStepDetailPane = "config" | "spreadsheet"
+
+const runStepDetailPanePref = stringBrowserPref<RunStepDetailPane>({
+  keySuffix: "run-step-detail-pane",
+  defaultValue: "config",
+  changedEvent: LOGGING_SETTINGS_CHANGED_EVENT,
+  isValid: (v): v is RunStepDetailPane => v === "config" || v === "spreadsheet",
+})
+
+export const readRunStepDetailPane = runStepDetailPanePref.read
+export const writeRunStepDetailPane = runStepDetailPanePref.write
 
 const hideServerLogsPref = booleanBrowserPref({
   keySuffix: "hide-server-logs",

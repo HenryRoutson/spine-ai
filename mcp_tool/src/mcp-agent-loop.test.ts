@@ -159,12 +159,12 @@ describe("MCP agent loop without the codebase", () => {
         const result = waitRun.result as CallResult
         expect(result.isError).toBe(true)
         expect(waitBody.ok).toBe(false)
-        expect(String(waitBody.next)).toMatch(/start_run|SPINE_API_URL|wait_for_run/)
+        expect(String(waitBody.next)).toMatch(/start_run|SPINE_API_URL|wait_for_run|npm run dev/)
       })
     } finally {
       rmSync(dir, { recursive: true, force: true })
     }
-  })
+  }, 30_000)
 
   it("connect_spine from an empty session without reading the repo", async () => {
     const dir = mkdtempSync(join(tmpdir(), "mcp-connect-"))
@@ -227,9 +227,22 @@ describe("MCP agent loop without the codebase", () => {
 
         const validated = parseTool(await call(12, "validate_project", { sessionPath })) as { ok?: boolean }
         expect(validated).toHaveProperty("ok")
+
+        const seeds = parseTool(await call(13, "list_seeds", {})) as { seeds: string[] }
+        expect(seeds.seeds).toContain("lead_enrich_n8n")
+
+        const lint = parseTool(await call(14, "lint_pipeline", { sessionPath })) as { ok?: boolean }
+        expect(lint).toHaveProperty("ok")
+
+        const review = parseTool(await call(15, "get_project", { sessionPath })) as { next?: string }
+        expect(String(review.next)).toMatch(/Fix|valid|ask_agent|add_step/)
+
+        const missingSeed = await call(16, "import_seed", { sessionPath, file: "not_a_real_seed" })
+        expect((missingSeed.result as CallResult).isError).toBe(true)
+        expect(JSON.stringify(parseTool(missingSeed))).toMatch(/Available:/)
       })
     } finally {
       rmSync(dir, { recursive: true, force: true })
     }
-  })
+  }, 30_000)
 })

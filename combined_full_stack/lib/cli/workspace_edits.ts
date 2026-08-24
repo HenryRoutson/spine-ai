@@ -67,7 +67,10 @@ export function resolveSeedPath(fileOrId: string): string {
   const named = fileOrId.endsWith(".json") ? fileOrId : `${fileOrId}.json`
   const inSeeds = join(SEEDS_DIR, named)
   if (existsSync(inSeeds)) return inSeeds
-  throw new Error(`seed not found: ${fileOrId}`)
+  const available = listSeedIds()
+  throw new Error(
+    `seed not found: ${fileOrId}. Available: ${available.length ? available.join(", ") : "(none — check SPINE_APP_ROOT)"}`,
+  )
 }
 
 export function listSeedIds(): string[] {

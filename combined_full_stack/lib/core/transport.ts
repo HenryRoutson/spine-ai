@@ -30,14 +30,33 @@ export const SPINE_API_TOKEN_ENV = "SPINE_API_TOKEN"
 
 type FetchLike = (url: string, init?: RequestInit) => Promise<Response>
 
-export function createApiEgress(baseUrl: string, token?: string, inner: FetchLike = fetch): EgressPort {
+export function createApiEgress(
+  baseUrl: string,
+  token?: string,
+  inner: FetchLike = fetch,
+  opts?: { timeoutMs?: number },
+): EgressPort {
   const origin = baseUrl.replace(/\/$/, "")
-  return createRecordingEgress((url, init) => {
+  const timeoutMs = opts?.timeoutMs
+  return createRecordingEgress(async (url, init) => {
     const headers = new Headers(init?.headers)
     if (token) headers.set("Authorization", `Bearer ${token}`)
     const path = url
     const abs = path.startsWith("http") ? path : `${origin}${path.startsWith("/") ? path : `/${path}`}`
-    return inner(abs, { ...init, headers })
+    // AI : MCP/CLI must not hang forever when Next is listening but stuck.
+    if (!timeoutMs || timeoutMs <= 0) {
+      return inner(abs, { ...init, headers })
+    }
+    const controller = new AbortController()
+    const timer = setTimeout(() => controller.abort(), timeoutMs)
+    const onAbort = () => controller.abort()
+    init?.signal?.addEventListener("abort", onAbort, { once: true })
+    try {
+      return await inner(abs, { ...init, headers, signal: controller.signal })
+    } finally {
+      clearTimeout(timer)
+      init?.signal?.removeEventListener("abort", onAbort)
+    }
   })
 }
 

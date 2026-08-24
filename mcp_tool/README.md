@@ -27,7 +27,7 @@ Or drop `.mcp.json` in the project root:
 
 The launcher sets `SPINE_REPO_ROOT`, `SPINE_APP_ROOT`, and `SPINE_SESSION_PATH` from its own location.
 
-Then: `auth_status` → `get_project` → `list_pieces` → `add_step kind=n8n` or `kind=fork`. After `start_run` / `run_test`, call `wait_for_run`.
+Then: `auth_status` → `get_project` → `list_pieces` / `list_seeds` → `add_step kind=n8n` or `kind=fork`. After `start_run` / `run_test`, call `wait_for_run`. Local API defaults to `http://127.0.0.1:3000`.
 
 ## Setup (Cursor)
 
@@ -52,9 +52,9 @@ npm install --prefix mcp_tool
 
 ## Tools
 
-Session (mutate `.spine-session.json`): `auth_status`, `get_project`, `validate_project`, `add_step`, `add_model`, `ask_agent`, `apply_project_changes`, `list_pieces`, `configure_n8n_step`, `import_piece`, `export_piece`, `wait_for_run`, `get_run`, …
+Session (mutate `.spine-session.json`): `auth_status`, `get_project`, `validate_project`, `add_step`, `add_model`, `ask_agent`, `apply_project_changes`, `list_pieces`, `list_seeds`, `configure_n8n_step`, `import_piece`, `export_piece`, `wait_for_run`, `get_run`, `remove_doc`, …
 
-Seed/testing (read-only): `pinpoint_failure`, `lint_pipeline`, `export_pydantic`, …
+Seed/testing (read-only unless session mode): `pinpoint_failure` (`testDocName` + `runJson` on the session, or seed paths), `lint_pipeline` (no args = session), `export_pydantic`, …
 
 Broken JSON and unknown step kinds return `{ ok: false, code, error, next }` instead of crashing the MCP session.
 

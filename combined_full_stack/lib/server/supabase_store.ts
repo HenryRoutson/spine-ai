@@ -419,6 +419,8 @@ export class SupabaseStore implements Store {
     }
     this.state.docs = nextDocs;
     this.state.contents = nextContents;
+    // AI : DB still has legacy per-user bundled rows — drop them again so they don't undo init purge.
+    this.purgeStaleUserBundledDocsFromMemory();
   }
 
   async init(): Promise<void> {

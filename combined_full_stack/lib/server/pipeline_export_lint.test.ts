@@ -14,7 +14,11 @@ import {
   configurePipelineRuntime,
   findQuote as exportFindQuote,
   resolveQuotes,
+  runN8nCode,
 } from "@/lib/export_runtime/ts/pipeline_runtime";
+import { resolveN8nForExport } from "@/lib/n8n-step";
+import { runN8nPiece } from "@/lib/n8n-run";
+import { flattenPipelineModules } from "@/lib/fork-pipeline";
 
 describe("pipeline TS export lint", () => {
   // AI : TODO (linter-first) — mirror this suite for pyright (pipeline.py) and cargo check (pipeline.rs); make Py/Rust primary.
@@ -132,6 +136,37 @@ describe("pipeline TS export lint", () => {
     expect(src).not.toMatch(/wire resolveQuotes/);
   });
 
+  it("n8n seeds export executable runN8nCode (UI parity)", () => {
+    const { project } = loadProjectSeed(resolve(SEEDS_DIR, "csv_triage_n8n.json"));
+    const src = generatePipelineSourceTs(project);
+    expect(src).toMatch(/runN8nCode\(/);
+    expect(src).toMatch(/parseCsv/);
+    expect(src).not.toMatch(/return input as unknown as ParsedCsv/);
+    const result = lintPipelineExportTs(project);
+    expect(result.ok, result.diagnostics.join("\n")).toBe(true);
+  });
+
+  it("export runN8nCode matches UI runN8nPiece for each n8n step", async () => {
+    const { project } = loadProjectSeed(resolve(SEEDS_DIR, "csv_triage_n8n.json"));
+    const input = {
+      csv: "vendor,amount,status\nAcme,40,open\nBeta,12,closed\nAcme,9,open",
+    };
+    let spine: unknown = input;
+    for (const m of flattenPipelineModules(project.modules)) {
+      if (m.kind !== ModuleKind.N8n) continue;
+      const r = resolveN8nForExport(m);
+      const ui = await runN8nPiece({
+        n8nNodeType: r.nodeType,
+        n8nCode: m.n8nCode,
+        n8nParameters: m.n8nParameters,
+        input: spine,
+        timeoutMs: r.timeoutMs,
+      });
+      const exp = await runN8nCode(r.code, r.params, spine, r.timeoutMs);
+      expect(exp, m.label).toEqual(ui);
+      spine = ui;
+    }
+  });
   it("export findQuote matches the UI linker", () => {
     const source = "The tenant shall pay rent on the first day of each month.";
     const quote = "pay rent on the first day";

@@ -13,6 +13,10 @@ You receive:
 
 ## Platform conventions (read before diagnosing)
 
+### Webhook secrets
+- Webhook steps declare \`webhookAuthEnv\` (and \`env:VAR\` / \`\${VAR}\` URLs without a built-in default). Those names must be set in **Library → Secrets** or process env **before** inference starts.
+- A missing key is a configuration failure, not a prompt/pipeline bug. Tell the user to add the named secret — do not rewrite steps or prompts.
+
 ### Assert steps — \`assertEqual(step("Label"), "Label")\`
 - The second argument is **not** a literal string to compare against.
 - When the second argument is a string, it is a **golden-fixture key**: runtime resolves it via \`expected(label)\` from the run's \`expectedOutputs\` map (seed fixtures / inferencePresets keyed by input documents).

@@ -24,6 +24,33 @@ export function isScheduleRun(run: PipelineRun): boolean {
   return run.source === RunSource.Schedule || !!run.scheduleId
 }
 
+export function RunSourceBadges({ run }: { run: PipelineRun }) {
+  return (
+    <>
+      {isSharedRun(run) && (
+        <Badge variant="secondary" className="shrink-0 font-mono text-[9px]">
+          shared run
+        </Badge>
+      )}
+      {isHostedApiRun(run) && (
+        <Badge variant="secondary" className="shrink-0 font-mono text-[9px]">
+          api call
+        </Badge>
+      )}
+      {isTestingRun(run) && (
+        <Badge variant="outline" className="shrink-0 border-chart-3/40 font-mono text-[9px] text-chart-3">
+          test
+        </Badge>
+      )}
+      {isScheduleRun(run) && (
+        <Badge variant="secondary" className="shrink-0 font-mono text-[9px]">
+          cron
+        </Badge>
+      )}
+    </>
+  )
+}
+
 export function filterRuns(runs: PipelineRun[], query: string): PipelineRun[] {
   if (!query.trim()) return runs
   const q = query.toLowerCase()
@@ -117,26 +144,7 @@ export function RunPickerColumn({
                     <div className="flex items-center justify-between gap-2">
                       <span className="truncate font-mono text-xs text-foreground">{runInputLabel(run)}</span>
                       <div className="flex shrink-0 items-center gap-1.5">
-                        {isSharedRun(run) && (
-                          <Badge variant="secondary" className="shrink-0 font-mono text-[9px]">
-                            shared run
-                          </Badge>
-                        )}
-                        {isHostedApiRun(run) && (
-                          <Badge variant="secondary" className="shrink-0 font-mono text-[9px]">
-                            api call
-                          </Badge>
-                        )}
-                        {isTestingRun(run) && (
-                          <Badge variant="outline" className="shrink-0 border-chart-3/40 font-mono text-[9px] text-chart-3">
-                            test
-                          </Badge>
-                        )}
-                        {isScheduleRun(run) && (
-                          <Badge variant="secondary" className="shrink-0 font-mono text-[9px]">
-                            cron
-                          </Badge>
-                        )}
+                        <RunSourceBadges run={run} />
                         {runInputDocIds(run).map((docId) => (
                           <OpenInDocumentsLink key={docId} docId={docId} label="store" className="text-[9px]" />
                         ))}

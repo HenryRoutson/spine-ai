@@ -2,6 +2,7 @@ import type { Metadata } from 'next'
 import { Geist, Geist_Mono } from 'next/font/google'
 import './globals.css'
 import { getSupabasePublicEnv } from '@/utils/supabase/env'
+import { RootInlineScripts } from '@/components/root-inline-scripts'
 import { SkipLink } from '@/lib/legal/chrome'
 import { CookieConsentBanner } from '@/lib/legal/cookie-consent'
 import { LEGAL } from '@shared/legal/site'
@@ -37,25 +38,8 @@ export default function RootLayout({
       className={`${geistSans.variable} ${geistMono.variable} bg-background`}
       suppressHydrationWarning
     >
-      <head>
-        {/* AI : native <script> in this Server Component — next/script hydrates on the client and triggers React 19's script-tag warning */}
-        {supabasePublic ? (
-          <script
-            id="supabase-public-config"
-            dangerouslySetInnerHTML={{
-              __html: `window.__SUPABASE_PUBLIC__=${JSON.stringify(supabasePublic)}`,
-            }}
-          />
-        ) : null}
-        {/* AI : apply saved color scheme before first paint — mirrors writeColorScheme() in lib/color-scheme.ts */}
-        <script
-          id="color-scheme-init"
-          dangerouslySetInnerHTML={{
-            __html: `(function(){try{var s=localStorage.getItem('spine:color-scheme');if(s&&s!=='default')document.documentElement.dataset.colorScheme=s;}catch(e){}})()`,
-          }}
-        />
-      </head>
       <body className="font-sans antialiased">
+        <RootInlineScripts supabasePublic={supabasePublic} />
         <SkipLink />
         {children}
         <CookieConsentBanner />

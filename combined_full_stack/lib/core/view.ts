@@ -10,6 +10,7 @@ import { withSharedModels, formatTypeExpr, stepSpineInType, stepSpineOutType } f
 import { quoteHref, type QuoteMatch } from "@/lib/quotes"
 import { isTestingFileName, lastTestRunVerdictForDoc, testReportPassed } from "@/lib/testing-files"
 import { flattenPipelineModules, forkJoinOf } from "@/lib/fork-pipeline"
+import { collectSecretRequirements, groupSecretRequirements } from "@/lib/webhook-step"
 import { derivePipelineMermaid } from "@/lib/pipeline-mermaid"
 import { formatTypeExprPy } from "@/lib/type-expr-parse"
 import { formatParametricName } from "@/lib/type-params"
@@ -323,6 +324,7 @@ const TUI_TAB_EMPTY: Record<TuiTab, string> = {
   logging: "no runs yet — press i to run inference, or t to run a test",
   cache: "no cache entries — they appear after inference (session pull)",
   documents: "no documents — spine session add-doc, or import a seed",
+  secrets: "no secrets yet — add project, personal, or team keys",
   docs: "no markdown — press e to write project docs",
   "project-billing": "no account — session pull / SPINE_API_URL",
   "project-settings": "no project — press n to create one",
@@ -688,5 +690,10 @@ export function toMcpProjectReview(snap: SessionSnapshot) {
       snap.docs.map((d) => ({ name: d.name, type: d.type, label: d.label })),
       pendingDocs,
     ),
+    requiredSecrets: groupSecretRequirements(collectSecretRequirements(viewed.modules)).map((g) => ({
+      name: g.name,
+      optional: g.optional,
+      steps: g.steps,
+    })),
   }
 }

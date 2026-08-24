@@ -15,6 +15,7 @@ const PREFETCH_CHUNK: Record<AppWindowId, () => Promise<unknown>> = {
   [AppWindowId.Cache]: () => import("@/components/cache"),
   [AppWindowId.Documents]: () => import("@/components/documents"),
   [AppWindowId.Docs]: () => import("@/components/documentation"),
+  [AppWindowId.Secrets]: () => import("@/components/secrets-settings"),
   [AppWindowId.ProjectBilling]: () => import("@/components/project-billing"),
   [AppWindowId.ProjectSettings]: () => import("@/components/project-settings"),
   [AppWindowId.Vibe]: () => import("@/components/vibe-panel"),

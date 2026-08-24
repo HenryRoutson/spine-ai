@@ -14,8 +14,9 @@ export enum AppWindowStepLabel {
   Cache = "08 / Cache",
   Documents = "09 / Documents",
   Docs = "10 / Docs",
-  ProjectBilling = "11 / Billing",
-  ProjectSettings = "12 / Settings",
+  Secrets = "11 / Secrets",
+  ProjectBilling = "12 / Billing",
+  ProjectSettings = "13 / Settings",
   Vibe = "· / Vibe",
   Billing = "· / Billing",
   Settings = "· / Settings",
@@ -35,6 +36,7 @@ export enum AppWindowTitle {
   Logging = "Run History",
   Documents = "Document Store",
   Docs = "Documentation",
+  Secrets = "Secrets",
   ProjectBilling = "Project spend",
   ProjectSettings = "Project settings",
   Vibe = "Vibe",
@@ -154,6 +156,12 @@ const BUILDER_WINDOW_HEADERS: Record<AppWindowId, WindowHeaderCopy> = {
     title: AppWindowTitle.Docs,
     description: "Project rules and context — prepended to every agent prompt to prevent regressions.",
   },
+  secrets: {
+    step: AppWindowStepLabel.Secrets,
+    title: AppWindowTitle.Secrets,
+    description:
+      "Project secrets — set on this project (name-prefixed), link personal keys like files, or load from the team without seeing values.",
+  },
   "project-billing": {
     step: AppWindowStepLabel.ProjectBilling,
     title: AppWindowTitle.ProjectBilling,
@@ -197,6 +205,7 @@ export function windowStepHotkey(step: AppWindowStepLabel): string | null {
   if (hint === "10") return "0"
   if (hint === "11") return "["
   if (hint === "12") return "]"
+  if (hint === "13") return "\\"
   if (/^0[1-9]$/.test(hint)) return hint.slice(1)
   if (/^[A-Z]$/.test(hint)) return hint.toLowerCase()
   return null

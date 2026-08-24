@@ -398,14 +398,17 @@ export interface PipelineModule {
   // AI : fetch a media URL from the terminal JSON into document.blob; spine becomes VideoClip-shaped.
   webhookIngestUrlPath?: string;
   webhookIngestInputType?: InputType; // video | audio | image
-  // AI : n8n — typed catalog piece (Activepieces-style). Local Code-node JS; no live Slack/Gmail.
+  // AI : n8n — typed catalog piece (Activepieces-style). Local Code-node JS; no live Slack/Gmail in-process.
   n8nNodeType?: string
   n8nNodeVersion?: number
   n8nParameters?: Record<string, unknown>
   n8nCode?: string
   n8nTimeoutMs?: number
+  // AI : TODO (n8n-sidecar-S2-live) — unused today; wire for live execute (first | all | jsonPath into body).
   n8nResponseMode?: "first" | "all" | "jsonPath"
+  // AI : TODO (n8n-sidecar-S2-live) — unused today; dot path when n8nResponseMode === "jsonPath".
   n8nResponsePath?: string
+  // AI : TODO (n8n-sidecar-S4-ui) — optional live workflow id / webhook path when sidecar mode ships (keep kinds separate).
   // AI : DONE (media-view-D-job) — async media is webhook poll + ingest, not ModuleKind.RemoteJob / Higgsfield step.
   // AI : chatbot — prompt is spine ChatbotPrompt.prompt (no module.prompt).
   chatbotMode?: ChatbotMode;
@@ -489,6 +492,7 @@ export interface Project {
   modules: PipelineModule[];
   strategies: Strategy[];
   seedDocNames?: string[]; // AI : filenames from seeds/*.json — scopes inference inputs to this project
+  seedSecretNames?: string[]; // AI : personal secret names linked into this project (like seedDocNames)
   expectedOutputs?: Record<string, unknown>; // AI : golden step outputs keyed by step label — assert steps compare at run time
   inferencePresets?: InferencePreset[]; // AI : legacy seed examples — prefer *_inference.json setup files in Documents
   llmProviders?: import("@/lib/custom-llm-providers").CustomLlmProviderDef[]; // AI : user-authored browser LLM providers

@@ -1,9 +1,13 @@
 import { describe, expect, it } from "vitest"
 import { InputType, WebhookBodyMode, WebhookMethod } from "@/lib/types"
+import { ModuleKind, type ModuleId, type PipelineModule } from "@/lib/types"
 import {
   authorizationHeader,
   buildWebhookFetchBody,
+  collectSecretRequirements,
+  formatMissingSecretsError,
   getValueAtPath,
+  missingRequiredSecrets,
   missingWebhookSecretMessage,
   pollWebhookUntilDone,
   resolveWebhookUrl,
@@ -81,5 +85,45 @@ describe("webhook URL env", () => {
 
   it("points missing auth at Settings → Secrets", () => {
     expect(() => resolveWebhookUrl("env:HIGGSFIELD_API_KEY", {})).toThrow(missingWebhookSecretMessage("HIGGSFIELD_API_KEY"))
+  })
+})
+
+function webhookMod(partial: Partial<PipelineModule> & { id: string; label: string }): PipelineModule {
+  return {
+    kind: ModuleKind.Webhook,
+    note: "",
+    cached: false,
+    avgMs: 0,
+    avgCostCents: 0,
+    ...partial,
+    id: partial.id as ModuleId,
+  }
+}
+
+describe("required secrets", () => {
+  const generate = webhookMod({
+    id: "mod_generate",
+    label: "Generate",
+    webhookUrl: "env:HIGGSFIELD_GENERATE_URL",
+    webhookAuthEnv: "HIGGSFIELD_API_KEY",
+  })
+
+  it("requires auth keys and treats public URL defaults as optional", () => {
+    const reqs = collectSecretRequirements([generate])
+    expect(reqs).toEqual([
+      expect.objectContaining({ name: "HIGGSFIELD_GENERATE_URL", optional: true, role: "url" }),
+      expect.objectContaining({ name: "HIGGSFIELD_API_KEY", optional: false, role: "auth", stepLabel: "Generate" }),
+    ])
+  })
+
+  it("fails closed before a webhook call when the auth key is missing", () => {
+    const missing = missingRequiredSecrets([generate], {})
+    expect(missing.map((r) => r.name)).toEqual(["HIGGSFIELD_API_KEY"])
+    expect(formatMissingSecretsError(missing)).toContain(missingWebhookSecretMessage("HIGGSFIELD_API_KEY"))
+    expect(formatMissingSecretsError(missing)).toContain("Required by: Generate")
+  })
+
+  it("passes when the auth key is present in env", () => {
+    expect(missingRequiredSecrets([generate], { HIGGSFIELD_API_KEY: "Key id:secret" })).toEqual([])
   })
 })

@@ -1,4 +1,3 @@
-// AI : canvas / logging copy for how a fork join actually combines lanes.
 import {
   forkBranchesOf,
   forkJoinOf,
@@ -73,8 +72,4 @@ export function forkJoinCaption(fork: PipelineModule): ForkJoinCaption {
     detail: "one field per lane on the joined structure",
     mappings: branches.map((b) => ({ lane: b.label, into: forkProductField(b) })),
   }
-}
-
-export function forkLaneColumnTemplate(hasNestedFork: boolean): string {
-  return hasNestedFork ? "minmax(22rem, 1.6fr)" : "minmax(13rem, 1fr)"
 }

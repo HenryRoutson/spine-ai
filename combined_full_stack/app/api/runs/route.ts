@@ -28,10 +28,8 @@ import {
   inputMinCountForModule,
   type InputDocsAssignment,
 } from "@/lib/inference-input";
-import {
-  collectInferenceInputIssues,
-  inferenceInputIssueMessage,
-} from "@/lib/inference-validity";
+import { collectInferenceInputIssues, inferenceInputIssueMessage } from "@/lib/inference-validity";
+import { missingRequiredSecretsError } from "@/lib/server/secret_preflight";
 import { RunSource, type DocId, type DocRef, type ModelId, type ModuleId, type ProjectId } from "@/lib/server/types";
 import { UnknownModelError, parseOptionalRequestModel } from "@/lib/server/model_catalog";
 import { ensureModelOptionsFresh } from "@/lib/server/openrouter_models";
@@ -159,6 +157,12 @@ export async function POST(req: NextRequest) {
   });
   if (inputIssues.length) {
     return apiError(inferenceInputIssueMessage(inputIssues, inputModules), 400);
+  }
+
+  const missingSecrets = await missingRequiredSecretsError(project.modules, auth.userId, { teamId: project.teamId, projectName: project.name, projectOwnerId: project.teamProjectOwnerId });
+  if (missingSecrets) {
+    apiLog.warn(`missing required secrets`, { projectId: pid, detail: missingSecrets });
+    return apiError(missingSecrets, HTTP.BAD_REQUEST, "missing_secrets");
   }
 
   const resolvedByModule = inputDocsByModuleFromAssignment(inputModules, assignment);

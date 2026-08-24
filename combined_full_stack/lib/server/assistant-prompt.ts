@@ -56,8 +56,9 @@ export function buildModuleKindsPromptBlock(): string {
   ).join("\n");
 }
 
-// AI : TODO (n8n-stage-G-export) — document n8n step for assistant: pick n8nNodeType from catalog,
-// AI :   fill n8nParameters for resource/operation; never invent node type strings (see n8n-roadmap.ts).
+// AI : DONE (n8n-stage-G-export) — document n8n step for assistant: pick n8nNodeType from catalog,
+// AI :   fill n8nParameters; never invent node type strings (see n8n-roadmap.ts).
+// AI : TODO (n8n-sidecar-S6-assistant) — when live sidecar ships: pick workflow id + out structure; never invent Cloud node types.
 // AI : TODO (media-view-C-assistant) — “create visualizer for this model” writes HTML + defaultView; not a React component.
 // AI : DONE (media-view-D-higgsfield) — webhook poll + ingest seed; spine is VideoClip { doc_id }. Not a Higgsfield ModuleKind.
 

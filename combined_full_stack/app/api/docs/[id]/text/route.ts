@@ -12,17 +12,25 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string }> }
 
   const { id } = await ctx.params;
   const docId = id as DocId;
-  const namesById = snapshotDocNamesById(store);
-  const resolved =
-    typeof store.docContent(docId) === "string"
-      ? { docId }
-      : namesById.has(docId)
-        ? await resolveRunInputDoc(store, docId, namesById, { scanBundledHashes: false })
-        : undefined;
-  if (!resolved || typeof store.docContent(resolved.docId) !== "string") {
+
+  // AI : resolve by id, name, or bundled content-hash — warm cache may have purged user seed copies.
+  async function resolveTextId(): Promise<DocId | undefined> {
+    if (typeof store.docContent(docId) === "string") return docId;
+    const namesById = snapshotDocNamesById(store);
+    const resolved = await resolveRunInputDoc(store, docId, namesById, { scanBundledHashes: true });
+    if (resolved && typeof store.docContent(resolved.docId) === "string") return resolved.docId;
+    return undefined;
+  }
+
+  let textId = await resolveTextId();
+  if (!textId) {
+    // AI : client may paint from project-state cache before this instance synced docs from DB.
+    await store.syncDocsFromDb?.();
+    textId = await resolveTextId();
+  }
+  if (!textId) {
     return apiError(unknownDoc(id), HTTP.NOT_FOUND);
   }
-  const textId = resolved.docId;
 
   const layer = new URL(req.url).searchParams.get("layer") ?? "parser";
   if (layer === "vision") {

@@ -11,7 +11,7 @@ import type { StructureModelId } from "@/lib/types"
 
 // AI : on project load / new uploads — fetch each doc's stored text and merge inferred structures.
 export function useSyncProjectDocStructures() {
-  const { docs, project, models, setModels, projectLoading } = useStore()
+  const { docs, project, models, setModels, projectLoading, stateSyncing } = useStore()
   const syncedRef = useRef(new Set<string>())
   const dedupedProjectRef = useRef<string | null>(null)
   const setModelsRef = useRef(setModels)
@@ -24,7 +24,7 @@ export function useSyncProjectDocStructures() {
 
   // AI : collapse legacy per-doc duplicates (HomeworkStudentAlexRow, …) into numbered Structure N — once per project load.
   useEffect(() => {
-    if (projectLoading) return
+    if (projectLoading || stateSyncing) return
     if (dedupedProjectRef.current === project.id) return
     const deduped = repairOrphanModelRefs(
       dedupeInferredModelsByShape(models),
@@ -32,10 +32,11 @@ export function useSyncProjectDocStructures() {
     )
     dedupedProjectRef.current = project.id
     if (modelsChanged(models, deduped)) setModelsRef.current(deduped)
-  }, [project.id, projectLoading, models])
+  }, [project.id, projectLoading, stateSyncing, models])
 
   useEffect(() => {
-    if (projectLoading) return
+    // AI : wait for /api/state — cached seedDoc ids 404 until the warm store syncs.
+    if (projectLoading || stateSyncing) return
 
     const projectDocs = docsForProject(docs, project)
     const pending = projectDocs.filter((d) => !syncedRef.current.has(d.id))
@@ -72,5 +73,5 @@ export function useSyncProjectDocStructures() {
     return () => {
       cancelled = true
     }
-  }, [docs, project.id, project.seedDocNames, projectLoading, models])
+  }, [docs, project.id, project.seedDocNames, projectLoading, stateSyncing, models])
 }

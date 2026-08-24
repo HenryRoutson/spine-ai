@@ -1,4 +1,3 @@
-// AI : client-safe pipeline cron DTOs — keep in sync with lib/server/pipeline_schedules.ts.
 import type { cron_expr_string, iana_timezone_string } from "@/lib/cron-expr"
 import type { DocId, ModelId, ModuleId, PipelineScheduleId, ProjectId } from "./types"
 
@@ -47,6 +46,18 @@ export function scheduleDocsFromByModule(
     for (const docId of ids ?? []) {
       out.push({ moduleId: moduleId as ModuleId, docId: docId as DocId })
     }
+  }
+  return out
+}
+
+export function scheduleDocsToByModule(
+  docs: ScheduleDefaultDoc[],
+): Partial<Record<ModuleId, DocId[]>> {
+  const out: Partial<Record<ModuleId, DocId[]>> = {}
+  for (const doc of docs) {
+    const ids = out[doc.moduleId] ?? []
+    ids.push(doc.docId)
+    out[doc.moduleId] = ids
   }
   return out
 }

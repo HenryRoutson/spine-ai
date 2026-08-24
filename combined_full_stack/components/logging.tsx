@@ -57,7 +57,7 @@ import { StepPromptSection } from "@/components/step-prompt-section"
 import { StepCodeExecPreview } from "@/components/step-code-exec-preview"
 import { StepValidationErrorsSection } from "@/components/step-validation-errors-section"
 import { STEP_TRACE_IO_INDENT_MARGIN } from "@/lib/step-trace-layout"
-import { filterRuns, isScheduleRun, isTestingRun, RunNotesPreview } from "@/components/logging/run-picker-column"
+import { filterRuns, RunNotesPreview, RunSourceBadges } from "@/components/logging/run-picker-column"
 import { filterRunsByErrorStatus, runHasErrors } from "@/lib/run-error-log"
 import { IsolatedErrorActions } from "@/components/logging/isolated-error-actions"
 import { InferenceHtmlDownloadButton } from "@/components/inference/inference-html-download-button"
@@ -329,21 +329,7 @@ export function Logging({
                             <div className="flex items-start justify-between gap-2">
                               <span className="min-w-0 flex-1 break-all font-mono text-xs">{runInputLabel(run)}</span>
                               <div className="flex shrink-0 items-center gap-1.5">
-                                {isSharedRun(run) && (
-                                  <Badge variant="secondary" className="shrink-0 font-mono text-[9px]">
-                                    shared run
-                                  </Badge>
-                                )}
-                                {isTestingRun(run) && (
-                                  <Badge variant="outline" className="shrink-0 border-chart-3/40 font-mono text-[9px] text-chart-3">
-                                    test
-                                  </Badge>
-                                )}
-                                {isScheduleRun(run) && (
-                                  <Badge variant="secondary" className="shrink-0 font-mono text-[9px]">
-                                    cron
-                                  </Badge>
-                                )}
+                                <RunSourceBadges run={run} />
                                 {runInputDocIds(run).map((docId) => (
                                   <OpenInDocumentsLink key={docId} docId={docId} label="store" className="text-[9px]" />
                                 ))}
@@ -524,7 +510,7 @@ export function Logging({
                           Step trace
                         </h3>
                         <p className="mt-0.5 font-mono text-[10px] text-muted-foreground">
-                          Nested fork graph — click a lane step for its spreadsheet. Join rows show how lanes combine.
+                          Same layout as the Pipeline tab — click a step for its config or spreadsheet.
                         </p>
                       </div>
                       <Button

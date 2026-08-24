@@ -4,7 +4,7 @@
 // AI : DONE (mcp-errors) — wrapTool returns { ok:false, code, next } with isError instead of throwing (JSON.parse of proposalJson).
 // AI : TODO (mcp-workspace) — one project handle: session pull/push vs seeds vs GUI Supabase currently diverge.
 // AI : TODO (mcp-capability) — wrap remaining GUI verbs: pullRemoteState, flushPendingSave,
-// AI :   removeDoc, linkQuotes, setDocProjects, executeProposedActions, resyncExamples,
+// AI :   linkQuotes, setDocProjects, executeProposedActions, resyncExamples,
 // AI :   billed ask HTTP, share/hosted mint, Stripe, run cancel. Host-bound stays GUI: CodeHost, human-review, chatbot.
 
 import { resolve } from "node:path"
@@ -46,7 +46,11 @@ import {
   getRunFromSession,
   importSeedFromSession,
   inspectIdsFromSession,
+  lintProjectFromSession,
+  listSeedsForMcp,
   openProjectFromSession,
+  pinpointFailureFromSession,
+  removeDocFromSession,
   renameProjectFromSession,
   runSessionAction,
   sessionLogs,
@@ -75,13 +79,19 @@ function nextHint(error: string): string {
   if (/not valid JSON|JSON\.parse|session file is not valid JSON/i.test(error)) return "Pass proposalJson as a JSON object string, or omit it to apply the pending Vibe proposal. If the session file is corrupt, delete it and call add_project."
   if (/unknown step kind/i.test(error)) return "Use add_step kind from: input, llm, llm-batch, fork, n8n, custom-code, webhook, … — list_pieces for n8n types."
   if (/unknown n8n piece|unknown piece/i.test(error)) return "Call list_pieces and use n8nNodeType exactly."
-  if (/no active project/i.test(error)) return "Call add_project (or import_seed) then retry."
+  if (/no active project/i.test(error)) return "Call add_project (or import_seed file from list_seeds) then retry."
   if (/no pending proposal/i.test(error)) return "ask_agent first, poll get_project until pendingProposal is set, then apply_project_changes with no proposalJson."
   if (/unknown step /i.test(error)) return "get_project and use the step id or label."
   if (/401|sign in required/i.test(error)) return "start_run needs a signed-in API. Local npm run dev without Supabase works. Remote: set SPINE_API_TOKEN to a Supabase access token, then retry."
-  if (/SPINE_API_URL|remote action/i.test(error)) return "Set SPINE_API_URL to the running Next app, call start_run, then wait_for_run."
+  if (/SPINE_API_URL|remote action|not reachable|timed out talking/i.test(error)) return "Start combined_full_stack (`npm run dev`) so http://127.0.0.1:3000 responds, then start_run → wait_for_run. Production also needs SPINE_API_TOKEN."
+  if (/ECONNREFUSED|fetch failed|Failed to parse URL|ENOTFOUND|network|EgressBlocked|AbortError|aborted/i.test(error)) return "The Next app is not reachable at http://127.0.0.1:3000. Start combined_full_stack with npm run dev, then retry start_run."
   if (/no run to wait for/i.test(error)) return "Call start_run or run_test first, then wait_for_run with that run id."
-  return "Call auth_status, then get_project, then validate_project. Do not re-send the same crashing payload."
+  if (/seed not found/i.test(error)) return "Call list_seeds (or auth_status.seeds) and pass import_seed file as one of those ids — no path, no .json suffix required."
+  if (/projectSeedPath or pipelineJson/i.test(error)) return "Call lint_pipeline with no args to lint the active session project, or pass a seed id from list_seeds as projectSeedPath."
+  if (/testDocName required|unknown test doc|provide projectSeedPath/i.test(error)) return "session_logs.tests lists *_testing.json names. Call pinpoint_failure with testDocName plus runJson from wait_for_run."
+  if (/unknown module|unknown doc/i.test(error)) return "get_project for step labels; session_logs for document names."
+  if (/parametersJson must be/i.test(error)) return "Pass parametersJson as a JSON object string, e.g. {\"maxItems\":5}."
+  return "Call auth_status, then get_project. Follow the next field. Do not re-send the same crashing payload."
 }
 
 function mcpError(err: unknown, code = "tool_error") {
@@ -123,13 +133,39 @@ const server = new McpServer(
 
 server.tool(
   "pinpoint_failure",
-  "Compare a finished pipeline run against a *_testing.json file and return the first diverging step with isolated field diffs (expected vs actual only). Seed-path tool — does not mutate .spine-session.json. Use after wait_for_run; start_run/run_test return immediately.",
+  "Compare a finished pipeline run against a *_testing.json file and return the first diverging step. Prefer session mode: testDocName from session_logs.tests + runJson from wait_for_run. Seed paths are only for bundled templates (list_seeds).",
   {
-    projectSeedPath: z.string().describe("Path to the project seed JSON (e.g. seeds/homework_grader.json)"),
-    testFilePath: z.string().describe("Path to the *_testing.json file with pinned per-step outputs"),
+    projectSeedPath: z.string().optional().describe("Path or list_seeds id — omit when using the session"),
+    testFilePath: z.string().optional().describe("Filesystem path to *_testing.json — omit when using testDocName"),
+    testDocName: z.string().optional().describe("Session *_testing.json name from session_logs.tests"),
+    sessionPath: z.string().optional(),
     ...runSourceSchema,
   },
-  wrapTool((args) => pinpointFailure(args, REPO_ROOT)),
+  wrapTool((args) => {
+    if (args.testDocName || (!args.projectSeedPath && !args.testFilePath)) {
+      return pinpointFailureFromSession(
+        {
+          sessionPath: args.sessionPath,
+          testDocName: args.testDocName,
+          runPath: args.runPath,
+          runJson: args.runJson,
+        },
+        REPO_ROOT,
+      )
+    }
+    if (!args.projectSeedPath || !args.testFilePath) {
+      throw new Error("provide projectSeedPath+testFilePath (seeds) or testDocName from session_logs.tests")
+    }
+    return pinpointFailure(
+      {
+        projectSeedPath: args.projectSeedPath,
+        testFilePath: args.testFilePath,
+        runPath: args.runPath,
+        runJson: args.runJson,
+      },
+      REPO_ROOT,
+    )
+  }),
 )
 
 server.tool(
@@ -214,13 +250,26 @@ server.tool(
 
 server.tool(
   "lint_pipeline",
-  "Lint a pipeline JSON or seed: spine I/O mismatches, structure fields, step custom code, and generated TypeScript export (tsc). Prefer this over validate_pipeline_wiring when you have pipeline JSON.",
+  "Lint a pipeline: omit args to lint the active session project (graph). Pass projectSeedPath (list_seeds id) or pipelineJson for a seed. Set includeExport true to also tsc the generated TypeScript export.",
   {
-    projectSeedPath: z.string().optional().describe("Path to a seeds/*.json project file"),
+    sessionPath: z.string().optional(),
+    projectSeedPath: z.string().optional().describe("Path or list_seeds id to a seeds/*.json project file"),
     pipelineJson: z.string().optional().describe("Inline pipeline JSON ({ models, modules, typeAliases? })"),
-    includeExport: z.boolean().optional().describe("Run tsc on generated pipeline.ts (default true)"),
+    includeExport: z.boolean().optional().describe("Run tsc on generated pipeline.ts (default false for session, true for seeds)"),
   },
-  wrapTool((args) => lintPipelineFromInput(args, REPO_ROOT)),
+  wrapTool((args) => {
+    if (!args.projectSeedPath && !args.pipelineJson) {
+      return lintProjectFromSession(args.sessionPath, args.includeExport ?? false)
+    }
+    return lintPipelineFromInput(
+      {
+        projectSeedPath: args.projectSeedPath,
+        pipelineJson: args.pipelineJson,
+        includeExport: args.includeExport,
+      },
+      REPO_ROOT,
+    )
+  }),
 )
 
 server.tool(
@@ -266,9 +315,16 @@ server.tool(
 
 server.tool(
   "auth_status",
-  "First call after connect. Returns session path, whether a project exists, and whether start_run can reach SPINE_API_URL. Do not read the repo.",
+  "First call after connect. Returns session path, projects, bundled seed ids, and whether start_run can reach the local Next app. Do not read the repo.",
   { sessionPath: z.string().optional() },
   wrapTool((args) => authStatusFromSession(args.sessionPath)),
+)
+
+server.tool(
+  "list_seeds",
+  "List bundled template ids for import_seed. No repo browsing — pass file as one of these ids (e.g. lead_enrich_n8n).",
+  {},
+  wrapTool(() => listSeedsForMcp()),
 )
 
 server.tool(
@@ -305,7 +361,7 @@ server.tool(
 
 server.tool(
   "start_run",
-  "POST /api/runs for the active session project (GUI Run). Needs SPINE_API_URL. Returns {id,status} immediately — then wait_for_run until terminal.",
+  "POST /api/runs for the active session project (GUI Run). Local default is http://127.0.0.1:3000. Returns {id,status} immediately — then wait_for_run until terminal.",
   {
     sessionPath: z.string().optional(),
     testDocName: z.string().optional(),
@@ -316,7 +372,7 @@ server.tool(
 
 server.tool(
   "run_test",
-  "Start a Testing-tab run for the active session project (GUI Testing → Run). Needs SPINE_API_URL. Returns immediately; call wait_for_run with the run id.",
+  "Start a Testing-tab run for the active session project (GUI Testing → Run). Local default is http://127.0.0.1:3000. Returns immediately; call wait_for_run with the run id.",
   {
     sessionPath: z.string().optional(),
     testDocName: z.string().optional(),
@@ -432,7 +488,7 @@ server.tool(
 
 server.tool(
   "import_seed",
-  "Ingest a bundled seed JSON into the session — same as GUI Clone template.",
+  "Ingest a bundled seed into the session — same as GUI Clone template. file is a list_seeds id (e.g. lead_enrich_n8n), not a filesystem path.",
   { sessionPath: z.string().optional(), file: z.string() },
   wrapTool((args) => importSeedFromSession(args.file, args.sessionPath)),
 )
@@ -466,6 +522,16 @@ server.tool(
     content: z.string(),
   },
   wrapTool((args) => addDocFromSession(args)),
+)
+
+server.tool(
+  "remove_doc",
+  "Remove a document from the session by name or id (GUI Documents delete).",
+  {
+    sessionPath: z.string().optional(),
+    doc: z.string().describe("Document name or id from get_project / session_logs"),
+  },
+  wrapTool((args) => removeDocFromSession(args.doc, args.sessionPath)),
 )
 
 server.tool(

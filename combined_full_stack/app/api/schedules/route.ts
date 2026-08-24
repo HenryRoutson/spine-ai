@@ -28,20 +28,20 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
+  const ctx = await requireAuthStore();
+  if (ctx instanceof NextResponse) return ctx;
+  const parsed = await parseRequestJson(req, createPipelineScheduleBodySchema);
+  if ("validationError" in parsed) return apiError(parsed.validationError, HTTP.BAD_REQUEST);
+  const project = ctx.store.project(parsed.projectId as ProjectId);
+  if (!project) return apiError(`unknown project ${parsed.projectId}`, HTTP.NOT_FOUND);
+  let defaultModel;
   try {
-    const ctx = await requireAuthStore();
-    if (ctx instanceof NextResponse) return ctx;
-    const parsed = await parseRequestJson(req, createPipelineScheduleBodySchema);
-    if ("validationError" in parsed) return apiError(parsed.validationError, HTTP.BAD_REQUEST);
-    const project = ctx.store.project(parsed.projectId as ProjectId);
-    if (!project) return apiError(`unknown project ${parsed.projectId}`, HTTP.NOT_FOUND);
-    let defaultModel;
-    try {
-      defaultModel = parseOptionalRequestModel(parsed.defaultModel);
-    } catch (err) {
-      if (err instanceof UnknownModelError) return apiError(err.message, HTTP.BAD_REQUEST);
-      throw err;
-    }
+    defaultModel = parseOptionalRequestModel(parsed.defaultModel);
+  } catch (err) {
+    if (err instanceof UnknownModelError) return apiError(err.message, HTTP.BAD_REQUEST);
+    throw err;
+  }
+  try {
     const created = await createSchedule({
       ownerId: ctx.auth.userId,
       projectId: parsed.projectId as ProjectId,
@@ -58,8 +58,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ schedule: created, runtime });
   } catch (err) {
     if (err instanceof ScheduleValidationError) return apiError(err.message, HTTP.BAD_REQUEST);
-    apiLog.error(`POST failed`, { error: (err as Error).message });
-    return apiError((err as Error).message || "failed to create schedule", HTTP.INTERNAL);
+    throw err;
   }
 }
 

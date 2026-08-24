@@ -3,6 +3,7 @@ import { apiError } from "@/lib/server/api_context";
 import { HTTP } from "@/lib/server/api-errors";
 import { checkRateLimit, clientIpFromHeaders } from "@/lib/rate_limit";
 import type { RateLimitKey } from "@/lib/rate_limit_config";
+import { authorizationBearerToken } from "@/lib/server/bearer-token";
 import {
   claimDueSchedules,
   markRuntimeTicked,
@@ -16,14 +17,8 @@ export const dynamic = "force-dynamic";
 
 const tickLog = logger("api:schedules:tick");
 
-function bearerToken(req: NextRequest): string | null {
-  const auth = req.headers.get("authorization");
-  if (!auth?.toLowerCase().startsWith("bearer ")) return null;
-  return auth.slice(7).trim();
-}
-
 export async function POST(req: NextRequest) {
-  const secret = bearerToken(req);
+  const secret = authorizationBearerToken(req);
   if (!secret) return apiError("Authorization: Bearer required", HTTP.UNAUTHORIZED);
   const ok = await verifyTickSecret(secret);
   if (!ok) return apiError("Invalid tick secret", HTTP.UNAUTHORIZED);
@@ -38,15 +33,17 @@ export async function POST(req: NextRequest) {
   const due = await claimDueSchedules();
   const started: string[] = [];
   const failed: { id: string; error: string }[] = [];
-  for (const row of due) {
-    try {
-      const result = await queueScheduledRun(row);
-      if (result.ok) started.push(result.jobId);
-      else failed.push({ id: row.id, error: result.message });
-    } catch (err) {
-      tickLog.error(`tick run failed`, { id: row.id, error: (err as Error).message });
-      failed.push({ id: row.id, error: (err as Error).message });
-    }
-  }
+  await Promise.all(
+    due.map(async (row) => {
+      try {
+        const result = await queueScheduledRun(row);
+        if (result.ok) started.push(result.jobId);
+        else failed.push({ id: row.id, error: result.message });
+      } catch (err) {
+        tickLog.error(`tick run failed`, { id: row.id, error: (err as Error).message });
+        failed.push({ id: row.id, error: (err as Error).message });
+      }
+    }),
+  );
   return NextResponse.json({ claimed: due.length, started: started.length, failed });
 }

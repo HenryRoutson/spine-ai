@@ -161,16 +161,91 @@ describe("MCP Bar A session tools", () => {
     const sessionPath = join(dir, "session.json")
     try {
       const { authStatusFromSession, addProjectFromSession, addStepFromSession } = await import("./spine-session-bar-a.js")
-      const empty = authStatusFromSession(sessionPath)
+      const empty = await authStatusFromSession(sessionPath)
       expect(empty.projectCount).toBe(0)
       expect(empty.next).toMatch(/add_project/)
+      expect(empty.seeds.length).toBeGreaterThan(0)
+      expect(empty.apiUrl).toMatch(/127\.0\.0\.1:3000/)
       addProjectFromSession(sessionPath)
       const added = addStepFromSession("HTTP", "Call API", sessionPath)
       expect(added[0]?.kind).toBe("webhook")
       const code = addStepFromSession("code", "Transform", sessionPath)
       expect(code[0]?.kind).toBe("custom-code")
-      expect(authStatusFromSession(sessionPath).projectCount).toBe(1)
+      expect((await authStatusFromSession(sessionPath)).projectCount).toBe(1)
     } finally {
+      rmSync(dir, { recursive: true, force: true })
+    }
+  })
+
+  it("get_project.next tells an agent to apply a pending proposal", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "mcp-next-"))
+    const sessionPath = join(dir, "session.json")
+    try {
+      const session = createSpineSession({ persist: createFilePersist(sessionPath) })
+      session.addProject({ open: true })
+      session.setPendingProposal({
+        modules: [],
+        models: [],
+        typeAliases: [],
+        docs: [],
+        documentation: "",
+        projectName: "Pending Name",
+        changed: {
+          modules: true,
+          models: false,
+          typeAliases: false,
+          docs: false,
+          documentation: false,
+          name: true,
+        },
+      })
+      const project = getProjectFromSession(sessionPath)
+      expect(project.pendingProposal).toBeTruthy()
+      expect(project.next).toMatch(/apply_project_changes/)
+    } finally {
+      rmSync(dir, { recursive: true, force: true })
+    }
+  })
+
+  it("import_seed lists available ids when the file is missing", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "mcp-seed-miss-"))
+    const sessionPath = join(dir, "session.json")
+    try {
+      const { addProjectFromSession, importSeedFromSession, listSeedsForMcp, removeDocFromSession, addDocFromSession, lintProjectFromSession } =
+        await import("./spine-session-bar-a.js")
+      addProjectFromSession(sessionPath)
+      expect(() => importSeedFromSession("not_a_real_seed", sessionPath)).toThrow(/Available:/)
+      const listed = listSeedsForMcp()
+      expect(listed.seeds).toContain("lead_enrich_n8n")
+      addDocFromSession({ sessionPath, name: "scratch.txt", content: "hi" })
+      const after = removeDocFromSession("scratch.txt", sessionPath)
+      expect(after.docs.some((d: { name: string }) => d.name === "scratch.txt")).toBe(false)
+      const lint = lintProjectFromSession(sessionPath, false)
+      expect(lint).toHaveProperty("ok")
+      addDocFromSession({
+        sessionPath,
+        name: "demo_testing.json",
+        content: JSON.stringify({ expectedOutputs: {} }),
+      })
+      const { pinpointFailureFromSession } = await import("./spine-session-bar-a.js")
+      expect(() => pinpointFailureFromSession({ sessionPath }, ".")).toThrow(/demo_testing.json/)
+    } finally {
+      rmSync(dir, { recursive: true, force: true })
+    }
+  })
+
+  it("start_run fails fast with a next hint when the API is down", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "mcp-run-down-"))
+    const sessionPath = join(dir, "session.json")
+    const prev = process.env.SPINE_API_URL
+    try {
+      process.env.SPINE_API_URL = "http://127.0.0.1:1"
+      const { addProjectFromSession, startRunFromSession } = await import("./spine-session-bar-a.js")
+      addProjectFromSession(sessionPath)
+      await expect(startRunFromSession({ sessionPath })).rejects.toThrow(/not reachable|timed out talking/)
+    } finally {
+      if (prev === undefined) delete process.env.SPINE_API_URL
+      else process.env.SPINE_API_URL = prev
       rmSync(dir, { recursive: true, force: true })
     }
   })

@@ -56,7 +56,6 @@ import { Switch } from "@/components/ui/switch"
 import { PrivacySettings } from "@/components/privacy-settings"
 import { TeamSettings } from "@/components/team-settings"
 import { LlmProvidersSettingsPage, LlmProvidersSettingsSummary } from "@/components/llm-providers-settings"
-import { SecretsSettings } from "@/components/secrets-settings"
 import { useOptionalAppShell } from "@/lib/app-shell"
 import { OPEN_LLM_PROVIDERS_EVENT, SCROLL_SETTINGS_SECTION_EVENT } from "@/lib/settings-nav"
 import { isDemoMode } from "@/lib/demo-mode"
@@ -124,7 +123,6 @@ const SETTINGS_SECTIONS = [
   { id: "settings-account", label: "Account", keywords: "email sign out logout login delete" },
   { id: "settings-model", label: "Default model", keywords: "llm provider pipeline steps" },
   { id: "settings-llm-providers", label: "LLM providers", keywords: "api key openai anthropic keys" },
-  { id: "settings-secrets", label: "Secrets", keywords: "higgsfield api key webhook env integration" },
   { id: "settings-json-reader", label: "JSON reader", keywords: "human view document viewer" },
   { id: "settings-json-syntax", label: "JSON syntax", keywords: "colours colors theme vscode structure" },
   { id: "settings-logging", label: "Run logging", keywords: "server logs input descriptions collapse" },
@@ -385,8 +383,6 @@ export function Settings() {
           {showSection("settings-llm-providers") ? (
             <LlmProvidersSettingsSummary onOpen={() => setLlmProvidersOpen(true)} />
           ) : null}
-
-          {showSection("settings-secrets") ? <SecretsSettings /> : null}
 
           {showSection("settings-json-reader") ? (
           <section id="settings-json-reader" className="rounded-lg border border-border bg-card">

@@ -1,7 +1,7 @@
-// AI : 5-field cron (n8n-style) — used by the Schedule tab and the Supabase tick runner.
-
 export type cron_expr_string = string & { __brand: "cron_expr" }
 export type iana_timezone_string = string & { __brand: "iana_timezone" }
+
+export const INVALID_CRON_MESSAGE = "Cron must be 5 fields, like */15 * * * *"
 
 const FIELD_BOUNDS = [
   { min: 0, max: 59 },
@@ -124,21 +124,31 @@ function matchesParts(
   return (domAll || domOk) && (dowAll || dowOk)
 }
 
+const zonedFmtCache = new Map<string, Intl.DateTimeFormat>()
+
+function zonedFmt(timeZone: string): Intl.DateTimeFormat {
+  let fmt = zonedFmtCache.get(timeZone)
+  if (!fmt) {
+    fmt = new Intl.DateTimeFormat("en-US", {
+      timeZone,
+      minute: "2-digit",
+      hour: "2-digit",
+      day: "2-digit",
+      month: "2-digit",
+      weekday: "short",
+      hour12: false,
+    })
+    zonedFmtCache.set(timeZone, fmt)
+  }
+  return fmt
+}
+
 function zonedParts(
   ms: number,
   timeZone: string,
 ): { minute: number; hour: number; day: number; month: number; dow: number } {
-  const fmt = new Intl.DateTimeFormat("en-US", {
-    timeZone,
-    minute: "2-digit",
-    hour: "2-digit",
-    day: "2-digit",
-    month: "2-digit",
-    weekday: "short",
-    hour12: false,
-  })
   const bag: Record<string, string> = {}
-  for (const part of fmt.formatToParts(new Date(ms))) {
+  for (const part of zonedFmt(timeZone).formatToParts(new Date(ms))) {
     if (part.type !== "literal") bag[part.type] = part.value
   }
   let hour = Number(bag.hour)

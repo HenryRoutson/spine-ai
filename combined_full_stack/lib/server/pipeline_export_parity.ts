@@ -16,6 +16,7 @@ import { orderedInputModules } from "@/lib/inference-input";
 import { inputDocsByModuleFromAssignment } from "@/lib/inference-input-assignment";
 import type { InputDocsAssignment } from "@/lib/inference-input-core";
 import { labelAsStateKey } from "@/lib/server/pipeline_state";
+import { flattenPipelineModules } from "@/lib/fork-pipeline";
 import { runPipeline, resumeRunPipeline } from "@/lib/server/run_engine";
 import { PipelinePausedError } from "@/lib/server/run_checkpoint";
 import { clearLlmProviderCache } from "@/lib/server/llm/registry";
@@ -447,7 +448,14 @@ export async function runTsExportParityTrace(
     copyFileSync(exportRuntimeTsPath(), join(dir, "pipeline_runtime.ts"));
     const mod = (await import(`${pathToFileURL(file).href}?t=${Date.now()}`)) as TsExportModule;
     const apiKey = process.env.OPENROUTER_API_KEY?.trim();
-    if (!apiKey) throw new Error("OPENROUTER_API_KEY missing — set it in the repo root .env");
+    const needsLlm = flattenPipelineModules(project.modules).some(
+      (m) =>
+        m.kind === ModuleKind.Llm ||
+        m.kind === ModuleKind.LlmBatch ||
+        m.kind === ModuleKind.ExampleSelect ||
+        m.kind === ModuleKind.Parallel,
+    );
+    if (needsLlm && !apiKey) throw new Error("OPENROUTER_API_KEY missing — set it in the repo root .env");
     const firstDoc = flatInputFiles(inputs)[0];
     const firstContent = firstDoc
       ? readFileSync(
@@ -456,9 +464,13 @@ export async function runTsExportParityTrace(
         )
       : undefined;
     mod.configurePipelineRuntime({
-      openRouterApiKey: apiKey,
-      openRouterModel: parityOpenRouterModel(),
-      openRouterSeed: parityOpenRouterSeed(),
+      ...(apiKey
+        ? {
+            openRouterApiKey: apiKey,
+            openRouterModel: parityOpenRouterModel(),
+            openRouterSeed: parityOpenRouterSeed(),
+          }
+        : {}),
       // AI : quote steps in exports need source text — use first input doc (same as UI sourceText).
       ...(firstContent
         ? { sourceText: firstContent, sourceDocId: firstDoc }

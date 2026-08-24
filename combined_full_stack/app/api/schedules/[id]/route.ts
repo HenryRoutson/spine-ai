@@ -13,6 +13,7 @@ import {
   getSchedule,
   patchSchedule,
   revokeSchedule,
+  toPublicRecord,
 } from "@/lib/server/pipeline_schedules";
 import { scheduleDocsFromByModule } from "@/lib/schedule-types";
 
@@ -24,23 +25,7 @@ export async function GET(_req: NextRequest, ctx: { params: Promise<{ id: string
   if (!scheduleId) return apiError("schedule not found", HTTP.NOT_FOUND);
   const row = await getSchedule(authCtx.auth.userId, scheduleId);
   if (!row) return apiError("schedule not found", HTTP.NOT_FOUND);
-  return NextResponse.json({
-    schedule: {
-      id: row.id,
-      projectId: row.projectId,
-      name: row.name,
-      cron: row.cron,
-      timezone: row.timezone,
-      enabled: row.enabled,
-      defaultModel: row.defaultModel,
-      defaultDocs: row.defaultDocs,
-      nextRunAt: row.nextRunAt,
-      lastRunAt: row.lastRunAt,
-      lastError: row.lastError,
-      runCount: row.runCount,
-      createdAt: row.createdAt,
-    },
-  });
+  return NextResponse.json({ schedule: toPublicRecord(row) });
 }
 
 export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: string }> }) {

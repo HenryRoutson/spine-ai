@@ -6,6 +6,7 @@ import { createSpineSession } from "@/lib/core/session"
 import { createApiEgress, createThrowingEgress, SPINE_API_TOKEN_ENV, SPINE_API_URL_ENV } from "@/lib/core/transport"
 import { toBillingView, toCacheView, toMcpProjectReview, toSettingsView, toShareView, toValidationView } from "@/lib/core/view"
 import { createFilePersist, resolveSessionPath } from "@/lib/cli/session_persist"
+import { lintPipeline } from "@/lib/server/pipeline_lint"
 import {
   addModelField,
   addNamedModel,
@@ -13,12 +14,18 @@ import {
   addTypeAlias,
   assignStepStructure,
   importSeed,
+  listSeedIds,
   parseAddableKind,
   patchStep,
   removeModelField,
   removeStep,
   setModelFieldRelation,
 } from "@/lib/cli/workspace_edits"
+import {
+  pinpointFailureOnProject,
+  readRunFromInput,
+  type PinpointRunSource,
+} from "./spine-pinpoint.js"
 import { askAgent } from "@/lib/cli/agent"
 import { inspectCatalogDocs } from "@/lib/sql-id-index"
 import type { ProjectProposal } from "@/lib/project-assistant-types"
@@ -31,15 +38,58 @@ import { DocLabel, InputType, RunStatus, type PipelineRun, type Project, type Ru
 const askAgentJobs = new Map<string, Promise<unknown>>()
 const askAgentErrors = new Map<string, string>()
 
+// AI : Claude Code often omits SPINE_API_URL — local Next is this origin.
+export const DEFAULT_LOCAL_API_URL = "http://127.0.0.1:3000"
+
+export function resolveMcpApiUrl(): string {
+  const configured = process.env[SPINE_API_URL_ENV]?.trim()
+  return (configured || DEFAULT_LOCAL_API_URL).replace(/\/$/, "")
+}
+
+let cachedApiReachable: { url: string; ok: boolean; at: number } | null = null
+
+async function probeApi(url: string): Promise<boolean> {
+  const now = Date.now()
+  if (cachedApiReachable && cachedApiReachable.url === url && now - cachedApiReachable.at < 15_000) {
+    return cachedApiReachable.ok
+  }
+  try {
+    await fetch(url, { method: "GET", redirect: "manual", signal: AbortSignal.timeout(250) })
+    cachedApiReachable = { url, ok: true, at: now }
+    return true
+  } catch {
+    cachedApiReachable = { url, ok: false, at: now }
+    return false
+  }
+}
+
+// AI : hung Next (listen but no respond) used to stall Claude Code for minutes.
+const MCP_API_TIMEOUT_MS = 8_000
+
 export function openMcpSession(sessionPath?: string, offline = false) {
   const persist = createFilePersist(resolveSessionPath(sessionPath))
-  const url = process.env[SPINE_API_URL_ENV]
+  const url = resolveMcpApiUrl()
   const egress = offline
     ? createThrowingEgress()
-    : url
-      ? createApiEgress(url, process.env[SPINE_API_TOKEN_ENV])
-      : undefined
+    : createApiEgress(url, process.env[SPINE_API_TOKEN_ENV], fetch, { timeoutMs: MCP_API_TIMEOUT_MS })
   return createSpineSession({ persist, egress })
+}
+
+function mcpProjectNext(
+  review: ReturnType<typeof toMcpProjectReview>,
+  assistantError?: string,
+): string {
+  if (assistantError) {
+    return `Vibe failed: ${assistantError}. Fix that, then ask_agent again or edit with add_step / configure_n8n_step.`
+  }
+  if (review.assistantInFlight) return "Vibe still running. Poll get_project. Do not re-send ask_agent."
+  if (review.pendingProposal) {
+    return "Unapplied proposal. apply_project_changes with no proposalJson to Approve, or session_action id=assistant.reject to discard."
+  }
+  if (!review.ok) {
+    return "Issues listed above. Fix with add_step / configure_n8n_step / session_action structure.add-field, or ask_agent. Then validate_project."
+  }
+  return "Project is valid. If auth_status.canRun, start_run then wait_for_run. pinpoint_failure with testDocName from session_logs.tests and runJson from wait_for_run."
 }
 
 // AI : compact graph so MCP can review Vibe proposals (inputType, fields, docs, pendingProposal).
@@ -50,9 +100,12 @@ export function getProjectFromSession(sessionPath?: string) {
   if (!snap.projects.length) {
     throw new Error("no active project")
   }
+  const assistantError = askAgentErrors.get(path)
+  const review = toMcpProjectReview(snap)
   return {
-    ...toMcpProjectReview(snap),
-    ...(askAgentErrors.has(path) ? { assistantError: askAgentErrors.get(path) } : {}),
+    ...review,
+    ...(assistantError ? { assistantError } : {}),
+    next: mcpProjectNext(review, assistantError),
   }
 }
 
@@ -79,9 +132,25 @@ export async function startRunFromSession(opts: {
   testDocName?: string
   testing?: boolean
 }) {
+  const apiUrl = resolveMcpApiUrl()
+  if (!(await probeApi(apiUrl))) {
+    throw new Error(
+      `Next app not reachable at ${apiUrl} — start combined_full_stack with npm run dev, then retry start_run`,
+    )
+  }
   const session = openMcpSession(opts.sessionPath, false)
-  const run = opts.testing ? await session.runTest(opts.testDocName) : await session.startRun()
-  return { id: run.id, status: run.status, source: run.source }
+  try {
+    const run = opts.testing ? await session.runTest(opts.testDocName) : await session.startRun()
+    return { id: run.id, status: run.status, source: run.source }
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err)
+    if (/abort|timeout|fetch failed|ECONNREFUSED|network/i.test(msg)) {
+      throw new Error(
+        `start_run timed out talking to ${apiUrl} — restart npm run dev in combined_full_stack, then retry`,
+      )
+    }
+    throw err
+  }
 }
 
 function compactRun(run: PipelineRun, includeJson = false) {
@@ -163,34 +232,58 @@ export function getRunFromSession(opts: { sessionPath?: string; runId?: string }
   return compactRun(run, true)
 }
 
-export function authStatusFromSession(sessionPath?: string) {
+export async function authStatusFromSession(sessionPath?: string) {
   const path = resolveSessionPath(sessionPath)
-  const apiUrl = process.env[SPINE_API_URL_ENV] ?? null
+  const apiUrl = resolveMcpApiUrl()
   const hasApiToken = Boolean(process.env[SPINE_API_TOKEN_ENV])
+  const apiReachable = await probeApi(apiUrl)
+  const seeds = listSeedIds()
   let projectCount = 0
+  let projects: { id: string; name: string; active: boolean }[] = []
   let loadError: string | undefined
   try {
-    projectCount = openMcpSession(sessionPath, true).projects.length
+    const session = openMcpSession(sessionPath, true)
+    projectCount = session.projects.length
+    projects = session.projects.map((p) => ({
+      id: p.id,
+      name: p.name,
+      active: p.id === session.activeProjectId,
+    }))
   } catch (err) {
     loadError = err instanceof Error ? err.message : String(err)
   }
-  const canRun = Boolean(apiUrl)
+  const canRun = apiReachable
   return {
     ok: !loadError,
     sessionPath: path,
     appRoot: process.env.SPINE_APP_ROOT,
     apiUrl,
+    apiReachable,
     hasApiToken,
     canRun,
     projectCount,
+    projects,
+    seeds,
     ...(loadError ? { error: loadError } : {}),
     next: loadError
       ? "Fix or delete the session JSON, then add_project."
       : !projectCount
-        ? "Call add_project (or import_seed), then get_project."
+        ? seeds.length
+          ? "Call add_project for a blank pipeline, or import_seed with file from seeds (e.g. lead_enrich_n8n). Then get_project."
+          : "Call add_project, then get_project."
         : canRun
           ? "Call get_project. You can start_run / wait_for_run."
-          : "Call get_project. Local edits work. To run, set SPINE_API_URL to the Next app, then start_run → wait_for_run. Production also needs SPINE_API_TOKEN (Supabase access token).",
+          : `Call get_project. Local edits work. To run, start combined_full_stack (npm run dev) so ${apiUrl} is up, then start_run → wait_for_run. Production also needs SPINE_API_TOKEN.`,
+  }
+}
+
+export function listSeedsForMcp() {
+  const seeds = listSeedIds()
+  return {
+    seeds,
+    next: seeds.length
+      ? "import_seed with file set to one of these ids (no path, no .json). Then get_project."
+      : "No bundled seeds found — check SPINE_APP_ROOT, then add_project.",
   }
 }
 
@@ -201,12 +294,53 @@ export function sessionLogs(sessionPath?: string, errorsOnly = false) {
     status: r.status,
     notes: r.notes,
   }))
+  const pendingDocs = (session.pendingProposal?.docs ?? []).map((d) => d.name)
   return {
     runs,
     cache: session.getSnapshot().cacheEntries,
     tests: session.docs.filter((d) => d.name.endsWith("_testing.json")).map((d) => d.name),
     docs: session.docs.map((d) => ({ name: d.name, type: d.type, label: d.label })),
+    ...(pendingDocs.length ? { pendingDocs } : {}),
+    next: "tests are names for pinpoint_failure.testDocName. pendingDocs are unapplied proposal files — apply_project_changes to ingest them.",
   }
+}
+
+export function lintProjectFromSession(sessionPath?: string, includeExport = false) {
+  const session = openMcpSession(sessionPath, true)
+  const project = session.project
+  if (!project) throw new Error("no active project")
+  const result = lintPipeline(project, { includeExport })
+  return {
+    projectName: project.name,
+    ok: result.ok,
+    lintCount: result.lints.length,
+    lints: result.lints,
+  }
+}
+
+export function pinpointFailureFromSession(
+  input: PinpointRunSource & { sessionPath?: string; testDocName?: string },
+  cwd: string,
+) {
+  const session = openMcpSession(input.sessionPath, true)
+  const project = session.project
+  if (!project) throw new Error("no active project")
+  const tests = session.docs.filter((d) => d.name.endsWith("_testing.json"))
+  const testName = input.testDocName?.trim()
+  if (!testName) {
+    throw new Error(
+      `testDocName required. Available: ${tests.map((d) => d.name).join(", ") || "(none — add a *_testing.json doc)"}`,
+    )
+  }
+  const doc = session.docs.find((d) => d.id === testName || d.name === testName)
+  if (!doc) {
+    throw new Error(
+      `unknown test doc: ${testName}. Available: ${tests.map((d) => d.name).join(", ") || "(none)"}`,
+    )
+  }
+  const content = session.getSnapshot().docContents[doc.id]
+  if (!content?.trim()) throw new Error(`test doc has no content: ${doc.name}`)
+  return pinpointFailureOnProject(project, content, doc.name, readRunFromInput(input, cwd))
 }
 
 export function projectFromSession(sessionPath?: string): Project {
@@ -390,6 +524,14 @@ export function addDocFromSession(input: { name: string; content: string; sessio
     label: DocLabel.Inference,
   })
   return doc
+}
+
+export function removeDocFromSession(docKey: string, sessionPath?: string) {
+  const session = openMcpSession(sessionPath, true)
+  const doc = session.docs.find((d) => d.id === docKey || d.name === docKey)
+  if (!doc) throw new Error(`unknown doc: ${docKey}`)
+  session.removeDoc(doc.id)
+  return getProjectFromSession(sessionPath)
 }
 
 export function setDocsFromSession(text: string, sessionPath?: string) {
@@ -596,6 +738,10 @@ export async function runSessionAction(args: SessionActionArgs): Promise<unknown
     case "add_doc":
       if (!args.name || args.content == null) throw new Error("name, content required")
       return addDocFromSession({ name: args.name, content: args.content, sessionPath })
+    case "documents.remove":
+    case "remove_doc":
+      if (!args.doc) throw new Error("doc required")
+      return removeDocFromSession(args.doc, sessionPath)
     case "docs.set":
     case "set_docs":
       if (args.text == null) throw new Error("text required")
@@ -660,8 +806,8 @@ export async function runSessionAction(args: SessionActionArgs): Promise<unknown
     case "logging.errors-only":
       return sessionLogs(sessionPath, true)
     // AI : TODO (mcp-capability) — GUI ids with SpineSession methods but no MCP case yet:
-    // AI :   documents.remove → removeDoc, quotes.link → linkQuotes,
-    // AI :   docs/project bind → setDocProjects, assistant approve-to-run → executeProposedActions,
+    // AI :   quotes.link → linkQuotes, docs/project bind → setDocProjects,
+    // AI :   assistant approve-to-run → executeProposedActions,
     // AI :   session pull/push → pullRemoteState/flushPendingSave, project.resync-examples → resyncExamples.
     // AI :   Host-bound (no session method): inference.stop, jobs.stop, inference.human-review.*,
     // AI :   inference.chatbot.send, inference.custom-code, share mint, Stripe, auth.sign-in.

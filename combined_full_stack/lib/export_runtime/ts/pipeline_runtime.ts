@@ -892,6 +892,68 @@ async function ingestWebhookMedia(mediaUrl: string, inputType: string | undefine
   return { doc_id: hashBytes(bytes), url, filename, mime };
 }
 
+// AI : n8n Code-node — same semantics as lib/n8n-run.ts; catalog code is baked into the generated step.
+type N8nItem = { json: Record<string, unknown> };
+
+function spineToN8nItems(input: unknown): N8nItem[] {
+  if (input == null) return [{ json: {} }];
+  if (Array.isArray(input)) {
+    return input.map((row) => ({
+      json: row && typeof row === "object" && !Array.isArray(row) ? (row as Record<string, unknown>) : { value: row },
+    }));
+  }
+  if (typeof input === "object") return [{ json: input as Record<string, unknown> }];
+  return [{ json: { value: input } }];
+}
+
+function n8nItemsToSpine(items: N8nItem[], inputWasList: boolean): unknown {
+  const jsons = items.map((i) => i.json ?? {});
+  if (inputWasList) return jsons;
+  return jsons[0] ?? {};
+}
+
+function asN8nItems(raw: unknown, fallback: N8nItem[]): N8nItem[] {
+  if (!Array.isArray(raw)) return fallback;
+  return raw.map((row) => {
+    if (row && typeof row === "object" && "json" in row && row.json && typeof row.json === "object") {
+      return { json: row.json as Record<string, unknown> };
+    }
+    if (row && typeof row === "object" && !Array.isArray(row)) return { json: row as Record<string, unknown> };
+    return { json: { value: row } };
+  });
+}
+
+function evalN8nCode(code: string, items: N8nItem[], params: Record<string, unknown>): N8nItem[] {
+  const src = code.trim();
+  if (!src) return items;
+  const $input = {
+    all: () => items,
+    first: () => items[0],
+    item: items[0],
+  };
+  const $json = items[0]?.json ?? {};
+  const fn = new Function("items", "$input", "$json", "$parameter", "params", `"use strict";\n${src}`);
+  const result = fn(items, $input, $json, params, params);
+  return asN8nItems(result, items);
+}
+
+/** Run baked n8n Code-node JS against spine input (UI uses the same eval shape). */
+export async function runN8nCode(
+  code: string,
+  params: Record<string, unknown>,
+  input: unknown,
+  timeoutMs = 60_000,
+): Promise<unknown> {
+  const items = spineToN8nItems(input);
+  const ran = await Promise.race([
+    Promise.resolve().then(() => evalN8nCode(code, items, params)),
+    new Promise<never>((_, reject) => {
+      setTimeout(() => reject(new Error(`n8n piece timed out after ${timeoutMs}ms`)), timeoutMs);
+    }),
+  ]);
+  return n8nItemsToSpine(ran, Array.isArray(input));
+}
+
 export async function callWebhook(
   input: unknown,
   state: unknown,

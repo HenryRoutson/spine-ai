@@ -316,6 +316,8 @@ interface StoreState {
   refresh: () => Promise<void>
   prefetchProject: (id: string) => void
   projectLoading: boolean
+  // AI : true while /api/state is refreshing — cached docs can 404 until syncDocsFromDb lands.
+  stateSyncing: boolean
   saveError: string | null
   clearSaveError: () => void
   // AI : flush debounced project save immediately — call before startRun to avoid stale server state.
@@ -928,13 +930,12 @@ export function StoreProvider({
     if (instant) {
       applyState(cached, scopedProjectId)
       setProjectLoading(false)
-      if (isInitialHydrate) {
-        setStateSyncing(false)
-        hydratedRef.current = true
-      }
+      // AI : keep syncing until network /api/state finishes — cached doc ids often 404 on warm-cache purge.
+      setStateSyncing(true)
+      if (isInitialHydrate) hydratedRef.current = true
     } else {
       if (mode === StoreMode.Workspace && hydratedRef.current && scopedProjectId) setProjectLoading(true)
-      if (isInitialHydrate) setStateSyncing(true)
+      setStateSyncing(true)
     }
 
     if (isInitialHydrate && !instant) {
@@ -1647,6 +1648,7 @@ export function StoreProvider({
       refresh,
       prefetchProject,
       projectLoading,
+      stateSyncing,
       saveError,
       clearSaveError,
       flushPendingSave,
@@ -1685,6 +1687,7 @@ export function StoreProvider({
     refresh,
     prefetchProject,
     projectLoading,
+    stateSyncing,
     saveError,
     clearSaveError,
     flushPendingSave,

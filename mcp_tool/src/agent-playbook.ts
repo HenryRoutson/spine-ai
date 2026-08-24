@@ -10,21 +10,21 @@ Spine sits on top of n8n-class automation with Pydantic/Zod structures. You defi
 CONNECT (Claude Code / Cursor — no codebase required)
 From the Spine repo: claude mcp add spine -- node "$PWD/mcp_tool/spine-mcp.mjs"
 Or commit .mcp.json { "mcpServers": { "spine": { "command": "node", "args": ["mcp_tool/spine-mcp.mjs"] } } }
-Cursor: .cursor/mcp.json command node + args [absolute path to mcp_tool/spine-mcp.mjs]. The launcher sets SPINE_* paths itself.
-You are already connected if you can call tools. First tool: auth_status. Then get_project.
+Cursor: .cursor/mcp.json command node + args [absolute path to mcp_tool/spine-mcp.mjs]. The launcher sets SPINE_* paths itself. Local runs default to http://127.0.0.1:3000 (start combined_full_stack with npm run dev).
+You are already connected if you can call tools. First tool: auth_status. Then get_project. Follow each tool's next field.
 
 WORKSPACES — never mix:
-- Session tools mutate .spine-session.json (omit sessionPath). This is the editable project.
-- Seed tools (pinpoint_failure, compare_run_to_test, validate_test, parse_test, list_project_tests, describe_pipeline_steps, validate_step_output, derive_step_prompt, validate_pipeline_wiring, lint_pipeline, export_pydantic, inspect_ids) read seeds/*.json + *_testing.json. They do not write the session.
-- Signed-in GUI uses Supabase cookies. MCP start_run sends SPINE_API_TOKEN as Bearer (Supabase access token).
+- Session tools mutate .spine-session.json (omit sessionPath). This is the editable project. Prefer these.
+- Bundled templates: list_seeds → import_seed file=<id>. Seed-path tools are optional; lint_pipeline with no args lints the session. pinpoint_failure uses testDocName from session_logs.tests + runJson from wait_for_run.
+- Signed-in GUI uses Supabase cookies. MCP start_run sends SPINE_API_TOKEN as Bearer (Supabase access token). Local npm run dev does not need a token.
 
 DEFAULT LOOP
-1. auth_status — session path, projectCount, canRun (SPINE_API_URL). Follow next.
-2. get_project — compact review (id, kind, field types, inputType, prompt/note, docs, pendingProposal, assistantError, issues, forkJoin, n8nNodeType, n8nParameters). If no active project, add_project or import_seed.
-3. validate_project — same computeInvalid as the pipeline editor.
-4. Change: ask_agent (kind vibe|structure|testing|diagnosis) → poll get_project if inFlight (do NOT re-send). If assistantError appears, fix from that text. Then apply_project_changes, OR edit with add_step / add_model / add_doc / assign_input / set_docs / configure_n8n_step / session_action structure.add-field.
-5. run_test or start_run (needs SPINE_API_URL). Returns {id,status} immediately — then wait_for_run until ok/error (or timedOut; call again). wait_for_run / get_run include runJson.
-6. Finished run: pinpoint_failure(projectSeedPath, testFilePath, runJson) using the JSON from wait_for_run.
+1. auth_status — session path, projects, seeds, canRun. Follow next.
+2. get_project — compact review plus next (apply pending proposal, fix issues, or run). If no active project, add_project or import_seed.
+3. validate_project — same computeInvalid as the pipeline editor. lint_pipeline with no args for graph lint.
+4. Change: ask_agent (kind vibe|structure|testing|diagnosis) → poll get_project if inFlight (do NOT re-send). If assistantError appears, fix from that text. Then apply_project_changes, OR edit with add_step / add_model / add_doc / remove_doc / assign_input / set_docs / configure_n8n_step / session_action structure.add-field.
+5. run_test or start_run. Returns {id,status} immediately — then wait_for_run until ok/error (or timedOut; call again). wait_for_run / get_run include runJson.
+6. Finished run: pinpoint_failure({ testDocName, runJson }) using session_logs.tests and wait_for_run JSON.
 
 TYPED N8N PIECES (no live integrations)
 list_pieces → add_step kind=n8n → configure_n8n_step (nodeType + parametersJson + optional n8nCode).
@@ -39,11 +39,11 @@ input, llm, llm-batch, example-select, transform, chunk, merge, assemble, fork, 
 Aliases: code→custom-code, http→webhook, piece→n8n, dag→fork. Case-insensitive.
 
 NAMED TOOLS vs session_action:
-Prefer named tools. session_action id is the GUI data-spine-id. Extra ids: structure.add-field/remove-field/set-relation/add-alias, pipeline.configure-step/remove-step/assign-structure, assistant.reject, billing.refresh, earnings.refresh, cache.refresh, logging.errors-only.
+Prefer named tools. session_action id is the GUI data-spine-id. Extra ids: structure.add-field/remove-field/set-relation/add-alias, pipeline.configure-step/remove-step/assign-structure, assistant.reject, documents.remove, billing.refresh, earnings.refresh, cache.refresh, logging.errors-only.
 
 ERRORS: tools return {ok:false, code, error, next} with isError instead of crashing. Follow next. Never retry the same crashing payload.
 
-NOT TOOLS YET: documents.remove, quotes.link, session pull/push, run cancel, share/hosted-api/embed mint, Stripe, human-review click, chatbot turn, custom-code (browser CodeHost), live n8n Cloud execute.`
+NOT TOOLS YET: quotes.link, session pull/push, run cancel, share/hosted-api/embed mint, Stripe, human-review click, chatbot turn, custom-code (browser CodeHost), live n8n Cloud execute.`
 
 function userMessage(text: string) {
   return { messages: [{ role: "user" as const, content: { type: "text" as const, text } }] }
@@ -59,7 +59,7 @@ export function registerSpinePrompts(server: McpServer): void {
     },
     ({ goal }) =>
       userMessage(
-        `Goal: ${goal}\n\nFollow Spine MCP instructions. Loop: auth_status → get_project → validate_project → ask_agent (kind=vibe unless this is clearly structure/testing/diagnosis). If ask_agent times out, poll get_project until pendingProposal or assistantError appears (do not re-ask). Then apply_project_changes (or session_action assistant.reject) → validate_project again → run_test if SPINE_API_URL is set, then wait_for_run. Use session tools only (not seed lint) unless pinpointing a finished run against seeds/*.json.`,
+        `Goal: ${goal}\n\nFollow Spine MCP instructions. Loop: auth_status → get_project → validate_project → ask_agent (kind=vibe unless this is clearly structure/testing/diagnosis). If ask_agent times out, poll get_project until pendingProposal or assistantError appears (do not re-ask). Then apply_project_changes (or session_action assistant.reject) → validate_project again → run_test if auth_status.canRun, then wait_for_run. Use session tools (lint_pipeline with no args, pinpoint_failure with testDocName) unless importing a list_seeds template.`,
       ),
   )
 
@@ -76,7 +76,7 @@ export function registerSpinePrompts(server: McpServer): void {
     },
     ({ testFilePath, projectSeedPath, runPath }) =>
       userMessage(
-        `Failing test: ${testFilePath}\nSeed: ${projectSeedPath}${runPath ? `\nRun JSON: ${runPath}` : ""}\n\nFollow Spine MCP instructions. If you have run JSON, call pinpoint_failure first (seed + test + run) — do not dump the whole pipeline. Then ask_agent kind=testing or kind=diagnosis with the isolated diffs, apply_project_changes, validate_project, run_test, wait_for_run. Pinpoint uses the seed file; session edits go through session tools.`,
+        `Failing test: ${testFilePath}\nSeed: ${projectSeedPath}${runPath ? `\nRun JSON: ${runPath}` : ""}\n\nFollow Spine MCP instructions. Prefer pinpoint_failure with testDocName + runJson from wait_for_run when the test lives on the session (session_logs.tests). Seed paths are for bundled templates from list_seeds. Then ask_agent kind=testing or kind=diagnosis with the isolated diffs, apply_project_changes, validate_project, run_test, wait_for_run.`,
       ),
   )
 
@@ -104,7 +104,7 @@ export function registerSpinePrompts(server: McpServer): void {
     },
     () =>
       userMessage(
-        `You are connected to Spine MCP. Do not clone or search the repo.\n\n1. auth_status — follow next (add_project if projectCount is 0).\n2. get_project.\n3. Add Pydantic-like structures with add_model + session_action structure.add-field (name, type).\n4. Wire steps: input → (fork lanes and/or n8n pieces and/or llm) → output. add_step kinds are listed in server instructions.\n5. validate_project until ok.\n6. Auto UI is the inference page from those structures — you do not hand-write forms.\n7. If SPINE_API_URL is set, start_run then wait_for_run.\nShare an n8n piece with export_piece; import someone else's with import_piece.\nNever call live Slack/Gmail. n8n pieces run local Code-node JS with typed in/out.`,
+        `You are connected to Spine MCP. Do not clone or search the repo.\n\n1. auth_status — follow next (add_project if projectCount is 0, or import_seed from seeds).\n2. get_project — follow next (apply, reject, or edit).\n3. Add Pydantic-like structures with add_model + session_action structure.add-field (name, type).\n4. Wire steps: input → (fork lanes and/or n8n pieces and/or llm) → output. add_step kinds are listed in server instructions.\n5. validate_project until ok. lint_pipeline with no args for graph lint.\n6. Auto UI is the inference page from those structures — you do not hand-write forms.\n7. If auth_status.canRun, start_run then wait_for_run. pinpoint_failure uses testDocName + runJson.\nShare an n8n piece with export_piece; import someone else's with import_piece.\nNever call live Slack/Gmail. n8n pieces run local Code-node JS with typed in/out.`,
       ),
   )
 

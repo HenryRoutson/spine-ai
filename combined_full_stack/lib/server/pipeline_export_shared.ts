@@ -1089,12 +1089,16 @@ export function generateParallelStepBodyGo(m: PipelineModule, project: Project, 
   ].join("\n");
 }
 
-function forkLaneLastStateExprsTs(m: PipelineModule): string[] {
+function forkLaneLastLabels(m: PipelineModule): string[] {
   return forkBranchesOf(m).flatMap((b) => {
     const last = laneLastModule(b);
     if (!last) return [];
-    return [`state[${JSON.stringify(last.label.trim())}]`];
+    return [last.label.trim()];
   });
+}
+
+function forkLaneLastStateExprsTs(m: PipelineModule): string[] {
+  return forkLaneLastLabels(m).map((label) => `state[${JSON.stringify(label)}]`);
 }
 
 export function generateForkStepBodyTs(m: PipelineModule, _project: Project, outTs: string): string {
@@ -1126,11 +1130,7 @@ export function generateForkStepBodyPy(m: PipelineModule, _project: Project, out
   if (join === "assemble") return generateAssembleStepBodyPy(m, _project, outPy);
   if (join === "merge") {
     const policyJson = JSON.stringify(m.mergePolicy ?? DEFAULT_MERGE_POLICY);
-    const exprs = forkBranchesOf(m).flatMap((b) => {
-      const last = laneLastModule(b);
-      if (!last) return [];
-      return [`state.get(${JSON.stringify(last.label.trim())})`];
-    });
+    const exprs = forkLaneLastLabels(m).map((label) => `state.get(${JSON.stringify(label)})`);
     return [
       exportComment("#", forkJoinComment()),
       `values = [v for v in [${exprs.join(", ")}] if v is not None]`,
@@ -1154,11 +1154,9 @@ export function generateForkStepBodyGo(m: PipelineModule, project: Project, outG
   const zero = goZeroValue(outGo);
   if (join === "merge") {
     const policyJson = JSON.stringify(m.mergePolicy ?? DEFAULT_MERGE_POLICY);
-    const pushes = forkBranchesOf(m).flatMap((b) => {
-      const last = laneLastModule(b);
-      if (!last) return [];
-      return [`\tif v, ok := state[${JSON.stringify(last.label.trim())}]; ok { values = append(values, v) }`];
-    });
+    const pushes = forkLaneLastLabels(m).map(
+      (label) => `\tif v, ok := state[${JSON.stringify(label)}]; ok { values = append(values, v) }`,
+    );
     return [
       exportComment("//", forkJoinComment()),
       `var policy any`,
@@ -1207,13 +1205,9 @@ export function generateForkStepBodyRust(m: PipelineModule, project: Project, ou
   if (join === "assemble") return generateAssembleStepBodyRust(m, project, outRust);
   if (join === "merge") {
     const policyJson = JSON.stringify(m.mergePolicy ?? DEFAULT_MERGE_POLICY);
-    const pushes = forkBranchesOf(m).flatMap((b) => {
-      const last = laneLastModule(b);
-      if (!last) return [];
-      return [
-        `if let Some(v) = state.get(${JSON.stringify(last.label.trim())}) { values.push(v.clone()); }`,
-      ];
-    });
+    const pushes = forkLaneLastLabels(m).map(
+      (label) => `if let Some(v) = state.get(${JSON.stringify(label)}) { values.push(v.clone()); }`,
+    );
     return [
       exportComment("//", forkJoinComment()),
       `let policy: Value = serde_json::from_str(${JSON.stringify(policyJson)}).unwrap_or(Value::Null);`,

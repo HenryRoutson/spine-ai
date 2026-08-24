@@ -22,6 +22,7 @@ import {
   collectInferenceInputIssues,
   inferenceInputIssueMessage,
 } from "@/lib/inference-validity";
+import { missingRequiredSecretsError } from "@/lib/server/secret_preflight";
 import { PUBLIC_RUN_SPEND_RESERVE_CENTS } from "@/lib/billing_config";
 import { hostedApiRunNotes } from "@/lib/hosted-api-types";
 import { PipelinePausedError } from "@/lib/server/run_checkpoint";
@@ -55,6 +56,7 @@ import {
 import { registerSharedProgressToken } from "@/lib/server/shared_links";
 import { logger } from "@/lib/server/server_logger";
 import { UserBillingKeyError, verifyUserBillingKey } from "@/lib/server/user_billing_keys";
+import { authorizationBearerToken } from "@/lib/server/bearer-token";
 import { HostedApiFundingMode, RunSource, type DocId, type HostedApiId, type ModuleId } from "@/lib/server/types";
 import type { user_id_string } from "@/lib/server/require_auth";
 
@@ -63,14 +65,8 @@ export const dynamic = "force-dynamic";
 
 const invokeLog = logger("api:hosted-apis:invoke");
 
-function bearerToken(req: NextRequest): string | null {
-  const auth = req.headers.get("authorization");
-  if (!auth?.toLowerCase().startsWith("bearer ")) return null;
-  return auth.slice(7).trim();
-}
-
 function deployApiKey(req: NextRequest): string | null {
-  return req.headers.get(SPINE_API_KEY_HEADER)?.trim() || bearerToken(req);
+  return req.headers.get(SPINE_API_KEY_HEADER)?.trim() || authorizationBearerToken(req);
 }
 
 export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
@@ -137,6 +133,9 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
     typeAliases: project.typeAliases,
   });
   if (inputIssues.length) return apiError(inferenceInputIssueMessage(inputIssues, inputModules), 400);
+
+  const missingSecrets = await missingRequiredSecretsError(project.modules, api.ownerId, { teamId: project.teamId, projectName: project.name, projectOwnerId: project.teamProjectOwnerId });
+  if (missingSecrets) return apiError(missingSecrets, HTTP.BAD_REQUEST, "missing_secrets");
 
   const resolvedByModule = inputDocsByModuleFromAssignment(inputModules, assignment);
   const flatIds = inputModules.flatMap((m) => (resolvedByModule[m.id] ?? []).map((d) => d as DocId));

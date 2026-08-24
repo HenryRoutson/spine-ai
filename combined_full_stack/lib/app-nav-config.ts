@@ -17,6 +17,7 @@ import {
   UserCircle,
   Settings2,
   Clock,
+  KeyRound,
 } from "lucide-react"
 import { SpineNavIcon } from "@/components/spine-mark"
 import { AppWindowId } from "@/lib/app-window-id"
@@ -127,6 +128,7 @@ export const AREA_SUB_NAV: Partial<Record<AppArea, AppNavItem[]>> = {
   [AppArea.Library]: [
     { id: AppWindowId.Documents, label: "Documents", hint: windowStepHint(AppWindowStepLabel.Documents), icon: Files },
     { id: AppWindowId.Docs, label: "Docs", hint: windowStepHint(AppWindowStepLabel.Docs), icon: BookOpen },
+    { id: AppWindowId.Secrets, label: "Secrets", hint: windowStepHint(AppWindowStepLabel.Secrets), icon: KeyRound },
     { id: AppWindowId.ProjectBilling, label: "Billing", hint: windowStepHint(AppWindowStepLabel.ProjectBilling), icon: CreditCard },
     { id: AppWindowId.ProjectSettings, label: "Settings", hint: windowStepHint(AppWindowStepLabel.ProjectSettings), icon: Settings2 },
   ],
@@ -149,6 +151,7 @@ export const BUILDER_NAV_ITEMS: AppNavItem[] = [
   { id: AppWindowId.Cache, label: "Cache", hint: windowStepHint(AppWindowStepLabel.Cache), icon: Database },
   { id: AppWindowId.Documents, label: "Documents", hint: windowStepHint(AppWindowStepLabel.Documents), icon: Files },
   { id: AppWindowId.Docs, label: "Docs", hint: windowStepHint(AppWindowStepLabel.Docs), icon: BookOpen },
+  { id: AppWindowId.Secrets, label: "Secrets", hint: windowStepHint(AppWindowStepLabel.Secrets), icon: KeyRound },
   { id: AppWindowId.ProjectBilling, label: "Billing", hint: windowStepHint(AppWindowStepLabel.ProjectBilling), icon: CreditCard },
   { id: AppWindowId.ProjectSettings, label: "Settings", hint: windowStepHint(AppWindowStepLabel.ProjectSettings), icon: Settings2 },
 ]

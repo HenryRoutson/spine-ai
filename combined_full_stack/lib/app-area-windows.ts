@@ -22,7 +22,13 @@ export const BUILDER_AREA_WINDOWS: Record<BuilderAreaId, readonly AppWindowId[]>
   ],
   [AppArea.Deploy]: [AppWindowId.Share, AppWindowId.Earnings],
   [AppArea.Observe]: [AppWindowId.Logging, AppWindowId.Cache],
-  [AppArea.Library]: [AppWindowId.Documents, AppWindowId.Docs, AppWindowId.ProjectBilling, AppWindowId.ProjectSettings],
+  [AppArea.Library]: [
+    AppWindowId.Documents,
+    AppWindowId.Docs,
+    AppWindowId.Secrets,
+    AppWindowId.ProjectBilling,
+    AppWindowId.ProjectSettings,
+  ],
   [AppArea.Account]: [AppWindowId.Billing, AppWindowId.Settings],
 }
 

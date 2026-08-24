@@ -76,10 +76,15 @@ export const secretNameSchema = z
   .string()
   .trim()
   .regex(/^[A-Z][A-Z0-9_]{0,127}$/, "Secret name must be UPPER_SNAKE_CASE");
+export const secretScopeSchema = z.enum(["personal", "project", "team"]);
 export const upsertSecretBodySchema = z
   .object({
     name: secretNameSchema,
     value: z.string().min(1).max(8_000),
+    scope: secretScopeSchema.default("personal"),
+    projectId: projectIdSchema.optional(),
+    teamId: teamIdSchema.optional(),
+    linkToProject: z.boolean().optional(),
   })
   .strict();
 
@@ -458,6 +463,7 @@ export const projectPatchSchema = z
     modules: z.array(pipelineModulePatchSchema).max(200).optional(),
     strategies: z.array(strategyPatchSchema).max(50).optional(),
     seedDocNames: z.array(z.string().max(256)).max(200).optional(),
+    seedSecretNames: z.array(secretNameSchema).max(200).optional(),
     expectedOutputs: z.record(z.string().max(256), jsonSizeBounded(100_000)).optional(),
     inferencePresets: z.array(jsonSizeBounded(50_000)).max(50).optional(),
     llmProviders: z.array(jsonSizeBounded(100_000)).max(20).optional(),

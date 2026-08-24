@@ -9,6 +9,12 @@ import { DEFAULT_EXAMPLE_REASON_FIELD, exampleReasonField } from "@/lib/example-
 import { examplePromptColumns } from "@/lib/sql-schema";
 import { isMergeModuleKind } from "@/lib/module-kinds";
 import {
+  exportN8nStepBodyGo,
+  exportN8nStepBodyPy,
+  exportN8nStepBodyRust,
+  exportN8nStepBodyTs,
+} from "@/lib/n8n-step";
+import {
   exportWebhookStepBodyGo,
   exportWebhookStepBodyPy,
   exportWebhookStepBodyRust,
@@ -811,32 +817,10 @@ export const STEP_BODY: Record<ModuleKind, Record<ExportLang, StepBodyEmitter>> 
     rs: (ctx) => exportWebhookStepBodyRust(ctx.m),
   },
   [ModuleKind.N8n]: {
-    ts: (ctx) =>
-      [
-        exportComment(TS, `n8n piece ${ctx.m.n8nNodeType ?? ""} — local Code-node JS, typed spine in/out`),
-        ...(ctx.m.n8nCode?.trim()
-          ? [commentForeignCode(TS, "n8n Code", ctx.m.n8nCode), tsCast(ctx.outType)]
-          : [`return input as unknown as ${ctx.outType};`]),
-      ].join("\n"),
-    py: (ctx) =>
-      [
-        exportComment(PY, `n8n piece ${ctx.m.n8nNodeType ?? ""}`),
-        ...(ctx.m.n8nCode?.trim()
-          ? [commentForeignCode(PY, "n8n Code", ctx.m.n8nCode), pyCast(ctx, "input")]
-          : [pyCast(ctx, "input")]),
-      ].join("\n"),
-    go: (ctx) =>
-      [
-        exportComment(C, `n8n piece ${ctx.m.n8nNodeType ?? ""}`),
-        ...(ctx.m.n8nCode?.trim() ? [commentForeignCode(C, "n8n Code", ctx.m.n8nCode)] : []),
-        "return input, nil",
-      ].join("\n"),
-    rs: (ctx) =>
-      [
-        exportComment(C, `n8n piece ${ctx.m.n8nNodeType ?? ""}`),
-        ...(ctx.m.n8nCode?.trim() ? [commentForeignCode(C, "n8n Code", ctx.m.n8nCode)] : []),
-        "Ok(input)",
-      ].join("\n"),
+    ts: (ctx) => exportN8nStepBodyTs(ctx.m, ctx.outType),
+    py: (ctx) => exportN8nStepBodyPy(ctx.m, ctx.outType),
+    go: (ctx) => exportN8nStepBodyGo(ctx.m, goZeroValue(ctx.outType)),
+    rs: (ctx) => exportN8nStepBodyRust(ctx.m),
   },
   [ModuleKind.Output]: {
     ts: (ctx) => {

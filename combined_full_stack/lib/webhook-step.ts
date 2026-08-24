@@ -1,8 +1,9 @@
-import type { PipelineModule } from "@/lib/types";
+import { flattenPipelineModules } from "@/lib/fork-pipeline";
+import type { ModuleId, PipelineModule } from "@/lib/types";
 import { InputType, WebhookBodyMode, WebhookMethod } from "@/lib/types";
 
-// AI : TODO (n8n-stage-E-exec) — do NOT fold n8n into webhook; share only URL/env resolve helpers if useful.
-// AI :   N8n step talks to n8n's node catalog + execute API (lib/server/n8n-roadmap.ts), not a raw URL body POST.
+// AI : TODO (n8n-sidecar-S5-http) — do NOT fold live n8n into ModuleKind.Webhook; share URL/auth/timeout/poll helpers only.
+// AI :   Sidecar execute lives in steps/n8n.ts (lib/server/n8n-roadmap.ts S2–S5), not a raw URL body POST.
 // AI : TODO (arch-export-webhook) — exportWebhookStepBody{Ts,Py,Go,Rust} is the same call shape four times;
 // AI :   one IR then printers (same as pipeline exporters).
 
@@ -12,35 +13,33 @@ export const DEFAULT_POLL_FAIL_WHEN = ["failed", "nsfw", "canceled", "cancelled"
 export const DEFAULT_POLL_STATUS_PATH = "status";
 
 // AI : public generate URLs — not secrets. env:HIGGSFIELD_GENERATE_URL falls back here so Inference runs
-// AI : without a server .env; only HIGGSFIELD_API_KEY must be set (Settings → Secrets).
+// AI : without a server .env; only HIGGSFIELD_API_KEY must be set (Library → Secrets).
 export const WEBHOOK_URL_DEFAULTS: Record<string, string> = {
   HIGGSFIELD_GENERATE_URL: "https://platform.higgsfield.ai/higgsfield-ai/dop/standard",
   HIGGSFIELD_IMAGE_URL: "https://platform.higgsfield.ai/higgsfield-ai/soul/standard",
 };
 
 export function missingWebhookSecretMessage(key: string): string {
-  return `${key} is not set. Add it in Settings → Secrets, or as an environment variable.`;
+  return `${key} is not set. Add it in Library → Secrets, or as an environment variable.`;
 }
 
 type env_record = Record<string, string | undefined>;
 
+export function webhookUrlEnvKey(url: string | undefined): string | undefined {
+  const raw = url?.trim() ?? "";
+  if (raw.startsWith("env:")) return raw.slice(4).trim() || undefined;
+  const envRef = raw.match(/^\$\{([A-Za-z_][A-Za-z0-9_]*)\}$/);
+  return envRef?.[1];
+}
+
 export function resolveWebhookUrl(spec: string | undefined, env: env_record = process.env): string {
   const raw = spec?.trim();
   if (!raw) throw new Error("webhook URL not configured");
-  if (raw.startsWith("env:")) {
-    const key = raw.slice(4).trim();
-    const val = env[key]?.trim() || WEBHOOK_URL_DEFAULTS[key];
-    if (!val?.trim()) throw new Error(missingWebhookSecretMessage(key));
-    return val.trim();
-  }
-  const envRef = raw.match(/^\$\{([A-Za-z_][A-Za-z0-9_]*)\}$/);
-  if (envRef) {
-    const key = envRef[1]!;
-    const val = env[key]?.trim() || WEBHOOK_URL_DEFAULTS[key];
-    if (!val?.trim()) throw new Error(missingWebhookSecretMessage(key));
-    return val.trim();
-  }
-  return raw;
+  const key = webhookUrlEnvKey(raw);
+  if (!key) return raw;
+  const val = env[key]?.trim() || WEBHOOK_URL_DEFAULTS[key];
+  if (!val?.trim()) throw new Error(missingWebhookSecretMessage(key));
+  return val.trim();
 }
 
 export function getValueAtPath(root: unknown, path: string | undefined): unknown {
@@ -225,13 +224,6 @@ export function webhookStepUsesPipelineState(m: PipelineModule): boolean {
   return spec.bodyMode !== WebhookBodyMode.Raw && spec.includeState;
 }
 
-export function webhookUrlEnvKey(url: string | undefined): string | undefined {
-  const raw = url?.trim() ?? "";
-  if (raw.startsWith("env:")) return raw.slice(4).trim() || undefined;
-  const envRef = raw.match(/^\$\{([A-Za-z_][A-Za-z0-9_]*)\}$/);
-  return envRef?.[1];
-}
-
 type webhook_export_opts = {
   urlEnv?: string;
   url?: string;
@@ -369,16 +361,96 @@ export function exportWebhookStepBodyRust(m: PipelineModule): string {
   ].join("\n");
 }
 
+export type secret_role = "auth" | "url";
+
+export type SecretRequirement = {
+  name: string;
+  stepId: ModuleId;
+  stepLabel: string;
+  role: secret_role;
+  optional: boolean;
+};
+
+export type SecretRequirementStatus = SecretRequirement & {
+  present: boolean;
+};
+
+export type GroupedSecretRequirement = {
+  name: string;
+  optional: boolean;
+  steps: string[];
+  roles: secret_role[];
+};
+
+export function collectSecretRequirements(modules: PipelineModule[]): SecretRequirement[] {
+  const out: SecretRequirement[] = [];
+  for (const m of flattenPipelineModules(modules)) {
+    if (m.kind !== "webhook") continue;
+    const spec = webhookCallSpecFromModule(m);
+    const urlKey = webhookUrlEnvKey(m.webhookUrl);
+    if (urlKey) {
+      out.push({
+        name: urlKey,
+        stepId: m.id,
+        stepLabel: m.label,
+        role: "url",
+        optional: urlKey in WEBHOOK_URL_DEFAULTS,
+      });
+    }
+    if (spec.authEnv) {
+      out.push({
+        name: spec.authEnv,
+        stepId: m.id,
+        stepLabel: m.label,
+        role: "auth",
+        optional: false,
+      });
+    }
+  }
+  return out;
+}
+
+export function groupSecretRequirements(reqs: SecretRequirement[]): GroupedSecretRequirement[] {
+  const byName = new Map<string, GroupedSecretRequirement>();
+  for (const r of reqs) {
+    const existing = byName.get(r.name);
+    if (!existing) {
+      byName.set(r.name, {
+        name: r.name,
+        optional: r.optional,
+        steps: [r.stepLabel],
+        roles: [r.role],
+      });
+      continue;
+    }
+    existing.optional = existing.optional && r.optional;
+    if (!existing.steps.includes(r.stepLabel)) existing.steps.push(r.stepLabel);
+    if (!existing.roles.includes(r.role)) existing.roles.push(r.role);
+  }
+  return [...byName.values()];
+}
+
+export function secretValuePresent(env: env_record, name: string): boolean {
+  return Boolean(env[name]?.trim());
+}
+
+export function missingRequiredSecrets(modules: PipelineModule[], env: env_record): SecretRequirement[] {
+  return collectSecretRequirements(modules).filter((r) => !r.optional && !secretValuePresent(env, r.name));
+}
+
+export function formatMissingSecretsError(missing: SecretRequirement[]): string {
+  const grouped = groupSecretRequirements(missing.filter((r) => !r.optional));
+  return grouped
+    .map((g) => `${missingWebhookSecretMessage(g.name)} Required by: ${g.steps.join(", ")}.`)
+    .join("\n");
+}
+
 export function collectWebhookExportEnvKeys(
   modules: PipelineModule[],
 ): { label: string; envKey: string; authEnv?: string; optional?: boolean }[] {
-  return modules
-    .filter((m) => m.kind === "webhook")
-    .flatMap((m) => {
-      const o = webhookExportOpts(m);
-      const rows: { label: string; envKey: string; authEnv?: string; optional?: boolean }[] = [];
-      if (o.urlEnv) rows.push({ label: m.label, envKey: o.urlEnv, optional: !!o.urlDefault });
-      if (o.authEnv) rows.push({ label: m.label, envKey: o.authEnv });
-      return rows;
-    });
+  return collectSecretRequirements(modules).map((r) => ({
+    label: r.stepLabel,
+    envKey: r.name,
+    optional: r.optional || undefined,
+  }));
 }

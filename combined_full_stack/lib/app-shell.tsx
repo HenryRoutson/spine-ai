@@ -55,6 +55,7 @@ interface AppShellState {
   sharedRunDocScope: SharedRunDocScope | null
   setSharedRunDocScope: (scope: SharedRunDocScope | null) => void
   openSettingsSection: (sectionId: string) => void
+  openSecrets: () => void
   pendingLlmProvidersOpen: boolean
   clearPendingLlmProvidersOpen: () => void
   focusTestDocName: string | null
@@ -138,7 +139,16 @@ export function AppShellProvider({ children }: { children: ReactNode }) {
 
   const clearFocusTestDoc = useCallback(() => setFocusTestDocName(null), [])
 
+  const openSecrets = useCallback(() => {
+    setActiveWindow(AppWindow.Secrets)
+  }, [])
+
   const openSettingsSection = useCallback((sectionId: string) => {
+    // AI : legacy deep-link — secrets moved to Library → Secrets tab.
+    if (sectionId === "settings-secrets" || sectionId === "settings-secrets") {
+      setActiveWindow(AppWindow.Secrets)
+      return
+    }
     setActiveWindow(AppWindow.Settings)
     if (sectionId === "settings-llm-providers") {
       setPendingLlmProvidersOpen(true)
@@ -177,6 +187,7 @@ export function AppShellProvider({ children }: { children: ReactNode }) {
         sharedRunDocScope,
         setSharedRunDocScope,
         openSettingsSection,
+        openSecrets,
         pendingLlmProvidersOpen,
         clearPendingLlmProvidersOpen,
         focusTestDocName,

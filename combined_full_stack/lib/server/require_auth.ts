@@ -4,6 +4,7 @@ import { createClient as createSupabaseJsClient } from "@supabase/supabase-js";
 import { AUTH_SIGN_IN_REQUIRED } from "@/lib/auth-messages";
 import { createClient } from "@/utils/supabase/server";
 import { getSupabasePublicEnv } from "@/utils/supabase/env";
+import { authorizationBearerToken } from "@/lib/server/bearer-token";
 
 export type user_id_string = string & { __brand: "user_id" };
 
@@ -41,9 +42,7 @@ async function sessionFromBearer(): Promise<AuthSession | null> {
   let token = "";
   try {
     const headerList = await headers();
-    const raw = headerList.get("authorization") ?? "";
-    if (!/^bearer\s+/i.test(raw)) return null;
-    token = raw.replace(/^bearer\s+/i, "").trim();
+    token = authorizationBearerToken(headerList) ?? "";
   } catch {
     return null;
   }

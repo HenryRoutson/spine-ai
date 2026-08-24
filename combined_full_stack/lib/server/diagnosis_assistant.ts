@@ -3,6 +3,7 @@
 import { llmStreamString } from "./llm";
 import { UsageLedger } from "./usage";
 import { buildDiagnosisSystemPrompt, buildDiagnosisUserPrompt } from "@/lib/diagnosis-prompt";
+import { diagnosisForMissingSecrets } from "@/lib/diagnosis-missing-secret";
 import { DIAGNOSIS_STREAM_EVENT } from "@/lib/diagnosis-stream-events";
 import type { ModelId, PipelineRun, Project } from "./types";
 
@@ -15,6 +16,11 @@ export async function diagnoseRunStream(
   globalModel: ModelId,
   onDelta: (delta: string) => void,
 ): Promise<{ text: string; usageCents: number }> {
+  const canned = diagnosisForMissingSecrets(project, run);
+  if (canned) {
+    onDelta(canned);
+    return { text: canned, usageCents: 0 };
+  }
   const ledger = new UsageLedger();
   const text = await llmStreamString(
     buildDiagnosisUserPrompt(project, run, message),

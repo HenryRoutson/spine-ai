@@ -11,7 +11,7 @@ import { PipelineObserveEmpty } from "@/components/pipeline-observe-empty"
 import { Badge } from "@/components/ui/badge"
 import { API_ROUTES } from "@/lib/api-routes"
 import { apiJson, JSON_HEADERS } from "@/lib/api-client"
-import { CRON_PRESETS, cronPresetIdFor, describeCronExpr, isValidCronExpr, type CronPresetId } from "@/lib/cron-expr"
+import { CRON_PRESETS, cronPresetIdFor, describeCronExpr, INVALID_CRON_MESSAGE, isValidCronExpr } from "@/lib/cron-expr"
 import { shareDefaultDocsByModule } from "@/lib/share-default-docs"
 import type { PipelineScheduleRecord, PipelineScheduleRuntime } from "@/lib/schedule-types"
 import { useStore } from "@/lib/store"
@@ -44,8 +44,8 @@ export function SchedulePage() {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [name, setName] = useState("Hourly run")
-  const [preset, setPreset] = useState<CronPresetId>("hourly")
   const [cron, setCron] = useState("0 * * * *")
+  const preset = cronPresetIdFor(cron)
   const [timezone, setTimezone] = useState(browserTimeZone)
   const [tickUrl, setTickUrl] = useState("")
   const [runningId, setRunningId] = useState<string | null>(null)
@@ -80,7 +80,8 @@ export function SchedulePage() {
 
   useEffect(() => {
     if (!runtime?.tickUrl || tickUrl) return
-    setTickUrl(runtime.tickUrl.replace(/\/api\/schedules\/tick$/, ""))
+    const suffix = API_ROUTES.schedulesTick
+    setTickUrl(runtime.tickUrl.endsWith(suffix) ? runtime.tickUrl.slice(0, -suffix.length) : runtime.tickUrl)
   }, [runtime, tickUrl])
 
   if (runTabsBlocked) {
@@ -96,7 +97,7 @@ export function SchedulePage() {
     setBusy(true)
     setError(null)
     try {
-      if (!isValidCronExpr(cron)) throw new Error("Cron must be 5 fields, like */15 * * * *")
+      if (!isValidCronExpr(cron)) throw new Error(INVALID_CRON_MESSAGE)
       await apiJson(API_ROUTES.schedules, {
         method: "POST",
         headers: JSON_HEADERS,
@@ -205,7 +206,6 @@ export function SchedulePage() {
                       type="button"
                       disabled={project.teamReadOnly}
                       onClick={() => {
-                        setPreset(p.id)
                         setCron(p.cron)
                       }}
                       className={cn(
@@ -221,7 +221,7 @@ export function SchedulePage() {
                   <button
                     type="button"
                     disabled={project.teamReadOnly}
-                    onClick={() => setPreset("custom")}
+                    onClick={() => document.getElementById("cron-expr")?.focus()}
                     className={cn(
                       "rounded-md border px-2 py-1 font-mono text-[11px] transition-colors",
                       preset === "custom"
@@ -245,7 +245,6 @@ export function SchedulePage() {
                   className="font-mono text-xs"
                   onChange={(e) => {
                     setCron(e.target.value)
-                    setPreset(cronPresetIdFor(e.target.value))
                   }}
                 />
               </div>

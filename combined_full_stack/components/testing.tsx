@@ -49,6 +49,8 @@ import { useRunJobs } from "@/lib/run-jobs-context"
 import { RunJobSource } from "@/lib/run-jobs-types"
 import { activeStepLabelFromStepStates, progressPctFromStepStates } from "@/lib/run-jobs-progress"
 import { computeWorkspaceValidity } from "@/lib/workspace-validity-ui"
+import { useProjectSecrets } from "@/lib/use-project-secrets"
+import { MissingSecretsBanner } from "@/components/missing-secrets-banner"
 import { docTextContent, fetchDocText, invalidateDocText } from "@/lib/doc-text-cache"
 import { flattenPipelineModules } from "@/lib/fork-pipeline"
 import { labelAsStateKey } from "@/lib/server/pipeline_state"
@@ -222,6 +224,10 @@ export function Testing() {
     modules,
     models,
     typeAliases,
+  )
+  const { missing: missingSecrets, hasBlockingMissing: secretsMissing } = useProjectSecrets(
+    project.id,
+    modules,
   )
 
   const [contents, setContents] = useState<Record<DocId, string>>({})
@@ -438,6 +444,7 @@ function staleLoadFailedContent(content: string): string | null {
     if (runBlocked) {
       return typesInvalid ? "fix type errors first" : "fix pipeline errors first"
     }
+    if (secretsMissing) return "Add required secrets in Settings before running"
     if (runAllActive) return undefined
     if (staleTests.length > 0) {
       return `Run ${staleTests.length} stale test(s) in parallel — test or pipeline changed, or not run yet for the current configuration`
@@ -449,7 +456,7 @@ function staleLoadFailedContent(content: string): string | null {
       return "waiting for test files to finish loading"
     }
     return "all runnable tests have a current pass/fail verdict"
-  }, [runBlocked, typesInvalid, runAllActive, staleTests.length, staleBlockedCount, testsNeedingRun])
+  }, [runBlocked, secretsMissing, typesInvalid, runAllActive, staleTests.length, staleBlockedCount, testsNeedingRun])
 
   // AI : hide stale run results when test/pipeline no longer matches the persisted verdict.
   useEffect(() => {
@@ -857,7 +864,7 @@ function staleLoadFailedContent(content: string): string | null {
               running={runAllActive}
               onRun={() => void runAllStaleTests()}
               onStop={() => stopAllRunningTests()}
-              disabled={runBlocked || staleTests.length === 0}
+              disabled={runBlocked || secretsMissing || staleTests.length === 0}
               title={runAllStaleTitle}
               label={`Run all stale${staleTests.length > 0 ? ` (${staleTests.length})` : ""}`}
               runningLabel={`Running stale (${runAllDone}/${runAllTotal})…`}
@@ -913,6 +920,11 @@ function staleLoadFailedContent(content: string): string | null {
         </div>
       ) : (
         <>
+      {secretsMissing ? (
+        <div className="border-b border-border px-4 py-3">
+          <MissingSecretsBanner missing={missingSecrets} />
+        </div>
+      ) : null}
       {actionError && (
         <p className="border-b border-destructive/30 bg-destructive/10 px-4 py-2 font-mono text-[11px] text-destructive">
           {actionError}
@@ -1061,7 +1073,7 @@ function staleLoadFailedContent(content: string): string | null {
                   resolveLastVerdict(selected.doc.name) === null
                 }
                 runs={runs}
-                runDisabled={runBlocked || runAllActive || selectedRun.phase === "running" || isPreviewOnly()}
+                runDisabled={runBlocked || secretsMissing || runAllActive || selectedRun.phase === "running" || isPreviewOnly()}
                 runPhase={selectedRun.phase}
                 stepStates={selectedRun.stepStates}
                 results={selectedRun.results}

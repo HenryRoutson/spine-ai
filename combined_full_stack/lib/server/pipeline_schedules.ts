@@ -1,10 +1,16 @@
-// AI : pipeline cron CRUD — Supabase is source of truth so confidential/self-hosted deploys can fire via pg_cron.
+// AI : Supabase is source of truth so confidential/self-hosted deploys can fire via pg_cron.
 import { randomBytes, timingSafeEqual } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { API_ROUTES } from "@/lib/api-routes";
 import { uid } from "@/lib/id";
-import { isValidCronExpr, isValidIanaTimeZone, nextCronFireAt } from "@/lib/cron-expr";
+import {
+  INVALID_CRON_MESSAGE,
+  isValidCronExpr,
+  isValidIanaTimeZone,
+  nextCronFireAt,
+} from "@/lib/cron-expr";
 import type { cron_expr_string, iana_timezone_string } from "@/lib/cron-expr";
 import type {
   PipelineScheduleRecord,
@@ -24,6 +30,7 @@ const scheduleLog = logger("pipeline-schedules");
 const SCHEDULE_PREFIX = "cron_";
 const CLAIM_STALE_MS = 5 * 60_000;
 const MAX_CLAIM_BATCH = 10;
+let localSchedulesPromoted = false;
 
 export class ScheduleValidationError extends Error {
   constructor(message: string) {
@@ -47,10 +54,6 @@ function isServerless(): boolean {
   return !!process.env.VERCEL;
 }
 
-async function supabaseForSchedules(): Promise<SupabaseClient | null> {
-  return createAdminClient();
-}
-
 function schedulesDir(): string {
   return join(dataDir(), "pipeline_schedules");
 }
@@ -63,11 +66,11 @@ function runtimeFile(): string {
   return join(dataDir(), "pipeline_schedule_runtime.json");
 }
 
-export function newPipelineScheduleId(): PipelineScheduleId {
+function newPipelineScheduleId(): PipelineScheduleId {
   return uid<PipelineScheduleId>(SCHEDULE_PREFIX);
 }
 
-function toPublicRecord(row: StoredSchedule): PipelineScheduleRecord {
+export function toPublicRecord(row: StoredSchedule): PipelineScheduleRecord {
   return {
     id: row.id,
     projectId: row.projectId,
@@ -171,31 +174,29 @@ function secretsEqual(a: string, b: string): boolean {
   return timingSafeEqual(left, right);
 }
 
-export function assertScheduleSpec(input: {
+function assertScheduleSpec(input: {
   name: string;
   cron: string;
   timezone: string;
-}): { name: string; cron: cron_expr_string; timezone: iana_timezone_string } {
+}): { name: string; cron: cron_expr_string; timezone: iana_timezone_string; nextRunAt: number } {
   const name = input.name.trim();
   if (!name || name.length > 80) throw new ScheduleValidationError("Name must be 1–80 characters");
   if (!isValidCronExpr(input.cron)) {
-    throw new ScheduleValidationError("Cron must be 5 fields, like */15 * * * *");
+    throw new ScheduleValidationError(INVALID_CRON_MESSAGE);
   }
   if (!isValidIanaTimeZone(input.timezone)) {
     throw new ScheduleValidationError("Timezone must be an IANA name, like UTC or Australia/Sydney");
   }
-  const nextRunAt = nextCronFireAt(input.cron, input.timezone);
+  const cron = input.cron.trim() as cron_expr_string;
+  const timezone = input.timezone.trim() as iana_timezone_string;
+  const nextRunAt = nextCronFireAt(cron, timezone);
   if (nextRunAt == null) throw new ScheduleValidationError("Cron expression never fires");
-  return {
-    name,
-    cron: input.cron.trim() as cron_expr_string,
-    timezone: input.timezone.trim() as iana_timezone_string,
-  };
+  return { name, cron, timezone, nextRunAt };
 }
 
 // AI : after the migration lands, copy disk fallback rows into Supabase so pg_cron can claim them.
 async function promoteLocalSchedules(db: SupabaseClient): Promise<void> {
-  if (isServerless() || !existsSync(schedulesDir())) return;
+  if (localSchedulesPromoted || isServerless() || !existsSync(schedulesDir())) return;
   for (const file of readdirSync(schedulesDir()).filter((f) => f.endsWith(".json"))) {
     const row = loadLocalSchedule(file.replace(".json", "") as PipelineScheduleId);
     if (!row || row.revoked) continue;
@@ -208,7 +209,10 @@ async function promoteLocalSchedules(db: SupabaseClient): Promise<void> {
     }
   }
   const localRuntime = existsSync(runtimeFile()) ? loadLocalRuntime() : null;
-  if (!localRuntime?.tickSecret) return;
+  if (!localRuntime?.tickSecret) {
+    localSchedulesPromoted = true;
+    return;
+  }
   const { data: remoteRuntime, error: remoteError } = await db
     .from("pipeline_schedule_runtime")
     .select("tick_secret, cron_job_ready")
@@ -218,7 +222,10 @@ async function promoteLocalSchedules(db: SupabaseClient): Promise<void> {
     scheduleLog.warn(`runtime promote skipped`, { error: remoteError.message });
     return;
   }
-  if (remoteRuntime?.tick_secret) return;
+  if (remoteRuntime?.tick_secret) {
+    localSchedulesPromoted = true;
+    return;
+  }
   const { error } = await db.from("pipeline_schedule_runtime").upsert({
     id: 1,
     tick_url: localRuntime.tickUrl,
@@ -228,14 +235,16 @@ async function promoteLocalSchedules(db: SupabaseClient): Promise<void> {
   });
   if (error && !isMissingSchemaError(error)) {
     scheduleLog.warn(`runtime promote skipped`, { error: error.message });
+    return;
   }
+  localSchedulesPromoted = true;
 }
 
 export async function listSchedulesForOwner(
   ownerId: user_id_string,
   projectId?: ProjectId,
 ): Promise<PipelineScheduleRecord[]> {
-  const db = await supabaseForSchedules();
+  const db = await createAdminClient();
   if (!db) return listLocalSchedulesForOwner(ownerId, projectId).map(toPublicRecord);
   await promoteLocalSchedules(db);
   let q = db.from("pipeline_schedules").select("*").eq("owner_id", ownerId).eq("revoked", false);
@@ -252,7 +261,7 @@ export async function getSchedule(
   ownerId: user_id_string,
   id: PipelineScheduleId,
 ): Promise<StoredSchedule | null> {
-  const db = await supabaseForSchedules();
+  const db = await createAdminClient();
   if (!db) {
     const row = loadLocalSchedule(id);
     if (!row || row.ownerId !== ownerId || row.revoked) return null;
@@ -291,8 +300,6 @@ export type CreateScheduleInput = {
 
 export async function createSchedule(input: CreateScheduleInput): Promise<PipelineScheduleRecord> {
   const spec = assertScheduleSpec(input);
-  const nextRunAt = nextCronFireAt(spec.cron, spec.timezone);
-  if (nextRunAt == null) throw new ScheduleValidationError("Cron expression never fires");
   const row: StoredSchedule = {
     id: newPipelineScheduleId(),
     ownerId: input.ownerId,
@@ -304,7 +311,7 @@ export async function createSchedule(input: CreateScheduleInput): Promise<Pipeli
     revoked: false,
     defaultModel: input.defaultModel,
     defaultDocs: input.defaultDocs,
-    nextRunAt,
+    nextRunAt: spec.nextRunAt,
     runCount: 0,
     createdAt: Date.now(),
   };
@@ -334,9 +341,7 @@ export async function patchSchedule(
   const timezone = patch.timezone ?? existing.timezone;
   const spec = assertScheduleSpec({ name, cron, timezone });
   const cronChanged = spec.cron !== existing.cron || spec.timezone !== existing.timezone;
-  const nextRunAt = cronChanged
-    ? (nextCronFireAt(spec.cron, spec.timezone) ?? existing.nextRunAt)
-    : existing.nextRunAt;
+  const nextRunAt = cronChanged ? spec.nextRunAt : existing.nextRunAt;
   const row: StoredSchedule = {
     ...existing,
     name: spec.name,
@@ -360,8 +365,7 @@ export async function revokeSchedule(ownerId: user_id_string, id: PipelineSchedu
 }
 
 async function persistSchedule(row: StoredSchedule): Promise<void> {
-  if (!isServerless()) saveLocalSchedule(row);
-  const db = await supabaseForSchedules();
+  const db = await createAdminClient();
   if (!db) {
     if (isServerless() || getSupabasePublicEnv()) {
       throw new Error("SUPABASE_SERVICE_ROLE_KEY required to save pipeline schedules");
@@ -369,6 +373,7 @@ async function persistSchedule(row: StoredSchedule): Promise<void> {
     saveLocalSchedule(row);
     return;
   }
+  if (!isServerless()) saveLocalSchedule(row);
   const { error } = await db.from("pipeline_schedules").upsert(toDbRow(row));
   if (error) {
     if (isServerless() || !isMissingSchemaError(error)) {
@@ -390,7 +395,7 @@ export async function getScheduleRuntime(): Promise<PipelineScheduleRuntime> {
 }
 
 async function loadRuntime(): Promise<StoredRuntime> {
-  const db = await supabaseForSchedules();
+  const db = await createAdminClient();
   if (!db) return loadLocalRuntime();
   const { data, error } = await db.from("pipeline_schedule_runtime").select("*").eq("id", 1).maybeSingle();
   if (error) {
@@ -408,7 +413,7 @@ async function loadRuntime(): Promise<StoredRuntime> {
 
 async function saveRuntime(row: StoredRuntime): Promise<void> {
   if (!isServerless()) saveLocalRuntime(row);
-  const db = await supabaseForSchedules();
+  const db = await createAdminClient();
   if (!db) {
     saveLocalRuntime(row);
     return;
@@ -425,13 +430,14 @@ async function saveRuntime(row: StoredRuntime): Promise<void> {
 
 function normalizeTickUrl(raw?: string): string {
   const site = getSiteUrl().replace(/\/$/, "");
-  const fallback = `${site}/api/schedules/tick`;
+  const tickPath = API_ROUTES.schedulesTick;
+  const fallback = `${site}${tickPath}`;
   let value = (raw ?? fallback).trim();
   if (!/^https?:\/\//i.test(value)) {
     throw new ScheduleValidationError("Tick URL must start with http:// or https://");
   }
   value = value.replace(/\/$/, "");
-  if (!value.endsWith("/api/schedules/tick")) value = `${value}/api/schedules/tick`;
+  if (!value.endsWith(tickPath)) value = `${value}${tickPath}`;
   return value;
 }
 
@@ -443,7 +449,7 @@ export async function ensureScheduleRuntime(tickUrl?: string): Promise<PipelineS
     tickSecret: existing.tickSecret || newTickSecret(),
   };
   await saveRuntime(next);
-  const db = await supabaseForSchedules();
+  const db = await createAdminClient();
   if (db) {
     const { error } = await db.rpc("ensure_pipeline_schedule_tick_job");
     if (error) {
@@ -487,7 +493,7 @@ function claimDueSchedulesLocal(now: number, staleBefore: number): ClaimedSchedu
 }
 
 export async function claimDueSchedules(now = Date.now()): Promise<ClaimedSchedule[]> {
-  const db = await supabaseForSchedules();
+  const db = await createAdminClient();
   const staleBefore = now - CLAIM_STALE_MS;
   if (!db) return claimDueSchedulesLocal(now, staleBefore);
   await promoteLocalSchedules(db);

@@ -18,6 +18,7 @@ export type ExportRuntimeNeeds = {
   humanReview: boolean;
   chatbot: boolean;
   webhook: boolean;
+  n8n: boolean;
   visionOcr: boolean;
   docToText: boolean;
   inputModules: { label: string; filenameHint?: string; inputType?: string }[];
@@ -40,6 +41,7 @@ export function analyzeExportRuntimeNeeds(project: Project): ExportRuntimeNeeds 
   let humanReview = false;
   let chatbot = false;
   let webhook = false;
+  let n8n = false;
   let visionOcr = false;
   let docToText = false;
   for (const m of flattenPipelineModules(project.modules)) {
@@ -53,6 +55,7 @@ export function analyzeExportRuntimeNeeds(project: Project): ExportRuntimeNeeds 
     if (m.kind === ModuleKind.HumanReview) humanReview = true;
     if (m.kind === ModuleKind.Chatbot) chatbot = true;
     if (m.kind === ModuleKind.Webhook) webhook = true;
+    if (m.kind === ModuleKind.N8n) n8n = true;
     if (m.kind === ModuleKind.DocToText) docToText = true;
     if (m.kind === ModuleKind.DocToText && m.useOcr) visionOcr = true;
   }
@@ -65,6 +68,7 @@ export function analyzeExportRuntimeNeeds(project: Project): ExportRuntimeNeeds 
     humanReview,
     chatbot,
     webhook,
+    n8n,
     visionOcr,
     docToText,
     inputModules,

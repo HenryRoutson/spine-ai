@@ -71,8 +71,10 @@ import {
 import { InferenceStepTracePanel } from "@/components/inference/inference-step-trace-panel"
 import { RunInputsNeededHint, RunWithStopButton } from "@/components/run-with-stop-button"
 import { IsolatedErrorButton } from "@/components/logging/isolated-error-actions"
+import { MissingSecretsBanner } from "@/components/missing-secrets-banner"
 import { useDiagnosisAgents } from "@/lib/diagnosis-agent-context"
 import { DiagnosisRunLink } from "@/components/diagnosis-agents/diagnosis-run-link"
+import { useProjectSecrets } from "@/lib/use-project-secrets"
 import { runHasErrors } from "@/lib/run-error-log"
 import { runInputDocsSummary } from "@/lib/inference-input"
 import { LOGGING_SETTINGS_CHANGED_EVENT } from "@/lib/logging-settings"
@@ -161,6 +163,10 @@ export function Inference({ simple }: { simple?: boolean } = {}) {
   const insufficientCredit =
     billingAccount != null && billingAccount.balanceCents < minRunBalanceCents
   const previewOnly = isPreviewOnly()
+  const { missing: missingSecrets, hasBlockingMissing: secretsMissing } = useProjectSecrets(
+    project.id,
+    modules,
+  )
 
   const projectDocs = useMemo(() => docsForProject(docs, project), [docs, project])
   const setupDocs = useMemo(() => projectDocs.filter((d) => isInferenceSetupFileName(d.name)), [projectDocs])
@@ -675,6 +681,8 @@ export function Inference({ simple }: { simple?: boolean } = {}) {
                       Explore the pipeline — sign in to run inference
                     </p>
                   </div>
+                ) : secretsMissing && run.phase !== "running" ? (
+                  <MissingSecretsBanner missing={missingSecrets} simple={isSimple} />
                 ) : insufficientCredit && run.phase !== "running" ? (
                   <div className="rounded-lg border border-destructive/50 bg-destructive/10 px-4 py-5 text-center">
                     <AlertTriangle className="mx-auto h-8 w-8 text-destructive" />
@@ -734,6 +742,7 @@ export function Inference({ simple }: { simple?: boolean } = {}) {
                         !run.allInputsReady ||
                         run.inputsInvalid ||
                         insufficientCredit ||
+                        secretsMissing ||
                         previewOnly
                       }
                       label={run.phase === "running" ? "Run another" : run.runButtonLabel}

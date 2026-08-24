@@ -25,6 +25,7 @@ import {
   collectInferenceInputIssues,
   inferenceInputIssueMessage,
 } from "@/lib/inference-validity";
+import { missingRequiredSecretsError } from "@/lib/server/secret_preflight";
 import { sharedRunNotes } from "@/lib/shared-link-types";
 import { PipelinePausedError } from "@/lib/server/run_checkpoint";
 import { runPipeline } from "@/lib/server/run_engine";
@@ -199,6 +200,9 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
     typeAliases: project.typeAliases,
   });
   if (inputIssues.length) return apiError(inferenceInputIssueMessage(inputIssues, inputModules), 400);
+
+  const missingSecrets = await missingRequiredSecretsError(project.modules, link.ownerId, { teamId: project.teamId, projectName: project.name, projectOwnerId: project.teamProjectOwnerId });
+  if (missingSecrets) return apiError(missingSecrets, HTTP.BAD_REQUEST, "missing_secrets");
 
   const resolvedByModule = inputDocsByModuleFromAssignment(inputModules, assignment);
   const flatIds = inputModules.flatMap((m) => (resolvedByModule[m.id] ?? []).map((d) => d as DocId));

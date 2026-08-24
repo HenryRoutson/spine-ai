@@ -59,7 +59,8 @@ async function fetchDocTextOnce(docId: string, layer: doc_text_layer): Promise<d
     }
 
     const body = await readApiErrorBody(res)
-    logApiFailure(url, res, body, "GET")
+    // AI : 404 is common while project-state cache is ahead of the warm store — callers retry on docs change.
+    if (res.status !== 404) logApiFailure(url, res, body, "GET")
     throw new Error(formatApiError(`GET ${url}`, res, body))
   }
 }

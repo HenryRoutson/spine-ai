@@ -6,6 +6,10 @@ import { requireLinearInput } from "../context"
 import { jsonStringifyStepValue } from "../results"
 import type { ExecResult, RunCtx, RunLogger } from "../engine_types"
 
+// AI : TODO (n8n-sidecar-S2-live) — branch local catalog (runN8nPiece) vs live n8n Cloud/self-host execute.
+// AI :   Live: POST workflow webhook or Public API; apply n8nResponseMode/Path; retry/timeout like webhook.
+// AI : TODO (n8n-sidecar-S3-adapter) — live response → spine items, then materializeStepOutput (type gate).
+
 export async function execN8nStep(m: PipelineModule, ctx: RunCtx, log: RunLogger): Promise<ExecResult> {
   const { project } = ctx
   const out = modelById(project.models, m.outStructureId)
@@ -19,6 +23,7 @@ export async function execN8nStep(m: PipelineModule, ctx: RunCtx, log: RunLogger
   const input = requireLinearInput(m, ctx)
   const timeoutMs = m.n8nTimeoutMs ?? DEFAULT_N8N_TIMEOUT_MS
   log.info(`n8n piece`, { moduleId: m.id, nodeType, timeoutMs })
+  // AI : local only today — sidecar live path must not call evalN8nCode / runN8nPiece.
   const raw = await runN8nPiece({
     n8nNodeType: nodeType,
     n8nCode: m.n8nCode,

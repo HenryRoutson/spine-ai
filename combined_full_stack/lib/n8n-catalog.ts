@@ -1,5 +1,6 @@
 // AI : Typed n8n-style pieces — schema + auto UI + shareable JSON. No live Slack/Gmail.
 // AI : Execution is local n8n Code-node JS (lib/n8n-run.ts), not n8n Cloud.
+// AI : TODO (n8n-sidecar-S4-ui) — catalog stays transform-only; live apps are workflows on n8n, not new pieces here.
 
 export const DEFAULT_N8N_TIMEOUT_MS = 60_000
 

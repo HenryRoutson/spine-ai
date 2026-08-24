@@ -52,6 +52,7 @@ import { labelAsStateKey } from "../pipeline_state";
 import { modelById, recordStepModel, snapshotForByLabel, stepFailuresFor, stepServerLogs, validatesStepOutputAsList } from "./helpers";
 import { persistArtifacts, persistCustomCodeArtifacts } from "./artifacts";
 import { loadWebhookSecretEnv } from "../user_secrets";
+import { missingRequiredSecretsError } from "../secret_preflight";
 import { createWriteLive } from "./live";
 import { runLinearStepsFrom } from "./linear";
 import { execForkJoin } from "./steps/fork";
@@ -147,6 +148,11 @@ export async function runPipeline(
   const artifacts: { moduleId: ModuleId; structure?: StructureModel; value: unknown }[] = [];
   const cacheOwnerId = opts.cacheOwnerId ?? "local";
   ctx.webhookEnv = await loadWebhookSecretEnv(cacheOwnerId);
+  const missingSecrets = await missingRequiredSecretsError(project.modules, cacheOwnerId, { teamId: project.teamId, projectName: project.name, projectOwnerId: project.teamProjectOwnerId });
+  if (missingSecrets) {
+    log.error(`missing required secrets`, { detail: missingSecrets });
+    throw new Error(missingSecrets);
+  }
   const savedCentsAcc = { value: 0 };
 
   const langfuseTraceId = await beginLangfusePipelineRun({

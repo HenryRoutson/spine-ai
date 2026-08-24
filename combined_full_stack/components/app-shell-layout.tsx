@@ -106,6 +106,10 @@ const DocumentationPanel = dynamic(
   () => import("@/components/documentation").then((m) => ({ default: m.Documentation })),
   { loading: () => <PanelLoading label="loading docs…" /> },
 )
+const SecretsPanel = dynamic(
+  () => import("@/components/secrets-settings").then((m) => ({ default: m.SecretsSettings })),
+  { loading: () => <PanelLoading label="loading secrets…" /> },
+)
 const VibePanel = dynamic(() => import("@/components/vibe-panel").then((m) => ({ default: m.VibePanel })), {
   loading: () => <PanelLoading label="loading vibe…" /> },
 )
@@ -156,6 +160,8 @@ function renderWindowPanel(windowId: AppWindowId): ReactNode {
       return <Documents />
     case AppWindowId.Docs:
       return <DocumentationPanel />
+    case AppWindowId.Secrets:
+      return <SecretsPanel />
     case AppWindowId.ProjectBilling:
       return <ProjectBilling />
     case AppWindowId.ProjectSettings:

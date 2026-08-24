@@ -71,4 +71,18 @@ describe("pipeline export dispatch", () => {
     expect(emitStepBody("ts", ctx)).toMatch(/state\["Lane A"\]/);
     expect(emitStepBody("ts", ctx)).not.toMatch(/Object\.values\(state\)/);
   });
+
+  it("n8n export bakes catalog code into runN8nCode (not passthrough)", () => {
+    const m = stubModule(ModuleKind.N8n);
+    m.n8nNodeType = "n8n-nodes-base.filter";
+    m.n8nParameters = { field: "status", operator: "equals", value: "open" };
+    const ctx = { m, project: stubProject(m), inType: "CsvRow[]", outType: "CsvRow[]" };
+    const body = emitStepBody("ts", ctx);
+    expect(body).toMatch(/runN8nCode\(/);
+    expect(body).toMatch(/\$parameter\.field/);
+    expect(body).not.toMatch(/return input as unknown as/);
+    expect(generatePipelineSourceTs(loadProjectSeed(resolve(SEEDS_DIR, "csv_triage_n8n.json")).project)).toMatch(
+      /import \{\n  runN8nCode,\n\} from "\.\/pipeline_runtime"/,
+    );
+  });
 });

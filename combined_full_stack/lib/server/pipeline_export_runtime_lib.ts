@@ -9,6 +9,7 @@ type RuntimeImportNeeds = {
   humanReview: boolean;
   chatbot: boolean;
   webhook: boolean;
+  n8n?: boolean;
   visionOcr: boolean;
   docToText: boolean;
 };
@@ -29,6 +30,7 @@ export function exportRuntimeImportTs(needs: RuntimeImportNeeds): string {
   if (needs.humanReview) value.push("waitForHumanReview");
   if (needs.chatbot) value.push("waitForChatbotSession");
   if (needs.webhook) value.push("callWebhook");
+  if (needs.n8n) value.push("runN8nCode");
   const types: string[] = [];
   if (needs.chatbot) types.push("ChatbotPrompt");
   const lines = [

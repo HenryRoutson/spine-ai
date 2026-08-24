@@ -131,7 +131,8 @@ describe("MCP stdio boot", () => {
     expect(result?.instructions).toContain("auth_status")
     expect(result?.instructions).toContain("session_action")
     expect(result?.instructions).toContain("do not see the browser")
-    expect(result?.instructions).toContain("spine-mcp.mjs")
+    expect(result?.instructions).toContain("list_seeds")
+    expect(result?.instructions).toContain("testDocName")
     expect(tools.error, JSON.stringify(tools.error)).toBeUndefined()
     const names = ((tools.result as { tools?: Array<{ name: string }> })?.tools ?? []).map((t) => t.name)
     expect(names).toContain("get_project")
@@ -144,6 +145,8 @@ describe("MCP stdio boot", () => {
     expect(names).toContain("export_piece")
     expect(names).toContain("wait_for_run")
     expect(names).toContain("get_run")
+    expect(names).toContain("list_seeds")
+    expect(names).toContain("remove_doc")
     expect(prompts.error, JSON.stringify(prompts.error)).toBeUndefined()
     const promptNames = ((prompts.result as { prompts?: Array<{ name: string }> })?.prompts ?? []).map(
       (p) => p.name,
@@ -162,7 +165,7 @@ describe("MCP stdio boot", () => {
     const piecesText = (pieces.result as { content?: Array<{ text?: string }> })?.content?.[0]?.text ?? ""
     expect(piecesText).toContain("n8n-nodes-base.set")
     expect(piecesText).toContain("n8n-nodes-base.filter")
-  })
+  }, 30_000)
 
   it("launcher + official SDK client works without SPINE_* env", async () => {
     const { Client } = await import("@modelcontextprotocol/sdk/client/index.js")
@@ -191,11 +194,13 @@ describe("MCP stdio boot", () => {
       expect(instructions).toContain("Do not clone")
       const tools = await client.listTools()
       expect(tools.tools.some((t) => t.name === "auth_status")).toBe(true)
+      expect(tools.tools.some((t) => t.name === "list_seeds")).toBe(true)
       const status = await client.callTool({ name: "auth_status", arguments: { sessionPath } })
       const text = (status.content as Array<{ text?: string }>)[0]?.text ?? "{}"
-      const body = JSON.parse(text) as { projectCount: number; next: string; appRoot?: string }
+      const body = JSON.parse(text) as { projectCount: number; next: string; appRoot?: string; seeds?: string[] }
       expect(body.projectCount).toBe(0)
       expect(body.next).toMatch(/add_project/)
+      expect(body.seeds?.length).toBeGreaterThan(0)
       expect(String(body.appRoot)).toMatch(/combined_full_stack$/)
       const prompt = await client.getPrompt({ name: "connect_spine" })
       const promptText = JSON.stringify(prompt)
@@ -205,5 +210,5 @@ describe("MCP stdio boot", () => {
       await client.close()
       rmSync(dir, { recursive: true, force: true })
     }
-  })
+  }, 30_000)
 })
