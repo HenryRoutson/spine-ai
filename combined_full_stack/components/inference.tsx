@@ -163,10 +163,14 @@ export function Inference({ simple }: { simple?: boolean } = {}) {
   const insufficientCredit =
     billingAccount != null && billingAccount.balanceCents < minRunBalanceCents
   const previewOnly = isPreviewOnly()
-  const { missing: missingSecrets, hasBlockingMissing: secretsMissing } = useProjectSecrets(
-    project.id,
-    modules,
-  )
+  const {
+    missing: missingSecrets,
+    hasBlockingMissing: secretsMissing,
+    teamId: secretsTeamId,
+    canEditTeam: canEditTeamSecrets,
+    projectPrefix: secretsProjectPrefix,
+    reload: reloadSecrets,
+  } = useProjectSecrets(project.id, modules)
 
   const projectDocs = useMemo(() => docsForProject(docs, project), [docs, project])
   const setupDocs = useMemo(() => projectDocs.filter((d) => isInferenceSetupFileName(d.name)), [projectDocs])
@@ -682,7 +686,16 @@ export function Inference({ simple }: { simple?: boolean } = {}) {
                     </p>
                   </div>
                 ) : secretsMissing && run.phase !== "running" ? (
-                  <MissingSecretsBanner missing={missingSecrets} simple={isSimple} />
+                  <MissingSecretsBanner
+                    missing={missingSecrets}
+                    simple={isSimple}
+                    showImport
+                    projectId={project.id}
+                    teamId={secretsTeamId}
+                    canEditTeam={canEditTeamSecrets}
+                    projectPrefix={secretsProjectPrefix}
+                    onImported={() => void reloadSecrets()}
+                  />
                 ) : insufficientCredit && run.phase !== "running" ? (
                   <div className="rounded-lg border border-destructive/50 bg-destructive/10 px-4 py-5 text-center">
                     <AlertTriangle className="mx-auto h-8 w-8 text-destructive" />

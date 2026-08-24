@@ -13,6 +13,7 @@ import type { SecretScope } from "@/lib/secret-scope"
 import { useStore } from "@/lib/store"
 import { useProjectSecrets, type SecretRow } from "@/lib/use-project-secrets"
 import { groupSecretRequirements, WEBHOOK_URL_DEFAULTS } from "@/lib/webhook-step"
+import { EnvSecretsImport } from "@/components/env-secrets-import"
 
 const PRESETS: { name: string; blurb: string }[] = [
   {
@@ -196,6 +197,14 @@ export function SecretsSettings() {
                     {[...new Set(missing.map((m) => m.name))].join(", ")} before running inference.
                   </p>
                 ) : null}
+
+                <EnvSecretsImport
+                  projectId={project.id}
+                  teamId={teamId}
+                  canEditTeam={canEditTeam}
+                  projectPrefix={projectPrefix}
+                  onImported={() => void reload()}
+                />
 
                 {requiredGroups.map((group) => {
                   const fromProject = byProject.get(group.name)

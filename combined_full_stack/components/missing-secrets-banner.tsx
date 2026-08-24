@@ -2,6 +2,7 @@
 
 import { KeyRound } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import { EnvSecretsImport } from "@/components/env-secrets-import"
 import { useAppShell } from "@/lib/app-shell"
 import { groupSecretRequirements, missingWebhookSecretMessage } from "@/lib/webhook-step"
 import type { SecretRequirementStatus } from "@/lib/webhook-step"
@@ -9,9 +10,21 @@ import type { SecretRequirementStatus } from "@/lib/webhook-step"
 export function MissingSecretsBanner({
   missing,
   simple = false,
+  showImport = false,
+  projectId,
+  teamId = null,
+  canEditTeam = false,
+  projectPrefix = null,
+  onImported,
 }: {
   missing: SecretRequirementStatus[]
   simple?: boolean
+  showImport?: boolean
+  projectId?: string
+  teamId?: string | null
+  canEditTeam?: boolean
+  projectPrefix?: string | null
+  onImported?: () => void
 }) {
   const { openSecrets } = useAppShell()
   const grouped = groupSecretRequirements(missing)
@@ -40,6 +53,19 @@ export function MissingSecretsBanner({
         <KeyRound className="h-3.5 w-3.5" />
         Go to Secrets
       </Button>
+      {showImport && projectId ? (
+        <div className="mt-4 text-left">
+          <EnvSecretsImport
+            compact
+            projectId={projectId}
+            teamId={teamId}
+            canEditTeam={canEditTeam}
+            projectPrefix={projectPrefix}
+            filterNames={[...new Set(grouped.map((g) => g.name))]}
+            onImported={onImported}
+          />
+        </div>
+      ) : null}
     </div>
   )
 }

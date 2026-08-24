@@ -5,6 +5,7 @@ import {
   parseRequestJson,
   secretNameSchema,
   upsertSecretBodySchema,
+  importSecretsBodySchema,
 } from "@/lib/server/api_schemas"
 import { secretRequirementStatusesFor } from "@/lib/server/secret_preflight"
 import {
@@ -155,6 +156,59 @@ export async function DELETE(req: NextRequest) {
     }
 
     return NextResponse.json({ ok: true })
+  } catch (err) {
+    return apiError((err as Error).message, HTTP.BAD_REQUEST)
+  }
+}
+
+export async function POST(req: NextRequest) {
+  const ctx = await requireAuthStore("write")
+  if (ctx instanceof NextResponse) return ctx
+  const parsed = await parseRequestJson(req, importSecretsBodySchema)
+  if ("validationError" in parsed) return apiError(parsed.validationError, HTTP.BAD_REQUEST)
+  const scope = parsed.scope ?? "personal"
+  const projectId = parsed.projectId as ProjectId | undefined
+  const teamId = (parsed.teamId ?? null) as team_id_string | null
+  const imported: { name: string; scope: string }[] = []
+
+  try {
+    if (scope === "team") {
+      if (!teamId) return apiError("teamId required for team secrets", HTTP.BAD_REQUEST)
+      for (const entry of parsed.entries) {
+        const secret = await upsertTeamSecret(teamId, ctx.auth.userId, entry.name, entry.value)
+        imported.push({ name: secret.name, scope: "team" })
+      }
+      apiLog.info(`import team secrets`, { userId: ctx.auth.userId, teamId, count: imported.length })
+      return NextResponse.json({ imported, count: imported.length })
+    }
+
+    let project = projectId ? ctx.store.project(projectId) : null
+    if (scope === "project") {
+      if (!projectId || !project) return apiError("projectId required for project secrets", HTTP.BAD_REQUEST)
+    }
+
+    const prefix = project ? projectSecretPrefix(project.name) : null
+    const linked = new Set(project?.seedSecretNames ?? [])
+
+    for (const entry of parsed.entries) {
+      const storeName =
+        scope === "project" && prefix
+          ? projectScopedSecretName(prefix, entry.name)
+          : entry.name
+      const secret = await upsertUserSecret(ctx.auth.userId, storeName, entry.value)
+      imported.push({
+        name: scope === "project" ? entry.name : secret.name,
+        scope,
+      })
+      if (scope === "personal" && parsed.linkToProject) linked.add(entry.name)
+    }
+
+    if (scope === "personal" && parsed.linkToProject && project) {
+      ctx.store.saveProject({ ...project, seedSecretNames: [...linked].sort() })
+    }
+
+    apiLog.info(`import secrets`, { userId: ctx.auth.userId, scope, count: imported.length })
+    return NextResponse.json({ imported, count: imported.length })
   } catch (err) {
     return apiError((err as Error).message, HTTP.BAD_REQUEST)
   }

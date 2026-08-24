@@ -88,6 +88,26 @@ export const upsertSecretBodySchema = z
   })
   .strict();
 
+export const importSecretsBodySchema = z
+  .object({
+    entries: z
+      .array(
+        z
+          .object({
+            name: secretNameSchema,
+            value: z.string().min(1).max(8_000),
+          })
+          .strict(),
+      )
+      .min(1)
+      .max(64),
+    scope: secretScopeSchema.default("personal"),
+    projectId: projectIdSchema.optional(),
+    teamId: teamIdSchema.optional(),
+    linkToProject: z.boolean().optional(),
+  })
+  .strict();
+
 export function parseProjectId(raw: string): ProjectId | null {
   const parsed = projectIdSchema.safeParse(raw);
   return parsed.success ? (parsed.data as ProjectId) : null;

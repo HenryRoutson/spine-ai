@@ -225,10 +225,14 @@ export function Testing() {
     models,
     typeAliases,
   )
-  const { missing: missingSecrets, hasBlockingMissing: secretsMissing } = useProjectSecrets(
-    project.id,
-    modules,
-  )
+  const {
+    missing: missingSecrets,
+    hasBlockingMissing: secretsMissing,
+    teamId: secretsTeamId,
+    canEditTeam: canEditTeamSecrets,
+    projectPrefix: secretsProjectPrefix,
+    reload: reloadSecrets,
+  } = useProjectSecrets(project.id, modules)
 
   const [contents, setContents] = useState<Record<DocId, string>>({})
   const [loadErrors, setLoadErrors] = useState<Record<DocId, string>>({})
@@ -922,7 +926,15 @@ function staleLoadFailedContent(content: string): string | null {
         <>
       {secretsMissing ? (
         <div className="border-b border-border px-4 py-3">
-          <MissingSecretsBanner missing={missingSecrets} />
+          <MissingSecretsBanner
+            missing={missingSecrets}
+            showImport
+            projectId={project.id}
+            teamId={secretsTeamId}
+            canEditTeam={canEditTeamSecrets}
+            projectPrefix={secretsProjectPrefix}
+            onImported={() => void reloadSecrets()}
+          />
         </div>
       ) : null}
       {actionError && (
