@@ -1,0 +1,19 @@
+#!/usr/bin/env bash
+# AI : same typechecks as .github/workflows/ci.yml — catch missing names / bad imports before push.
+set -euo pipefail
+
+ROOT="$(git rev-parse --show-toplevel)"
+cd "$ROOT"
+
+echo "pre-commit: typecheck combined_full_stack + mcp_tool"
+
+app_status=0
+mcp_status=0
+
+(cd "$ROOT/combined_full_stack" && npm run typecheck) || app_status=$?
+(cd "$ROOT/mcp_tool" && npm run typecheck) || mcp_status=$?
+
+if [ "$app_status" -ne 0 ] || [ "$mcp_status" -ne 0 ]; then
+  echo "pre-commit: typecheck failed (app=$app_status mcp=$mcp_status). Fix before committing."
+  exit 1
+fi

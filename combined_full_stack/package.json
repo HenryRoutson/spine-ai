@@ -3,6 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
+    "prepare": "bash ../scripts/install-git-hooks.sh",
     "ensure-monaco": "node scripts/ensure_monaco_public.mjs",
     "sync:shared": "bash ../scripts/sync-shared.sh",
     "dev": "npm run sync:shared && npm run ensure-monaco && next dev",

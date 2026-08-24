@@ -2,7 +2,7 @@
 
 // AI : user-defined LLM providers — persisted in localStorage; code shown in model selector + exports.
 import { useCallback, useEffect, useState } from "react";
-import type { CodeViewerLanguage } from "@/components/code-viewer";
+import type { CodeViewerLanguage } from "@/lib/code-viewer-types";
 import { customProviderTemplate } from "@/lib/llm-provider-samples";
 
 export type CustomLlmProviderExportCode = Partial<Record<CodeViewerLanguage, string>>;

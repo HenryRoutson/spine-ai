@@ -18,7 +18,7 @@ import {
   type PinpointFailureInput,
 } from "../src/spine-pinpoint.js"
 import { isTestingFileName, parseTestFile, type SpineTestFile } from "@/lib/testing-files"
-import { ModuleKind, RunStatus, type PipelineModule, type PipelineRun, type RunStep } from "@/lib/server/types"
+import { ModuleKind, RunStatus, RunStepStatus, RunTestStepStatus, type PipelineModule, type PipelineRun, type RunStep } from "@/lib/server/types"
 
 type repo_path_string = string
 
@@ -237,10 +237,14 @@ export function buildRunFromSteps(
   for (const s of llmOutputs) byLabel.set(s.label, s.output)
   for (const [label, output] of byLabel) {
     steps.push({
+      moduleId: `bench_${label}` as RunStep["moduleId"],
       label,
-      kind: "llm",
+      kind: ModuleKind.Llm,
+      status: RunStepStatus.Ok,
       ms: 0,
       costCents: 0,
+      inputPreview: "",
+      outputPreview: "",
       outputJson: JSON.stringify(output, null, 2),
     })
   }
@@ -270,9 +274,9 @@ export function scoreBenchmark(
     runJson: JSON.stringify(run),
   }
   const report = compareRunToTestReport(input, REPO_ROOT)
-  const comparable = report.results.filter((r) => r.status !== "skipped")
-  const passed = comparable.filter((r) => r.status === "pass").length
-  const failed = comparable.filter((r) => r.status === "fail" || r.status === "not_reached").length
+  const comparable = report.results.filter((r) => r.status !== RunTestStepStatus.Skipped)
+  const passed = comparable.filter((r) => r.status === RunTestStepStatus.Pass).length
+  const failed = comparable.filter((r) => r.status === RunTestStepStatus.Fail || r.status === RunTestStepStatus.NotReached).length
   return {
     passed: report.passed,
     projectName: report.projectName,

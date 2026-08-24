@@ -11,8 +11,9 @@ import { MONACO_VS_DARK_THEME } from "@/lib/monaco-theme"
 import { CustomCodeLanguage } from "@/lib/types"
 import { Badge } from "@/components/ui/badge"
 import { cn } from "@/lib/utils"
+import type { CodeViewerLanguage, MultiLangCodeSource } from "@/lib/code-viewer-types"
 
-export type CodeViewerLanguage = "python" | "typescript" | "rust" | "go" | "baml" | "sql"
+export type { CodeViewerLanguage, MultiLangCodeSource }
 
 export const CODE_VIEWER_LANGUAGES: CodeViewerLanguage[] = ["python", "typescript", "rust", "go", "baml"]
 
@@ -268,14 +269,6 @@ export function ReadonlyCodeViewer({
       />
     </div>
   )
-}
-
-export type MultiLangCodeSource = {
-  language: CodeViewerLanguage
-  label: string
-  filename: string
-  content: string
-  hint?: "runtime" | "export"
 }
 
 export function MultiLangReadonlyCodeViewer({

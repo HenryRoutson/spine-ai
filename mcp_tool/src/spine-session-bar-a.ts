@@ -76,10 +76,10 @@ export function openMcpSession(sessionPath?: string, offline = false) {
   return createSpineSession({ persist, egress })
 }
 
-function mcpProjectNext(
-  review: ReturnType<typeof toMcpProjectReview>,
-  assistantError?: string,
-): string {
+type mcp_review = ReturnType<typeof toMcpProjectReview>
+type mcp_review_with_inflight = Omit<mcp_review, "assistantInFlight"> & { assistantInFlight: boolean }
+
+function mcpProjectNext(review: mcp_review_with_inflight, assistantError?: string): string {
   if (assistantError) {
     return `Vibe failed: ${assistantError}. Fix that, then ask_agent again or edit with add_step / configure_n8n_step.`
   }

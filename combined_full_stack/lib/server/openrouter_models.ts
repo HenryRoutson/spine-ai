@@ -49,7 +49,7 @@ async function fetchOpenRouterRatesBySlug(): Promise<Map<string, OpenRouterRates
 
   const res = await fetch(OPENROUTER_MODELS_URL, {
     headers: { Authorization: `Bearer ${key}` },
-    next: { revalidate: 0 },
+    cache: "no-store",
   });
   if (!res.ok) throw new Error(`OpenRouter models ${res.status}: ${await res.text()}`);
 

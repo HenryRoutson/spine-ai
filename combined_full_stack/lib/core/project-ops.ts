@@ -3,7 +3,7 @@
 import type { ProjectPatch } from "@/lib/core/types"
 import type { SessionSnapshot } from "@/lib/core/types"
 import { AUTHORED_PROJECT_KIND } from "@/lib/project-assistant-types"
-import { stripBuiltinTypeAliases, stripSharedModels, withSharedModels } from "@/lib/structure"
+import { stripBuiltinTypeAliases, stripSharedModels, withBuiltinTypeAliases, withSharedModels } from "@/lib/structure"
 import { syncManagedPipelineSteps } from "@/lib/structure-parse-steps"
 import type { PipelineModule, Project, ProjectId, StructureModel, TypeAlias } from "@/lib/types"
 

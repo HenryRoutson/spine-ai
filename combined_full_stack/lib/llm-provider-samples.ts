@@ -1,5 +1,5 @@
 // AI : client-safe LLM provider example code — shown in model selector for each export language.
-import type { CodeViewerLanguage, MultiLangCodeSource } from "@/components/code-viewer";
+import type { CodeViewerLanguage, MultiLangCodeSource } from "@/lib/code-viewer-types";
 import { OPENROUTER_PROVIDER_ID } from "@/lib/types";
 
 export type LlmProviderSampleKind = "openrouter" | "custom";

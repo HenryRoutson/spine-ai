@@ -117,7 +117,7 @@ describe("MCP vibe coding performance regressions", () => {
         name: "lease.txt",
         content: blob,
         type: InputType.Text,
-        label: DocLabel.Document,
+        label: DocLabel.Inference,
       })
 
       const review = getProjectFromSession(sessionPath)
