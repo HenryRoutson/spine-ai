@@ -225,7 +225,7 @@ MCP  ask_agent                    │
                          SessionSnapshot / StoreState
 ```
 
-GUI path is **billed + authed** (`requireAuthStore("llm")`). CLI/MCP `ask` still import the assistant **in-process** (needs `OPENROUTER_API_KEY`, skips HTTP billing). TODO: route MCP/CLI ask through `POST /api/pipeline-assistant`.
+GUI path is **billed + authed** (`requireAuthStore("llm")`). CLI/MCP `ask_agent` prefers the same HTTP assistant routes when `SPINE_API_URL` + `SPINE_API_TOKEN` reach a server project; falls back in-process (needs `OPENROUTER_API_KEY`) on 401/404 or `--offline`.
 
 Apply deltas (both surfaces):
 
@@ -297,7 +297,7 @@ Reverse: `session pull` hydrates from `GET /api/state`. `session import-seed` st
 - `session start-run` / `run-test` → `POST /api/runs`
 - `session billing` / `earnings` → `/api/billing` / `/api/earnings`
 
-Agent propose still runs in-process (`proposePipelineChange`; needs `OPENROUTER_API_KEY`). `--offline` injects throwing egress (`blocked: true`).
+Agent propose prefers billed HTTP (`/api/pipeline-assistant`, `/api/structure-assistant`, `/api/testing-assistant`, `/api/diagnosis-assistant`) when egress auth works; in-process fallback needs `OPENROUTER_API_KEY`. `--offline` injects throwing egress (`blocked: true`).
 
 ### GUI → CLI
 
@@ -313,7 +313,7 @@ Live runs, cache, billing, share link **ids** have CLI wrappers (`start-run`, `c
 
 ### API → MCP (Bar A)
 
-`mcp_tool` wraps Testing-tab functions on **seed paths + run JSON**, and Bar A reads `.spine-session.json`: `get_project`, `validate_project`, `apply_project_changes`, `ask_agent`, `start_run` / `run_test` (HTTP), `session_logs`, plus CRUD (`add_project`, `add_step`, `add_model`, `add_doc`, `session_action`).
+`mcp_tool` wraps Testing-tab functions on **seed paths + run JSON**, and Bar A reads `.spine-session.json`: `get_project`, `validate_project`, `apply_project_changes`, `ask_agent`, `start_run` / `run_test` (HTTP), `session_logs`, `session_action` (all catalog ids), plus seed/pinpoint/lint named tools.
 
 ### 4.1 Same actions, different store
 
@@ -324,12 +324,12 @@ Live runs, cache, billing, share link **ids** have CLI wrappers (`start-run`, `c
 | Project bytes | `useStore` ← `GET /api/state` (Supabase / JsonStore), cookies | `SpineSession` ← `.spine-session.json` |
 | Mutations | `useStore` methods (not yet a thin wrap of `SpineSession`) | same **names** via `createSpineSession` + `workspace_edits` |
 | Validators | `computeInvalid`, `validateTestFile`, `compareRunToTest` | **same imports** |
-| Vibe | `POST /api/pipeline-assistant` (auth, billing, stream, observe tools, UI pins) | `askAgent` → in-process `proposePipelineChange` |
+| Vibe | `POST /api/pipeline-assistant` (auth, billing, stream, observe tools, UI pins) | `ask_agent` → HTTP prefer, in-process fallback |
 | Runs | `POST /api/runs` then poll until terminal; step JSON in Logging | `start_run` returns `{id, status}` immediately; `pinpoint_failure` needs a finished run JSON |
 | Auth | Supabase cookie JWT | `SPINE_API_TOKEN` Bearer — Supabase access JWT via `requireAuth()` `sessionFromBearer` |
 | Agent playbook | on-screen tabs + buttons | MCP `instructions` + prompts `vibe_loop` / `fix_test` / `add_pipeline_step` |
 
-The GUI **does not read** `.spine-session.json`. An MCP `apply_project_changes` is invisible in the browser until `session pull` / `session push` against a working authenticated HTTP API (or until `useStore` loads the file — it does not). That is a **capability** gap (pull/push not MCP tools), not a missing screenshot.
+The GUI **does not read** `.spine-session.json`. An MCP edit is invisible in the browser until `pull_remote_state` / `push_remote_state` (or `session pull` / `session push` in CLI) against a working authenticated HTTP API.
 
 Three workspaces agents mix up:
 
@@ -361,32 +361,32 @@ Legend: **Y** = same capability, **P** = partial (list/validate/stub), **N** = m
 | Capability | GUI | HTTP API | CLI session/TUI | MCP |
 |---|---|---|---|---|
 | List/select/rename/delete/clone projects | Y | Y | Y | Y (`get_project` handle + CRUD; full graph dump not required) |
-| Blank project | Y | Y | Y | Y `add_project` |
+| Blank project | Y | Y | Y | Y `session_action` id=project.add |
 | Clone built-in seeds | Y (`cloneFromTemplate`) | Y templates | Y (`import-seed` / ingest) | Y `import_seed` |
-| Structure field CRUD, aliases, pydantic | Y | via project PUT | Y (`add-field` / `add-alias` / `pydantic`) | P (`session_action` add-field; seed `export_pydantic`; no session describe tool yet) |
-| Structure assistant | Y | Y | Y (`agent structure`) | P `ask_agent kind=structure` (in-process, not HTTP) |
-| Pipeline add step | Y | via PUT | Y (`add-step`) | Y `add_step` |
-| Pipeline per-step fields / reorder / export | Y | Y export | Y (`patch-step` / `move-step` / `pydantic`) | P `session_action` configure/assign; no move-step |
-| Docs markdown | Y (edit/preview/split) | Y | P (set text / preview slice) | P `set_docs` (no preview) |
-| Documents upload, OCR, PDF, labels | Y | Y | P (text `add-doc` / `--file`) | P `add_doc` text only |
-| Link quotes (local offsets) | Y | server step + local `findQuote` | Y | N |
+| Structure field CRUD, aliases, pydantic | Y | via project PUT | Y (`add-field` / `add-alias` / `pydantic`) | Y (`session_action` structure.*; `lint_pipeline` export; seed `export_pydantic`) |
+| Structure assistant | Y | Y | Y (`agent structure`) | Y `ask_agent kind=structure` (HTTP prefer / in-process fallback) |
+| Pipeline add step | Y | via PUT | Y (`add-step`) | Y `session_action` id=pipeline.add-step |
+| Pipeline per-step fields / reorder / export | Y | Y export | Y (`patch-step` / `move-step` / `pydantic`) | Y `session_action` configure/assign/move-step |
+| Docs markdown | Y (edit/preview/split) | Y | P (set text / preview slice) | Y `session_action` id=docs.set (no preview) |
+| Documents upload, OCR, PDF, labels | Y | Y | P (text `add-doc` / `--file`) | Y `session_action` id=documents.upload (text only) |
+| Link quotes (local offsets) | Y | server step + local `findQuote` | Y | Y `session_action` quotes.link |
 | Validate pipeline / structures | Y | implicit on run | Y | Y |
 | Testing file validate | Y | — | Y | Y |
-| Testing **run** + diffs + LLM judge | Y | Y runs + `testing-evaluate` | P (`run-test` HTTP; diffs via pinpoint MCP) | P `run_test` no wait; pinpoint vs seed+run JSON |
-| Inference `startRun` + input assignment | Y | Y | Y (`assign-input` / `start-run`) | P `assign_input` / `start_run` (no poll) |
+| Testing **run** + diffs + LLM judge | Y | Y runs + `testing-evaluate` | P (`run-test` HTTP; diffs via pinpoint MCP) | Y `run_test` + `wait_for_run` + `pinpoint_failure` (session or seed run JSON) |
+| Inference `startRun` + input assignment | Y | Y | Y (`assign-input` / `start-run`) | Y `session_action` id=inference.assign-input / `start_run` + `wait_for_run` |
 | Custom code (browser host) | Y | pause + client-step | N (no Node `CodeHost`; action registered) | N |
 | Human review / chatbot pauses | Y | Y | N (action registered; GUI pause) | N |
-| Logging traces / notes / Langfuse | Y | Y | Y (ViewModel: notes, test, langfuse, steps) | P `session_logs` (no step outputs) |
-| Cache inspect | Y | Y | Y (local snapshot / pull) | P `session_logs` |
+| Logging traces / notes / Langfuse | Y | Y | Y (ViewModel: notes, test, langfuse, steps) | Y `session_logs` + `wait_for_run` / `get_run` (hydrated steps + runJson) |
+| Cache inspect | Y | Y | Y (local snapshot / pull) | Y `session_logs.cache` |
 | Share / marketplace / hosted APIs | Y | Y | P (list ids; mint is HTTP/GUI) | N mint; list ids after pull [P] |
 | Earnings / billing / Stripe / keys | Y | Y | P (HTTP refresh; no Stripe TUI) | P refresh via `session_action`; no Stripe |
 | Settings / sign-in / teams | Y | Y | P (model / saveError; no OAuth) | P (`auth_status` + Bearer JWT; no signup) |
 | Consumer Run mode | Y | shared-link APIs | N | N |
-| Vibe / project agent propose+apply | Y | Y | Y (`agent ask/apply`) | P `ask_agent` + `apply_project_changes` (in-process ask) |
+| Vibe / project agent propose+apply | Y | Y | Y (`agent ask/apply`) | Y `ask_agent` (HTTP prefer) + `apply_project_changes` |
 | Agent streaming + observe tools + billing | Y | Y | P (no stream/store/catalog) | N |
-| Structure / testing / diagnosis agents | Y | Y | Y | P `ask_agent kind=` (in-process) |
-| Execute `proposedActions` runs | Y | Y | Y (`--run` + `SPINE_API_URL`) | via `start_run` (no wait) |
-| Supabase persist | Y | Y | P (JSON file + `pull`/`push`) | session file; pull/push not MCP tools |
+| Structure / testing / diagnosis agents | Y | Y | Y | Y `ask_agent kind=` (HTTP prefer / in-process fallback) |
+| Execute `proposedActions` runs | Y | Y | Y (`--run` + `SPINE_API_URL`) | Y `assistant.execute-runs` / `start_run` |
+| Supabase persist | Y | Y | P (JSON file + `pull`/`push`) | Y session file + `pull_remote_state` / `push_remote_state` |
 | Realtime overlay | Y | DB + channel | P (TUI attaches when Supabase env set) | N |
 | Strategies / A-B | Y | `/api/abtest` | P (`setStrategies` on session) | N |
 | `--offline` local-only | N/A | N/A | Y | P (offline flag on `openMcpSession`; not a tool) |
@@ -411,13 +411,13 @@ Custom code: **local to the browser**, not to Node CLI. Source still goes to the
 
 | Concept | GUI | CLI | API | MCP |
 |---|---|---|---|---|
-| Create project | `addProject` | `session add-project` | `POST /api/projects` | `add_project` |
-| Open | `setActiveProjectId` / `openProject` | `session open` | `GET /api/state?projectId=` | `open_project` |
-| Patch graph | `applyProjectChanges` | `add-model` / `add-step` / agent apply | `PUT /api/projects/:id` | `apply_project_changes` / `add_step` |
-| Docs markdown | `setDocumentation` | `session set-docs` | same PUT | `set_docs` |
+| Create project | `addProject` | `session add-project` | `POST /api/projects` | `session_action` id=project.add |
+| Open | `setActiveProjectId` / `openProject` | `session open` | `GET /api/state?projectId=` | `session_action` id=project.open |
+| Patch graph | `applyProjectChanges` | `add-model` / `add-step` / agent apply | `PUT /api/projects/:id` | `apply_project_changes` / `session_action` pipeline.add-step |
+| Docs markdown | `setDocumentation` | `session set-docs` | same PUT | `session_action` id=docs.set |
 | Validate | badges | `session validate` | (engine) | `validate_project` |
 | Quotes | quote UI | `session link-quotes` | quote step in run | none |
-| Agent ask | Vibe send | `agent ask --message` | `POST /api/pipeline-assistant` | `ask_agent` (in-process) |
+| Agent ask | Vibe send | `agent ask --message` | `POST /api/*-assistant` | `ask_agent` (HTTP prefer) |
 | Agent approve | Approve button | `agent apply` | local + optional run | `apply_project_changes` |
 | Tabs | `AppWindowId` | `TUI_TABS` | n/a | no window; tools by concern |
 
@@ -457,7 +457,7 @@ Remaining gaps are **browser-only hosts** and **marketplace/Stripe UX**, not mis
 
 - [x] Authenticated `EgressPort` (`SPINE_API_TOKEN` bearer).
 - [x] CLI wrappers for `/api/state`, `/api/runs`, `/api/billing` (and earnings). Cache/share list from snapshot after pull.
-- [ ] Do not bypass billing when CLI calls `proposePipelineChange` in-process (still skips `requireAuthStore`).
+- [x] All assistant kinds prefer billed HTTP when egress auth reaches a server project (`/api/pipeline-assistant`, `/api/structure-assistant`, `/api/testing-assistant`, `/api/diagnosis-assistant`); in-process fallback on 401/404 or `--offline`.
 
 ### 8.4 MCP — Bar A vs full-UI (Bar B)
 
@@ -468,11 +468,11 @@ Remaining gaps are **browser-only hosts** and **marketplace/Stripe UX**, not mis
 - [x] `get_project` / `validate_project` / CRUD / `ask_agent` / `apply_project_changes` / `start_run` / `run_test` / `session_logs` / pinpoint+lint.
 - [x] MCP `instructions` + prompts `vibe_loop` / `fix_test` / `add_pipeline_step` (agents: session vs seed, named tools vs `session_action`).
 - [x] Wrap remaining `SpineSession` verbs as MCP (`mcp-capability`): `pullRemoteState`, `flushPendingSave`, `linkQuotes`, `setDocProjects`, `executeProposedActions`, `resyncExamples`, `moveStep` via `session_action`. `removeDoc` is a named tool. `get_project` stays a handle — do not dump the graph for “eyes”.
-- [ ] One project handle: MCP pull/push vs seeds vs GUI Supabase (`mcp-workspace`).
+- [x] Named MCP `pull_remote_state` / `push_remote_state` + `auth_status` next hints (`mcp-workspace`). Seeds vs session file vs GUI Supabase remain three workspaces by design until agents default to pull→edit→push.
 - [x] `ask_agent` prefers `POST /api/pipeline-assistant` when egress auth reaches a server project; falls back in-process (`mcp-vibe-http`).
-- [ ] `wait_for_run` + `get_run` (step outputs) so pinpoint can run on session runs (`mcp-run-loop`). *(tools exist; live runs need API up + Bearer.)*
+- [x] `wait_for_run` + `get_run` (step outputs) so pinpoint can run on session runs (`mcp-run-loop`). *(tools hydrate via GET /api/runs/:id; live runs need API up + Bearer.)*
 - [x] Auth the API accepts: cookie + Bearer Supabase JWT in `requireAuth()` (`mcp-auth`). `auth_status` tool (`mcp-auth-tool`).
-- [ ] Shrink tool list; structured `{ ok, code, next }` errors (`mcp-tools`). *(errors envelope done; shrink still open.)*
+- [x] Shrink tool list; structured `{ ok, code, next }` errors (`mcp-tools`). *(Catalog GUI actions go through `session_action`; named tools are vibe loop + seeds/pinpoint/lint.)*
 
 **Bar B (whole app)** — host-bound or mint HTTP; not started as MCP:
 
@@ -495,8 +495,8 @@ Pinpoint stays the Testing-tab specialist; Bar A is the session/Vibe path. They 
 ### 8.5 GUI using core (convergence)
 
 - [x] Overlay is shared (`overlayOptimisticProjects`). Method names on `useStore` match `SpineSession`.
-- [ ] Thin `useStore` so every mutation goes through `SpineSession` (React still owns hydration/debounce/billing caches).
-- [x] Docs panel consumes `toDocsView` / `toMermaidView` via `sessionSnapshotFromStore` (parity.md §8.5). Pipeline list still pending `toPipelineView`.
+- [x] Thin `useStore` so project mutations go through `SpineSession` (React still owns hydration/debounce/billing caches). *Done:* `gui-session-bridge` + persist port; `patchProject` / structure / docs / rename / delete / model / inference assignment delegate to session; HTTP docs/runs/billing stay in store.
+- [x] Docs panel consumes `toDocsView` / `toMermaidView`; Pipeline builder consumes `toPipelineView` / `toValidationView` via `sessionSnapshotFromStore`.
 
 ---
 
@@ -538,7 +538,7 @@ A feature is at parity when:
 | GUI session | pixels | `lib/store.tsx` + `components/*` |
 | CLI argv | session | `lib/cli/session_cli.ts`, `agent_cli.ts`, `run.ts` |
 | Session | Ink | `lib/cli/ink/app.tsx` → `workspace-view.tsx` |
-| Agent propose | GUI HTTP; CLI/MCP in-process | `lib/server/pipeline_assistant.ts` |
+| Agent propose | GUI HTTP; CLI/MCP HTTP prefer | `lib/cli/agent.ts` + `lib/server/*_assistant.ts` |
 | MCP stdio | Cursor | `mcp_tool/src/index.ts` + `.cursor/mcp.json` |
 | Agent apply | both | `session.applyProposal` / `project-assistant.tsx` |
 | Button ids | GUI+TUI+API+MCP | `lib/core/parity-catalog.ts` (`data-spine-id`) |
@@ -561,7 +561,7 @@ Grep an id (example): `rg 'project.add' combined_full_stack docs mcp_tool`.
 
 | id | GUI | TUI | API | MCP | Library |
 |---|---|---|---|---|---|
-| `nav.run` | Run | Ink: press 5 (share tab) | GET /api/shared-links + marketplace | session_logs lists share ids after pull [P] | setActiveWindow('share') / SpineSession snapshot.shareLinkIds |
+| `nav.run` | Run | Ink: press 6 (share tab) | GET /api/shared-links + marketplace | session_logs lists share ids after pull [P] | setActiveWindow('share') / SpineSession snapshot.shareLinkIds |
 | `nav.build` | Build | Ink: press 2 (pipeline) | GET /api/state?projectId= | get_project | session.openProject(id) |
 | `nav.billing` | Billing | Ink: press b | GET /api/billing | session_action id=nav.billing → refreshBilling [P] | session.refreshBilling() |
 | `nav.settings` | Settings | Ink: press , | GET /api/account | session_action id=nav.settings → settings snapshot [P] | session.getSnapshot() + setModel |
@@ -571,58 +571,58 @@ Grep an id (example): `rg 'project.add' combined_full_stack docs mcp_tool`.
 | `nav.window.pipeline` | Pipeline | Ink: press 2 | PUT /api/projects/:id (modules) | describe_pipeline_steps | session.setModules / addPipelineStep |
 | `nav.window.testing` | Testing | Ink: press 3 | POST /api/runs (testing) + POST /api/testing-evaluate | run_test / validate_test | session.runTest(testDocName) |
 | `nav.window.inference` | Inference | Ink: press 4 | POST /api/runs | start_run | session.startRun() |
-| `nav.window.schedule` | Schedule | Ink: press c | POST /api/schedules | not exposed; use HTTP | HTTP /api/schedules |
-| `nav.window.share` | Share | Ink: press 5 | POST /api/shared-links | session_action lists shareLinkIds [P] | session.getSnapshot().shareLinkIds |
-| `nav.window.earnings` | Earnings | Ink: press 6 | GET /api/earnings | session_action id=earnings.refresh [P] | session.refreshEarnings() |
-| `nav.window.logging` | Logging | Ink: press 7 | GET /api/runs | session_logs | toLogsView(session.getSnapshot()) |
-| `nav.window.cache` | Cache | Ink: press 8 | GET /api/cache | session_logs.cache [P] | session.getSnapshot().cacheEntries |
-| `nav.window.documents` | Documents | Ink: press 9 | POST /api/docs | add_doc | session.addDoc / addDocContent |
-| `nav.window.docs` | Docs | Ink: press 0 | PUT /api/projects/:id documentation | set_docs | session.setDocumentation(text) |
-| `nav.window.secrets` | Secrets | Ink: press [ | GET/POST /api/secrets | session pull + HTTP [P] | GUI useProjectSecrets |
-| `nav.window.project-billing` | Billing | Ink: press ] | GET /api/billing | session_action id=billing.refresh [P] | session.refreshBilling() |
-| `nav.window.project-settings` | Settings | Ink: press \\ | PUT /api/projects/:id (langfuse etc.) | session_action + apply_project_changes [P] | session.patchProject |
-| `project.add` | New project / Blank project | Ink: press n or / new | POST /api/projects | add_project | session.addProject({ open: true }) |
+| `nav.window.schedule` | Schedule | Ink: press 5 | POST /api/schedules | not exposed; use HTTP | HTTP /api/schedules |
+| `nav.window.share` | Share | Ink: press 6 | POST /api/shared-links | session_action lists shareLinkIds [P] | session.getSnapshot().shareLinkIds |
+| `nav.window.earnings` | Earnings | Ink: press 7 | GET /api/earnings | session_action id=earnings.refresh [P] | session.refreshEarnings() |
+| `nav.window.logging` | Logging | Ink: press 8 | GET /api/runs | session_logs | toLogsView(session.getSnapshot()) |
+| `nav.window.cache` | Cache | Ink: press 9 | GET /api/cache | session_logs.cache | session.getSnapshot().cacheEntries |
+| `nav.window.documents` | Documents | Ink: press 0 | POST /api/docs | session_action id=documents.upload | session.addDoc / addDocContent |
+| `nav.window.docs` | Docs | Ink: press [ | PUT /api/projects/:id documentation | session_action id=docs.set | session.setDocumentation(text) |
+| `nav.window.secrets` | Secrets | Ink: press ] | GET/POST /api/secrets | session pull + HTTP [P] | GUI useProjectSecrets |
+| `nav.window.project-billing` | Billing | Ink: press \\ | GET /api/billing | session_action id=billing.refresh [P] | session.refreshBilling() |
+| `nav.window.project-settings` | Settings | Ink: press - | PUT /api/projects/:id (langfuse etc.) | session_action + apply_project_changes [P] | session.patchProject |
+| `project.add` | New project / Blank project | Ink: press n or / new | POST /api/projects | session_action id=project.add | session.addProject({ open: true }) |
 | `project.browse-all` | All projects… | Ink: ↑↓ in project pane; spine session list | GET /api/projects + GET /api/state | get_project after session list | session.projects / openProject |
-| `project.rename` | Rename project | Ink: press r | PUT /api/projects/:id name | rename_project | session.renameProject(id, name) |
-| `project.delete` | Delete project | Ink: press x | DELETE /api/projects/:id | delete_project | session.deleteProject(id) |
-| `project.open` | Open | Ink: enter on selected project / session open | GET /api/state?projectId= | open_project | session.openProject(id) |
-| `project.clone` | Clone project | spine session clone [id] | POST /api/projects (clone body) | clone_project | session.cloneProject(id) |
+| `project.rename` | Rename project | Ink: press r | PUT /api/projects/:id name | session_action id=project.rename | session.renameProject(id, name) |
+| `project.delete` | Delete project | Ink: press x | DELETE /api/projects/:id | session_action id=project.delete | session.deleteProject(id) |
+| `project.open` | Open | Ink: enter on selected project / session open | GET /api/state?projectId= | session_action id=project.open | session.openProject(id) |
+| `project.clone` | Clone project | spine session clone [id] | POST /api/projects (clone body) | session_action id=project.clone | session.cloneProject(id) |
 | `project.clone-template` | Clone (template) | spine session import-seed --file <id> | GET /api/project-templates then POST /api/projects | import_seed | session.cloneFromTemplate / ingestProject |
 | `project.resync-examples` | Refresh example documents | no TUI key — HTTP only [P] | POST /api/projects/resync-examples | session_action id=project.resync-examples | session.resyncExamples() |
-| `structure.add-model` | Add struct | Ink: press m | PUT /api/projects/:id models | add_model | addNamedModel(session, name) |
+| `structure.add-model` | Add struct | Ink: press m | PUT /api/projects/:id models | session_action id=structure.add-model | addNamedModel(session, name) |
 | `structure.add-field` | Add field | spine session add-field --model --name --type | PUT /api/projects/:id | session_action id=structure.add-field | addModelField(session, model, name, type) |
 | `structure.remove-field` | Remove field | spine session remove-field --model --name | PUT /api/projects/:id | session_action id=structure.remove-field | removeModelField(session, model, name) |
 | `structure.mark-optional` | Mark optional / required | add-field --optional; no toggle command yet [P] | PUT /api/projects/:id field.optional | apply_project_changes with models[] [P] | session.applyProjectChanges({ models }) |
 | `structure.add-alias` | Add type alias | spine session add-alias --name --expr | PUT /api/projects/:id typeAliases | session_action id=structure.add-alias | addTypeAlias(session, name, expr) |
 | `structure.export-pydantic` | Pydantic preview | spine session pydantic | local export (no extra HTTP) | export_pydantic | exportSessionPydantic(session) |
-| `pipeline.add-step` | Add step | Ink: press s | PUT /api/projects/:id modules | add_step | addPipelineStep(session, kind, label) |
+| `pipeline.add-step` | Add step | Ink: press s | PUT /api/projects/:id modules | session_action id=pipeline.add-step | addPipelineStep(session, kind, label) |
 | `pipeline.configure-step` | Configure step | Ink: press e | PUT /api/projects/:id | session_action id=pipeline.configure-step | patchStep(session, id, { prompt, label, note }) |
 | `pipeline.remove-step` | Remove step | Ink: edit-step → remove / session remove-step | PUT /api/projects/:id | session_action id=pipeline.remove-step | removeStep(session, id) |
 | `pipeline.move-step` | Reorder step | spine session move-step --id --at | PUT /api/projects/:id modules | session_action id=pipeline.move-step | moveStep(session, id, at) |
 | `pipeline.assign-structure` | Assign structure | Ink: e → structure / session assign-structure | PUT /api/projects/:id | session_action id=pipeline.assign-structure | assignStepStructure(session, step, model) |
 | `pipeline.export` | Export code | spine session pydantic (models); full bundle is HTTP | POST /api/pipeline-export/documents | export_pydantic (models only) | exportSessionPydantic(session) / exportPipeline |
 | `pipeline.validate` | Validation badges | spine session validate | engine-side on run [n/a] | validate_project / validate_pipeline_wiring | session.validation() / toValidationView |
-| `testing.new-file` | New test file | add-doc with *_testing.json name [P] | POST /api/docs (name *_testing.json) | add_doc name=foo_testing.json | session.addDocContent({ name: '*_testing.json', … }) |
+| `testing.new-file` | New test file | add-doc with *_testing.json name [P] | POST /api/docs (name *_testing.json) | session_action id=documents.upload | session.addDocContent({ name: '*_testing.json', … }) |
 | `testing.run` | Run test | Ink: press t | POST /api/runs source=testing | run_test | session.runTest(testDocName) |
 | `testing.stop` | Stop | no TUI cancel yet [N] | client aborts poll; no dedicated cancel route [P] | no MCP cancel [N] | browser AbortController / run registry [host] |
 | `testing.pinpoint` | Isolated error / first diverging step | session tests validates; diffs via MCP [P] | POST /api/testing-evaluate | pinpoint_failure / compare_run_to_test | compareRunToTest / validateTestFile (shared lib) |
-| `inference.assign-input` | Assign document to Input slot | spine session assign-input --module --doc | POST /api/runs body.inputDocsByModule | assign_input | session.setInferenceInputDocIds({ [moduleId]: docId }) |
+| `inference.assign-input` | Assign document to Input slot | spine session assign-input --module --doc | POST /api/runs body.inputDocsByModule | session_action id=inference.assign-input | session.setInferenceInputDocIds({ [moduleId]: docId }) |
 | `inference.start-run` | Run | Ink: press i | POST /api/runs | start_run | session.startRun() |
 | `inference.stop` | Stop | no TUI cancel yet [N] | client aborts poll [P] | no MCP cancel [N] | browser AbortController [host] |
 | `inference.human-review.approve` | Approve (human review) | GUI pause — TUI has no elicitation [host] | POST /api/runs/:id/client-step | humanReview action fails closed [N] | session humanReview throws — browser CodeHost/pause [host] |
 | `inference.human-review.reject` | Reject (human review) | GUI pause [host] | POST /api/runs/:id/client-step (rejected) | humanReview action fails closed [N] | browser pause UI [host] |
 | `inference.chatbot.send` | Send (chatbot step) | GUI chatbot pause [host] | POST /api/runs/:id/chatbot-turn | no MCP chatbot turn [N] | browser ChatInput → chatbot-turn [host] |
-| `inference.apply-setup` | Apply to run | assign-input per slot; no *_setup.json TUI editor [P] | POST /api/docs + run body | assign_input per module [P] | session.setInferenceInputDocIds |
+| `inference.apply-setup` | Apply to run | assign-input per slot; no *_setup.json TUI editor [P] | POST /api/docs + run body | session_action id=inference.assign-input [P] | session.setInferenceInputDocIds |
 | `inference.custom-code` | Run custom code (client step) | browser CodeHost [host] | POST /api/runs/:id/client-step | customCode action fails closed [N] | customCode action — lib/custom_code.ts in the browser [host] |
-| `documents.upload` | Browse files / drag-drop | session add-doc --file (text only, no OCR/PDF) [P] | POST /api/docs | add_doc (text content) | session.addDoc / addDocContent |
-| `documents.remove` | Delete document | spine session remove-doc --doc | DELETE /api/docs/:id | remove_doc | session.removeDoc(id) |
+| `documents.upload` | Browse files / drag-drop | session add-doc --file (text only, no OCR/PDF) [P] | POST /api/docs | session_action id=documents.upload | session.addDoc / addDocContent |
+| `documents.remove` | Delete document | spine session remove-doc --doc | DELETE /api/docs/:id | session_action id=documents.remove | session.removeDoc(id) |
 | `documents.set-projects` | Bind document to projects | spine session set-doc-projects --doc --projects | local bind [P] | session_action id=documents.set-projects | session.setDocProjects(docId, projectIds) |
 | `documents.open` | Open document viewer | session docs lists names [P] | GET /api/docs/:id/text | get_project does not return doc bodies [P] | session.docs + docContents |
-| `docs.set` | Edit project markdown | Ink: press w | PUT /api/projects/:id documentation | set_docs | session.setDocumentation(text) |
+| `docs.set` | Edit project markdown | Ink: press w | PUT /api/projects/:id documentation | session_action id=docs.set | session.setDocumentation(text) |
 | `quotes.link` | Quote as context / link quotes | spine session link-quotes --quote --doc | quote step in run engine; offsets are local [P] | session_action id=quotes.link | session.linkQuotes({ quote, sourceText, docId }) |
 | `logging.simple-view` | Simplified view | no TUI simple view [N] | client pref [n/a] | no MCP [N] | localStorage simple-step-trace [host] |
 | `logging.errors-only` | Errors only | Ink: press f | GET /api/runs (filter client-side) | session_action id=logging.errors-only | toLogsView → runs with hasErrors |
-| `logging.hydrate` | Load run detail | session pull hydrates; no per-run TUI hydrate [P] | GET /api/runs/:id | session_logs local only [P] | session.hydrateRunDetail(runId) |
+| `logging.hydrate` | Load run detail | session pull hydrates; no per-run TUI hydrate [P] | GET /api/runs/:id | wait_for_run / get_run / session_logs steps | session.hydrateRunDetail(runId) |
 | `logging.compare` | Compare runs | no TUI compare [N] | GET /api/runs/:id × 2 | compare_run_to_test (run vs test file) | no session.compareRuns [P] |
 | `logging.copy-error` | Copy isolated error | JSON --json on session logs [P] | clipboard is GUI [n/a] | pinpoint_failure.isolatedText | formatTestFailuresForClipboard |
 | `jobs.stop` | Stop job | no TUI job hub cancel [N] | abort client poll [P] | no MCP [N] | useCancellableRunRegistry in the browser [host] |

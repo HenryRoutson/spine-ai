@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 // AI : Spine MCP — GUI-equivalent *actions* on SpineSession + Testing-tab pinpoint. Not a live UI view.
-// AI : TODO (mcp-tools) — shrink to ~8 vibe tools; session_action duplicates named tools and agents pick the wrong one.
+// AI : DONE (mcp-tools shrink) — catalog actions via session_action; named tools are vibe loop + seeds/pinpoint.
 // AI : DONE (mcp-errors) — wrapTool returns { ok:false, code, next } with isError instead of throwing (JSON.parse of proposalJson).
-// AI : TODO (mcp-workspace) — one project handle: session pull/push vs seeds vs GUI Supabase currently diverge.
+// AI : DONE (mcp-workspace pull/push) — named pull_remote_state / push_remote_state + session_action; seeds vs session vs GUI still three workspaces until auth sync is the default loop.
 // AI : session_action covers pull/push/quotes/resync/move-step/setDocProjects/execute-runs.
 // AI : ask_agent prefers POST /api/pipeline-assistant when egress+auth works; falls back in-process.
 // AI : Host-bound stays GUI: CodeHost, human-review, chatbot, share/hosted mint, Stripe, run cancel.
@@ -30,31 +30,22 @@ import {
   validateStepOutputValue,
 } from "./spine-step-models.js"
 import {
-  addDocFromSession,
-  addModelFromSession,
-  addProjectFromSession,
-  addStepFromSession,
   applyPendingProposalFromSession,
   applyProjectChangesFromSession,
   askAgentFromSession,
-  assignInputFromSession,
   authStatusFromSession,
-  cloneProjectFromSession,
   configureN8nStepFromSession,
-  deleteProjectFromSession,
   getProjectFromSession,
   getRunFromSession,
   importSeedFromSession,
   inspectIdsFromSession,
   lintProjectFromSession,
   listSeedsForMcp,
-  openProjectFromSession,
   pinpointFailureFromSession,
-  removeDocFromSession,
-  renameProjectFromSession,
+  pullRemoteStateFromSession,
+  pushRemoteStateFromSession,
   runSessionAction,
   sessionLogs,
-  setDocsFromSession,
   startRunFromSession,
   validateProjectFromSession,
   waitForRunFromSession,
@@ -76,10 +67,10 @@ function textContent(data: unknown) {
 }
 
 function nextHint(error: string): string {
-  if (/not valid JSON|JSON\.parse|session file is not valid JSON/i.test(error)) return "Pass proposalJson as a JSON object string, or omit it to apply the pending Vibe proposal. If the session file is corrupt, delete it and call add_project."
-  if (/unknown step kind/i.test(error)) return "Use add_step kind from: input, llm, llm-batch, fork, n8n, custom-code, webhook, … — list_pieces for n8n types."
+  if (/not valid JSON|JSON\.parse|session file is not valid JSON/i.test(error)) return "Pass proposalJson as a JSON object string, or omit it to apply the pending Vibe proposal. If the session file is corrupt, delete it and call session_action id=project.add."
+  if (/unknown step kind/i.test(error)) return "Use session_action id=pipeline.add-step with kind from: input, llm, llm-batch, fork, n8n, custom-code, webhook, … — list_pieces for n8n types."
   if (/unknown n8n piece|unknown piece/i.test(error)) return "Call list_pieces and use n8nNodeType exactly."
-  if (/no active project/i.test(error)) return "Call add_project (or import_seed file from list_seeds) then retry."
+  if (/no active project/i.test(error)) return "Call session_action id=project.add (or import_seed file from list_seeds) then retry."
   if (/no pending proposal/i.test(error)) return "ask_agent first, poll get_project until pendingProposal is set, then apply_project_changes with no proposalJson."
   if (/unknown step /i.test(error)) return "get_project and use the step id or label."
   if (/401|sign in required/i.test(error)) return "start_run needs a signed-in API. Local npm run dev without Supabase works. Remote: set SPINE_API_TOKEN to a Supabase access token, then retry."
@@ -452,42 +443,17 @@ server.tool(
 )
 
 server.tool(
-  "add_project",
-  "Create a blank project in the session file — same as GUI New project / session.addProject.",
+  "pull_remote_state",
+  "GET /api/state into the session file — same project bytes as a signed-in GUI when SPINE_API_URL + SPINE_API_TOKEN (Bearer JWT) work. Prefer this before mutating a human's live project.",
   { sessionPath: z.string().optional() },
-  wrapTool((args) => addProjectFromSession(args.sessionPath)),
+  wrapTool(async (args) => pullRemoteStateFromSession(args.sessionPath)),
 )
 
 server.tool(
-  "rename_project",
-  "Rename a project in the session file.",
-  {
-    sessionPath: z.string().optional(),
-    id: z.string().optional(),
-    name: z.string(),
-  },
-  wrapTool((args) => renameProjectFromSession(args.name, args.id, args.sessionPath)),
-)
-
-server.tool(
-  "delete_project",
-  "Delete a project from the session file.",
-  { sessionPath: z.string().optional(), id: z.string() },
-  wrapTool((args) => deleteProjectFromSession(args.id, args.sessionPath)),
-)
-
-server.tool(
-  "open_project",
-  "Set the active project in the session file.",
-  { sessionPath: z.string().optional(), id: z.string() },
-  wrapTool((args) => openProjectFromSession(args.id, args.sessionPath)),
-)
-
-server.tool(
-  "clone_project",
-  "Clone a project in the session file.",
-  { sessionPath: z.string().optional(), id: z.string().optional() },
-  wrapTool((args) => cloneProjectFromSession(args.id, args.sessionPath)),
+  "push_remote_state",
+  "PUT active session project to /api/projects/:id (flushPendingSave). Use after local edits when auth_status.hasApiToken and the project id exists on the server.",
+  { sessionPath: z.string().optional() },
+  wrapTool(async (args) => pushRemoteStateFromSession(args.sessionPath)),
 )
 
 server.tool(
@@ -495,65 +461,6 @@ server.tool(
   "Ingest a bundled seed into the session — same as GUI Clone template. file is a list_seeds id (e.g. lead_enrich_n8n), not a filesystem path.",
   { sessionPath: z.string().optional(), file: z.string() },
   wrapTool((args) => importSeedFromSession(args.file, args.sessionPath)),
-)
-
-server.tool(
-  "add_model",
-  "Add a named structure model (press m in the TUI).",
-  { sessionPath: z.string().optional(), name: z.string(), params: z.string().optional() },
-  wrapTool((args) => addModelFromSession(args.name, args.sessionPath, args.params)),
-)
-
-server.tool(
-  "add_step",
-  "Insert a pipeline step (press s in the TUI).",
-  {
-    sessionPath: z.string().optional(),
-    kind: z.string().describe("llm | input | combine | fork | n8n | chunk | …"),
-    label: z.string().optional(),
-    forkId: z.string().optional().describe("Fork step id when inserting into a lane"),
-    branchId: z.string().optional().describe("Lane id or label when inserting into a Fork"),
-  },
-  wrapTool((args) => addStepFromSession(args.kind, args.label, args.sessionPath, { forkId: args.forkId, branchId: args.branchId })),
-)
-
-server.tool(
-  "add_doc",
-  "Add a text document to the session (GUI Documents upload for text).",
-  {
-    sessionPath: z.string().optional(),
-    name: z.string(),
-    content: z.string(),
-  },
-  wrapTool((args) => addDocFromSession(args)),
-)
-
-server.tool(
-  "remove_doc",
-  "Remove a document from the session by name or id (GUI Documents delete).",
-  {
-    sessionPath: z.string().optional(),
-    doc: z.string().describe("Document name or id from get_project / session_logs"),
-  },
-  wrapTool((args) => removeDocFromSession(args.doc, args.sessionPath)),
-)
-
-server.tool(
-  "set_docs",
-  "Set project markdown docs (Docs tab / press w).",
-  { sessionPath: z.string().optional(), text: z.string() },
-  wrapTool((args) => setDocsFromSession(args.text, args.sessionPath)),
-)
-
-server.tool(
-  "assign_input",
-  "Assign a document to an Input step — same as Inference slot picker. Rejects wrong type / name mismatch.",
-  {
-    sessionPath: z.string().optional(),
-    module: z.string(),
-    doc: z.string(),
-  },
-  wrapTool((args) => assignInputFromSession(args.module, args.doc, args.sessionPath)),
 )
 
 server.tool(
@@ -569,7 +476,7 @@ server.tool(
 
 server.tool(
   "list_pieces",
-  "List typed n8n/Activepieces-style catalog pieces (Set, Filter, CSV, …). Local Code-node JS — no live Slack/Gmail. Use before add_step kind=n8n.",
+  "List typed n8n/Activepieces-style catalog pieces (Set, Filter, CSV, …). Local Code-node JS — no live Slack/Gmail. Use before session_action id=pipeline.add-step kind=n8n.",
   {},
   wrapTool(() => ({ pieces: listPiecesForMcp(APP_ROOT) })),
 )

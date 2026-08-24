@@ -2,6 +2,8 @@
 // AI : MCP column is *action* parity with the GUI, not a shared live store / "eyes".
 
 import type { ParityRow, ParitySurface } from "@/lib/core/parity"
+import { AppWindowId } from "@/lib/app-window-id"
+import { windowNavHint, windowPanelHeader, windowStepHotkey } from "@/lib/window-panel-meta"
 
 const y = (how: string, ref?: string): ParitySurface => ({ how, status: "Y", ref })
 const p = (how: string, ref?: string): ParitySurface => ({ how, status: "P", ref })
@@ -29,12 +31,18 @@ function row(
   }
 }
 
+function inkTab(id: AppWindowId, extra?: string): ParitySurface {
+  const key = windowStepHotkey(windowPanelHeader(id).step)
+  if (!key) throw new Error(`tab ${id} has no numbered hotkey`)
+  return y(extra ? `Ink: press ${key} ${extra}` : `Ink: press ${key}`, `tab-${id}`)
+}
+
 export const PARITY_ROWS: ParityRow[] = [
   row(
     "nav.run",
     "chrome",
     { label: "Run", file: "components/app-primary-nav.tsx", how: "L0 Run — consumer share/run surface" },
-    y("Ink: press 5 (share tab)", "tab-share"),
+    inkTab(AppWindowId.Share, "(share tab)"),
     y("GET /api/shared-links + marketplace", "/api/shared-links"),
     p("session_logs lists share ids after pull", "session_logs"),
     y("setActiveWindow('share') / SpineSession snapshot.shareLinkIds"),
@@ -43,7 +51,7 @@ export const PARITY_ROWS: ParityRow[] = [
     "nav.build",
     "chrome",
     { label: "Build", file: "components/app-primary-nav.tsx", how: "L0 Build — project editors" },
-    y("Ink: press 2 (pipeline)", "tab-pipeline"),
+    inkTab(AppWindowId.Pipeline, "(pipeline)"),
     y("GET /api/state?projectId=", "/api/state"),
     y("get_project", "get_project"),
     y("session.openProject(id)"),
@@ -79,7 +87,10 @@ export const PARITY_ROWS: ParityRow[] = [
     "nav.build.editors",
     "pipeline",
     { label: "dev", file: "components/build-surface-nav.tsx", how: "Build visual editors (structure/pipeline/…)" },
-    y("Ink: press 1–4 for structure/pipeline/testing/inference", "tab-structure"),
+    y(
+      `Ink: press ${windowStepHotkey(windowPanelHeader(AppWindowId.Structure).step)}–${windowStepHotkey(windowPanelHeader(AppWindowId.Inference).step)} for structure/pipeline/testing/inference`,
+      "tab-structure",
+    ),
     y("PUT /api/projects/:id", "/api/projects"),
     y("session_action id=nav.build.editors → get_project", "get_project"),
     y("session.getSnapshot() / setActiveWindow editors"),
@@ -88,7 +99,7 @@ export const PARITY_ROWS: ParityRow[] = [
     "nav.window.structure",
     "structure",
     { label: "Structures", file: "components/app-window-nav.tsx" },
-    y("Ink: press 1", "tab-structure"),
+    inkTab(AppWindowId.Structure),
     y("PUT /api/projects/:id (models)", "/api/projects"),
     y("validate_project + describe_pipeline_steps", "validate_project"),
     y("session.setModels / addNamedModel"),
@@ -97,7 +108,7 @@ export const PARITY_ROWS: ParityRow[] = [
     "nav.window.pipeline",
     "pipeline",
     { label: "Pipeline", file: "components/app-window-nav.tsx" },
-    y("Ink: press 2", "tab-pipeline"),
+    inkTab(AppWindowId.Pipeline),
     y("PUT /api/projects/:id (modules)", "/api/projects"),
     y("describe_pipeline_steps", "describe_pipeline_steps"),
     y("session.setModules / addPipelineStep"),
@@ -106,7 +117,7 @@ export const PARITY_ROWS: ParityRow[] = [
     "nav.window.testing",
     "testing",
     { label: "Testing", file: "components/app-window-nav.tsx" },
-    y("Ink: press 3", "tab-testing"),
+    inkTab(AppWindowId.Testing),
     y("POST /api/runs (testing) + POST /api/testing-evaluate", "/api/runs"),
     y("run_test / validate_test", "run_test"),
     y("session.runTest(testDocName)"),
@@ -115,7 +126,7 @@ export const PARITY_ROWS: ParityRow[] = [
     "nav.window.inference",
     "inference",
     { label: "Inference", file: "components/app-window-nav.tsx" },
-    y("Ink: press 4", "tab-inference"),
+    inkTab(AppWindowId.Inference),
     y("POST /api/runs", "/api/runs"),
     y("start_run", "start_run"),
     y("session.startRun()"),
@@ -124,7 +135,7 @@ export const PARITY_ROWS: ParityRow[] = [
     "nav.window.schedule",
     "schedule",
     { label: "Schedule", file: "components/app-window-nav.tsx" },
-    y("Ink: press c", "tab-schedule"),
+    inkTab(AppWindowId.Schedule),
     y("POST /api/schedules", "/api/schedules"),
     n("not exposed; use HTTP"),
     n("HTTP /api/schedules"),
@@ -133,7 +144,7 @@ export const PARITY_ROWS: ParityRow[] = [
     "nav.window.share",
     "share",
     { label: "Share", file: "components/app-window-nav.tsx" },
-    y("Ink: press 5", "tab-share"),
+    inkTab(AppWindowId.Share),
     y("POST /api/shared-links", "/api/shared-links"),
     p("session_action lists shareLinkIds", "session_action"),
     y("session.getSnapshot().shareLinkIds"),
@@ -142,7 +153,7 @@ export const PARITY_ROWS: ParityRow[] = [
     "nav.window.earnings",
     "earnings",
     { label: "Earnings", file: "components/app-window-nav.tsx" },
-    y("Ink: press 6", "tab-earnings"),
+    inkTab(AppWindowId.Earnings),
     y("GET /api/earnings", "/api/earnings"),
     p("session_action id=earnings.refresh", "session_action"),
     y("session.refreshEarnings()"),
@@ -151,7 +162,7 @@ export const PARITY_ROWS: ParityRow[] = [
     "nav.window.logging",
     "logging",
     { label: "Logging", file: "components/app-window-nav.tsx" },
-    y("Ink: press 7", "tab-logging"),
+    inkTab(AppWindowId.Logging),
     y("GET /api/runs", "/api/runs"),
     y("session_logs", "session_logs"),
     y("toLogsView(session.getSnapshot())"),
@@ -160,34 +171,34 @@ export const PARITY_ROWS: ParityRow[] = [
     "nav.window.cache",
     "cache",
     { label: "Cache", file: "components/app-window-nav.tsx" },
-    y("Ink: press 8", "tab-cache"),
+    inkTab(AppWindowId.Cache),
     y("GET /api/cache", "/api/cache"),
-    p("session_logs.cache", "session_logs"),
+    y("session_logs.cache", "session_logs"),
     y("session.getSnapshot().cacheEntries"),
   ),
   row(
     "nav.window.documents",
     "documents",
     { label: "Documents", file: "components/app-window-nav.tsx" },
-    y("Ink: press 9", "tab-documents"),
+    inkTab(AppWindowId.Documents),
     y("POST /api/docs", "/api/docs"),
-    y("add_doc", "add_doc"),
+    y("session_action id=documents.upload", "session_action"),
     y("session.addDoc / addDocContent"),
   ),
   row(
     "nav.window.docs",
     "docs",
     { label: "Docs", file: "components/app-window-nav.tsx" },
-    y("Ink: press 0", "tab-docs"),
+    inkTab(AppWindowId.Docs),
     y("PUT /api/projects/:id documentation", "/api/projects"),
-    y("set_docs", "set_docs"),
+    y("session_action id=docs.set", "session_action"),
     y("session.setDocumentation(text)"),
   ),
   row(
     "nav.window.secrets",
     "secrets",
     { label: "Secrets", file: "components/app-window-nav.tsx" },
-    y("Ink: press [", "tab-secrets"),
+    inkTab(AppWindowId.Secrets),
     y("GET/POST /api/secrets", "/api/secrets"),
     p("session pull + HTTP; no dedicated MCP tool", "session_action"),
     p("snapshot after pull; GUI useProjectSecrets"),
@@ -195,8 +206,8 @@ export const PARITY_ROWS: ParityRow[] = [
   row(
     "nav.window.project-billing",
     "project-billing",
-    { label: "Billing", file: "components/app-window-nav.tsx", how: "Project-scoped billing tab (12)" },
-    y("Ink: press ]", "tab-project-billing"),
+    { label: "Billing", file: "components/app-window-nav.tsx", how: `Project-scoped billing tab (${windowNavHint(AppWindowId.ProjectBilling)})` },
+    inkTab(AppWindowId.ProjectBilling),
     y("GET /api/billing", "/api/billing"),
     p("session_action id=billing.refresh", "session_action"),
     y("session.refreshBilling()"),
@@ -204,8 +215,8 @@ export const PARITY_ROWS: ParityRow[] = [
   row(
     "nav.window.project-settings",
     "project-settings",
-    { label: "Settings", file: "components/app-window-nav.tsx", how: "Project settings tab (13)" },
-    y("Ink: press \\", "tab-project-settings"),
+    { label: "Settings", file: "components/app-window-nav.tsx", how: `Project settings tab (${windowNavHint(AppWindowId.ProjectSettings)})` },
+    inkTab(AppWindowId.ProjectSettings),
     y("PUT /api/projects/:id (langfuse etc.)", "/api/projects"),
     p("session_action + apply_project_changes", "apply_project_changes"),
     y("session.patchProject"),
@@ -216,7 +227,7 @@ export const PARITY_ROWS: ParityRow[] = [
     { label: "New project / Blank project", file: "components/project-selector.tsx" },
     y("Ink: press n or / new", "new-project"),
     y("POST /api/projects", "/api/projects"),
-    y("add_project", "add_project"),
+    y("session_action id=project.add", "session_action"),
     y("session.addProject({ open: true })"),
   ),
   row(
@@ -234,7 +245,7 @@ export const PARITY_ROWS: ParityRow[] = [
     { label: "Rename project", file: "components/project-selector.tsx" },
     y("Ink: press r", "rename"),
     y("PUT /api/projects/:id name", "/api/projects"),
-    y("rename_project", "rename_project"),
+    y("session_action id=project.rename", "session_action"),
     y("session.renameProject(id, name)"),
   ),
   row(
@@ -243,7 +254,7 @@ export const PARITY_ROWS: ParityRow[] = [
     { label: "Delete project", file: "components/project-selector.tsx" },
     y("Ink: press x", "delete"),
     y("DELETE /api/projects/:id", "/api/projects"),
-    y("delete_project", "delete_project"),
+    y("session_action id=project.delete", "session_action"),
     y("session.deleteProject(id)"),
   ),
   row(
@@ -252,7 +263,7 @@ export const PARITY_ROWS: ParityRow[] = [
     { label: "Open", file: "components/project-picker-page.tsx" },
     y("Ink: enter on selected project / session open", "session open"),
     y("GET /api/state?projectId=", "/api/state"),
-    y("open_project", "open_project"),
+    y("session_action id=project.open", "session_action"),
     y("session.openProject(id)"),
   ),
   row(
@@ -261,7 +272,7 @@ export const PARITY_ROWS: ParityRow[] = [
     { label: "Clone project", file: "components/project-picker-page.tsx" },
     y("spine session clone [id]", "session clone"),
     y("POST /api/projects (clone body)", "/api/projects"),
-    y("clone_project", "clone_project"),
+    y("session_action id=project.clone", "session_action"),
     y("session.cloneProject(id)"),
   ),
   row(
@@ -288,7 +299,7 @@ export const PARITY_ROWS: ParityRow[] = [
     { label: "Add struct", file: "components/structure-builder.tsx" },
     y("Ink: press m", "add-model"),
     y("PUT /api/projects/:id models", "/api/projects"),
-    y("add_model", "add_model"),
+    y("session_action id=structure.add-model", "session_action"),
     y("addNamedModel(session, name)"),
   ),
   row(
@@ -342,7 +353,7 @@ export const PARITY_ROWS: ParityRow[] = [
     { label: "Add step", file: "components/pipeline-builder.tsx" },
     y("Ink: press s", "add-step"),
     y("PUT /api/projects/:id modules", "/api/projects"),
-    y("add_step", "add_step"),
+    y("session_action id=pipeline.add-step", "session_action"),
     y("addPipelineStep(session, kind, label)"),
   ),
   row(
@@ -396,7 +407,7 @@ export const PARITY_ROWS: ParityRow[] = [
     { label: "New test file", file: "components/testing.tsx" },
     p("add-doc with *_testing.json name", "session add-doc"),
     y("POST /api/docs (name *_testing.json)", "/api/docs"),
-    y("add_doc name=foo_testing.json", "add_doc"),
+    y("session_action id=documents.upload name=foo_testing.json", "session_action"),
     y("session.addDocContent({ name: '*_testing.json', … })"),
   ),
   row(
@@ -432,7 +443,7 @@ export const PARITY_ROWS: ParityRow[] = [
     { label: "Assign document to Input slot", file: "components/inference/inference-input-slot.tsx" },
     y("spine session assign-input --module --doc", "session assign-input"),
     y("POST /api/runs body.inputDocsByModule", "/api/runs"),
-    y("assign_input", "assign_input"),
+    y("session_action id=inference.assign-input", "session_action"),
     y("session.setInferenceInputDocIds({ [moduleId]: docId })"),
   ),
   row(
@@ -504,7 +515,7 @@ export const PARITY_ROWS: ParityRow[] = [
     { label: "Browse files / drag-drop", file: "components/file-drop-zone.tsx" },
     p("session add-doc --file (text only, no OCR/PDF)", "session add-doc"),
     y("POST /api/docs", "/api/docs"),
-    y("add_doc (text content)", "add_doc"),
+    y("session_action id=documents.upload (text content)", "session_action"),
     y("session.addDoc / addDocContent"),
   ),
   row(
@@ -513,7 +524,7 @@ export const PARITY_ROWS: ParityRow[] = [
     { label: "Delete document", file: "components/documents.tsx" },
     y("spine session remove-doc --doc", "session remove-doc"),
     y("DELETE /api/docs/:id", "/api/docs"),
-    y("remove_doc", "remove_doc"),
+    y("session_action id=documents.remove", "session_action"),
     y("session.removeDoc(id)"),
   ),
   row(
@@ -549,7 +560,7 @@ export const PARITY_ROWS: ParityRow[] = [
     { label: "Edit project markdown", file: "components/documentation.tsx" },
     y("Ink: press w", "set-docs"),
     y("PUT /api/projects/:id documentation", "/api/projects"),
-    y("set_docs", "set_docs"),
+    y("session_action id=docs.set", "session_action"),
     y("session.setDocumentation(text)"),
   ),
   row(
@@ -585,7 +596,7 @@ export const PARITY_ROWS: ParityRow[] = [
     { label: "Load run detail", file: "components/logging.tsx" },
     p("session pull hydrates; no per-run TUI hydrate"),
     y("GET /api/runs/:id", "/api/runs"),
-    p("session_logs local only"),
+    y("wait_for_run / get_run / session_logs steps", "wait_for_run"),
     y("session.hydrateRunDetail(runId)"),
   ),
   row(

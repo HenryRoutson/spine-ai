@@ -4,6 +4,19 @@ export { chatForActiveProject } from "@/lib/core/types"
 export { SpineSession, createSpineSession, createMemoryPersist, emptySessionSnapshot, migrateSessionChat, ASSISTANT_IN_FLIGHT_STALE_MS } from "@/lib/core/session"
 export { sessionSnapshotFromStore } from "@/lib/core/store-snapshot"
 export type { StoreSnapshotParts } from "@/lib/core/store-snapshot"
+export { buildGuiSessionSnapshot, createGuiSpineSession } from "@/lib/core/gui-session-bridge"
+export type { GuiSessionSyncInput, GuiSpineSessionHandlers } from "@/lib/core/gui-session-bridge"
+export {
+  deleteProjectSnapshot,
+  modelsPatchWithSync,
+  modulesPatchWithSync,
+  patchProjectInList,
+  projectPatchFromChanges,
+  renamedProjects,
+  typeAliasesPatch,
+  withProjectDocumentation,
+} from "@/lib/core/project-ops"
+export type { renamed_name } from "@/lib/core/project-ops"
 export {
   overlayOptimisticProjects,
   overlayOptimisticRuns,

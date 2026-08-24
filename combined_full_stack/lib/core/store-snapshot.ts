@@ -3,7 +3,7 @@
 
 import { emptySessionSnapshot } from "@/lib/core/session"
 import type { SessionSnapshot } from "@/lib/core/types"
-import type { DocRef, PipelineModule, Project, StructureModel } from "@/lib/types"
+import type { DocRef, PipelineModule, Project, StructureModel, TypeAlias } from "@/lib/types"
 
 export type StoreSnapshotParts = {
   projects: Project[]
@@ -12,7 +12,7 @@ export type StoreSnapshotParts = {
   documentation?: string
   modules?: PipelineModule[]
   models?: StructureModel[]
-  typeAliases?: import("@/lib/types").TypeAlias[]
+  typeAliases?: TypeAlias[]
   model?: string
   inferenceInputDocIds?: SessionSnapshot["inferenceInputDocIds"]
 }

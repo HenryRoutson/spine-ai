@@ -37,7 +37,7 @@ import {
   areaIdForWindow,
   type BuilderAreaId,
 } from "@/lib/app-area-windows"
-import { windowPanelHeader, windowStepHotkey } from "@/lib/window-panel-meta"
+import { appWindowStepForId, hotkeyForAppWindowStep, windowPanelHeader } from "@/lib/window-panel-meta"
 
 export type PipelineStepView = {
   id: string
@@ -296,9 +296,9 @@ const TUI_TAB_HOTKEY_OVERRIDE: Partial<Record<TuiTab, string>> = {
 function tuiHotkey(tab: TuiTab): string {
   const override = TUI_TAB_HOTKEY_OVERRIDE[tab]
   if (override) return override
-  const key = windowStepHotkey(windowPanelHeader(tab).step)
-  if (!key) throw new Error(`TUI tab ${tab} has no digit hotkey — add TUI_TAB_HOTKEY_OVERRIDE`)
-  return key
+  const step = appWindowStepForId(tab)
+  if (step == null) throw new Error(`TUI tab ${tab} has no digit hotkey — add TUI_TAB_HOTKEY_OVERRIDE`)
+  return hotkeyForAppWindowStep(step)
 }
 
 export const TUI_TAB_HOTKEY: Record<TuiTab, string> = Object.fromEntries(

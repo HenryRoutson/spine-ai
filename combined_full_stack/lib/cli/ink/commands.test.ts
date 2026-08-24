@@ -1,14 +1,15 @@
 import { describe, expect, it } from "vitest"
-import { areaForTuiTab, tuiTabFromHotkey, TUI_TAB_META, resolveTuiTab } from "@/lib/core/view"
+import { areaForTuiTab, tuiTabFromHotkey, TUI_TAB_HOTKEY, TUI_TAB_META, resolveTuiTab } from "@/lib/core/view"
 import { tokenizeJsonLine, looksLikeJson } from "@/lib/cli/ink/syntax"
 import { defaultPaneForTab, nextActionHint, suggestedCommandId } from "@/lib/cli/ink/commands"
 
 describe("TUI tab chrome", () => {
-  it("maps number keys like the full UI 01–10 hints", () => {
-    expect(tuiTabFromHotkey("1")).toBe("structure")
-    expect(tuiTabFromHotkey("2")).toBe("pipeline")
-    expect(tuiTabFromHotkey("7")).toBe("logging")
-    expect(tuiTabFromHotkey("0")).toBe("docs")
+  it("maps number keys like the full UI step hints", () => {
+    expect(tuiTabFromHotkey(TUI_TAB_HOTKEY.structure)).toBe("structure")
+    expect(tuiTabFromHotkey(TUI_TAB_HOTKEY.pipeline)).toBe("pipeline")
+    expect(tuiTabFromHotkey(TUI_TAB_HOTKEY.schedule)).toBe("schedule")
+    expect(tuiTabFromHotkey(TUI_TAB_HOTKEY.logging)).toBe("logging")
+    expect(tuiTabFromHotkey(TUI_TAB_HOTKEY.docs)).toBe("docs")
     expect(tuiTabFromHotkey("b")).toBe("billing")
     expect(resolveTuiTab("logs")).toBe("logging")
     expect(areaForTuiTab("logging")).toBe("observe")

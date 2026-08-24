@@ -1,13 +1,11 @@
 // AI : vanilla store matching useStore() names — React/CLI/MCP subscribe; persist is a port.
-// AI : TODO (arch-thin-store) — GUI useStore should call these methods instead of reimplementing
-// AI :   rename/delete/apply; React still owns hydration/debounce/billing (docs/parity.md §8.5).
+// AI : GUI useStore delegates project mutations via gui-session-bridge (docs/parity.md §8.5).
 
 import { hashContent } from "@/lib/content-hash"
 import { uid } from "@/lib/id"
 import { UNNAMED_PROJECT_NAME, AUTHORED_PROJECT_KIND } from "@/lib/project-assistant-types"
 import { findQuote } from "@/lib/quotes"
-import { stripBuiltinTypeAliases, stripSharedModels, withBuiltinTypeAliases, withSharedModels } from "@/lib/structure"
-import { syncManagedPipelineSteps } from "@/lib/structure-parse-steps"
+import { withBuiltinTypeAliases, withSharedModels } from "@/lib/structure"
 import { DEFAULT_MODEL, DocLabel, InputType, ModuleKind, RunSource } from "@/lib/types"
 import type {
   DocId,
@@ -31,7 +29,16 @@ import {
   type TeamRealtimeHandlers,
 } from "@/lib/core/realtime"
 import { toQuoteView, toValidationView, type QuoteView, type ValidationView } from "@/lib/core/view"
-import { renamedProjects, withProjectDocumentation } from "@/lib/core/project-ops"
+import {
+  deleteProjectSnapshot,
+  modelsPatchWithSync,
+  modulesPatchWithSync,
+  patchProjectInList,
+  projectPatchFromChanges,
+  renamedProjects,
+  typeAliasesPatch,
+  withProjectDocumentation,
+} from "@/lib/core/project-ops"
 import {
   inferenceInputIssueMessage,
   issuesForSavedInferenceAssignment,
@@ -166,9 +173,8 @@ function nextChatForNewProject(
 }
 
 export class SpineSession {
-  // AI : TODO (mcp-capability) — every method a human uses in the GUI should have an MCP session_action.
-  // AI :   Still unwrapped: removeDoc, linkQuotes, setDocProjects, hydrateRunDetail, flushPendingSave,
-  // AI :   pullRemoteState, executeProposedActions, resyncExamples. Not a full-snapshot "eyes" dump.
+  // AI : MCP session_action + named tools wrap public methods (see mcp_tool/spine-session-bar-a.ts).
+  // AI :   Host-bound stays GUI-only: CodeHost, human-review, chatbot, share mint, Stripe, run cancel.
   private snap: SessionSnapshot
   private readonly listeners = new Set<() => void>()
   private readonly persist: PersistPort | undefined
@@ -250,10 +256,15 @@ export class SpineSession {
     return job
   }
 
-  private commit(next: SessionSnapshot): void {
+  private commit(next: SessionSnapshot, opts?: { persist?: boolean }): void {
     this.snap = next
-    this.persist?.save(next)
+    if (opts?.persist !== false) this.persist?.save(next)
     for (const listener of this.listeners) listener()
+  }
+
+  // AI : GUI HTTP hydrate — replace snap without echoing debounced PUT.
+  hydrateSnapshot(next: SessionSnapshot): void {
+    this.commit(next, { persist: false })
   }
 
   private requireProject(): Project {
@@ -362,22 +373,7 @@ export class SpineSession {
   }
 
   deleteProject(id: string): void {
-    const deletedProjectIds = this.snap.deletedProjectIds.includes(id)
-      ? this.snap.deletedProjectIds
-      : [...this.snap.deletedProjectIds, id]
-    const projects = this.snap.projects.filter((p) => p.id !== id)
-    const pendingCreates = this.snap.pendingCreates.filter((p) => p.id !== id)
-    const activeProjectId = this.snap.activeProjectId === id ? (projects[0]?.id ?? "") : this.snap.activeProjectId
-    const { [id]: _dropped, ...chatByProjectId } = this.snap.chatByProjectId
-    this.commit({
-      ...this.snap,
-      projects,
-      pendingCreates,
-      deletedProjectIds,
-      activeProjectId,
-      chatByProjectId,
-      chat: (activeProjectId && chatByProjectId[activeProjectId]) || [],
-    })
+    this.commit(deleteProjectSnapshot(this.snap, id))
   }
 
   patchProject(patch: Partial<Project>): void {
@@ -386,49 +382,33 @@ export class SpineSession {
     const next = { ...current, ...patch }
     this.commit({
       ...this.snap,
-      projects: this.snap.projects.map((p) => (p.id === current.id ? next : p)),
-      pendingCreates: this.snap.pendingCreates.map((p) => (p.id === current.id ? next : p)),
+      projects: patchProjectInList(this.snap.projects, current.id, next),
+      pendingCreates: patchProjectInList(this.snap.pendingCreates, current.id, next),
     })
   }
 
   setModels(m: StructureModel[] | ((prev: StructureModel[]) => StructureModel[])): void {
-    const prev = stripSharedModels(this.project?.models ?? [])
-    const raw = typeof m === "function" ? m(withSharedModels(prev)) : m
-    this.patchProject({ models: stripSharedModels(raw) })
+    const project = this.project
+    if (!project) return
+    this.patchProject(modelsPatchWithSync(project, m, this.snap.model))
   }
 
   setTypeAliases(t: TypeAlias[] | ((prev: TypeAlias[]) => TypeAlias[])): void {
-    const prev = stripBuiltinTypeAliases(this.project?.typeAliases ?? [])
-    const raw = typeof t === "function" ? t(withBuiltinTypeAliases(prev)) : t
-    this.patchProject({ typeAliases: stripBuiltinTypeAliases(raw) })
+    const project = this.project
+    if (!project) return
+    this.patchProject(typeAliasesPatch(project, t))
   }
 
   setModules(m: PipelineModule[]): void {
     const project = this.requireProject()
-    this.patchProject({ modules: syncManagedPipelineSteps(m, project.models, this.snap.model) })
+    this.patchProject(modulesPatchWithSync(project, m, this.snap.model))
   }
 
   applyProjectChanges(changes: ProjectPatch): void {
     const project = this.requireProject()
-    if (!changes.models && !changes.modules && !changes.typeAliases && changes.documentation === undefined && !changes.name) {
-      return
-    }
-    const nextModels = changes.models ? stripSharedModels(changes.models) : project.models
-    const modelsForSync = withSharedModels(nextModels)
-    const nextModules = changes.modules
-      ? syncManagedPipelineSteps(changes.modules, modelsForSync, this.snap.model)
-      : changes.models
-        ? syncManagedPipelineSteps(project.modules, modelsForSync, this.snap.model)
-        : undefined
-    const leaveBlank = project.kind === "blank" && nextModels.length > 0
-    this.patchProject({
-      ...(changes.models ? { models: nextModels } : {}),
-      ...(changes.typeAliases ? { typeAliases: stripBuiltinTypeAliases(changes.typeAliases) } : {}),
-      ...(nextModules !== undefined ? { modules: nextModules } : {}),
-      ...(changes.documentation !== undefined ? { documentation: changes.documentation || undefined } : {}),
-      ...(changes.name ? { name: changes.name } : {}),
-      ...(leaveBlank ? { kind: AUTHORED_PROJECT_KIND } : {}),
-    })
+    const patch = projectPatchFromChanges(project, changes, this.snap.model)
+    if (!patch) return
+    this.patchProject(patch)
   }
 
   setDocumentation(text: string): void {

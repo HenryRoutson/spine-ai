@@ -1,5 +1,7 @@
 // AI : same propose/apply path as Vibe — LLM is remote; apply is local session mutation.
-// AI : TODO (arch-structure-assistant) — askStructureAgent uses proposeStructureChange; GUI structure tab uses full project assistant.
+// AI : all assistant kinds prefer billed HTTP when egress+auth reach the server project; else in-process fallback.
+import { API_ROUTES } from "@/lib/api-routes"
+import { DIAGNOSIS_STREAM_EVENT } from "@/lib/diagnosis-stream-events"
 import { DocLabel, InputType } from "@/lib/types"
 import type { ModelId, Project } from "@/lib/types"
 import type { SpineSession } from "@/lib/core/session"
@@ -8,8 +10,8 @@ import type { SessionChatTurn } from "@/lib/core/types"
 import type { ProjectProposal } from "@/lib/project-assistant-types"
 import type { PipelineAssistantProposal, PipelineAssistantResult } from "@/lib/server/pipeline_assistant"
 import { proposePipelineChange } from "@/lib/server/pipeline_assistant"
-import { proposeStructureChange } from "@/lib/server/structure_assistant"
-import { generateTestFile } from "@/lib/server/testing_assistant"
+import { proposeStructureChange, type StructureAssistantResult } from "@/lib/server/structure_assistant"
+import { generateTestFile, type GeneratedTestFile } from "@/lib/server/testing_assistant"
 import { diagnoseRunStream } from "@/lib/server/diagnosis_assistant"
 import type { CliCommandResult } from "@/lib/cli/types"
 import { compactProposalReview } from "@/lib/core/view"
@@ -57,6 +59,46 @@ export async function defaultAgentPropose(
   })
 }
 
+// AI : 401/404 → null so callers fall back in-process; other errors surface to the agent.
+async function assistantHttpPost(
+  session: SpineSession,
+  path: string,
+  body: unknown,
+): Promise<Response | null> {
+  const egress = session.egress
+  if (!egress || egress.blocked) return null
+  const res = await egress.request(path, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(body),
+  })
+  if (res.status === 401 || res.status === 404) return null
+  if (!res.ok) {
+    const errBody = (await res.json().catch(() => ({}))) as { error?: string }
+    throw new Error(errBody.error ?? `${path} HTTP ${res.status}`)
+  }
+  return res
+}
+
+function parseDiagnosisNdjson(raw: string): { text: string; usageCents: number } {
+  let text = ""
+  let usageCents = 0
+  for (const line of raw.split("\n")) {
+    const trimmed = line.trim()
+    if (!trimmed) continue
+    const evt = JSON.parse(trimmed) as { type?: string; text?: string; usageCents?: number; error?: string }
+    if (evt.type === DIAGNOSIS_STREAM_EVENT.ERROR) {
+      throw new Error(evt.error ?? "diagnosis failed")
+    }
+    if (evt.type === DIAGNOSIS_STREAM_EVENT.DONE) {
+      text = evt.text ?? ""
+      usageCents = evt.usageCents ?? 0
+    }
+  }
+  if (!text) throw new Error("diagnosis stream ended without done")
+  return { text, usageCents }
+}
+
 // AI : billed GUI path when SPINE_API_URL + token reach a project that exists on the server; else null → in-process.
 export async function proposeViaHttpEgress(
   session: SpineSession,
@@ -64,27 +106,73 @@ export async function proposeViaHttpEgress(
   message: string,
   history: SessionChatTurn[],
 ): Promise<PipelineAssistantResult | null> {
-  const egress = session.egress
-  if (!egress || egress.blocked) return null
-  const res = await egress.request("/api/pipeline-assistant", {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({
-      projectId: project.id,
-      message,
-      history,
-      model: session.model,
-      stream: false,
-      humanSurface: "vibe",
-      ...(session.pendingProposal ? { pendingProposal: session.pendingProposal } : {}),
-    }),
+  const res = await assistantHttpPost(session, API_ROUTES.pipelineAssistant, {
+    projectId: project.id,
+    message,
+    history,
+    model: session.model,
+    stream: false,
+    humanSurface: "vibe",
+    ...(session.pendingProposal ? { pendingProposal: session.pendingProposal } : {}),
   })
-  if (res.status === 401 || res.status === 404) return null
-  if (!res.ok) {
-    const body = (await res.json().catch(() => ({}))) as { error?: string }
-    throw new Error(body.error ?? `pipeline-assistant HTTP ${res.status}`)
-  }
+  if (!res) return null
   return (await res.json()) as PipelineAssistantResult
+}
+
+async function structureViaHttpEgress(
+  session: SpineSession,
+  project: Project,
+  message: string,
+  history: SessionChatTurn[],
+): Promise<StructureAssistantResult | null> {
+  const res = await assistantHttpPost(session, API_ROUTES.structureAssistant, {
+    projectId: project.id,
+    message,
+    history,
+    model: session.model,
+  })
+  if (!res) return null
+  const body = (await res.json()) as { message: string; proposal: { models: Project["models"] } | null }
+  return {
+    message: body.message,
+    proposal: body.proposal ? { models: body.proposal.models } : null,
+  }
+}
+
+async function testingViaHttpEgress(
+  session: SpineSession,
+  project: Project,
+  instruction: string,
+): Promise<GeneratedTestFile | null> {
+  const res = await assistantHttpPost(session, API_ROUTES.testingAssistant, {
+    projectId: project.id,
+    instruction,
+    model: session.model,
+  })
+  if (!res) return null
+  const body = (await res.json()) as GeneratedTestFile
+  return {
+    name: body.name,
+    content: body.content,
+    issues: body.issues ?? [],
+    usageCents: body.usageCents ?? 0,
+  }
+}
+
+async function diagnosisViaHttpEgress(
+  session: SpineSession,
+  project: Project,
+  runId: string,
+  message: string,
+): Promise<{ text: string; usageCents: number } | null> {
+  const res = await assistantHttpPost(session, API_ROUTES.diagnosisAssistant, {
+    projectId: project.id,
+    runId,
+    message,
+    model: session.model,
+  })
+  if (!res) return null
+  return parseDiagnosisNdjson(await res.text())
 }
 
 function changedKeys(proposal: ProjectProposal): string[] {
@@ -282,7 +370,11 @@ export async function askStructureAgent(
   if (blocked) return blocked
   session.appendChat({ role: "user", content: message.trim() })
   try {
-    const result = await proposeStructureChange(session.project!, message.trim(), session.chat, session.model as ModelId)
+    const trimmed = message.trim()
+    const viaHttp = await structureViaHttpEgress(session, session.project!, trimmed, session.chat)
+    const result =
+      viaHttp ??
+      (await proposeStructureChange(session.project!, trimmed, session.chat, session.model as ModelId))
     session.appendChat({ role: "assistant", content: result.message })
     if (result.proposal && opts.apply) session.applyProjectChanges({ models: result.proposal.models })
     return {
@@ -310,12 +402,11 @@ export async function askTestingAgent(
   if (blocked) return blocked
   session.appendChat({ role: "user", content: message.trim() })
   try {
-    const generated = await generateTestFile(
-      session.project!,
-      session.docs,
-      message.trim(),
-      session.model as ModelId,
-    )
+    const trimmed = message.trim()
+    const viaHttp = await testingViaHttpEgress(session, session.project!, trimmed)
+    const generated =
+      viaHttp ??
+      (await generateTestFile(session.project!, session.docs, trimmed, session.model as ModelId))
     if (opts.apply !== false) {
       session.addDocContent({
         name: generated.name,
@@ -349,7 +440,11 @@ export async function askDiagnosisAgent(session: SpineSession, message: string):
   }
   session.appendChat({ role: "user", content: message.trim() })
   try {
-    const result = await diagnoseRunStream(session.project!, run, message.trim(), session.model as ModelId, () => undefined)
+    const trimmed = message.trim()
+    const viaHttp = await diagnosisViaHttpEgress(session, session.project!, run.id, trimmed)
+    const result =
+      viaHttp ??
+      (await diagnoseRunStream(session.project!, run, trimmed, session.model as ModelId, () => undefined))
     session.appendChat({ role: "assistant", content: result.text })
     return {
       ok: true,

@@ -20,30 +20,35 @@ WORKSPACES — never mix:
 
 DEFAULT LOOP
 1. auth_status — session path, projects, seeds, canRun. Follow next.
-2. get_project — compact review plus next (apply pending proposal, fix issues, or run). If no active project, add_project or import_seed.
+2. get_project — compact review plus next (apply pending proposal, fix issues, or run). If no active project, session_action id=project.add or import_seed. To edit the same project as a signed-in GUI: pull_remote_state (needs SPINE_API_TOKEN) → mutate → push_remote_state.
 3. validate_project — same computeInvalid as the pipeline editor. lint_pipeline with no args for graph lint.
-4. Change: ask_agent (kind vibe|structure|testing|diagnosis) → poll get_project if inFlight (do NOT re-send). If assistantError appears, fix from that text. Then apply_project_changes, OR edit with add_step / add_model / add_doc / remove_doc / assign_input / set_docs / configure_n8n_step / session_action structure.add-field.
+4. Change: ask_agent (kind vibe|structure|testing|diagnosis) → poll get_project if inFlight (do NOT re-send). If assistantError appears, fix from that text. Then apply_project_changes, OR edit with session_action (project/structure/pipeline/docs/inference ids) / configure_n8n_step.
 5. run_test or start_run. Returns {id,status} immediately — then wait_for_run until ok/error (or timedOut; call again). wait_for_run / get_run include runJson.
 6. Finished run: pinpoint_failure({ testDocName, runJson }) using session_logs.tests and wait_for_run JSON.
 
 TYPED N8N PIECES (no live integrations)
-list_pieces → add_step kind=n8n → configure_n8n_step (nodeType + parametersJson + optional n8nCode).
+list_pieces → session_action id=pipeline.add-step kind=n8n → configure_n8n_step (nodeType + parametersJson + optional n8nCode).
 Catalog: n8n-nodes-base.set | filter | sort | limit | removeDuplicates | itemLists | crypto | dateTime | html | markdown | spreadsheetFile | code.
 Each piece has a props schema → the GUI auto-generates the form. n8nCode is n8n Code-node JS: items = [{json}], return items. Prefer a catalog piece over custom-code. import_piece / export_piece share JSON.
 
 FORK DAG
-Pipelines are series-parallel. add_step kind=fork, then add_step with forkId + branchId into a lane. Nest another fork in a lane for a generic DAG (no cycles). Join: product | assemble | merge via session_action pipeline.configure-step forkJoin. get_project.steps[].branches shows the tree.
+Pipelines are series-parallel. session_action id=pipeline.add-step kind=fork, then session_action with forkId + branchId into a lane. Nest another fork in a lane for a generic DAG (no cycles). Join: product | assemble | merge via session_action pipeline.configure-step forkJoin. get_project.steps[].branches shows the tree.
 
 STEP KINDS
 input, llm, llm-batch, example-select, transform, chunk, merge, assemble, fork, combine, custom-code, assert, human-review, webhook, n8n, chatbot, output.
 Aliases: code→custom-code, http→webhook, piece→n8n, dag→fork. Case-insensitive.
 
-NAMED TOOLS vs session_action:
-Prefer named tools. session_action id is the GUI data-spine-id. Extra ids: structure.add-field/remove-field/set-relation/add-alias, pipeline.configure-step/remove-step/assign-structure, assistant.reject, documents.remove, billing.refresh, earnings.refresh, cache.refresh, logging.errors-only.
+CORE SESSION TOOLS (vibe loop — do not bounce between duplicate names):
+auth_status → get_project → validate_project → ask_agent → apply_project_changes → session_action (structure/pipeline/docs ids) → start_run or run_test → wait_for_run → pinpoint_failure.
+Sync with GUI: pull_remote_state → edit → push_remote_state.
+
+session_action vs named CRUD:
+session_action id is the GUI data-spine-id (project.add, pipeline.move-step, quotes.link, …). Legacy aliases (add_project, rename_project, …) still work inside session_action id. Prefer catalog ids.
+Extra session_action ids: structure.add-field/remove-field/set-relation/add-alias, pipeline.configure-step/remove-step/assign-structure, assistant.reject, documents.set-projects, billing.refresh, earnings.refresh, cache.refresh, logging.errors-only, logging.hydrate.
 
 ERRORS: tools return {ok:false, code, error, next} with isError instead of crashing. Follow next. Never retry the same crashing payload.
 
-NOT TOOLS YET: run cancel, share/hosted-api/embed mint, Stripe, human-review click, chatbot turn, custom-code (browser CodeHost), live n8n Cloud execute. session.pull / session.push / quotes.link / project.resync-examples / pipeline.move-step / documents.set-projects are session_action ids.`
+NOT TOOLS YET: run cancel, share/hosted-api/embed mint, Stripe, human-review click, chatbot turn, custom-code (browser CodeHost), live n8n Cloud execute. pull_remote_state / push_remote_state / quotes.link / project.resync-examples / pipeline.move-step / documents.set-projects are available (named or session_action).`
 
 function userMessage(text: string) {
   return { messages: [{ role: "user" as const, content: { type: "text" as const, text } }] }
@@ -104,7 +109,7 @@ export function registerSpinePrompts(server: McpServer): void {
     },
     () =>
       userMessage(
-        `You are connected to Spine MCP. Do not clone or search the repo.\n\n1. auth_status — follow next (add_project if projectCount is 0, or import_seed from seeds).\n2. get_project — follow next (apply, reject, or edit).\n3. Add Pydantic-like structures with add_model + session_action structure.add-field (name, type).\n4. Wire steps: input → (fork lanes and/or n8n pieces and/or llm) → output. add_step kinds are listed in server instructions.\n5. validate_project until ok. lint_pipeline with no args for graph lint.\n6. Auto UI is the inference page from those structures — you do not hand-write forms.\n7. If auth_status.canRun, start_run then wait_for_run. pinpoint_failure uses testDocName + runJson.\nShare an n8n piece with export_piece; import someone else's with import_piece.\nNever call live Slack/Gmail. n8n pieces run local Code-node JS with typed in/out.`,
+        `You are connected to Spine MCP. Do not clone or search the repo.\n\n1. auth_status — follow next (session_action id=project.add if projectCount is 0, or import_seed from seeds).\n2. get_project — follow next (apply, reject, or edit).\n3. Add Pydantic-like structures with session_action id=structure.add-model + session_action structure.add-field (name, type).\n4. Wire steps: input → (fork lanes and/or n8n pieces and/or llm) → output. session_action id=pipeline.add-step kinds are listed in server instructions.\n5. validate_project until ok. lint_pipeline with no args for graph lint.\n6. Auto UI is the inference page from those structures — you do not hand-write forms.\n7. If auth_status.canRun, start_run then wait_for_run. pinpoint_failure uses testDocName + runJson.\nShare an n8n piece with export_piece; import someone else's with import_piece.\nNever call live Slack/Gmail. n8n pieces run local Code-node JS with typed in/out.`,
       ),
   )
 

@@ -4,7 +4,7 @@ import { createSpineSession } from "@/lib/core/session"
 import { addNamedModel } from "@/lib/cli/workspace_edits"
 import { renderSpineTuiString, shouldLaunchInteractiveTui, runTuiCommand } from "@/lib/cli/ink/launch"
 import { WorkspaceView } from "@/lib/cli/ink/workspace-view"
-import { toAgentView, toDocsView, toLogsView, toPipelineView, toTestingView, toValidationView } from "@/lib/core/view"
+import { toAgentView, toDocsView, toLogsView, toPipelineView, toTestingView, toValidationView, TUI_TAB_HOTKEY } from "@/lib/core/view"
 import { runSpineCli } from "@/lib/cli/run"
 import { mkdtempSync, rmSync } from "node:fs"
 import { tmpdir } from "node:os"
@@ -18,7 +18,7 @@ describe("Ink TUI", () => {
     expect(frame).toContain("Spine")
     expect(frame).toContain("empty")
     expect(frame).toContain("Projects")
-    expect(frame).toContain("1:structure")
+    expect(frame).toContain(`${TUI_TAB_HOTKEY.structure}:structure`)
     expect(frame).toContain("search commands")
     expect(frame).toContain("New project")
     expect(frame).toContain("create a project")
@@ -198,15 +198,16 @@ describe("Ink TUI", () => {
     session.addProject({ open: true })
     const pipeline = renderSpineTuiString(session, "memory", { tab: "pipeline" })
     expect(pipeline).toContain("Build")
-    expect(pipeline).toContain("1:structure")
-    expect(pipeline).toContain("2:pipeline")
+    expect(pipeline).toContain(`${TUI_TAB_HOTKEY.structure}:structure`)
+    expect(pipeline).toContain(`${TUI_TAB_HOTKEY.pipeline}:pipeline`)
+    expect(pipeline).toContain(`${TUI_TAB_HOTKEY.schedule}:schedule`)
     expect(pipeline).toContain("Linear Pipeline")
     expect(pipeline).toContain("Each step declares its input and output model")
     expect(pipeline).toContain("annotation:")
 
     const logging = renderSpineTuiString(session, "memory", { tab: "logging" }).replace(/\s+/g, " ")
     expect(logging).toContain("Observe")
-    expect(logging).toContain("7:logging")
+    expect(logging).toContain(`${TUI_TAB_HOTKEY.logging}:logging`)
     expect(logging).toContain("Run History")
     expect(logging).toContain("full per-step trace")
     expect(logging).toContain("press i to run inference")

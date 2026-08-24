@@ -146,7 +146,14 @@ describe("MCP stdio boot", () => {
     expect(names).toContain("wait_for_run")
     expect(names).toContain("get_run")
     expect(names).toContain("list_seeds")
-    expect(names).toContain("remove_doc")
+    expect(names).toContain("pull_remote_state")
+    expect(names).toContain("push_remote_state")
+    expect(names).not.toContain("add_project")
+    expect(names).not.toContain("add_step")
+    expect(names).not.toContain("add_model")
+    expect(names).not.toContain("add_doc")
+    expect(names).not.toContain("remove_doc")
+    expect(names).not.toContain("assign_input")
     expect(prompts.error, JSON.stringify(prompts.error)).toBeUndefined()
     const promptNames = ((prompts.result as { prompts?: Array<{ name: string }> })?.prompts ?? []).map(
       (p) => p.name,
@@ -199,7 +206,7 @@ describe("MCP stdio boot", () => {
       const text = (status.content as Array<{ text?: string }>)[0]?.text ?? "{}"
       const body = JSON.parse(text) as { projectCount: number; next: string; appRoot?: string; seeds?: string[] }
       expect(body.projectCount).toBe(0)
-      expect(body.next).toMatch(/add_project/)
+      expect(body.next).toMatch(/project\.add|session_action/)
       expect(body.seeds?.length).toBeGreaterThan(0)
       expect(String(body.appRoot)).toMatch(/combined_full_stack$/)
       const prompt = await client.getPrompt({ name: "connect_spine" })

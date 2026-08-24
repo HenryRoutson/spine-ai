@@ -2,7 +2,17 @@ import { describe, expect, it } from "vitest"
 import { AppWindowId } from "@/lib/app-window-id"
 import { BUILDER_AREAS, BUILDER_NAV_ITEMS, BUILDER_WORKSPACE_WINDOW_IDS } from "@/lib/app-nav-config"
 import { BUILDER_AREA_WINDOWS, TUI_AREA_IDS } from "@/lib/app-area-windows"
-import { windowPanelHeader, windowStepHint, windowStepHotkey } from "@/lib/window-panel-meta"
+import {
+  APP_WINDOW_STEPS,
+  AppWindowStep,
+  AppWindowStepLabel,
+  appWindowIdForStep,
+  hotkeyForAppWindowStep,
+  windowNavHint,
+  windowPanelHeader,
+  windowStepHint,
+  windowStepHotkey,
+} from "@/lib/window-panel-meta"
 import { TUI_AREAS, TUI_TAB_HOTKEY, TUI_TAB_META, TUI_TABS, type TuiTab } from "@/lib/core/view"
 
 describe("window chrome parity (GUI headers / nav hints / TUI)", () => {
@@ -43,5 +53,15 @@ describe("window chrome parity (GUI headers / nav hints / TUI)", () => {
 
   it("prefetch workspace ids match BUILDER_NAV_ITEMS (no account L0)", () => {
     expect(BUILDER_WORKSPACE_WINDOW_IDS).toEqual(BUILDER_NAV_ITEMS.map((item) => item.id))
+  })
+
+  it("AppWindowStep numbers are contiguous and drive Schedule plus later tabs", () => {
+    expect(APP_WINDOW_STEPS).toEqual(APP_WINDOW_STEPS.map((_, i) => i + 1))
+    expect(windowNavHint(AppWindowId.Schedule)).toMatch(/^\d{2}$/)
+    expect(windowPanelHeader(AppWindowId.Schedule).step).toBe(AppWindowStepLabel.Schedule)
+    expect(AppWindowStepLabel.Schedule).toBe(`${windowNavHint(AppWindowId.Schedule)} / Schedule`)
+    expect(appWindowIdForStep(AppWindowStep.Schedule)).toBe(AppWindowId.Schedule)
+    const hotkeys = APP_WINDOW_STEPS.map((step) => hotkeyForAppWindowStep(step))
+    expect(new Set(hotkeys).size).toBe(hotkeys.length)
   })
 })

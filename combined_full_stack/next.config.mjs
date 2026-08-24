@@ -17,12 +17,11 @@ const supabaseKey =
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ??
   process.env.SUPABASE_ANON_KEY
 
-// AI : default true — set SESSION_REPLAY_ENABLED=false to disable rrweb recording.
-// AI : TODO privacy (prod) — default this to "false" so hosted deploys opt in, not out.
+// AI : default off — set SESSION_REPLAY_ENABLED=true to record rrweb sessions.
 const sessionReplayEnabled =
   process.env.SESSION_REPLAY_ENABLED ??
   process.env.NEXT_PUBLIC_SESSION_REPLAY_ENABLED ??
-  "true"
+  "false"
 
 // AI : app root only — repo-wide root made Turbopack watch old/, landing_page/, etc.
 

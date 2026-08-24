@@ -95,7 +95,6 @@ describe("GUI button parity catalog", () => {
     const tools = mcpToolNames(MCP_INDEX)
     expect(tools.has("session_action")).toBe(true)
     expect(tools.has("ask_agent")).toBe(true)
-    expect(tools.has("add_project")).toBe(true)
     for (const row of PARITY_ROWS) {
       if (row.mcp.status !== "Y" || !row.mcp.ref) continue
       if (row.mcp.ref === "session_action") continue

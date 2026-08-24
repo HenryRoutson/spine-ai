@@ -163,7 +163,7 @@ describe("MCP Bar A session tools", () => {
       const { authStatusFromSession, addProjectFromSession, addStepFromSession } = await import("./spine-session-bar-a.js")
       const empty = await authStatusFromSession(sessionPath)
       expect(empty.projectCount).toBe(0)
-      expect(empty.next).toMatch(/add_project/)
+      expect(empty.next).toMatch(/project\.add|session_action/)
       expect(empty.seeds.length).toBeGreaterThan(0)
       expect(empty.apiUrl).toMatch(/127\.0\.0\.1:3000/)
       addProjectFromSession(sessionPath)

@@ -1,8 +1,7 @@
 "use client"
 
 // AI : TODO refactor — optional split: persistence, billing refresh, project CRUD into separate hooks.
-// AI : TODO (arch-thin-store) — wrap SpineSession for local mutations (rename/delete/applyProposal);
-// AI :   React keeps hydration, debounce save, billing caches (docs/parity.md §8.5). Do not merge stores.
+// AI : TODO (arch-thin-store) — HTTP docs/runs/billing stay here; project mutations delegate to SpineSession (parity.md §8.5).
 // AI : TODO (opt-browser-tui-snapshot) — optional: expose SessionSnapshot from this store so a DOM TUI
 // AI :   can call to*View without a second SpineSession. Mutations stay these methods.
 // AI : TODO (spec) — prefetch project-scoped cache entries on hydrate; Cache tab should not refetch from cold on every open.
@@ -87,7 +86,11 @@ import { readEarningsSnapshot, writeEarningsSnapshot } from "@/lib/earnings-snap
 import { warmMarketplaceListings } from "@/lib/warm-run-data"
 import { warmSettingsAccount, warmSettingsTeams } from "@/lib/warm-settings-data"
 import { useTeamRealtime } from "@/lib/use-team-realtime"
-import { renamedProjects, withProjectDocumentation } from "@/lib/core/project-ops"
+import {
+  deleteProjectSnapshot,
+} from "@/lib/core/project-ops"
+import { buildGuiSessionSnapshot, createGuiSpineSession } from "@/lib/core/gui-session-bridge"
+import { emptySessionSnapshot, type SpineSession } from "@/lib/core/session"
 import { DEMO_DEFAULT_PROJECT_ID } from "@/lib/demo-constants"
 import { setDemoMode } from "@/lib/demo-mode"
 import { overlayOptimisticProjects as mergeOptimisticProjects, confirmCreatedInMap, reseedCreatedFromLocal, shouldKeepLocalProject } from "@/lib/core/realtime"
@@ -452,6 +455,18 @@ export function StoreProvider({
   const createdProjectsRef = useRef(new Map<string, Project>())
   const projectMutatedAtRef = useRef(new Map<string, number>())
   const projectsRef = useRef<Project[]>([])
+  const spineMutationRef = useRef(false)
+  const spineHandlersRef = useRef({
+    onPersist: (_snap: import("@/lib/core/types").SessionSnapshot) => {},
+    scheduleProjectSave: (_project: Project) => {},
+  })
+  const spineSessionRef = useRef<SpineSession | null>(null)
+  if (!spineSessionRef.current) {
+    spineSessionRef.current = createGuiSpineSession({
+      onPersist: (snap) => spineHandlersRef.current.onPersist(snap),
+      scheduleProjectSave: (project) => spineHandlersRef.current.scheduleProjectSave(project),
+    })
+  }
 
   // AI : prod GET /api/state lags POST/DELETE (warm-instance + realtime). Never let that snapshot drop local creates or resurrect tombstones.
   const overlayOptimisticProjects = useCallback((projects: Project[]): Project[] => {
@@ -491,6 +506,60 @@ export function StoreProvider({
     setSaveError(null)
     return true
   }, [mode, state?.projects, clearSaveError])
+
+  const scheduleDebouncedProjectSave = useCallback(
+    (project: Project) => {
+      projectMutatedAtRef.current.set(project.id, Date.now())
+      if (saveTimer.current) clearTimeout(saveTimer.current)
+      const body = serializeProjectPutBody(project)
+      pendingSaveRef.current = { id: project.id, body }
+      saveTimer.current = setTimeout(() => {
+        pendingSaveRef.current = null
+        void persistProject(project.id, body)
+      }, 500)
+    },
+    [persistProject],
+  )
+
+  useLayoutEffect(() => {
+    spineHandlersRef.current = {
+      onPersist: (snap) => {
+        spineMutationRef.current = true
+        projectsRef.current = snap.projects
+        for (const id of snap.deletedProjectIds) deletedProjectIdsRef.current.add(id)
+        setState((prev) => (prev ? { ...prev, projects: snap.projects } : prev))
+      },
+      scheduleProjectSave: scheduleDebouncedProjectSave,
+    }
+  }, [scheduleDebouncedProjectSave])
+
+  const syncSpineFromStore = useCallback(() => {
+    const session = spineSessionRef.current
+    if (!session || !state) return
+    session.hydrateSnapshot(
+      buildGuiSessionSnapshot(
+        {
+          projects: state.projects,
+          activeProjectId: activeProjectId || state.projects[0]?.id || "",
+          model,
+          docs: state.docs,
+          runs: state.runs,
+          inferenceInputDocIds: inferenceInputsByProject[activeProjectId] ?? {},
+          pendingCreates: [...createdProjectsRef.current.values()],
+          deletedProjectIds: [...deletedProjectIdsRef.current],
+        },
+        session.getSnapshot(),
+      ),
+    )
+  }, [state, activeProjectId, model, inferenceInputsByProject])
+
+  useLayoutEffect(() => {
+    if (spineMutationRef.current) {
+      spineMutationRef.current = false
+      return
+    }
+    syncSpineFromStore()
+  }, [syncSpineFromStore])
 
   const refreshBilling = useCallback(async (opts?: AccountRefreshOpts) => {
     const force = opts?.force === true
@@ -789,22 +858,6 @@ export function StoreProvider({
     [confirmCreatedProjects, mode, overlayOptimisticProjects],
   )
 
-  const stampProjectOpened = useCallback(
-    (id: string) => {
-      setState((prev) => {
-        if (!prev) return prev
-        const current = prev.projects.find((p) => p.id === id)
-        if (!current) return prev
-        const next = { ...current, lastOpenedAt: Date.now() }
-        if (!current.teamReadOnly) {
-          void persistProject(id, serializeProjectPutBody(next))
-        }
-        return { ...prev, projects: prev.projects.map((p) => (p.id === id ? next : p)) }
-      })
-    },
-    [persistProject],
-  )
-
   const selectActiveProject = useCallback(
     (id: string, opts?: { skipPersist?: boolean }) => {
       if (id === activeProjectId) return
@@ -817,12 +870,19 @@ export function StoreProvider({
           return { ...prev, projects: prev.projects.map((p) => (p.id === id ? next : p)) }
         })
       } else {
-        stampProjectOpened(id)
+        spineSessionRef.current?.setActiveProjectId(id)
+        if (saveTimer.current) clearTimeout(saveTimer.current)
+        saveTimer.current = null
+        pendingSaveRef.current = null
+        const opened = spineSessionRef.current?.getSnapshot().projects.find((p) => p.id === id)
+        if (opened && !opened.teamReadOnly) {
+          void persistProject(id, serializeProjectPutBody(opened))
+        }
       }
       writeActiveProjectSession(id as ProjectId)
       setActiveProjectId(id)
     },
-    [activeProjectId, stampProjectOpened],
+    [activeProjectId, persistProject],
   )
 
   const openProject = useCallback(
@@ -1076,31 +1136,10 @@ export function StoreProvider({
     navigateToProjectPicker()
   }, [mode, state, projectLoading, stateSyncing, activeProjectId, project])
 
-  // AI : optimistic local update + debounced PUT (builders patch on every keystroke).
-  const patchProject = useCallback(
-    (patch: Partial<Project>) => {
-      setState((prev) => {
-        if (!prev) return prev
-        const id = activeProjectId || prev.projects[0]?.id
-        const current = prev.projects.find((p) => p.id === id)
-        if (current?.teamReadOnly) return prev
-        let next: Project | undefined
-        const nextProjects = prev.projects.map((p) => (p.id === id ? (next = { ...p, ...patch }) : p))
-        if (next) {
-          projectMutatedAtRef.current.set(id, Date.now())
-          if (saveTimer.current) clearTimeout(saveTimer.current)
-          const body = serializeProjectPutBody(next)
-          pendingSaveRef.current = { id, body }
-          saveTimer.current = setTimeout(() => {
-            pendingSaveRef.current = null
-            void persistProject(id, body)
-          }, 500)
-        }
-        return { ...prev, projects: nextProjects }
-      })
-    },
-    [activeProjectId, persistProject],
-  )
+  // AI : project patches go through SpineSession — persist port owns debounced PUT (parity.md §8.5).
+  const patchProject = useCallback((patch: Partial<Project>) => {
+    spineSessionRef.current?.patchProject(patch)
+  }, [])
 
   // AI : cancel the debounce and persist immediately — call before startRun / Approve to avoid stale server state.
   const flushPendingSave = useCallback(async (): Promise<boolean> => {
@@ -1201,17 +1240,17 @@ export function StoreProvider({
       })
   }, [refresh])
 
-  // AI : discrete rename — shared renamedProjects with SpineSession; save immediately.
-  const renameProject = useCallback((id: string, name: string) => {
-    setState((prev) => {
-      if (!prev) return prev
-      const nextProjects = renamedProjects(prev.projects, id, name)
-      if (!nextProjects) return prev
-      const next = nextProjects.find((p) => p.id === id)!
-      void persistProject(id, serializeProjectPutBody(next))
-      return { ...prev, projects: nextProjects }
-    })
-  }, [persistProject])
+  const renameProject = useCallback(
+    (id: string, name: string) => {
+      spineSessionRef.current?.renameProject(id, name)
+      if (saveTimer.current) clearTimeout(saveTimer.current)
+      saveTimer.current = null
+      pendingSaveRef.current = null
+      const next = spineSessionRef.current?.getSnapshot().projects.find((p) => p.id === id)
+      if (next) void persistProject(id, serializeProjectPutBody(next))
+    },
+    [persistProject],
+  )
 
   const deleteProject = useCallback(
     (id: string): Promise<void> => {
@@ -1229,11 +1268,41 @@ export function StoreProvider({
       }
 
       let removed: Project | undefined
-      setState((prev) => {
-        if (!prev) return prev
-        removed = prev.projects.find((p) => p.id === id)
-        return { ...prev, projects: overlayOptimisticProjects(prev.projects.filter((p) => p.id !== id)) }
-      })
+      removed = state?.projects.find((p) => p.id === id)
+      const session = spineSessionRef.current
+      if (session && state) {
+        session.hydrateSnapshot(
+          buildGuiSessionSnapshot(
+            {
+              projects: state.projects,
+              activeProjectId,
+              model,
+              docs: state.docs,
+              runs: state.runs,
+              inferenceInputDocIds: inferenceInputsByProject[activeProjectId] ?? {},
+              pendingCreates: [...createdProjectsRef.current.values()],
+              deletedProjectIds: [...deletedProjectIdsRef.current],
+            },
+            session.getSnapshot(),
+          ),
+        )
+        session.deleteProject(id)
+      } else {
+        setState((prev) => {
+          if (!prev) return prev
+          removed = prev.projects.find((p) => p.id === id)
+          const nextSnap = deleteProjectSnapshot(
+            {
+              ...emptySessionSnapshot(),
+              projects: prev.projects,
+              activeProjectId,
+              deletedProjectIds: [...deletedProjectIdsRef.current],
+            },
+            id,
+          )
+          return { ...prev, projects: overlayOptimisticProjects(nextSnap.projects) }
+        })
+      }
       // AI : only leave the builder if this delete removed the project on screen — not a later in-flight DELETE.
       if (activeProjectId === id) {
         setActiveProjectId("")
@@ -1260,7 +1329,7 @@ export function StoreProvider({
       })
       return Promise.resolve()
     },
-    [activeProjectId, mode, overlayOptimisticProjects],
+    [activeProjectId, mode, overlayOptimisticProjects, state, model, inferenceInputsByProject],
   )
 
   const addDoc = useCallback(async (file: File, label: DocLabel, projectId?: string) => {
@@ -1521,34 +1590,21 @@ export function StoreProvider({
 
   const setModels = useCallback(
     (m: StructureModel[] | ((prev: StructureModel[]) => StructureModel[])) => {
-      if (!project) return
-      const prev = stripSharedModels(project.models)
-      const raw = typeof m === "function" ? m(prev) : m
-      const nextModels = stripSharedModels(raw)
-      patchProject({
-        models: nextModels,
-        modules: syncManagedPipelineSteps(project.modules, withSharedModels(nextModels), model),
-      })
+      spineSessionRef.current?.setModels(m)
     },
-    [patchProject, project, model],
+    [],
   )
 
   const setTypeAliases = useCallback(
     (t: TypeAlias[] | ((prev: TypeAlias[]) => TypeAlias[])) => {
-      const prev = stripBuiltinTypeAliases(project?.typeAliases ?? [])
-      const raw = typeof t === "function" ? t(withBuiltinTypeAliases(prev)) : t
-      patchProject({ typeAliases: stripBuiltinTypeAliases(raw) })
+      spineSessionRef.current?.setTypeAliases(t)
     },
-    [patchProject, project],
+    [],
   )
 
-  const setModules = useCallback(
-    (m: PipelineModule[]) => {
-      if (!project) return
-      patchProject({ modules: syncManagedPipelineSteps(m, project.models, model) })
-    },
-    [patchProject, project, model],
-  )
+  const setModules = useCallback((m: PipelineModule[]) => {
+    spineSessionRef.current?.setModules(m)
+  }, [])
 
   const applyProjectChanges = useCallback(
     (changes: {
@@ -1556,48 +1612,29 @@ export function StoreProvider({
       modules?: PipelineModule[]
       typeAliases?: TypeAlias[]
     }) => {
-      if (!project || (!changes.models && !changes.modules && !changes.typeAliases)) return
-
-      const nextModels = changes.models ? stripSharedModels(changes.models) : project.models
-      const modelsForSync = withSharedModels(nextModels)
-      const nextModules = changes.modules
-        ? syncManagedPipelineSteps(changes.modules, modelsForSync, model)
-        : changes.models
-          ? syncManagedPipelineSteps(project.modules, modelsForSync, model)
-          : undefined
-
-      const leaveBlank = project.kind === "blank" && nextModels.length > 0
-      patchProject({
-        ...(changes.models ? { models: nextModels } : {}),
-        ...(changes.typeAliases ? { typeAliases: stripBuiltinTypeAliases(changes.typeAliases) } : {}),
-        ...(nextModules !== undefined ? { modules: nextModules } : {}),
-        ...(leaveBlank ? { kind: AUTHORED_PROJECT_KIND } : {}),
-      })
+      spineSessionRef.current?.applyProjectChanges(changes)
     },
-    [patchProject, project, model],
+    [],
   )
 
-  const setStrategies = useCallback(
-    (s: Strategy[]) => {
-      patchProject({ strategies: s })
-    },
-    [patchProject],
-  )
+  const setStrategies = useCallback((s: Strategy[]) => {
+    spineSessionRef.current?.setStrategies(s)
+  }, [])
 
-  const setDocumentation = useCallback(
-    (text: string) => {
-      if (!project) return
-      const next = withProjectDocumentation(project, text)
-      if (next === project) return
-      patchProject({ documentation: next.documentation })
-    },
-    [patchProject, project],
-  )
+  const setDocumentation = useCallback((text: string) => {
+    spineSessionRef.current?.setDocumentation(text)
+  }, [])
+
+  const boundSetModel = useCallback((m: string) => {
+    setModel(m)
+    spineSessionRef.current?.setModel(m)
+  }, [])
 
   const boundSetInferenceInputDocIds = useCallback(
     (docs: Partial<Record<ModuleId, DocId | DocId[]>>) => {
       if (!project) return
       setInferenceInputDocIds(project.id, docs)
+      spineSessionRef.current?.setInferenceInputDocIds(docs)
     },
     [project, setInferenceInputDocIds],
   )
@@ -1627,7 +1664,7 @@ export function StoreProvider({
       documentation: project.documentation ?? "",
       setDocumentation,
       model,
-      setModel,
+      setModel: boundSetModel,
       modelOptions: state.modelOptions,
       docs: state.docs,
       addDoc,
@@ -1668,7 +1705,7 @@ export function StoreProvider({
     applyProjectChanges,
     setStrategies,
     setDocumentation,
-    model,
+    boundSetModel,
     addDoc,
     addDocContent,
     removeDoc,

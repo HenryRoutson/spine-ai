@@ -22,7 +22,7 @@ import {
 import { SpineNavIcon } from "@/components/spine-mark"
 import { AppWindowId } from "@/lib/app-window-id"
 import { AppPrimarySectionTitle } from "@/lib/app-primary-section-labels"
-import { AppWindowStepLabel, windowStepHint } from "@/lib/window-panel-meta"
+import { AppWindowStepLabel, windowNavHint, windowStepHint } from "@/lib/window-panel-meta"
 import {
   AppArea,
   BUILDER_AREA_DEFAULT,
@@ -74,11 +74,11 @@ export type BuildStepConfig = {
 }
 
 export const BUILD_STEPS: BuildStepConfig[] = [
-  { id: BuildStepId.Structure, label: "Structure", hint: windowStepHint(AppWindowStepLabel.Structure), icon: Boxes },
-  { id: BuildStepId.Pipeline, label: "Pipeline", hint: windowStepHint(AppWindowStepLabel.Pipeline), icon: SpineNavIcon },
-  { id: BuildStepId.Testing, label: "Testing", hint: windowStepHint(AppWindowStepLabel.Testing), icon: SquareCheck },
-  { id: BuildStepId.Inference, label: "Inference", hint: windowStepHint(AppWindowStepLabel.Inference), icon: Play },
-  { id: BuildStepId.Schedule, label: "Schedule", hint: windowStepHint(AppWindowStepLabel.Schedule), icon: Clock },
+  { id: BuildStepId.Structure, label: "Structure", hint: windowNavHint(BuildStepId.Structure), icon: Boxes },
+  { id: BuildStepId.Pipeline, label: "Pipeline", hint: windowNavHint(BuildStepId.Pipeline), icon: SpineNavIcon },
+  { id: BuildStepId.Testing, label: "Testing", hint: windowNavHint(BuildStepId.Testing), icon: SquareCheck },
+  { id: BuildStepId.Inference, label: "Inference", hint: windowNavHint(BuildStepId.Inference), icon: Play },
+  { id: BuildStepId.Schedule, label: "Schedule", hint: windowNavHint(BuildStepId.Schedule), icon: Clock },
 ]
 
 export const BUILD_STEP_IDS = new Set<BuildStepId>(BUILD_STEPS.map((s) => s.id))
@@ -118,47 +118,47 @@ export const CONSUMER_AREAS: AppAreaConfig[] = [
 
 export const AREA_SUB_NAV: Partial<Record<AppArea, AppNavItem[]>> = {
   [AppArea.Deploy]: [
-    { id: AppWindowId.Share, label: "Share", hint: windowStepHint(AppWindowStepLabel.Share), icon: SquareArrowUp },
-    { id: AppWindowId.Earnings, label: "Earnings", hint: windowStepHint(AppWindowStepLabel.Earnings), icon: Wallet },
+    { id: AppWindowId.Share, label: "Share", hint: windowNavHint(AppWindowId.Share), icon: SquareArrowUp },
+    { id: AppWindowId.Earnings, label: "Earnings", hint: windowNavHint(AppWindowId.Earnings), icon: Wallet },
   ],
   [AppArea.Observe]: [
-    { id: AppWindowId.Logging, label: "Logging", hint: windowStepHint(AppWindowStepLabel.Logging), icon: ScrollText },
-    { id: AppWindowId.Cache, label: "Cache", hint: windowStepHint(AppWindowStepLabel.Cache), icon: Database },
+    { id: AppWindowId.Logging, label: "Logging", hint: windowNavHint(AppWindowId.Logging), icon: ScrollText },
+    { id: AppWindowId.Cache, label: "Cache", hint: windowNavHint(AppWindowId.Cache), icon: Database },
   ],
   [AppArea.Library]: [
-    { id: AppWindowId.Documents, label: "Documents", hint: windowStepHint(AppWindowStepLabel.Documents), icon: Files },
-    { id: AppWindowId.Docs, label: "Docs", hint: windowStepHint(AppWindowStepLabel.Docs), icon: BookOpen },
-    { id: AppWindowId.Secrets, label: "Secrets", hint: windowStepHint(AppWindowStepLabel.Secrets), icon: KeyRound },
-    { id: AppWindowId.ProjectBilling, label: "Billing", hint: windowStepHint(AppWindowStepLabel.ProjectBilling), icon: CreditCard },
-    { id: AppWindowId.ProjectSettings, label: "Settings", hint: windowStepHint(AppWindowStepLabel.ProjectSettings), icon: Settings2 },
+    { id: AppWindowId.Documents, label: "Documents", hint: windowNavHint(AppWindowId.Documents), icon: Files },
+    { id: AppWindowId.Docs, label: "Docs", hint: windowNavHint(AppWindowId.Docs), icon: BookOpen },
+    { id: AppWindowId.Secrets, label: "Secrets", hint: windowNavHint(AppWindowId.Secrets), icon: KeyRound },
+    { id: AppWindowId.ProjectBilling, label: "Billing", hint: windowNavHint(AppWindowId.ProjectBilling), icon: CreditCard },
+    { id: AppWindowId.ProjectSettings, label: "Settings", hint: windowNavHint(AppWindowId.ProjectSettings), icon: Settings2 },
   ],
   [AppArea.Account]: [
-    { id: AppWindowId.Billing, label: "Billing", hint: windowStepHint(AppWindowStepLabel.Billing), icon: CreditCard },
-    { id: AppWindowId.Settings, label: "Settings", hint: windowStepHint(AppWindowStepLabel.Settings), icon: UserCircle },
+    { id: AppWindowId.Billing, label: "Billing", hint: windowNavHint(AppWindowId.Billing), icon: CreditCard },
+    { id: AppWindowId.Settings, label: "Settings", hint: windowNavHint(AppWindowId.Settings), icon: UserCircle },
   ],
 }
 
 // AI : legacy flat list — kept for validity helpers and deep links
 export const BUILDER_NAV_ITEMS: AppNavItem[] = [
-  { id: AppWindowId.Structure, label: "Structures", hint: windowStepHint(AppWindowStepLabel.Structure), icon: Boxes },
-  { id: AppWindowId.Pipeline, label: "Pipeline", hint: windowStepHint(AppWindowStepLabel.Pipeline), icon: SpineNavIcon },
-  { id: AppWindowId.Testing, label: "Testing", hint: windowStepHint(AppWindowStepLabel.Testing), icon: SquareCheck },
-  { id: AppWindowId.Inference, label: "Inference", hint: windowStepHint(AppWindowStepLabel.Inference), icon: Play },
-  { id: AppWindowId.Schedule, label: "Schedule", hint: windowStepHint(AppWindowStepLabel.Schedule), icon: Clock },
-  { id: AppWindowId.Share, label: "Share", hint: windowStepHint(AppWindowStepLabel.Share), icon: SquareArrowUp },
-  { id: AppWindowId.Earnings, label: "Earnings", hint: windowStepHint(AppWindowStepLabel.Earnings), icon: Wallet },
-  { id: AppWindowId.Logging, label: "Logging", hint: windowStepHint(AppWindowStepLabel.Logging), icon: ScrollText },
-  { id: AppWindowId.Cache, label: "Cache", hint: windowStepHint(AppWindowStepLabel.Cache), icon: Database },
-  { id: AppWindowId.Documents, label: "Documents", hint: windowStepHint(AppWindowStepLabel.Documents), icon: Files },
-  { id: AppWindowId.Docs, label: "Docs", hint: windowStepHint(AppWindowStepLabel.Docs), icon: BookOpen },
-  { id: AppWindowId.Secrets, label: "Secrets", hint: windowStepHint(AppWindowStepLabel.Secrets), icon: KeyRound },
-  { id: AppWindowId.ProjectBilling, label: "Billing", hint: windowStepHint(AppWindowStepLabel.ProjectBilling), icon: CreditCard },
-  { id: AppWindowId.ProjectSettings, label: "Settings", hint: windowStepHint(AppWindowStepLabel.ProjectSettings), icon: Settings2 },
+  { id: AppWindowId.Structure, label: "Structures", hint: windowNavHint(AppWindowId.Structure), icon: Boxes },
+  { id: AppWindowId.Pipeline, label: "Pipeline", hint: windowNavHint(AppWindowId.Pipeline), icon: SpineNavIcon },
+  { id: AppWindowId.Testing, label: "Testing", hint: windowNavHint(AppWindowId.Testing), icon: SquareCheck },
+  { id: AppWindowId.Inference, label: "Inference", hint: windowNavHint(AppWindowId.Inference), icon: Play },
+  { id: AppWindowId.Schedule, label: "Schedule", hint: windowNavHint(AppWindowId.Schedule), icon: Clock },
+  { id: AppWindowId.Share, label: "Share", hint: windowNavHint(AppWindowId.Share), icon: SquareArrowUp },
+  { id: AppWindowId.Earnings, label: "Earnings", hint: windowNavHint(AppWindowId.Earnings), icon: Wallet },
+  { id: AppWindowId.Logging, label: "Logging", hint: windowNavHint(AppWindowId.Logging), icon: ScrollText },
+  { id: AppWindowId.Cache, label: "Cache", hint: windowNavHint(AppWindowId.Cache), icon: Database },
+  { id: AppWindowId.Documents, label: "Documents", hint: windowNavHint(AppWindowId.Documents), icon: Files },
+  { id: AppWindowId.Docs, label: "Docs", hint: windowNavHint(AppWindowId.Docs), icon: BookOpen },
+  { id: AppWindowId.Secrets, label: "Secrets", hint: windowNavHint(AppWindowId.Secrets), icon: KeyRound },
+  { id: AppWindowId.ProjectBilling, label: "Billing", hint: windowNavHint(AppWindowId.ProjectBilling), icon: CreditCard },
+  { id: AppWindowId.ProjectSettings, label: "Settings", hint: windowNavHint(AppWindowId.ProjectSettings), icon: Settings2 },
 ]
 
 export const ACCOUNT_WINDOW_IDS = new Set<AppWindowId>([AppWindowId.Billing, AppWindowId.Settings])
 
-// AI : workspace tabs include project-billing (11); account billing/settings are L0 only.
+// AI : workspace tabs include project-billing; account billing/settings are L0 only.
 export const BUILDER_WORKSPACE_NAV_ITEMS: AppNavItem[] = BUILDER_NAV_ITEMS.filter(
   (item) => !ACCOUNT_WINDOW_IDS.has(item.id),
 )
@@ -193,7 +193,7 @@ export function hidesWorkspaceNav(window: AppWindowId): boolean {
 }
 
 export const CONSUMER_NAV_ITEMS: AppNavItem[] = [
-  { id: AppWindowId.Share, label: AppPrimarySectionTitle.Run, hint: "01", icon: Users },
+  { id: AppWindowId.Share, label: AppPrimarySectionTitle.Run, hint: windowStepHint(AppWindowStepLabel.Run), icon: Users },
 ]
 
 export function windowToArea(window: AppWindowId, consumer = false): AppArea {

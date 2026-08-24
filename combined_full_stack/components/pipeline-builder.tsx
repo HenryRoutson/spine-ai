@@ -416,6 +416,13 @@ export function PipelineBuilder() {
                       <span className={INSPECTOR_SECTION_TITLE_CLASS}>
                         {MODULE_META[selected.kind].label}
                       </span>
+                      {selectedViewInvalid.length > 0 ? (
+                        <ul className="mb-2 list-disc space-y-0.5 pl-4 font-mono text-[10px] text-destructive">
+                          {selectedViewInvalid.map((msg) => (
+                            <li key={msg}>{msg}</li>
+                          ))}
+                        </ul>
+                      ) : null}
                       {isAutoQuoteStep(selected) ? (
                         <AutoLockTooltip explainer={AUTO_QUOTE_EXPLAINER}>
                           <AutoQuoteLock />

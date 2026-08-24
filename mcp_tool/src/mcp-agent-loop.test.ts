@@ -131,7 +131,8 @@ describe("MCP agent loop without the codebase", () => {
         expect(pieces.pieces.some((p) => p.n8nNodeType === "n8n-nodes-base.filter")).toBe(true)
 
         const added = parseTool(
-          await call(5, "add_step", {
+          await call(5, "session_action", {
+            id: "pipeline.add-step",
             sessionPath,
             kind: "n8n",
             label: "Limit extras",
@@ -176,16 +177,20 @@ describe("MCP agent loop without the codebase", () => {
           next: string
         }
         expect(status.projectCount).toBe(0)
-        expect(status.next).toMatch(/add_project/)
+        expect(status.next).toMatch(/project\.add|session_action/)
 
         const missing = await call(3, "get_project", { sessionPath })
         expect((missing.result as CallResult).isError).toBe(true)
-        expect(JSON.stringify(parseTool(missing))).toMatch(/add_project/)
+        expect(JSON.stringify(parseTool(missing))).toMatch(/project\.add|session_action/)
 
-        const created = parseTool(await call(4, "add_project", { sessionPath })) as { id: string }
+        const created = parseTool(
+          await call(4, "session_action", { id: "project.add", sessionPath }),
+        ) as { id: string }
         expect(created.id).toBeTruthy()
 
-        const model = parseTool(await call(5, "add_model", { sessionPath, name: "Lead" })) as { name: string }
+        const model = parseTool(
+          await call(5, "session_action", { id: "structure.add-model", sessionPath, name: "Lead" }),
+        ) as { name: string }
         expect(model.name).toBe("Lead")
 
         await call(6, "session_action", {
@@ -196,17 +201,23 @@ describe("MCP agent loop without the codebase", () => {
           type: "string",
         })
 
-        const input = parseTool(await call(7, "add_step", { sessionPath, kind: "INPUT", label: "Leads" })) as Array<{
+        const input = parseTool(
+          await call(7, "session_action", { id: "pipeline.add-step", sessionPath, kind: "INPUT", label: "Leads" }),
+        ) as Array<{
           kind: string
         }>
         expect(input[0]?.kind).toBe("input")
 
-        const llm = parseTool(await call(8, "add_step", { sessionPath, kind: "llm", label: "Extract" })) as Array<{
+        const llm = parseTool(
+          await call(8, "session_action", { id: "pipeline.add-step", sessionPath, kind: "llm", label: "Extract" }),
+        ) as Array<{
           kind: string
         }>
         expect(llm[0]?.kind).toBe("llm")
 
-        const n8n = parseTool(await call(9, "add_step", { sessionPath, kind: "piece", label: "Set fields" })) as Array<{
+        const n8n = parseTool(
+          await call(9, "session_action", { id: "pipeline.add-step", sessionPath, kind: "piece", label: "Set fields" }),
+        ) as Array<{
           kind: string
           id: string
         }>
@@ -235,7 +246,7 @@ describe("MCP agent loop without the codebase", () => {
         expect(lint).toHaveProperty("ok")
 
         const review = parseTool(await call(15, "get_project", { sessionPath })) as { next?: string }
-        expect(String(review.next)).toMatch(/Fix|valid|ask_agent|add_step/)
+        expect(String(review.next)).toMatch(/Fix|valid|ask_agent|pipeline\.add-step|session_action/)
 
         const missingSeed = await call(16, "import_seed", { sessionPath, file: "not_a_real_seed" })
         expect((missingSeed.result as CallResult).isError).toBe(true)

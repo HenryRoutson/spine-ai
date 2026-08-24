@@ -1,30 +1,96 @@
-import type { AppWindowId } from "@/lib/app-window-id"
+import { AppWindowId } from "@/lib/app-window-id"
 import { AppPrimarySectionTitle } from "@/lib/app-primary-section-labels"
 
-// AI : canonical WindowHeader step badges — same numbers as BUILDER_NAV_ITEMS hints / TUI keys 01–10.
-export enum AppWindowStepLabel {
-  Structure = "01 / Structure",
-  Pipeline = "02 / Pipeline",
-  Testing = "03 / Testing",
-  Inference = "04 / Inference",
-  Schedule = "C / Schedule",
-  Share = "05 / Share",
-  Earnings = "06 / Earnings",
-  Logging = "07 / Logging",
-  Cache = "08 / Cache",
-  Documents = "09 / Documents",
-  Docs = "10 / Docs",
-  Secrets = "11 / Secrets",
-  ProjectBilling = "12 / Billing",
-  ProjectSettings = "13 / Settings",
-  Vibe = "· / Vibe",
-  Billing = "· / Billing",
-  Settings = "· / Settings",
-  Run = "01 / Run",
-  ProjectPicker = "Project",
-  AbTest = "03 / A/B Test",
-  LlmProviders = "Settings / LLM providers",
+// AI : numbered workspace tabs — name is the key, number is the value. Insert a member to shift later tabs; do not assign values after Structure.
+export enum AppWindowStep {
+  Structure = 1,
+  Pipeline,
+  Testing,
+  Inference,
+  Schedule,
+  Share,
+  Earnings,
+  Logging,
+  Cache,
+  Documents,
+  Docs,
+  Secrets,
+  ProjectBilling,
+  ProjectSettings,
 }
+
+type AppWindowStepKey = {
+  [K in keyof typeof AppWindowStep]: (typeof AppWindowStep)[K] extends number ? K : never
+}[keyof typeof AppWindowStep]
+
+// AI : every numbered step must exist on AppWindowId (Vibe / Billing / Settings stay unnumbered).
+const _stepKeysOnWindowId: { [K in AppWindowStepKey]: (typeof AppWindowId)[K] } = AppWindowId
+void _stepKeysOnWindowId
+
+export const APP_WINDOW_STEPS: AppWindowStep[] = (
+  Object.values(AppWindowStep).filter((v): v is AppWindowStep => typeof v === "number")
+).sort((a, b) => a - b)
+
+// AI : one hotkey slot per numbered step (1–9, 0, then extras). Append a key when adding a tab past this list.
+export const APP_WINDOW_STEP_HOTKEYS = ["1", "2", "3", "4", "5", "6", "7", "8", "9", "0", "[", "]", "\\", "-"] as const
+
+if (APP_WINDOW_STEP_HOTKEYS.length < APP_WINDOW_STEPS.length) {
+  throw new Error("APP_WINDOW_STEP_HOTKEYS is shorter than AppWindowStep — append a key")
+}
+
+const STEP_BADGE_NAME: Partial<Record<AppWindowStep, string>> = {
+  [AppWindowStep.ProjectBilling]: "Billing",
+  [AppWindowStep.ProjectSettings]: "Settings",
+}
+
+export function padAppWindowStep(step: AppWindowStep): string {
+  return String(step).padStart(2, "0")
+}
+
+export function appWindowStepBadgeName(step: AppWindowStep): string {
+  return STEP_BADGE_NAME[step] ?? AppWindowStep[step]
+}
+
+export function formatAppWindowStepLabel(step: AppWindowStep): string {
+  return `${padAppWindowStep(step)} / ${appWindowStepBadgeName(step)}`
+}
+
+export function appWindowIdForStep(step: AppWindowStep): AppWindowId {
+  return AppWindowId[AppWindowStep[step] as AppWindowStepKey]
+}
+
+export function appWindowStepForId(id: AppWindowId): AppWindowStep | undefined {
+  const key = (Object.keys(AppWindowId) as (keyof typeof AppWindowId)[]).find((k) => AppWindowId[k] === id)
+  if (!key) return undefined
+  const step = AppWindowStep[key as AppWindowStepKey]
+  return typeof step === "number" ? step : undefined
+}
+
+export function hotkeyForAppWindowStep(step: AppWindowStep): string {
+  const key = APP_WINDOW_STEP_HOTKEYS[step - 1]
+  if (!key) throw new Error(`AppWindowStep ${step} has no hotkey — append APP_WINDOW_STEP_HOTKEYS`)
+  return key
+}
+
+function numberedStepLabels(): Record<AppWindowStepKey, string> {
+  return Object.fromEntries(
+    APP_WINDOW_STEPS.map((step) => [AppWindowStep[step], formatAppWindowStepLabel(step)]),
+  ) as Record<AppWindowStepKey, string>
+}
+
+// AI : GUI / TUI badge copy. Numbered values come from AppWindowStep — unnumbered overlays stay dotted.
+export const AppWindowStepLabel = {
+  ...numberedStepLabels(),
+  Vibe: "· / Vibe",
+  Billing: "· / Billing",
+  Settings: "· / Settings",
+  Run: `${padAppWindowStep(AppWindowStep.Structure)} / Run`,
+  ProjectPicker: "Project",
+  AbTest: `${padAppWindowStep(AppWindowStep.Testing)} / A/B Test`,
+  LlmProviders: "Settings / LLM providers",
+} as const
+
+export type AppWindowStepLabel = (typeof AppWindowStepLabel)[keyof typeof AppWindowStepLabel]
 
 export enum AppWindowTitle {
   Structure = "Structures",
@@ -193,20 +259,21 @@ export function windowPanelHeader(windowId: AppWindowId): WindowHeaderCopy {
   return BUILDER_WINDOW_HEADERS[windowId]
 }
 
-// AI : "07 / Logging" → "07" (nav hint). Non-numbered steps (· / Vibe) return "".
+// AI : "07 / Logging" → "07". Dotted overlays (· / Vibe) return "".
 export function windowStepHint(step: AppWindowStepLabel): string {
-  const match = /^(\d{2}|[A-Z])/.exec(step)
+  const match = /^(\d{2})/.exec(step)
   return match?.[1] ?? ""
 }
 
-// AI : "07 / Logging" → "7"; "10 / Docs" → "0"; "C / Schedule" → "c". 11+ use [ / ].
+export function windowNavHint(id: AppWindowId): string {
+  const step = appWindowStepForId(id)
+  return step != null ? padAppWindowStep(step) : ""
+}
+
 export function windowStepHotkey(step: AppWindowStepLabel): string | null {
   const hint = windowStepHint(step)
-  if (hint === "10") return "0"
-  if (hint === "11") return "["
-  if (hint === "12") return "]"
-  if (hint === "13") return "\\"
-  if (/^0[1-9]$/.test(hint)) return hint.slice(1)
-  if (/^[A-Z]$/.test(hint)) return hint.toLowerCase()
-  return null
+  if (!hint) return null
+  const n = Number(hint)
+  if (!Number.isInteger(n) || n < 1) return null
+  return APP_WINDOW_STEP_HOTKEYS[n - 1] ?? null
 }

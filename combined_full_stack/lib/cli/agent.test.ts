@@ -4,7 +4,7 @@ import { join } from "node:path"
 import { describe, expect, it } from "vitest"
 import { FieldType, InputType, ModuleKind } from "@/lib/types"
 import { createSpineSession } from "@/lib/core/session"
-import { createThrowingEgress } from "@/lib/core/transport"
+import { createRecordingEgress, createThrowingEgress } from "@/lib/core/transport"
 import { askAgent } from "@/lib/cli/agent"
 import { runSpineCli } from "@/lib/cli/run"
 import { uid } from "@/lib/id"
@@ -90,6 +90,26 @@ describe("spine agent CLI", () => {
     expect(session.project?.models.map((m) => m.name)).toEqual(["Finding"])
     expect(session.chat.map((t) => t.role)).toEqual(["user", "assistant"])
     expect(session.pendingProposal).toBeNull()
+  })
+
+  it("structure ask uses HTTP egress when the server responds", async () => {
+    const proposal = findingProposal()
+    const session = createSpineSession({
+      egress: createRecordingEgress(async (url) => {
+        expect(String(url)).toContain("/api/structure-assistant")
+        return new Response(
+          JSON.stringify({
+            message: "Added Finding.",
+            proposal: { models: proposal.models },
+          }),
+          { status: 200, headers: { "content-type": "application/json" } },
+        )
+      }),
+    })
+    session.addProject({ open: true })
+    const result = await askAgent(session, "add Finding", { kind: "structure", apply: true })
+    expect(result.ok).toBe(true)
+    expect(session.project?.models.map((m) => m.name)).toEqual(["Finding"])
   })
 
   it("does not start a second vibe ask while one is in flight", async () => {

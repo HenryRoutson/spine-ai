@@ -271,14 +271,16 @@ export async function authStatusFromSession(sessionPath?: string) {
     seeds,
     ...(loadError ? { error: loadError } : {}),
     next: loadError
-      ? "Fix or delete the session JSON, then add_project."
+      ? "Fix or delete the session JSON, then session_action id=project.add."
       : !projectCount
         ? seeds.length
-          ? "Call add_project for a blank pipeline, or import_seed with file from seeds (e.g. lead_enrich_n8n). Then get_project."
-          : "Call add_project, then get_project."
-        : canRun
-          ? "Call get_project. You can start_run / wait_for_run."
-          : `Call get_project. Local edits work. To run, start combined_full_stack (npm run dev) so ${apiUrl} is up, then start_run → wait_for_run. Production also needs SPINE_API_TOKEN.`,
+          ? "Call session_action id=project.add for a blank pipeline, or import_seed with file from seeds (e.g. lead_enrich_n8n). Then get_project."
+          : "Call session_action id=project.add, then get_project."
+        : canRun && hasApiToken
+          ? "Call get_project. Same GUI project: pull_remote_state → edit → push_remote_state. Or start_run → wait_for_run."
+          : canRun
+            ? "Call get_project. You can start_run / wait_for_run. For the signed-in GUI project set SPINE_API_TOKEN then pull_remote_state."
+            : `Call get_project. Local edits work. To run, start combined_full_stack (npm run dev) so ${apiUrl} is up, then start_run → wait_for_run. Production also needs SPINE_API_TOKEN + pull_remote_state.`,
   }
 }
 
@@ -288,15 +290,14 @@ export function listSeedsForMcp() {
     seeds,
     next: seeds.length
       ? "import_seed with file set to one of these ids (no path, no .json). Then get_project."
-      : "No bundled seeds found — check SPINE_APP_ROOT, then add_project.",
+      : "No bundled seeds found — check SPINE_APP_ROOT, then session_action id=project.add.",
   }
 }
 
 export function sessionLogs(sessionPath?: string, errorsOnly = false) {
   const session = openMcpSession(sessionPath, true)
   const runs = filterRunsByErrorStatus(session.runs, errorsOnly ? "errors" : "all").map((r) => ({
-    id: r.id,
-    status: r.status,
+    ...compactRun(r, false),
     notes: r.notes,
   }))
   const pendingDocs = (session.pendingProposal?.docs ?? []).map((d) => d.name)
@@ -306,7 +307,7 @@ export function sessionLogs(sessionPath?: string, errorsOnly = false) {
     tests: session.docs.filter((d) => d.name.endsWith("_testing.json")).map((d) => d.name),
     docs: session.docs.map((d) => ({ name: d.name, type: d.type, label: d.label })),
     ...(pendingDocs.length ? { pendingDocs } : {}),
-    next: "tests are names for pinpoint_failure.testDocName. pendingDocs are unapplied proposal files — apply_project_changes to ingest them.",
+    next: "runs include step status/previews when hydrated (wait_for_run / logging.hydrate). tests are names for pinpoint_failure.testDocName. pendingDocs need apply_project_changes.",
   }
 }
 
