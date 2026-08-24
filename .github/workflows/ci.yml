@@ -27,12 +27,17 @@ jobs:
       - name: Typecheck
         run: npm run typecheck
       - name: Unit tests
-        # AI : offline only — live OpenRouter parity is a separate job (never Next.js / browser).
+        # AI : offline only — live OpenRouter parity is a separate step (never Next.js / browser).
         run: npm test
       - name: Live parity (flash + seed)
-        if: ${{ secrets.OPENROUTER_API_KEY != '' }}
         env:
           OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
           OPENROUTER_SEED: "42"
           PARITY_QUIET: "1"
-        run: npm run test:parity
+        # AI : secrets context is not allowed in if: — gate on the injected env instead.
+        run: |
+          if [ -z "${OPENROUTER_API_KEY}" ]; then
+            echo "Skipping live parity — OPENROUTER_API_KEY not configured"
+            exit 0
+          fi
+          npm run test:parity
