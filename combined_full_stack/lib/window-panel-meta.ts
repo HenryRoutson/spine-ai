@@ -97,7 +97,7 @@ export enum AppWindowTitle {
   Pipeline = "Linear Pipeline",
   Testing = "Pipeline Tests",
   Inference = "Run Pipeline",
-  Schedule = "Cron schedules",
+  Schedule = "Schedule",
   Share = "Share & Monetize",
   Logging = "Run History",
   Documents = "Document Store",
@@ -133,6 +133,7 @@ export enum PublishTab {
   Link = "link",
   Api = "api",
   Embed = "embed",
+  Site = "site",
   Marketplace = "marketplace",
 }
 
@@ -190,7 +191,7 @@ const BUILDER_WINDOW_HEADERS: Record<AppWindowId, WindowHeaderCopy> = {
   schedule: {
     step: AppWindowStepLabel.Schedule,
     title: AppWindowTitle.Schedule,
-    description: "n8n-style cron — Supabase pg_cron fires this pipeline on a schedule, including confidential self-host.",
+    description: "Run this pipeline automatically — every few minutes, hourly, daily, or weekly.",
   },
   share: {
     step: AppWindowStepLabel.Share,
@@ -241,7 +242,7 @@ const BUILDER_WINDOW_HEADERS: Record<AppWindowId, WindowHeaderCopy> = {
   vibe: {
     step: AppWindowStepLabel.Vibe,
     title: AppWindowTitle.Vibe,
-    description: "Talk to the agent to build the full project — structures, pipeline, docs, and run. Inference, Share, and Logging sit on the right for files, live progress, publishing, and past runs.",
+    description: "Talk to the agent to build the full project — structures, pipeline, docs, and run. Inference, Schedule, Share, and Logging sit on the right for files, live progress, publishing, and past runs.",
   },
   billing: {
     step: AppWindowStepLabel.Billing,

@@ -202,6 +202,8 @@ export enum ModuleKind {
   Webhook = "webhook", // AI : server-side HTTP call — search APIs, Zapier, internal services (generic URL)
   // AI : DONE (n8n-stage-A) — N8n = typed catalog piece + local Code-node JS (no live vendor APIs).
   N8n = "n8n",
+  // AI : DONE (connect-A-kind) — live Slack/Gmail/Sheets via Nango; hidden in Vibe.
+  Connect = "connect",
   // AI : DONE (media-view-D-job) — no RemoteJob kind. Async media = webhook poll + ingest (pipeline, not a connector catalog).
   Chatbot = "chatbot", // AI : pause for prompted chat — spine in ChatbotPrompt, out ChatbotResult
   Output = "output",
@@ -404,11 +406,13 @@ export interface PipelineModule {
   n8nParameters?: Record<string, unknown>
   n8nCode?: string
   n8nTimeoutMs?: number
-  // AI : TODO (n8n-sidecar-S2-live) — unused today; wire for live execute (first | all | jsonPath into body).
+  // AI : unused local-piece fields — live apps are ModuleKind.Connect (connect-roadmap.ts), not n8n Cloud.
   n8nResponseMode?: "first" | "all" | "jsonPath"
-  // AI : TODO (n8n-sidecar-S2-live) — unused today; dot path when n8nResponseMode === "jsonPath".
   n8nResponsePath?: string
-  // AI : TODO (n8n-sidecar-S4-ui) — optional live workflow id / webhook path when sidecar mode ships (keep kinds separate).
+  // AI : connect — Nango action id + optional connection after in-app OAuth.
+  connectActionId?: string
+  connectConnectionId?: string
+  connectParameters?: Record<string, unknown>
   // AI : DONE (media-view-D-job) — async media is webhook poll + ingest, not ModuleKind.RemoteJob / Higgsfield step.
   // AI : chatbot — prompt is spine ChatbotPrompt.prompt (no module.prompt).
   chatbotMode?: ChatbotMode;
@@ -919,9 +923,14 @@ export const MODULE_META: Record<ModuleKind, { label: string; description: strin
       "HTTP call with typed spine in/out — optional poll of a status URL and fetch of a media URL into Documents. Not a vendor catalog.",
   },
   [ModuleKind.N8n]: {
-    label: "n8n piece",
+    label: "Transform piece",
     description:
-      "Typed catalog piece with n8n Code-node JavaScript — Set, Filter, CSV, Hash, … Auto UI from the piece schema. Share the JSON; does not call live integrations.",
+      "Typed local transform (Set, Filter, CSV, Hash). JavaScript on the spine — does not call Slack/Gmail. Live apps use Connect.",
+  },
+  [ModuleKind.Connect]: {
+    label: "Connect app",
+    description:
+      "Post to Slack, send Gmail, append Sheets — OAuth stays in a popup. Hidden in Vibe; typed in/out.",
   },
   [ModuleKind.Chatbot]: {
     label: "Chatbot",

@@ -1,6 +1,5 @@
 // AI : owner-scoped integration secrets — webhook env:VAR resolves here after process.env.
-// AI : TODO (n8n-sidecar-S1-creds) — document/accept N8N_BASE_URL + N8N_API_KEY here for live n8n invoke.
-// AI :   Never put those values in pipeline export zips. Vendor OAuth (Slack/Gmail) stays inside n8n.
+// AI : SUPERSEDED (n8n-sidecar-S1-creds) — live apps use Nango (NANGO_SECRET_KEY), not N8N_API_KEY.
 import { existsSync, mkdirSync, readFileSync, readdirSync, unlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { dataDir } from "@/lib/server/config";

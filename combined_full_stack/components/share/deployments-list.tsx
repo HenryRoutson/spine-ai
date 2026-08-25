@@ -1,7 +1,7 @@
 "use client"
 
 import { useCallback, useEffect, useMemo, useState } from "react"
-import { Copy, Globe, Loader2, PanelTop, Power, RefreshCw, ScrollText, Trash2, TrendingDown, TrendingUp, Zap } from "lucide-react"
+import { Copy, Globe, LayoutTemplate, Loader2, PanelTop, Power, RefreshCw, ScrollText, Trash2, TrendingDown, TrendingUp, Zap } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { DeploymentSpendLimitEditor } from "@/components/share/deployment-monitor"
 import type { ActivityFilter } from "@/components/share/deployment-activity-page"
@@ -22,16 +22,13 @@ import { callerFundsHostedApi } from "@/lib/hosted-api-funding"
 import { viewerFundsSharedRun } from "@/lib/shared-link-funding"
 import type { SharedLinkRecord } from "@/lib/shared-link-types"
 import { copyTextToClipboard } from "@/lib/clipboard"
+import { sharedLinkPublicPath } from "@/lib/hosted-site"
 import { cn } from "@/lib/utils"
 
 function linkUrl(id: string): string {
-  if (typeof window === "undefined") return `/run/${id}`
-  return `${window.location.origin}/run/${id}`
-}
-
-function embedUrl(id: string): string {
-  if (typeof window === "undefined") return `/embed/${id}`
-  return `${window.location.origin}/embed/${id}`
+  const path = sharedLinkPublicPath(id)
+  if (typeof window === "undefined") return path
+  return `${window.location.origin}${path}`
 }
 
 function apiInvokeUrl(id: string): string {
@@ -41,7 +38,6 @@ function apiInvokeUrl(id: string): string {
 
 function deploymentUrl(item: DeploymentRow): string {
   if (item.kind === "api") return apiInvokeUrl(item.row.id)
-  if (item.kind === "embed") return embedUrl(item.row.id)
   return linkUrl(item.row.id)
 }
 
@@ -93,6 +89,7 @@ function DeploymentRowCard({
   const isAsset = deploymentIsAsset(item)
   const isApi = item.kind === "api"
   const isEmbed = item.kind === "embed"
+  const isSite = item.kind === "site"
   const isEnabled = row.enabled !== false
   const url = deploymentUrl(item)
   const callCount = isApi ? (row as HostedApiRecord).requestCount : (row as SharedLinkRecord).runCount
@@ -100,7 +97,7 @@ function DeploymentRowCard({
   const spent = row.totalSpendCents
   const atLimit = limit != null && spent >= limit
   const actionBusy = revoking === row.id || toggling === row.id
-  const kindLabel = isApi ? "api" : isEmbed ? "embed" : "link"
+  const kindLabel = isApi ? "api" : isEmbed ? "embed" : isSite ? "page" : "link"
   const origins = !isApi ? (row as SharedLinkRecord).allowedOrigins ?? [] : []
 
   return (
@@ -117,6 +114,8 @@ function DeploymentRowCard({
               <Zap className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
             ) : isEmbed ? (
               <PanelTop className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+            ) : isSite ? (
+              <LayoutTemplate className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
             ) : (
               <Globe className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
             )}

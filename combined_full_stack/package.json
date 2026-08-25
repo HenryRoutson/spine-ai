@@ -33,6 +33,7 @@
     "@langfuse/otel": "^5.10.0",
     "@langfuse/tracing": "^5.10.0",
     "@monaco-editor/react": "^4.7.0",
+    "@nangohq/frontend": "^0.58.7",
     "@napi-rs/canvas": "^1.0.0",
     "@opentelemetry/sdk-node": "^0.221.0",
     "@stripe/stripe-js": "^9.8.0",

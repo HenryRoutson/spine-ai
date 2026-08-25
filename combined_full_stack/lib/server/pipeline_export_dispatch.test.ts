@@ -85,4 +85,13 @@ describe("pipeline export dispatch", () => {
       /import \{\n  runN8nCode,\n\} from "\.\/pipeline_runtime"/,
     );
   });
+
+  it("connect export calls runConnectAction (not passthrough)", () => {
+    const m = stubModule(ModuleKind.Connect);
+    m.connectActionId = "slack.postMessage";
+    const ctx = { m, project: stubProject(m), inType: "Msg", outType: "Msg" };
+    const body = emitStepBody("ts", ctx);
+    expect(body).toMatch(/runConnectAction\(/);
+    expect(body).not.toMatch(/return input as unknown as/);
+  });
 });

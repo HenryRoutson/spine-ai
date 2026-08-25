@@ -139,6 +139,80 @@ describe("MCP Bar A session tools", () => {
     }
   })
 
+  it("add_step kind=connect configures a catalog action", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "mcp-connect-"))
+    const sessionPath = join(dir, "session.json")
+    try {
+      const session = createSpineSession({ persist: createFilePersist(sessionPath) })
+      session.addProject({ open: true })
+      const { addStepFromSession, configureConnectStepFromSession } = await import("./spine-session-bar-a.js")
+      const added = addStepFromSession("connect", "Post to Slack", sessionPath)
+      expect(added[0]?.kind).toBe("connect")
+      const configured = configureConnectStepFromSession({
+        stepId: added[0]!.id,
+        connectActionId: "slack.postMessage",
+        parametersJson: JSON.stringify({ channel: "#general", textField: "text" }),
+        sessionPath,
+      })
+      expect(configured.connectActionId).toBe("slack.postMessage")
+      expect(configured.connectParameters?.channel).toBe("#general")
+      expect(configured.connectConnected).toBe(false)
+      const linked = configureConnectStepFromSession({
+        stepId: added[0]!.id,
+        connectConnectionId: "conn_slack_1",
+        sessionPath,
+      })
+      expect(linked.connectConnected).toBe(true)
+    } finally {
+      rmSync(dir, { recursive: true, force: true })
+    }
+  })
+
+  it("session_action share.create-site and schedule.create POST the GUI routes", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "mcp-share-"))
+    const sessionPath = join(dir, "session.json")
+    const posts: { url: string; body: Record<string, unknown> }[] = []
+    vi.stubGlobal("fetch", async (url: string | URL, init?: RequestInit) => {
+      const href = String(url)
+      const method = (init?.method ?? "GET").toUpperCase()
+      if (method === "GET") return new Response("", { status: 200 })
+      const body = init?.body ? (JSON.parse(String(init.body)) as Record<string, unknown>) : {}
+      posts.push({ url: href, body })
+      if (href.includes("/api/shared-links")) {
+        return new Response(JSON.stringify({ link: { id: "site_mcp" }, url: "/site/site_mcp" }), { status: 200 })
+      }
+      if (href.includes("/api/schedules")) {
+        return new Response(JSON.stringify({ schedule: { id: "sch_mcp" }, runtime: {} }), { status: 200 })
+      }
+      return new Response(JSON.stringify({ error: `unexpected ${method} ${href}` }), { status: 500 })
+    })
+    try {
+      const session = createSpineSession({ persist: createFilePersist(sessionPath) })
+      session.addProject({ open: true })
+      session.renameProject(session.activeProjectId, "Acme Pipeline")
+      const { runSessionAction } = await import("./spine-session-bar-a.js")
+      const site = (await runSessionAction({
+        id: "share.create-site",
+        sessionPath,
+        companyName: "Acme",
+      })) as { link: { id: string }; url: string }
+      expect(site.link.id).toBe("site_mcp")
+      expect(site.url).toContain("/site/site_mcp")
+      expect(posts.some((p) => p.url.includes("/api/shared-links") && p.body.kind === "site")).toBe(true)
+      const scheduled = (await runSessionAction({
+        id: "schedule.create",
+        sessionPath,
+        cron: "0 9 * * *",
+        timezone: "UTC",
+      })) as { schedule: { id: string } }
+      expect(scheduled.schedule.id).toBe("sch_mcp")
+      await expect(runSessionAction({ id: "share.create-embed", sessionPath })).rejects.toThrow(/allowedOrigins/)
+    } finally {
+      vi.unstubAllGlobals()
+      rmSync(dir, { recursive: true, force: true })
+    }
+  })
+
   it("ask_agent returns inFlight without waiting for the agent", async () => {
     const dir = mkdtempSync(join(tmpdir(), "mcp-ask-"))
     const sessionPath = join(dir, "session.json")

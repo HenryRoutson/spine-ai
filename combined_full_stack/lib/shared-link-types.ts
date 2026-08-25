@@ -30,6 +30,39 @@ export const DEFAULT_EMBED_OPTIONS: EmbedOptions = {
   postMessageEvents: false,
 };
 
+// AI : hosted HTML wrapper around a share-link backend — company chrome, no database of their own.
+export type HostedSiteBrand = {
+  companyName: string;
+  tagline: string;
+  logoUrl: string;
+  primaryColor: string;
+  accentColor: string;
+  backgroundColor: string;
+  textColor: string;
+};
+
+export type HostedSiteOptions = {
+  brand: HostedSiteBrand;
+  customHtml: string;
+  customCss: string;
+  hideSpineFooter: boolean;
+};
+
+export const DEFAULT_HOSTED_SITE_OPTIONS: HostedSiteOptions = {
+  brand: {
+    companyName: "",
+    tagline: "",
+    logoUrl: "",
+    primaryColor: "#111827",
+    accentColor: "#2563eb",
+    backgroundColor: "#f8fafc",
+    textColor: "#0f172a",
+  },
+  customHtml: "",
+  customCss: "",
+  hideSpineFooter: false,
+};
+
 export type SharedLinkRecord = {
   id: SharedLinkId;
   projectId: Project["id"];
@@ -50,6 +83,8 @@ export type SharedLinkRecord = {
   // AI : non-empty + emb_ id ⇒ website Embed deployment (origin-bound).
   allowedOrigins: string[];
   embedOptions: EmbedOptions;
+  // AI : site_ id ⇒ Spine-hosted HTML wrapper; empty customHtml uses the default company template.
+  siteOptions: HostedSiteOptions;
 };
 
 export type SharedLinkPublicView = Pick<
@@ -65,6 +100,7 @@ export type SharedLinkPublicView = Pick<
   | "flatFeeCents"
   | "allowedOrigins"
   | "embedOptions"
+  | "siteOptions"
 > & {
   modules: Project["modules"];
   models: Project["models"];

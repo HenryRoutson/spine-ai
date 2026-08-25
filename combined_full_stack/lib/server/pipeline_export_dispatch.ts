@@ -9,6 +9,12 @@ import { DEFAULT_EXAMPLE_REASON_FIELD, exampleReasonField } from "@/lib/example-
 import { examplePromptColumns } from "@/lib/sql-schema";
 import { isMergeModuleKind } from "@/lib/module-kinds";
 import {
+  exportConnectStepBodyGo,
+  exportConnectStepBodyPy,
+  exportConnectStepBodyRust,
+  exportConnectStepBodyTs,
+} from "@/lib/connect-step";
+import {
   exportN8nStepBodyGo,
   exportN8nStepBodyPy,
   exportN8nStepBodyRust,
@@ -821,6 +827,12 @@ export const STEP_BODY: Record<ModuleKind, Record<ExportLang, StepBodyEmitter>> 
     py: (ctx) => exportN8nStepBodyPy(ctx.m, ctx.outType),
     go: (ctx) => exportN8nStepBodyGo(ctx.m, goZeroValue(ctx.outType)),
     rs: (ctx) => exportN8nStepBodyRust(ctx.m),
+  },
+  [ModuleKind.Connect]: {
+    ts: (ctx) => exportConnectStepBodyTs(ctx.m, ctx.outType),
+    py: (ctx) => exportConnectStepBodyPy(ctx.m, ctx.outType),
+    go: (ctx) => exportConnectStepBodyGo(ctx.m, goZeroValue(ctx.outType)),
+    rs: (ctx) => exportConnectStepBodyRust(ctx.m),
   },
   [ModuleKind.Output]: {
     ts: (ctx) => {

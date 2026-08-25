@@ -49,6 +49,7 @@ import { ForkModuleFields } from "@/components/pipeline-fields/fork-fields"
 import { ExampleSelectModuleFields } from "@/components/pipeline-fields/example-select-fields"
 import { WebhookModuleFields } from "@/components/pipeline-fields/webhook-fields"
 import { N8nModuleFields } from "@/components/pipeline-fields/n8n-fields"
+import { ConnectModuleFields } from "@/components/pipeline-fields/connect-fields"
 import { ChatbotModuleFields } from "@/components/pipeline-fields/chatbot-fields"
 import { InspectorCollapsibleSection } from "@/components/inspector-collapsible-section"
 
@@ -545,6 +546,9 @@ export function PipelineModuleFields({
       )}
       {selected.kind === ModuleKind.N8n && (
         <N8nModuleFields selected={selected} edit={!!edit} invalid={invalid} onUpdate={onUpdate} />
+      )}
+      {selected.kind === ModuleKind.Connect && (
+        <ConnectModuleFields selected={selected} edit={!!edit} invalid={invalid} onUpdate={onUpdate} />
       )}
       {/* AI : TODO (media-view-B-ui) — View picker on output (and any previewable step). TODO (media-view-C-picker) — custom visualizer. */}
       {/* AI : DONE (media-view-D-job) — poll/ingest live on webhook-fields, not a RemoteJob form. */}

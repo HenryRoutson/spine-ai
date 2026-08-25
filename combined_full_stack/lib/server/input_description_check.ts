@@ -151,6 +151,7 @@ export function shouldCheckInputDescription(
   if (m.checkInputDescription === false) return false
   // AI : n8n pieces run local Code-node JS — typed I/O already validates; skip the LLM gate.
   if (m.kind === "n8n") return false;
+  if (m.kind === "connect") return false;
   if (m.kind === "input") {
     const types = !m.inputType ? [] : Array.isArray(m.inputType) ? m.inputType : [m.inputType];
     if (types.length > 0 && types.every((t) => t === InputType.Json || t === InputType.Excel)) return false;

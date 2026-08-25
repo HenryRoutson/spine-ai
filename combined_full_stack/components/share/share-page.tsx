@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import { AlertTriangle, Boxes, Globe, type LucideIcon, PanelTop, ScrollText, Store, User, Users, Zap } from "lucide-react"
+import { AlertTriangle, Boxes, Globe, LayoutTemplate, type LucideIcon, PanelTop, ScrollText, Store, User, Users, Zap } from "lucide-react"
 import {
   DeploymentActivityPage,
   type ActivityFilter,
@@ -14,6 +14,7 @@ import { MyPipelinesPanel } from "@/components/share/my-pipelines-panel"
 import { OwnPipelineRunner } from "@/components/share/own-pipeline-runner"
 import { ShareEmbedForm } from "@/components/share/share-embed-form"
 import { ShareLinkForm } from "@/components/share/share-link-form"
+import { ShareSiteForm } from "@/components/share/share-site-form"
 import { SharedLinkRunner } from "@/components/share/shared-link-runner"
 import { SharedWithMePanel } from "@/components/share/shared-with-me-panel"
 import { PipelineObserveEmpty } from "@/components/pipeline-observe-empty"
@@ -272,6 +273,20 @@ export function SharePage({ simple }: { simple?: boolean } = {}) {
                     type="button"
                     className={cn(
                       "flex flex-1 items-center justify-center gap-1.5 rounded px-2 py-1.5 text-xs font-medium transition-colors",
+                      tab === PublishTab.Site
+                        ? "bg-background text-foreground shadow-sm"
+                        : "text-muted-foreground hover:text-foreground",
+                    )}
+                    onClick={() => setTab(PublishTab.Site)}
+                    {...spineActionProps("share.tab.site")}
+                  >
+                    <LayoutTemplate className="h-3.5 w-3.5" />
+                    Page
+                  </button>
+                  <button
+                    type="button"
+                    className={cn(
+                      "flex flex-1 items-center justify-center gap-1.5 rounded px-2 py-1.5 text-xs font-medium transition-colors",
                       tab === PublishTab.Marketplace
                         ? "bg-background text-foreground shadow-sm"
                         : "text-muted-foreground hover:text-foreground",
@@ -299,6 +314,13 @@ export function SharePage({ simple }: { simple?: boolean } = {}) {
                   />
                 ) : tab === PublishTab.Embed ? (
                   <ShareEmbedForm
+                    project={builder.project}
+                    docs={builder.docs}
+                    inferenceInputDocIds={builder.inferenceInputDocIds}
+                    onCreated={() => setRefreshToken((n) => n + 1)}
+                  />
+                ) : tab === PublishTab.Site ? (
+                  <ShareSiteForm
                     project={builder.project}
                     docs={builder.docs}
                     inferenceInputDocIds={builder.inferenceInputDocIds}

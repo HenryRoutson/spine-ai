@@ -2,8 +2,7 @@ import { flattenPipelineModules } from "@/lib/fork-pipeline";
 import type { ModuleId, PipelineModule } from "@/lib/types";
 import { InputType, WebhookBodyMode, WebhookMethod } from "@/lib/types";
 
-// AI : TODO (n8n-sidecar-S5-http) — do NOT fold live n8n into ModuleKind.Webhook; share URL/auth/timeout/poll helpers only.
-// AI :   Sidecar execute lives in steps/n8n.ts (lib/server/n8n-roadmap.ts S2–S5), not a raw URL body POST.
+// AI : SUPERSEDED (n8n-sidecar-S5-http) — do NOT fold live apps into ModuleKind.Webhook; connect is Nango.
 // AI : TODO (arch-export-webhook) — exportWebhookStepBody{Ts,Py,Go,Rust} is the same call shape four times;
 // AI :   one IR then printers (same as pipeline exporters).
 

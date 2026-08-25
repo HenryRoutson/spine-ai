@@ -37,6 +37,9 @@ export function listPiecesForMcp(appRoot: string) {
   return listN8nNodes().map((p) => ({
     id: p.id,
     n8nNodeType: p.n8nNodeType,
+    pieceAlias: p.n8nNodeType.startsWith("n8n-nodes-base.")
+      ? `piece.${p.n8nNodeType.slice("n8n-nodes-base.".length)}`
+      : undefined,
     displayName: p.displayName,
     description: p.description,
     category: p.category,

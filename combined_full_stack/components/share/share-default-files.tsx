@@ -33,9 +33,7 @@ export function ShareDefaultFiles({
 
   return (
     <div className="rounded-md border border-border bg-muted/20 p-3">
-      <p className="mb-2 font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
-        Default files
-      </p>
+      <p className="mb-2 text-xs text-muted-foreground">Files used each time</p>
       <ul className="space-y-1 text-xs text-muted-foreground">
         {inputModules.map((m) => {
           const ids = defaultDocsByModule[m.id] ?? []

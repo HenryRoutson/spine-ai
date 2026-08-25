@@ -6,6 +6,7 @@ import { DEFAULT_CUSTOM_CODE_MAX_RUN_MS } from "@/lib/custom-code-max-run"
 import { DEFAULT_LLM_STEP_COST_LIMIT_CENTS } from "@/lib/llm-cost-limit"
 import { DEFAULT_WEBHOOK_TIMEOUT_MS } from "@/lib/webhook-step"
 import { DEFAULT_N8N_TIMEOUT_MS, piecePropDefaults, getN8nNode } from "@/lib/n8n-catalog"
+import { DEFAULT_CONNECT_ACTION_ID, getConnectAction } from "@/lib/connect-catalog"
 import {
   DEFAULT_CHATBOT_MAX_TURNS,
   DEFAULT_CHATBOT_MODE,
@@ -60,6 +61,9 @@ export type ModuleFactoryOpts = {
   n8nParameters?: Record<string, unknown>
   n8nCode?: string
   n8nTimeoutMs?: number
+  connectActionId?: string
+  connectConnectionId?: string
+  connectParameters?: Record<string, unknown>
   chatbotMode?: ChatbotMode
   maxTurns?: number
 }
@@ -170,6 +174,17 @@ export function createPipelineModule(
         : undefined,
     n8nCode: kind === ModuleKind.N8n ? opts.n8nCode : undefined,
     n8nTimeoutMs: kind === ModuleKind.N8n ? (opts.n8nTimeoutMs ?? DEFAULT_N8N_TIMEOUT_MS) : undefined,
+    connectActionId: kind === ModuleKind.Connect ? (opts.connectActionId ?? DEFAULT_CONNECT_ACTION_ID) : undefined,
+    connectConnectionId: kind === ModuleKind.Connect ? opts.connectConnectionId : undefined,
+    connectParameters:
+      kind === ModuleKind.Connect
+        ? (opts.connectParameters ??
+          Object.fromEntries(
+            (getConnectAction(opts.connectActionId ?? DEFAULT_CONNECT_ACTION_ID)?.props ?? [])
+              .filter((p) => p.default !== undefined)
+              .map((p) => [p.name, p.default]),
+          ))
+        : undefined,
     chatbotMode: isChatbot
       ? (opts.chatbotMode ??
         (DEFAULT_CHATBOT_MODE === "single" ? ChatbotMode.Single : ChatbotMode.UntilExit))

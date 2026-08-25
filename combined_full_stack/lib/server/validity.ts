@@ -18,6 +18,7 @@ import type {
 } from "./types";
 import { ModuleKind, FieldType } from "./types";
 import { getN8nNode, missingN8nParams } from "@/lib/n8n-catalog";
+import { getConnectAction, missingConnectParams } from "@/lib/connect-catalog";
 import { customCodeEntriesForModule } from "@/lib/custom_code_entries";
 import { tryCompileCustomCodeEntry } from "@/lib/custom_code";
 import { usesPassthroughStructure, isLlmKind, isMergeModuleKind, stepRequiresNote } from "@/lib/module-kinds";
@@ -835,11 +836,41 @@ function computeN8nInvalid(modules: PipelineModule[]): InvalidMap {
       pushInvalid(invalid, {
         moduleId: m.id,
         kind: InvalidKind.StructureField,
-        structureMessage: `unknown n8n piece "${type}" — use list_pieces`,
+        structureMessage: `unknown transform piece "${type}" — use list_pieces`,
       });
       continue;
     }
     const missing = missingN8nParams(entry, m.n8nParameters);
+    if (missing.length) {
+      pushInvalid(invalid, {
+        moduleId: m.id,
+        kind: InvalidKind.StructureField,
+        structureMessage: `${entry.displayName} needs: ${missing.join(", ")}`,
+      });
+    }
+  }
+  return invalid;
+}
+
+function computeConnectInvalid(modules: PipelineModule[]): InvalidMap {
+  const invalid: InvalidMap = new Map();
+  for (const m of flattenPipelineModules(modules)) {
+    if (m.kind !== ModuleKind.Connect) continue;
+    const id = m.connectActionId?.trim();
+    if (!id) {
+      pushInvalid(invalid, { moduleId: m.id, kind: InvalidKind.MissingConnectAction });
+      continue;
+    }
+    const entry = getConnectAction(id);
+    if (!entry) {
+      pushInvalid(invalid, {
+        moduleId: m.id,
+        kind: InvalidKind.StructureField,
+        structureMessage: `unknown connect action "${id}" — use list_connect_actions`,
+      });
+      continue;
+    }
+    const missing = missingConnectParams(entry, m.connectParameters);
     if (missing.length) {
       pushInvalid(invalid, {
         moduleId: m.id,
@@ -951,6 +982,7 @@ export function computeInvalid(
   mergeInvalid(invalid, computeNoteInvalid(flat));
   mergeInvalid(invalid, computeWebhookInvalid(flat));
   mergeInvalid(invalid, computeN8nInvalid(modules));
+  mergeInvalid(invalid, computeConnectInvalid(modules));
   mergeInvalid(invalid, computeExampleSelectInvalid(flat, models));
   mergeInvalid(invalid, computeMergeStateInvalid(flat, models));
   mergeInvalid(invalid, computeAssembleInvalid(flat, models, opts?.typeAliases ?? []));

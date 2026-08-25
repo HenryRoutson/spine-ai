@@ -19,6 +19,7 @@ export type ExportRuntimeNeeds = {
   chatbot: boolean;
   webhook: boolean;
   n8n: boolean;
+  connect: boolean;
   visionOcr: boolean;
   docToText: boolean;
   inputModules: { label: string; filenameHint?: string; inputType?: string }[];
@@ -42,6 +43,7 @@ export function analyzeExportRuntimeNeeds(project: Project): ExportRuntimeNeeds 
   let chatbot = false;
   let webhook = false;
   let n8n = false;
+  let connect = false;
   let visionOcr = false;
   let docToText = false;
   for (const m of flattenPipelineModules(project.modules)) {
@@ -56,6 +58,7 @@ export function analyzeExportRuntimeNeeds(project: Project): ExportRuntimeNeeds 
     if (m.kind === ModuleKind.Chatbot) chatbot = true;
     if (m.kind === ModuleKind.Webhook) webhook = true;
     if (m.kind === ModuleKind.N8n) n8n = true;
+    if (m.kind === ModuleKind.Connect) connect = true;
     if (m.kind === ModuleKind.DocToText) docToText = true;
     if (m.kind === ModuleKind.DocToText && m.useOcr) visionOcr = true;
   }
@@ -69,6 +72,7 @@ export function analyzeExportRuntimeNeeds(project: Project): ExportRuntimeNeeds 
     chatbot,
     webhook,
     n8n,
+    connect,
     visionOcr,
     docToText,
     inputModules,
@@ -145,12 +149,22 @@ export function generateEnvExample(project: Project): string {
   }
 
   if (needs.webhook && needs.webhookEnvKeys.length) {
-    lines.push("# Webhook steps — external integrations (n8n, search APIs, Zapier, …)");
+    lines.push("# Webhook steps — HTTP integrations");
     for (const w of needs.webhookEnvKeys) {
       lines.push(`# Step "${w.label}"${w.optional ? " (optional — public default in generated code)" : ""}`);
       lines.push(`${w.envKey}=""`);
       lines.push("");
     }
+  }
+
+  if (needs.connect) {
+    lines.push(
+      "# Connect steps — self-hosted Nango (do not put Slack tokens here)",
+      'NANGO_SECRET_KEY=""',
+      'NANGO_HOST="http://127.0.0.1:3003"',
+      'NANGO_CONNECTION_ID=""',
+      "",
+    );
   }
 
   lines.push(

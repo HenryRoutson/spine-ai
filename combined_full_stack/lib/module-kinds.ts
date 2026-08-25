@@ -20,6 +20,7 @@ export const USER_ADDABLE_MODULE_KINDS = [
   "human-review",
   "webhook",
   "n8n",
+  "connect",
   "chatbot",
   "output",
 ] as const
@@ -33,6 +34,7 @@ const ADDABLE_KIND_ALIASES: Record<string, UserAddableModuleKind> = {
   llmbatch: "llm-batch",
   http: "webhook",
   piece: "n8n",
+  app: "connect",
   dag: "fork",
 }
 

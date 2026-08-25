@@ -57,6 +57,7 @@ const AUTHORED_MODULE_KINDS = [
   "human-review",
   "webhook",
   "n8n",
+  "connect",
   "chatbot",
   "output",
 ] as const;
@@ -208,6 +209,9 @@ const SeedFileSchema = z.object({
       n8nTimeoutMs: z.number().int().min(1).optional(),
       n8nResponseMode: z.enum(["first", "all", "jsonPath"]).optional(),
       n8nResponsePath: z.string().optional(),
+      connectActionId: z.string().optional(),
+      connectConnectionId: z.string().optional(),
+      connectParameters: z.record(z.string(), z.unknown()).optional(),
       mergeStateLabel: z.string().optional(),
       mergeWrapListField: z.string().optional(),
       mergeCustom: z.string().optional(),

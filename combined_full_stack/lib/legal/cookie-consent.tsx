@@ -35,6 +35,7 @@ export function CookieConsentBanner({
   const [visible, setVisible] = useState(false)
 
   useEffect(() => {
+    if (window.location.pathname.startsWith("/site/")) return
     setVisible(readCookieConsent() === null)
   }, [])
 

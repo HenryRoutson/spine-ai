@@ -32,6 +32,7 @@ import {
   type RunId,
   type RunStep,
   type StructureModel,
+  RunSource,
 } from "../types";
 import type { Store } from "../store";
 import { UsageLedger } from "../usage";
@@ -142,6 +143,7 @@ export async function runPipeline(
     outputs: new Map(),
     sourceText: "",
     sourceDocId: inputDocId,
+    source: opts.runMeta?.source ?? RunSource.App,
   };
 
   const steps: RunStep[] = [];
@@ -275,6 +277,7 @@ export async function resumeRunPipeline(
   const ctx = restoreCtx(project, store, ledger, model, checkpoint.ctx);
   const cacheOwnerId = opts.cacheOwnerId ?? checkpoint.cacheOwnerId ?? "local";
   ctx.webhookEnv = await loadWebhookSecretEnv(cacheOwnerId);
+  ctx.source = opts.runMeta?.source ?? ctx.source;
   const steps: RunStep[] = [...checkpoint.steps];
   const artifacts: { moduleId: ModuleId; structure?: StructureModel; value: unknown }[] = steps
     .filter((s) => s.status !== "error")

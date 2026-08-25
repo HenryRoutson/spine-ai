@@ -318,7 +318,7 @@ const TUI_TAB_EMPTY: Record<TuiTab, string> = {
   pipeline: "no project — press n to create one",
   testing: "no *_testing.json files — add one in Documents, then press t to run",
   inference: "no documents assigned — add a file in Documents, then press i to run",
-  schedule: "no cron jobs — create one in the web UI (Supabase pg_cron)",
+  schedule: "no schedules yet — create one in the web UI",
   share: "no published links — create them in the web UI, then session pull",
   earnings: "no account — session pull / SPINE_API_URL",
   logging: "no runs yet — press i to run inference, or t to run a test",
@@ -588,6 +588,9 @@ export type McpStepReview = {
   structureOut?: string
   n8nNodeType?: string
   n8nParameters?: Record<string, unknown>
+  connectActionId?: string
+  connectParameters?: Record<string, unknown>
+  connectConnected?: boolean
   forkJoin?: string
   prompt?: string
   note?: string
@@ -633,6 +636,9 @@ function mcpStepReview(modules: PipelineModule[], models: StructureModel[]): Mcp
       ...(structureOut ? { structureOut: formatTypeExpr(structureOut, named) } : {}),
       ...(m.kind === "n8n" && m.n8nNodeType ? { n8nNodeType: m.n8nNodeType } : {}),
       ...(m.kind === "n8n" && m.n8nParameters ? { n8nParameters: m.n8nParameters } : {}),
+      ...(m.kind === "connect" && m.connectActionId ? { connectActionId: m.connectActionId } : {}),
+      ...(m.kind === "connect" && m.connectParameters ? { connectParameters: m.connectParameters } : {}),
+      ...(m.kind === "connect" ? { connectConnected: Boolean(m.connectConnectionId?.trim()) } : {}),
       ...(m.kind === "fork" ? { forkJoin: forkJoinOf(m) } : {}),
       ...(m.prompt?.trim() ? { prompt: m.prompt.trim().slice(0, 240) } : {}),
       ...(m.note?.trim() ? { note: m.note.trim().slice(0, 160) } : {}),

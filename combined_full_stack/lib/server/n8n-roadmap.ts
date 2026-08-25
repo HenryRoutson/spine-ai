@@ -26,19 +26,15 @@
 // AI : DONE (n8n-stage-H-community) — pieces/*.json + MCP list_pieces / import_piece / export_piece
 // AI : DONE (media-view-D-higgsfield) — generate APIs are webhook poll + ingest, not an n8n node.
 //
-// --- Sidecar (Path A): Spine owns typed I/O; n8n Cloud/self-host owns Slack/Gmail/Sheets ---
-// Do NOT grow local n8nCode into app connectors. Live apps stay in n8n; Spine invokes a workflow.
+// --- Live apps: SUPERSEDED — use ModuleKind.Connect + Nango (lib/server/connect-roadmap.ts) ---
+// Do NOT grow local n8nCode into app connectors. Do NOT host n8n or copy n8n-nodes-base live nodes.
 //
-// AI : TODO (n8n-sidecar-S1-creds) — N8N_BASE_URL + N8N_API_KEY in user_secrets (never in export zip).
-// AI :   OAuth for Slack/Gmail stays in n8n; Spine only stores the n8n invoke credential.
-// AI : TODO (n8n-sidecar-S2-live) — branch execN8nStep: local catalog vs live execute (webhook URL or Public API).
-// AI :   Wire unused n8nResponseMode / n8nResponsePath; timeouts/retries like webhook poll, not evalN8nCode.
-// AI : TODO (n8n-sidecar-S3-adapter) — spine ↔ n8n items for live payloads; materializeStepOutput is the type gate.
-// AI :   Do not let untyped JSON leak into downstream LLM steps.
-// AI : TODO (n8n-sidecar-S4-ui) — n8n-fields: mode local|live; live = workflow id / webhook path + response map.
-// AI :   Do not dump 400 n8n Cloud nodes into n8n-catalog.ts.
-// AI : TODO (n8n-sidecar-S5-http) — share URL/auth/timeout helpers with webhook-step; do NOT merge ModuleKind.
-// AI : TODO (n8n-sidecar-S6-assistant) — assistant-prompt: when live, pick workflow + out structure; never invent node types.
-// AI : TODO (n8n-sidecar-S7-export) — export live n8n as env-backed HTTP call (same family as webhook), not baked Code-node JS.
+// AI : SUPERSEDED (n8n-sidecar-S1-creds) — vendor OAuth is Nango session tokens, not N8N_API_KEY.
+// AI : SUPERSEDED (n8n-sidecar-S2-live) — live Slack/Gmail is steps/connect.ts, not execN8nStep HTTP.
+// AI : SUPERSEDED (n8n-sidecar-S3-adapter) — connect materializeStepOutput is the type gate.
+// AI : SUPERSEDED (n8n-sidecar-S4-ui) — Vibe Connect chip; n8n-fields stay local transforms.
+// AI : SUPERSEDED (n8n-sidecar-S5-http) — webhook stays generic HTTP; connect is Nango proxy.
+// AI : SUPERSEDED (n8n-sidecar-S6-assistant) — vibe proposes kind=connect from list_connect_actions.
+// AI : SUPERSEDED (n8n-sidecar-S7-export) — connect export is env-backed NANGO_* HTTP.
 
 export {};

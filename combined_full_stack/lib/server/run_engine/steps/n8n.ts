@@ -6,9 +6,8 @@ import { requireLinearInput } from "../context"
 import { jsonStringifyStepValue } from "../results"
 import type { ExecResult, RunCtx, RunLogger } from "../engine_types"
 
-// AI : TODO (n8n-sidecar-S2-live) — branch local catalog (runN8nPiece) vs live n8n Cloud/self-host execute.
-// AI :   Live: POST workflow webhook or Public API; apply n8nResponseMode/Path; retry/timeout like webhook.
-// AI : TODO (n8n-sidecar-S3-adapter) — live response → spine items, then materializeStepOutput (type gate).
+// AI : SUPERSEDED (n8n-sidecar-S2-live) — live Slack/Gmail is execConnectStep, not a live branch here.
+// AI : SUPERSEDED (n8n-sidecar-S3-adapter) — connect materializeStepOutput is the type gate.
 
 export async function execN8nStep(m: PipelineModule, ctx: RunCtx, log: RunLogger): Promise<ExecResult> {
   const { project } = ctx

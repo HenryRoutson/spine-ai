@@ -12,9 +12,10 @@ const KEY = appStorageKey("shared-with-me")
 
 export function parseSharedLinkIdFromInput(raw: string): shared_link_id_string | null {
   const trimmed = raw.trim()
-  const fromUrl = trimmed.match(/\/run\/(pub_[a-f0-9]+)/i)?.[1]
+  const fromUrl =
+    trimmed.match(/\/(?:run|embed|site)\/((?:pub|emb|site)_[a-f0-9]+)/i)?.[1]
   if (fromUrl) return fromUrl
-  if (/^pub_[a-f0-9]+$/i.test(trimmed)) return trimmed
+  if (/^(?:pub|emb|site)_[a-f0-9]+$/i.test(trimmed)) return trimmed
   return null
 }
 

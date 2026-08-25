@@ -39,8 +39,8 @@ const MAX_MODULE_STRING_CHARS = 64_000;
 const MAX_MODULE_PAYLOAD_CHARS = 120_000;
 const MAX_STRUCTURE_PAYLOAD_CHARS = 50_000;
 
-// AI : pub_ = public link, emb_ = website Embed (same shared_links table + run stack).
-export const sharedLinkIdSchema = z.string().regex(/^(pub|emb)_[a-z0-9]{10,32}$/i);
+// AI : pub_ = public link, emb_ = website Embed, site_ = hosted HTML wrapper (same shared_links table + run stack).
+export const sharedLinkIdSchema = z.string().regex(/^(pub|emb|site)_[a-z0-9]{10,32}$/i);
 export const hostedApiIdSchema = z.string().regex(/^api_[a-z0-9]{10,32}$/i);
 export const pipelineScheduleIdSchema = z.string().regex(/^cron_[a-z0-9]{10,32}$/i);
 export const marketplaceListingIdSchema = z.string().regex(/^mkt_[a-z0-9]{10,32}$/i);
@@ -85,6 +85,13 @@ export const upsertSecretBodySchema = z
     projectId: projectIdSchema.optional(),
     teamId: teamIdSchema.optional(),
     linkToProject: z.boolean().optional(),
+  })
+  .strict();
+
+export const connectSessionBodySchema = z
+  .object({
+    actionId: z.string().trim().min(1).max(128),
+    projectId: projectIdSchema.optional(),
   })
   .strict();
 
@@ -345,6 +352,9 @@ const pipelineModulePatchSchema = z
     n8nTimeoutMs: z.number().int().min(1_000).max(600_000).optional(),
     n8nResponseMode: z.enum(["first", "all", "jsonPath"]).optional(),
     n8nResponsePath: z.string().max(512).optional(),
+    connectActionId: z.string().max(128).optional(),
+    connectConnectionId: z.string().max(256).optional(),
+    connectParameters: z.record(z.string().max(128), z.unknown()).optional(),
     // AI : TODO (media-view-B-api) — view: ViewBinding on modules.
     chatbotMode: z.enum(["single", "until-exit"]).optional(),
     maxTurns: z.number().int().min(1).max(200).optional(),
@@ -686,6 +696,28 @@ const embedOptionsSchema = z
   })
   .strict();
 
+const hexColorSchema = z.string().regex(/^#([0-9a-f]{3}|[0-9a-f]{6})$/i);
+
+export const hostedSiteOptionsSchema = z
+  .object({
+    brand: z
+      .object({
+        companyName: z.string().trim().max(80).optional(),
+        tagline: z.string().trim().max(200).optional(),
+        logoUrl: z.string().trim().max(2048).optional(),
+        primaryColor: hexColorSchema.optional(),
+        accentColor: hexColorSchema.optional(),
+        backgroundColor: hexColorSchema.optional(),
+        textColor: hexColorSchema.optional(),
+      })
+      .strict()
+      .optional(),
+    customHtml: z.string().max(50_000).optional(),
+    customCss: z.string().max(20_000).optional(),
+    hideSpineFooter: z.boolean().optional(),
+  })
+  .strict();
+
 export const createSharedLinkBodySchema = z
   .object({
     projectId: projectIdSchema,
@@ -697,18 +729,26 @@ export const createSharedLinkBodySchema = z
     flatFeeCents: z.number().min(0).max(100_000).optional(),
     defaultDocsByModule: inputDocsByModuleSchema,
     // AI : kind embed ⇒ emb_ id + required allowedOrigins (anti-theft allowlist).
-    kind: z.enum(["link", "embed"]).optional(),
+    // AI : kind site ⇒ site_ id + hosted HTML wrapper (no origin allowlist; Spine hosts the page).
+    kind: z.enum(["link", "embed", "site"]).optional(),
     allowedOrigins: z.array(z.string().trim().min(1).max(256)).max(32).optional(),
     embedOptions: embedOptionsSchema.optional(),
+    siteOptions: hostedSiteOptionsSchema.optional(),
   })
   .strict()
   .superRefine((data, ctx) => {
-    if (data.kind !== "embed") return;
-    if (!data.allowedOrigins?.length) {
+    if (data.kind === "embed" && !data.allowedOrigins?.length) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
         message: "Embed requires at least one allowed origin",
         path: ["allowedOrigins"],
+      });
+    }
+    if (data.kind === "site" && !data.siteOptions?.brand?.companyName?.trim()) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Hosted page requires a company name",
+        path: ["siteOptions", "brand", "companyName"],
       });
     }
   });
@@ -742,6 +782,7 @@ export const updateDeploymentBodySchema = z
     enabled: z.boolean().optional(),
     allowedOrigins: z.array(z.string().trim().min(1).max(256)).max(32).optional(),
     embedOptions: embedOptionsSchema.optional(),
+    siteOptions: hostedSiteOptionsSchema.optional(),
   })
   .strict()
   .refine(
@@ -749,9 +790,10 @@ export const updateDeploymentBodySchema = z
       data.spendLimitCents !== undefined ||
       data.enabled !== undefined ||
       data.allowedOrigins !== undefined ||
-      data.embedOptions !== undefined,
+      data.embedOptions !== undefined ||
+      data.siteOptions !== undefined,
     {
-      message: "Provide spendLimitCents, enabled, allowedOrigins, and/or embedOptions",
+      message: "Provide spendLimitCents, enabled, allowedOrigins, embedOptions, and/or siteOptions",
     },
   );
 

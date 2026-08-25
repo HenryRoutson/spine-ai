@@ -18,6 +18,7 @@ import type { ChatTurn } from "./assistant-shared";
 import { fieldToTypeExpr, stepEmitsList } from "./type_expr";
 import type { ModuleKind, PipelineModule, StructureModel } from "./types";
 import { customCodeEntriesForModule } from "@/lib/custom_code_entries";
+import { listConnectActions } from "@/lib/connect-catalog";
 
 function structureName(models: StructureModel[], id: string | undefined): string | undefined {
   if (!id) return undefined;
@@ -58,7 +59,7 @@ export function buildModuleKindsPromptBlock(): string {
 
 // AI : DONE (n8n-stage-G-export) — document n8n step for assistant: pick n8nNodeType from catalog,
 // AI :   fill n8nParameters; never invent node type strings (see n8n-roadmap.ts).
-// AI : TODO (n8n-sidecar-S6-assistant) — when live sidecar ships: pick workflow id + out structure; never invent Cloud node types.
+// AI : SUPERSEDED (n8n-sidecar-S6-assistant) — live Slack/Gmail is kind=connect (connect-roadmap.ts), not n8n Cloud.
 // AI : TODO (media-view-C-assistant) — “create visualizer for this model” writes HTML + defaultView; not a React component.
 // AI : DONE (media-view-D-higgsfield) — webhook poll + ingest seed; spine is VideoClip { doc_id }. Not a Higgsfield ModuleKind.
 
@@ -310,7 +311,12 @@ ${buildLlmCallStrategyPromptBlock()}
 - assemble: set structureOut (or leave unset for auto-derived product) and assembleBindings mapping each field to spine, a prior step label, or a path into either. At least one binding must use spine.
 - parallel: legacy LLM-only shorthand — do not emit; use Fork + product join with one llm per lane instead.
 - fork: set forkJoin (product | assemble | merge) and forkBranches (2–12, each { label, modules: [...] }). Lanes are linear module arrays. Nest Fork inside a lane when you need a DAG. Product join auto-derives one field per lane. llm-batch is map-over-list, not a fork.
-- n8n: typed catalog piece (Set, Filter, Sort, Limit, CSV, Hash, HTML, Markdown, DateTime, Item Lists, Code). Set n8nNodeType + n8nParameters. Runs local n8n Code-node JavaScript against the typed spine — do NOT call live Slack/Gmail. Share pieces as JSON. Auto UI is generated from the piece props schema. Prefer n8n over custom-code for field maps/filters.
+- n8n: typed local transform (Set, Filter, Sort, Limit, CSV, Hash, HTML, Markdown, DateTime, Item Lists, Code). Set n8nNodeType + n8nParameters. piece.set is an alias for n8n-nodes-base.set. Runs local JavaScript against the typed spine — do NOT call live Slack/Gmail. Prefer n8n over custom-code for field maps/filters. Live apps use kind=connect.
+- connect: live Slack / Gmail / Sheets / HTTP. Set connectActionId from this exact list (never invent ids):
+${listConnectActions()
+  .map((a) => `  - ${a.id} — ${a.description} (params: ${a.props.map((p) => p.name).join(", ")})`)
+  .join("\n")}
+  After Approve, the human taps Connect {App} (OAuth popup to Slack/Google only). Do not ask them to paste tokens or open a node canvas. Prefer connect over webhook for those apps. HTTP connect (http.request) is the generic hatch.
 - llm steps with tuple[text,quote] outputs get a Link Quotes step auto-inserted after them — do NOT emit quote steps yourself.
 - PDF/word/image/web inputs get a locked Convert to text step auto-inserted after the input (parser or OCR). Omit it from modules JSON and seeds — do NOT emit it yourself. A locked Parse to structure LLM step is auto-inserted when structureOut is not Document — do NOT emit that either.
 - transform reshapes upstream data. When a list feeds a single-object output, include a list field on that structure (prefer list[model] ref = input structure) so transform can wrap items automatically, or use custom-code.
@@ -376,7 +382,8 @@ export type AssistantHumanSurface = "vibe" | "build"
 
 export function buildHumanSurfacePromptBlock(surface?: AssistantHumanSurface): string {
   if (surface !== "vibe") return ""
-  return `Human UI surface: Vibe (agent-first, non-technical). Chat is on the left. Inference (pick files, run), Share (publish a link), and Logging (previous runs) are on the right — tell them to use those panes, not to leave Vibe. They do not see Structure/Pipeline/Testing tabs. You still have full Build-equivalent control — propose the project yourself and let them approve. Do not ask them to open developer tools. Write short everyday language. Never mention spine, list[], schemas, type aliases, or wiring. Ask what they want to build.
+  return `Human UI surface: Vibe (agent-first, non-technical). Chat is on the left. Inference (pick files, run), Schedule (every morning), Share (publish a link), and Logging (previous runs) are on the right — tell them to use those panes, not to leave Vibe. They do not see Structure/Pipeline/Testing tabs. You still have full Build-equivalent control — propose the project yourself and let them approve. Do not ask them to open developer tools. Write short everyday language. Never mention spine, list[], schemas, type aliases, wiring, n8n, nodes, or Nango. Ask what they want to build.
+If they want Slack, Gmail, or a spreadsheet, add a connect step from the catalog. After they Approve, tell them to tap Connect on the right — a Slack or Google window asks them to approve. For "every morning", tell them to tap Schedule on the right.
 
 `
 }

@@ -474,12 +474,17 @@ Remaining gaps are **browser-only hosts** and **marketplace/Stripe UX**, not mis
 - [x] Auth the API accepts: cookie + Bearer Supabase JWT in `requireAuth()` (`mcp-auth`). `auth_status` tool (`mcp-auth-tool`).
 - [x] Shrink tool list; structured `{ ok, code, next }` errors (`mcp-tools`). *(Catalog GUI actions go through `session_action`; named tools are vibe loop + seeds/pinpoint/lint.)*
 
-**Bar B (whole app)** — host-bound or mint HTTP; not started as MCP:
+**Bar B (whole app)** — host-bound remains GUI; Share/Schedule mint is MCP session_action HTTP:
 
-- marketplace / hosted API / embed mint, Stripe checkout + keys, teams invite
+- Stripe checkout + keys, teams invite
 - Node `CodeHost` (custom-code / assert)
 - human-review + chatbot pause
 - OCR/PDF documents, consumer Run, UI select-mode pins, assistant chat store, realtime
+- Vendor OAuth popup (Connect chip) — MCP `connect.start-session` probes Nango; human completes OAuth in GUI
+
+- [x] Share mint: `share.create-link` / `share.create-embed` / `share.create-site` / `share.deploy-api` / `share.marketplace-publish` via `session_action` (same POST as GUI).
+- [x] Schedule mint: `schedule.create` / `schedule.toggle` / `schedule.run-now` / `schedule.delete`.
+- [x] Connect step: `list_connect_actions` / `configure_connect_step` / `connect.start-session`.
 
 **What “MCP = full UI” actually requires (order):**
 
@@ -571,8 +576,8 @@ Grep an id (example): `rg 'project.add' combined_full_stack docs mcp_tool`.
 | `nav.window.pipeline` | Pipeline | Ink: press 2 | PUT /api/projects/:id (modules) | describe_pipeline_steps | session.setModules / addPipelineStep |
 | `nav.window.testing` | Testing | Ink: press 3 | POST /api/runs (testing) + POST /api/testing-evaluate | run_test / validate_test | session.runTest(testDocName) |
 | `nav.window.inference` | Inference | Ink: press 4 | POST /api/runs | start_run | session.startRun() |
-| `nav.window.schedule` | Schedule | Ink: press 5 | POST /api/schedules | not exposed; use HTTP | HTTP /api/schedules |
-| `nav.window.share` | Share | Ink: press 6 | POST /api/shared-links | session_action lists shareLinkIds [P] | session.getSnapshot().shareLinkIds |
+| `nav.window.schedule` | Schedule | Ink: press 5 | POST /api/schedules | session_action id=nav.window.schedule lists; schedule.create mints | HTTP /api/schedules via session.createSchedule |
+| `nav.window.share` | Share | Ink: press 6 | POST /api/shared-links | session_action id=nav.window.share lists; share.create-* mints | session.createShareLink / listShareLinks |
 | `nav.window.earnings` | Earnings | Ink: press 7 | GET /api/earnings | session_action id=earnings.refresh [P] | session.refreshEarnings() |
 | `nav.window.logging` | Logging | Ink: press 8 | GET /api/runs | session_logs | toLogsView(session.getSnapshot()) |
 | `nav.window.cache` | Cache | Ink: press 9 | GET /api/cache | session_logs.cache | session.getSnapshot().cacheEntries |
@@ -628,15 +633,22 @@ Grep an id (example): `rg 'project.add' combined_full_stack docs mcp_tool`.
 | `jobs.stop` | Stop job | no TUI job hub cancel [N] | abort client poll [P] | no MCP [N] | useCancellableRunRegistry in the browser [host] |
 | `jobs.close` | Close jobs hub | TUI has no hub overlay [n/a] | UI chrome [n/a] | UI chrome [n/a] | React overlay state [n/a] |
 | `cache.refresh` | Refresh cache | spine session cache (after pull) | GET /api/cache | session_logs.cache [P] | session.setCacheEntries / snapshot.cacheEntries / cacheGet |
-| `share.tab.link` | Link | session share lists ids; mint is HTTP [P] | POST /api/shared-links | mint not in MCP [N] | snapshot.shareLinkIds after pull [P] |
-| `share.tab.api` | API | session share lists hostedApiIds [P] | POST /api/hosted-apis | mint not in MCP [N] | snapshot.hostedApiIds [P] |
-| `share.tab.embed` | Embed | no TUI embed mint [N] | POST /api/shared-links (embed/origin allowlist) | not in MCP [N] | GUI share-embed-form [host] |
-| `share.create-link` | Create link | session share lists; mint HTTP/GUI [P] | POST /api/shared-links | Bar B [N] | shareLink action lists ids only [P] |
-| `share.deploy-api` | Deploy API | session share lists hosted APIs [P] | POST /api/hosted-apis | Bar B [N] | hostedApi action lists ids only [P] |
-| `share.create-embed` | Create website embed | no TUI [N] | POST /api/shared-links (emb_ rows) | Bar B [N] | GUI only [host] |
-| `share.marketplace-publish` | Share to marketplace | no TUI mint [N] | POST /api/marketplace | Bar B [N] | GUI / HTTP [host] |
+| `share.tab.link` | Link | session share lists ids; mint is HTTP [P] | POST /api/shared-links | session_action id=share.tab.link lists; share.create-link mints | session.listShareLinks / createShareLink |
+| `share.tab.api` | API | session share lists hostedApiIds [P] | POST /api/hosted-apis | session_action id=share.tab.api lists; share.deploy-api mints | session.listHostedApis / createHostedApi |
+| `share.tab.embed` | Embed | no TUI embed mint [N] | POST /api/shared-links (embed/origin allowlist) | session_action id=share.create-embed (allowedOrigins) | session.createShareLink({ kind: 'embed' }) |
+| `share.tab.site` | Page | no TUI site mint [N] | POST /api/shared-links (site HTML wrapper) | session_action id=share.create-site (companyName) | session.createShareLink({ kind: 'site' }) |
+| `share.create-link` | Create link | session share lists; mint HTTP/GUI [P] | POST /api/shared-links | session_action id=share.create-link | session.createShareLink |
+| `share.deploy-api` | Deploy API | session share lists hosted APIs [P] | POST /api/hosted-apis | session_action id=share.deploy-api | session.createHostedApi |
+| `share.create-embed` | Create website embed | no TUI [N] | POST /api/shared-links (emb_ rows) | session_action id=share.create-embed | session.createShareLink({ kind: 'embed' }) |
+| `share.create-site` | Launch hosted page | no TUI [N] | POST /api/shared-links (site_ rows) | session_action id=share.create-site | session.createShareLink({ kind: 'site' }) |
+| `share.marketplace-publish` | Share to marketplace | no TUI mint [N] | POST /api/marketplace | session_action id=share.marketplace-publish | session.publishMarketplaceListing |
 | `share.marketplace-clone` | Clone listing | session import-seed for bundled examples | POST /api/marketplace/:id/clone | import_seed (seeds) / clone_project | session.cloneFromTemplate |
 | `share.run-shared` | Run shared link | consumer Run is GUI/HTTP [N] | POST /api/shared-links/:id/run | not in MCP [N] | consumer GUI [host] |
+| `schedule.create` | Create schedule | no TUI mint [N] | POST /api/schedules | session_action id=schedule.create | session.createSchedule |
+| `schedule.toggle` | Enable / pause schedule | no TUI [N] | PATCH /api/schedules/:id | session_action id=schedule.toggle | session.patchSchedule |
+| `schedule.run-now` | Run now | no TUI [N] | POST /api/schedules/:id/run | session_action id=schedule.run-now | session.runScheduleNow |
+| `schedule.delete` | Delete schedule | no TUI [N] | DELETE /api/schedules/:id | session_action id=schedule.delete | session.deleteSchedule |
+| `connect.start-session` | Connect app | OAuth popup is GUI [N] | POST /api/connect/session | session_action id=connect.start-session (OAuth still GUI) | session.startConnectSession |
 | `earnings.withdraw` | Move to LLM credit | no Stripe/withdraw TUI [host] | POST /api/earnings/withdraw | Bar B [N] | HTTP from GUI [host] |
 | `earnings.refresh` | Refresh | spine session earnings | GET /api/earnings | session_action id=earnings.refresh | session.refreshEarnings() |
 | `billing.topup` | Top up | Stripe Checkout — no TUI [host] | POST /api/billing/checkout | Bar B [N] | redirectToCheckout in the browser [host] |

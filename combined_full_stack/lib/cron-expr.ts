@@ -25,10 +25,77 @@ export const CRON_PRESETS = [
   { id: "5m", label: "Every 5 minutes", cron: "*/5 * * * *" },
   { id: "15m", label: "Every 15 minutes", cron: "*/15 * * * *" },
   { id: "hourly", label: "Every hour", cron: "0 * * * *" },
-  { id: "daily", label: "Every day at 09:00", cron: "0 9 * * *" },
-  { id: "weekdays", label: "Weekdays at 09:00", cron: "0 9 * * 1-5" },
-  { id: "weekly", label: "Every Monday at 09:00", cron: "0 9 * * 1" },
+  { id: "daily", label: "Every day at 9:00 AM", cron: "0 9 * * *" },
+  { id: "weekdays", label: "Weekdays at 9:00 AM", cron: "0 9 * * 1-5" },
+  { id: "weekly", label: "Every Monday at 9:00 AM", cron: "0 9 * * 1" },
 ] as const
+
+export type hour_0_23 = number
+export type minute_0_59 = number
+export type weekday_sun0 = number
+
+export type ScheduleHowOftenId =
+  | "every-5-min"
+  | "every-10-min"
+  | "every-15-min"
+  | "every-30-min"
+  | "hourly"
+  | "daily"
+  | "weekdays"
+  | "weekly"
+
+export type FriendlySchedule = {
+  howOften: ScheduleHowOftenId
+  hour: hour_0_23
+  minute: minute_0_59
+  weekday: weekday_sun0
+}
+
+export const SCHEDULE_HOW_OFTEN: { id: ScheduleHowOftenId; label: string; needsTime: boolean; needsWeekday: boolean }[] = [
+  { id: "every-5-min", label: "Every 5 minutes", needsTime: false, needsWeekday: false },
+  { id: "every-10-min", label: "Every 10 minutes", needsTime: false, needsWeekday: false },
+  { id: "every-15-min", label: "Every 15 minutes", needsTime: false, needsWeekday: false },
+  { id: "every-30-min", label: "Every 30 minutes", needsTime: false, needsWeekday: false },
+  { id: "hourly", label: "Every hour", needsTime: false, needsWeekday: false },
+  { id: "daily", label: "Every day", needsTime: true, needsWeekday: false },
+  { id: "weekdays", label: "Weekdays (Monday–Friday)", needsTime: true, needsWeekday: false },
+  { id: "weekly", label: "Once a week", needsTime: true, needsWeekday: true },
+]
+
+export const WEEKDAY_OPTIONS: { value: weekday_sun0; label: string }[] = [
+  { value: 1, label: "Monday" },
+  { value: 2, label: "Tuesday" },
+  { value: 3, label: "Wednesday" },
+  { value: 4, label: "Thursday" },
+  { value: 5, label: "Friday" },
+  { value: 6, label: "Saturday" },
+  { value: 0, label: "Sunday" },
+]
+
+export const COMMON_IANA_TIMEZONES = [
+  "UTC",
+  "Pacific/Honolulu",
+  "America/Los_Angeles",
+  "America/Denver",
+  "America/Chicago",
+  "America/New_York",
+  "America/Sao_Paulo",
+  "Europe/London",
+  "Europe/Paris",
+  "Europe/Berlin",
+  "Africa/Johannesburg",
+  "Asia/Dubai",
+  "Asia/Kolkata",
+  "Asia/Singapore",
+  "Asia/Shanghai",
+  "Asia/Tokyo",
+  "Australia/Perth",
+  "Australia/Sydney",
+  "Australia/Melbourne",
+  "Pacific/Auckland",
+] as const
+
+const DOW_LONG = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"] as const
 
 export type CronPresetId = (typeof CRON_PRESETS)[number]["id"] | "custom"
 
@@ -64,8 +131,7 @@ function parseRange(raw: string, min: number, max: number, wrapDow: boolean): nu
     end = start
     if (!Number.isInteger(start)) return null
   }
-  if (wrapDow && start === 7) start = 0
-  if (wrapDow && end === 7) end = 0
+  // AI : 7 is Sunday on DOW; wrap in the loop so 1-7 stays Mon–Sun (wrapping end→0 made start>end).
   if (start < min || end > max || start > end) return null
   const out: number[] = []
   for (let n = start; n <= end; n += step) out.push(wrapDow && n === 7 ? 0 : n)
@@ -180,7 +246,163 @@ export function cronPresetIdFor(expr: string): CronPresetId {
   return hit?.id ?? "custom"
 }
 
+function pad2(n: number): string {
+  return String(n).padStart(2, "0")
+}
+
+export function formatClockTime(hour: hour_0_23, minute: minute_0_59): string {
+  const suffix = hour < 12 ? "AM" : "PM"
+  const h12 = hour % 12 === 0 ? 12 : hour % 12
+  return `${h12}:${pad2(minute)} ${suffix}`
+}
+
+export function formatClockInput(hour: hour_0_23, minute: minute_0_59): string {
+  return `${pad2(hour)}:${pad2(minute)}`
+}
+
+export function parseClockInput(value: string): { hour: hour_0_23; minute: minute_0_59 } | null {
+  const match = value.trim().match(/^(\d{1,2}):(\d{2})/)
+  if (!match) return null
+  const hour = Number(match[1])
+  const minute = Number(match[2])
+  if (hour < 0 || hour > 23 || minute < 0 || minute > 59) return null
+  return { hour, minute }
+}
+
+export function cronFromFriendlySchedule(s: FriendlySchedule): cron_expr_string {
+  // AI : picker → 5-field cron; the UI never shows this string.
+  const h = String(s.hour)
+  const m = String(s.minute)
+  const d = String(s.weekday)
+  switch (s.howOften) {
+    case "every-5-min":
+      return "*/5 * * * *" as cron_expr_string
+    case "every-10-min":
+      return "*/10 * * * *" as cron_expr_string
+    case "every-15-min":
+      return "*/15 * * * *" as cron_expr_string
+    case "every-30-min":
+      return "*/30 * * * *" as cron_expr_string
+    case "hourly":
+      return "0 * * * *" as cron_expr_string
+    case "daily":
+      return `${m} ${h} * * *` as cron_expr_string
+    case "weekdays":
+      return `${m} ${h} * * 1-5` as cron_expr_string
+    case "weekly":
+      return `${m} ${h} * * ${d}` as cron_expr_string
+  }
+}
+
+export function howOftenMeta(id: ScheduleHowOftenId): (typeof SCHEDULE_HOW_OFTEN)[number] {
+  return SCHEDULE_HOW_OFTEN.find((row) => row.id === id) ?? SCHEDULE_HOW_OFTEN[5]!
+}
+
+function joinList(items: string[]): string {
+  if (items.length === 0) return ""
+  if (items.length === 1) return items[0]!
+  if (items.length === 2) return `${items[0]} and ${items[1]}`
+  return `${items.slice(0, -1).join(", ")}, and ${items[items.length - 1]}`
+}
+
+function describeDow(raw: string): string | null {
+  if (raw === "*") return null
+  if (raw === "1-5") return "Weekdays"
+  if (/^\d$/.test(raw) || raw === "7") {
+    const n = Number(raw) === 7 ? 0 : Number(raw)
+    const name = DOW_LONG[n]
+    return name ? `Every ${name}` : null
+  }
+  if (/^(\d+)(,\d+)+$/.test(raw)) {
+    const names = raw.split(",").map((part) => {
+      const n = Number(part) === 7 ? 0 : Number(part)
+      return DOW_LONG[n]
+    })
+    if (names.every(Boolean)) return joinList(names as string[])
+  }
+  return null
+}
+
+function everyMinutes(raw: string): number | null {
+  const star = raw.match(/^\*\/(\d+)$/)
+  if (star) return Number(star[1])
+  return null
+}
+
 export function describeCronExpr(expr: string): string {
-  const hit = CRON_PRESETS.find((p) => p.cron === expr.trim())
-  return hit?.label ?? expr.trim()
+  // AI : always English — never return the raw * * * * * string.
+  const trimmed = expr.trim()
+  if (!isValidCronExpr(trimmed)) return "Custom schedule"
+  const parts = trimmed.split(/\s+/)
+  const [minute, hour, dom, month, dow] = parts
+  if (!minute || !hour || !dom || !month || !dow) return "Custom schedule"
+  if (month !== "*") return "Custom schedule"
+
+  const minEvery = everyMinutes(minute)
+  if (minEvery != null && hour === "*" && dom === "*" && dow === "*") {
+    return minEvery === 1 ? "Every minute" : `Every ${minEvery} minutes`
+  }
+
+  if (/^\d+$/.test(minute) && hour === "*" && dom === "*" && dow === "*") {
+    const m = Number(minute)
+    return m === 0 ? "Every hour" : `Every hour at :${pad2(m)}`
+  }
+
+  const hourEvery = everyMinutes(hour)
+  if (minute === "0" && hourEvery != null && dom === "*" && dow === "*") {
+    return hourEvery === 1 ? "Every hour" : `Every ${hourEvery} hours`
+  }
+
+  if (!/^\d+$/.test(minute) || !/^\d+$/.test(hour)) return "Custom schedule"
+  const clock = formatClockTime(Number(hour), Number(minute))
+
+  if (dom === "*" && dow === "*") return `Every day at ${clock}`
+  if (dom === "*" && dow === "1-5") return `Weekdays at ${clock}`
+  if (dom === "*") {
+    const days = describeDow(dow)
+    if (days === "Weekdays") return `Weekdays at ${clock}`
+    if (days?.startsWith("Every ")) return `${days} at ${clock}`
+    if (days) return `${days} at ${clock}`
+  }
+  if (/^\d+$/.test(dom) && dow === "*") {
+    return `On the ${Number(dom)} of each month at ${clock}`
+  }
+  return "Custom schedule"
+}
+
+export function timezoneCity(tz: string): string {
+  if (tz === "UTC") return "UTC"
+  return (tz.split("/").pop() ?? tz).replace(/_/g, " ")
+}
+
+export function formatTimeZoneLabel(tz: string, now = new Date()): string {
+  const city = timezoneCity(tz)
+  try {
+    const offset = new Intl.DateTimeFormat("en-US", { timeZone: tz, timeZoneName: "shortOffset" })
+      .formatToParts(now)
+      .find((part) => part.type === "timeZoneName")?.value
+    return offset ? `${city} (${offset})` : city
+  } catch {
+    return city
+  }
+}
+
+export function scheduleTimeZoneOptions(preferred: string): { value: string; label: string }[] {
+  const seen = new Set<string>()
+  const out: { value: string; label: string }[] = []
+  const add = (tz: string, label?: string) => {
+    if (seen.has(tz) || !isValidIanaTimeZone(tz)) return
+    seen.add(tz)
+    out.push({ value: tz, label: label ?? formatTimeZoneLabel(tz) })
+  }
+  if (preferred) add(preferred, `Your time — ${formatTimeZoneLabel(preferred)}`)
+  for (const tz of COMMON_IANA_TIMEZONES) add(tz)
+  return out
+}
+
+export function schedulePreviewSentence(cron: string, tz: string): string {
+  const when = describeCronExpr(cron)
+  const rest = when.charAt(0).toLowerCase() + when.slice(1)
+  if (tz === "UTC") return `Runs ${rest} (UTC).`
+  return `Runs ${rest}, ${timezoneCity(tz)} time.`
 }

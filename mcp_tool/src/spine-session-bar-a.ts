@@ -1,8 +1,9 @@
 // AI : MCP Bar A — session file + HTTP, same SpineSession methods as CLI/Vibe (not seed-only).
 // AI : Goal is GUI-equivalent *actions*. get_project is a compact review, not a live UI dump.
 
+import { getConnectAction } from "@/lib/connect-catalog"
 import { USER_ADDABLE_MODULE_KINDS } from "@/lib/module-kinds"
-import { createSpineSession } from "@/lib/core/session"
+import { createSpineSession, type SpineSession } from "@/lib/core/session"
 import { createApiEgress, createThrowingEgress, SPINE_API_TOKEN_ENV, SPINE_API_URL_ENV } from "@/lib/core/transport"
 import { toBillingView, toCacheView, toMcpProjectReview, toSettingsView, toShareView, toValidationView } from "@/lib/core/view"
 import { createFilePersist, resolveSessionPath } from "@/lib/cli/session_persist"
@@ -33,6 +34,11 @@ import type { ProjectProposal } from "@/lib/project-assistant-types"
 import { filterRunsByErrorStatus } from "@/lib/run-error-log"
 import { testReportPassed } from "@/lib/testing-files"
 import { exclusionReasonForInputModule, exclusionReasonLabel } from "@/lib/inference-input-picker"
+import { flattenPipelineModules } from "@/lib/fork-pipeline"
+import { shareDefaultDocsByModule } from "@/lib/share-default-docs"
+import { describeCronExpr, isValidCronExpr, isValidIanaTimeZone } from "@/lib/cron-expr"
+import { DEFAULT_EMBED_OPTIONS, DEFAULT_HOSTED_SITE_OPTIONS } from "@/lib/shared-link-types"
+import { DEFAULT_HOSTED_SITE_HTML, normalizeHostedSiteOptions } from "@/lib/hosted-site"
 // AI : import enums from server/types — tsx ESM drops named values through lib/types `export *`.
 import { DocLabel, InputType, RunStatus, type PipelineRun, type Project, type RunId } from "@/lib/server/types"
 
@@ -76,21 +82,82 @@ export function openMcpSession(sessionPath?: string, offline = false) {
   return createSpineSession({ persist, egress })
 }
 
+const DEFAULT_SHARE_SPEND_CENTS = 1000
+const DEFAULT_SCHEDULE_CRON = "0 9 * * *"
+const DEFAULT_SCHEDULE_TZ = "UTC"
+
+type mcp_step_review = {
+  kind: string
+  label: string
+  connectActionId?: string
+  connectConnected?: boolean
+  branches?: { steps: mcp_step_review[] }[]
+}
+
+function reviewConnectGaps(steps: mcp_step_review[]): string[] {
+  const out: string[] = []
+  for (const s of steps) {
+    if (s.kind === "connect" && s.connectConnected === false) {
+      const entry = getConnectAction(s.connectActionId)
+      if (entry && entry.auth !== "none") out.push(entry.displayName)
+    }
+    for (const b of s.branches ?? []) out.push(...reviewConnectGaps(b.steps))
+  }
+  return out
+}
+
+function parseObjectParams(params?: string): Record<string, unknown> {
+  if (!params?.trim()) return {}
+  const parsed: unknown = JSON.parse(params)
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+    throw new Error("params must be a JSON object")
+  }
+  return parsed as Record<string, unknown>
+}
+
+function csvList(raw?: string): string[] {
+  return (raw ?? "")
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean)
+}
+
+async function requireLiveSession(sessionPath?: string): Promise<SpineSession> {
+  const apiUrl = resolveMcpApiUrl()
+  if (!(await probeApi(apiUrl))) {
+    throw new Error(
+      `Next app not reachable at ${apiUrl} — start combined_full_stack with npm run dev, then retry`,
+    )
+  }
+  return openMcpSession(sessionPath, false)
+}
+
+function sessionDefaultDocs(session: SpineSession) {
+  const project = session.project
+  if (!project) throw new Error("no active project")
+  const snap = session.getSnapshot()
+  return shareDefaultDocsByModule(project, snap.docs, snap.inferenceInputDocIds)
+}
+
 type mcp_review = ReturnType<typeof toMcpProjectReview>
 type mcp_review_with_inflight = Omit<mcp_review, "assistantInFlight"> & { assistantInFlight: boolean }
 
 function mcpProjectNext(review: mcp_review_with_inflight, assistantError?: string): string {
   if (assistantError) {
-    return `Vibe failed: ${assistantError}. Fix that, then ask_agent again or edit with add_step / configure_n8n_step.`
+    return `Vibe failed: ${assistantError}. Fix that, then ask_agent again or edit with add_step / configure_n8n_step / configure_connect_step.`
   }
   if (review.assistantInFlight) return "Vibe still running. Poll get_project. Do not re-send ask_agent."
   if (review.pendingProposal) {
     return "Unapplied proposal. apply_project_changes with no proposalJson to Approve, or session_action id=assistant.reject to discard."
   }
   if (!review.ok) {
-    return "Issues listed above. Fix with add_step / configure_n8n_step / session_action structure.add-field, or ask_agent. Then validate_project."
+    return "Issues listed above. Fix with add_step / configure_n8n_step / configure_connect_step / session_action structure.add-field, or ask_agent. Then validate_project."
   }
-  return "Project is valid. If auth_status.canRun, start_run then wait_for_run. pinpoint_failure with testDocName from session_logs.tests and runJson from wait_for_run."
+  const connectNeeded = reviewConnectGaps(review.steps)
+  if (connectNeeded.length) {
+    return `Project is valid. Human taps Connect ${connectNeeded.join(", ")} in the GUI, then pull_remote_state (or configure_connect_step connectConnectionId). Then start_run, or session_action share.create-link / share.create-site / schedule.create.`
+  }
+  return "Project is valid. If auth_status.canRun, start_run then wait_for_run. Publish with session_action share.create-link | share.create-site | share.create-embed | share.deploy-api. Recurring runs: session_action schedule.create. pinpoint_failure with testDocName from session_logs.tests and runJson from wait_for_run."
 }
 
 // AI : compact graph so MCP can review Vibe proposals (inputType, fields, docs, pendingProposal).
@@ -509,6 +576,42 @@ export function configureN8nStepFromSession(opts: {
   }
 }
 
+export function configureConnectStepFromSession(opts: {
+  stepId: string
+  connectActionId?: string
+  parametersJson?: string
+  connectConnectionId?: string
+  sessionPath?: string
+}) {
+  const session = openMcpSession(opts.sessionPath, true)
+  let parameters: Record<string, unknown> | undefined
+  if (opts.parametersJson?.trim()) {
+    const parsed: unknown = JSON.parse(opts.parametersJson)
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+      throw new Error("parametersJson must be a JSON object")
+    }
+    parameters = parsed as Record<string, unknown>
+  }
+  if (opts.connectActionId && !getConnectAction(opts.connectActionId)) {
+    throw new Error(`unknown connect action: ${opts.connectActionId}`)
+  }
+  const patch: Parameters<typeof patchStep>[2] = {}
+  if (opts.connectActionId) patch.connectActionId = opts.connectActionId
+  if (parameters) patch.connectParameters = parameters
+  if (opts.connectConnectionId !== undefined) {
+    patch.connectConnectionId = opts.connectConnectionId.trim() || undefined
+  }
+  const step = patchStep(session, opts.stepId, patch)
+  return {
+    id: step.id,
+    label: step.label,
+    kind: step.kind,
+    connectActionId: step.connectActionId,
+    connectParameters: step.connectParameters,
+    connectConnected: Boolean(step.connectConnectionId?.trim()),
+  }
+}
+
 export function removeStepFromSession(id: string, sessionPath?: string) {
   const session = openMcpSession(sessionPath, true)
   removeStep(session, id)
@@ -689,10 +792,190 @@ export function cacheFromSession(sessionPath?: string) {
   return toCacheView(session.getSnapshot())
 }
 
-export function shareFromSession(sessionPath?: string) {
-  // AI : TODO (mcp-capability) — list-only; GUI Share mints POST /api/shared-links + hosted-apis + embed.
-  const session = openMcpSession(sessionPath, true)
-  return toShareView(session.getSnapshot())
+export async function shareFromSession(sessionPath?: string) {
+  try {
+    const session = await requireLiveSession(sessionPath)
+    const [links, apis] = await Promise.all([session.listShareLinks(), session.listHostedApis()])
+    return { ...toShareView(session.getSnapshot()), links: links.links, apis: apis.apis }
+  } catch {
+    const session = openMcpSession(sessionPath, true)
+    return {
+      ...toShareView(session.getSnapshot()),
+      next: "Local snapshot only. Start combined_full_stack and set SPINE_API_TOKEN, then session_action share.create-link / share.create-site / share.deploy-api.",
+    }
+  }
+}
+
+export async function createShareFromSession(kind: "link" | "embed" | "site", args: SessionActionArgs) {
+  const session = await requireLiveSession(args.sessionPath)
+  const extra = parseObjectParams(args.params)
+  const fundingMode =
+    args.fundingMode ??
+    (typeof extra.fundingMode === "string" ? extra.fundingMode : undefined) ??
+    (kind === "embed" ? "viewer_signs_in" : "sharer_pays")
+  const spendLimitCents =
+    args.spendLimitCents ??
+    (typeof extra.spendLimitCents === "number" ? extra.spendLimitCents : DEFAULT_SHARE_SPEND_CENTS)
+  const allowedOrigins = csvList(args.allowedOrigins).length
+    ? csvList(args.allowedOrigins)
+    : Array.isArray(extra.allowedOrigins)
+      ? (extra.allowedOrigins as string[])
+      : []
+  if (kind === "embed" && !allowedOrigins.length) {
+    throw new Error("share.create-embed needs allowedOrigins (comma-separated origins the iframe may load on)")
+  }
+  const project = session.project
+  if (!project) throw new Error("no active project")
+  const companyName =
+    args.companyName?.trim() ||
+    args.name?.trim() ||
+    (typeof extra.companyName === "string" ? extra.companyName.trim() : "") ||
+    project.name
+  const siteOptions =
+    kind === "site"
+      ? normalizeHostedSiteOptions({
+          brand: {
+            ...DEFAULT_HOSTED_SITE_OPTIONS.brand,
+            companyName,
+            tagline:
+              typeof extra.tagline === "string" && extra.tagline.trim()
+                ? extra.tagline
+                : "Run this pipeline",
+          },
+          customHtml: typeof extra.customHtml === "string" ? extra.customHtml : DEFAULT_HOSTED_SITE_HTML,
+          customCss: typeof extra.customCss === "string" ? extra.customCss : "",
+          hideSpineFooter: extra.hideSpineFooter === true,
+          ...(typeof extra.siteOptions === "object" && extra.siteOptions ? (extra.siteOptions as object) : {}),
+        })
+      : undefined
+  const minted = await session.createShareLink({
+    kind,
+    fundingMode,
+    viewerNameRequired: extra.viewerNameRequired === true,
+    spendLimitCents,
+    billingMultiple: typeof extra.billingMultiple === "number" ? extra.billingMultiple : 1,
+    flatFeeCents: typeof extra.flatFeeCents === "number" ? extra.flatFeeCents : undefined,
+    defaultDocsByModule: extra.defaultDocsByModule ?? sessionDefaultDocs(session),
+    ...(kind === "embed"
+      ? {
+          allowedOrigins,
+          embedOptions: {
+            ...DEFAULT_EMBED_OPTIONS,
+            ...(typeof extra.embedOptions === "object" && extra.embedOptions ? extra.embedOptions : {}),
+          },
+        }
+      : {}),
+    ...(kind === "site" ? { siteOptions } : {}),
+  })
+  const origin = resolveMcpApiUrl()
+  return {
+    ...minted,
+    url: minted.url.startsWith("http") ? minted.url : `${origin}${minted.url}`,
+    next:
+      kind === "site"
+        ? `Hosted page minted. Share ${origin}${minted.url}. OAuth apps still need the human Connect chip.`
+        : kind === "embed"
+          ? `Embed minted. Drop the iframe on an allowed origin. Path ${minted.url}.`
+          : `Link minted. Share ${origin}${minted.url}.`,
+  }
+}
+
+export async function createHostedApiFromSession(args: SessionActionArgs) {
+  const session = await requireLiveSession(args.sessionPath)
+  const extra = parseObjectParams(args.params)
+  const created = await session.createHostedApi({
+    fundingMode: args.fundingMode ?? (typeof extra.fundingMode === "string" ? extra.fundingMode : "owner_pays"),
+    billingMultiple: typeof extra.billingMultiple === "number" ? extra.billingMultiple : 1,
+    flatFeeCents: typeof extra.flatFeeCents === "number" ? extra.flatFeeCents : undefined,
+    spendLimitCents: args.spendLimitCents ?? (typeof extra.spendLimitCents === "number" ? extra.spendLimitCents : undefined),
+    defaultDocsByModule: extra.defaultDocsByModule ?? sessionDefaultDocs(session),
+  })
+  return {
+    ...created,
+    next: created.apiKey
+      ? "Copy apiKey now — the server will not show it again. Invoke with that key."
+      : "Hosted API deployed.",
+  }
+}
+
+export async function listSchedulesFromSession(sessionPath?: string) {
+  const session = await requireLiveSession(sessionPath)
+  return session.listSchedules()
+}
+
+export async function createScheduleFromSession(args: SessionActionArgs) {
+  const session = await requireLiveSession(args.sessionPath)
+  const extra = parseObjectParams(args.params)
+  const cron = args.cron?.trim() || (typeof extra.cron === "string" ? extra.cron.trim() : DEFAULT_SCHEDULE_CRON)
+  const timezone =
+    args.timezone?.trim() || (typeof extra.timezone === "string" ? extra.timezone.trim() : DEFAULT_SCHEDULE_TZ)
+  if (!isValidCronExpr(cron)) throw new Error("That schedule isn't valid — pass cron like 0 9 * * *")
+  if (!isValidIanaTimeZone(timezone)) throw new Error("Pass timezone as an IANA name, e.g. Australia/Sydney")
+  const name = args.name?.trim() || (typeof extra.name === "string" ? extra.name.trim() : "") || describeCronExpr(cron)
+  return session.createSchedule({
+    name,
+    cron,
+    timezone,
+    defaultDocsByModule: extra.defaultDocsByModule ?? sessionDefaultDocs(session),
+    enabled: args.enabled ?? (typeof extra.enabled === "boolean" ? extra.enabled : true),
+    tickUrl: typeof extra.tickUrl === "string" ? extra.tickUrl : undefined,
+  })
+}
+
+function requireScheduleId(args: SessionActionArgs): string {
+  const id = args.scheduleId?.trim() || args.stepId?.trim()
+  if (!id) throw new Error("scheduleId required")
+  return id
+}
+
+export async function patchScheduleFromSession(args: SessionActionArgs) {
+  const session = await requireLiveSession(args.sessionPath)
+  const extra = parseObjectParams(args.params)
+  const patch: Record<string, unknown> = { ...extra }
+  if (args.name) patch.name = args.name
+  if (args.cron) patch.cron = args.cron
+  if (args.timezone) patch.timezone = args.timezone
+  if (args.enabled !== undefined) patch.enabled = args.enabled
+  if (Object.keys(patch).length === 0) throw new Error("Provide enabled, name, cron, and/or timezone")
+  return session.patchSchedule(requireScheduleId(args), patch)
+}
+
+export async function deleteScheduleFromSession(args: SessionActionArgs) {
+  const session = await requireLiveSession(args.sessionPath)
+  return session.deleteSchedule(requireScheduleId(args))
+}
+
+export async function runScheduleNowFromSession(args: SessionActionArgs) {
+  const session = await requireLiveSession(args.sessionPath)
+  return session.runScheduleNow(requireScheduleId(args))
+}
+
+export async function publishMarketplaceFromSession(args: SessionActionArgs) {
+  const session = await requireLiveSession(args.sessionPath)
+  const extra = parseObjectParams(args.params)
+  const title = args.name?.trim() || (typeof extra.title === "string" ? extra.title.trim() : "")
+  if (!title) throw new Error("name required (marketplace listing title)")
+  return session.publishMarketplaceListing({
+    title,
+    description: typeof extra.description === "string" ? extra.description : args.text,
+    priceCents: typeof extra.priceCents === "number" ? extra.priceCents : 0,
+  })
+}
+
+export async function startConnectSessionFromSession(args: SessionActionArgs) {
+  const session = await requireLiveSession(args.sessionPath)
+  const extra = parseObjectParams(args.params)
+  let actionId = args.connectActionId?.trim() || (typeof extra.actionId === "string" ? extra.actionId.trim() : "")
+  if (!actionId && args.stepId) {
+    const step = flattenPipelineModules(session.modules).find((m) => m.id === args.stepId || m.label === args.stepId)
+    actionId = step?.connectActionId?.trim() ?? ""
+  }
+  if (!actionId) throw new Error("connectActionId required — list_connect_actions or pass stepId of a connect step")
+  const started = await session.startConnectSession(actionId)
+  return {
+    ...started,
+    next: "Vendor OAuth is GUI-only. Human taps Connect in the app, then pull_remote_state (or configure_connect_step connectConnectionId). Do not invent connection ids.",
+  }
 }
 
 export function settingsFromSession(model?: string, sessionPath?: string) {
@@ -735,6 +1018,16 @@ export type SessionActionArgs = {
   executeRuns?: boolean
   at?: number
   projects?: string
+  cron?: string
+  timezone?: string
+  enabled?: boolean
+  fundingMode?: string
+  companyName?: string
+  allowedOrigins?: string
+  spendLimitCents?: number
+  connectConnectionId?: string
+  connectActionId?: string
+  scheduleId?: string
 }
 
 export async function runSessionAction(args: SessionActionArgs): Promise<unknown> {
@@ -871,7 +1164,33 @@ export async function runSessionAction(args: SessionActionArgs): Promise<unknown
       return settingsFromSession(args.model, sessionPath)
     case "nav.window.share":
     case "share.tab.link":
+    case "share.tab.api":
+    case "share.tab.embed":
+    case "share.tab.site":
       return shareFromSession(sessionPath)
+    case "share.create-link":
+      return createShareFromSession("link", args)
+    case "share.create-embed":
+      return createShareFromSession("embed", args)
+    case "share.create-site":
+      return createShareFromSession("site", args)
+    case "share.deploy-api":
+      return createHostedApiFromSession(args)
+    case "share.marketplace-publish":
+      return publishMarketplaceFromSession(args)
+    case "nav.window.schedule":
+      return listSchedulesFromSession(sessionPath)
+    case "schedule.create":
+      return createScheduleFromSession(args)
+    case "schedule.toggle":
+      if (args.enabled === undefined) throw new Error("enabled required")
+      return patchScheduleFromSession(args)
+    case "schedule.run-now":
+      return runScheduleNowFromSession(args)
+    case "schedule.delete":
+      return deleteScheduleFromSession(args)
+    case "connect.start-session":
+      return startConnectSessionFromSession(args)
     case "nav.window.cache":
     case "cache.refresh":
       return cacheFromSession(sessionPath)
@@ -906,7 +1225,7 @@ export async function runSessionAction(args: SessionActionArgs): Promise<unknown
     case "assistant.execute-runs":
       return executeProposedActionsFromSession(sessionPath)
     // AI : Host-bound (no session method): inference.stop, jobs.stop, inference.human-review.*,
-    // AI :   inference.chatbot.send, inference.custom-code, share mint, Stripe, auth.sign-in.
+    // AI :   inference.chatbot.send, inference.custom-code, Stripe, auth.sign-in. OAuth popup is GUI.
     default:
       throw new Error(`unknown session_action id: ${id}`)
   }

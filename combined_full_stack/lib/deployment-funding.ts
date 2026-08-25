@@ -1,3 +1,4 @@
+import { isSiteLinkId } from "@/lib/hosted-site";
 import type { HostedApiRecord } from "./hosted-api-types";
 import { callerFundsHostedApi } from "./hosted-api-funding";
 import { viewerFundsSharedRun } from "./shared-link-funding";
@@ -6,6 +7,7 @@ import type { SharedLinkRecord } from "./shared-link-types";
 export type DeploymentRow =
   | { kind: "link"; row: SharedLinkRecord }
   | { kind: "embed"; row: SharedLinkRecord }
+  | { kind: "site"; row: SharedLinkRecord }
   | { kind: "api"; row: HostedApiRecord };
 
 export type DeploymentKind = DeploymentRow["kind"];
@@ -33,9 +35,11 @@ export function liveDeploymentRows(
     ...links
       .filter((l) => !l.revoked)
       .map((row) =>
-        isEmbedRecord(row)
-          ? ({ kind: "embed" as const, row })
-          : ({ kind: "link" as const, row }),
+        isSiteLinkId(row.id)
+          ? ({ kind: "site" as const, row })
+          : isEmbedRecord(row)
+            ? ({ kind: "embed" as const, row })
+            : ({ kind: "link" as const, row }),
       ),
     ...apis.filter((a) => !a.revoked).map((row) => ({ kind: "api" as const, row })),
   ].sort((a, b) => b.row.createdAt - a.row.createdAt);

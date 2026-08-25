@@ -24,7 +24,7 @@ export function SharedRunViewer({
   embedSessionToken,
 }: {
   linkId: string
-  variant?: "page" | "embed"
+  variant?: "page" | "embed" | "site"
   embedSessionToken?: string
 }) {
   const [link, setLink] = useState<SharedLinkPublicView | null>(null)
@@ -43,9 +43,9 @@ export function SharedRunViewer({
     return (
       <div className="flex min-h-dvh flex-col items-center justify-center gap-3 p-8 text-center">
         <p className="text-sm text-muted-foreground">
-          {variant === "embed" ? "Embed not found" : "Shared link not found"}
+          {variant === "embed" ? "Embed not found" : variant === "site" ? "Hosted page not found" : "Shared link not found"}
         </p>
-        {variant === "page" ? (
+        {variant === "page" || variant === "site" ? (
           <Link href="/" className="text-sm text-primary underline-offset-4 hover:underline">
             Back to Spine
           </Link>
@@ -80,18 +80,19 @@ function SharedRunContent({
 }: {
   link: SharedLinkPublicView
   linkId: string
-  variant: "page" | "embed"
+  variant: "page" | "embed" | "site"
   embedSessionToken?: string
 }) {
   const { email, isAuthenticated, ready, signOut } = useSupabaseSession()
   const isEmbed = variant === "embed"
-  const hideBranding = isEmbed && link.embedOptions?.hideBranding
-  const loginNext = isEmbed ? `/embed/${linkId}` : `/run/${linkId}`
+  const isSite = variant === "site"
+  const hideBranding = (isEmbed && link.embedOptions?.hideBranding) || isSite
+  const loginNext = isSite ? `/site/${linkId}` : isEmbed ? `/embed/${linkId}` : `/run/${linkId}`
 
   return (
     <DocViewerProvider>
     <SharedRunDocScopeProvider scope={{ linkId }}>
-    <div className={cn("flex flex-col bg-background text-foreground", isEmbed ? "min-h-full" : "min-h-dvh")}>
+    <div className={cn("flex flex-col bg-background text-foreground", isEmbed || isSite ? "min-h-full" : "min-h-dvh")}>
       {!hideBranding && (
       <header className="border-b border-border px-4 py-3">
         <div className="mx-auto flex max-w-4xl flex-wrap items-center gap-2">
@@ -137,7 +138,7 @@ function SharedRunContent({
                 Sign in
               </Button>
             ) : null}
-            {!isEmbed && (
+            {!isEmbed && !isSite && (
             <Button
               size="sm"
               className="h-7 gap-1.5 text-xs"
@@ -152,14 +153,16 @@ function SharedRunContent({
       </header>
       )}
 
-      <main className={cn("mx-auto w-full max-w-4xl flex-1 overflow-y-auto", isEmbed ? "p-3" : "p-5")}>
+      <main className={cn("mx-auto w-full max-w-4xl flex-1 overflow-y-auto", isEmbed || isSite ? "p-3" : "p-5")}>
         {isAuthenticated && viewerFundsSharedRun(link.fundingMode) ? (
           <div className="mb-4 rounded-lg border border-primary/30 bg-primary/5 px-4 py-3 text-sm">
-            <p className="font-medium">Run this in your workspace for Billing access</p>
+            <p className="font-medium">{isSite ? "This page bills your credits" : "Run this in your workspace for Billing access"}</p>
             <p className="mt-1 text-xs text-muted-foreground">
-              Viewer-paid links need credit in your account. Use Open in workspace, then go to the Billing tab to top up.
+              {isSite
+                ? "Viewer-paid pages need credit in your account. Top up from Billing in Spine after you sign in."
+                : "Viewer-paid links need credit in your account. Use Open in workspace, then go to the Billing tab to top up."}
             </p>
-            {!isEmbed && (
+            {!isEmbed && !isSite && (
             <Button
               size="sm"
               className="mt-3 gap-1.5"

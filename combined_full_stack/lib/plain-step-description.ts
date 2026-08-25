@@ -76,7 +76,9 @@ export function simpleKindBlurb(kind?: string): string | undefined {
     case "webhook":
       return "Sends the result somewhere else"
     case "n8n":
-      return "Runs a typed automation piece"
+      return "Rearranges the previous step"
+    case "connect":
+      return "Sends it to the app you connected"
     case "chatbot":
       return "Has a conversation"
     default:

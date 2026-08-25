@@ -8,6 +8,8 @@ describe("n8n typed pieces", () => {
     expect(types).toContain("n8n-nodes-base.set")
     expect(types).toContain("n8n-nodes-base.filter")
     expect(types).toContain("n8n-nodes-base.spreadsheetFile")
+    expect(getN8nNode("piece.set")?.n8nNodeType).toBe("n8n-nodes-base.set")
+    expect(getN8nNode("piece.filter")?.n8nNodeType).toBe("n8n-nodes-base.filter")
     expect(types.every((t) => !t.includes("trigger"))).toBe(true)
   })
 

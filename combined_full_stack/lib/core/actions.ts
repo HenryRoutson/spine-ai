@@ -171,18 +171,46 @@ export const exportPipelineAction = defineAction({
 
 export const shareLinkAction = defineAction({
   id: "shareLink",
-  label: "List share link ids (HTTP to mint)",
+  label: "List share link ids",
   locality: "remote",
   input: z.object({}),
-  run: (session) => session.getSnapshot().shareLinkIds,
+  run: (session) => session.listShareLinks(),
+})
+
+export const createShareLinkAction = defineAction({
+  id: "createShareLink",
+  label: "Create shared link / embed / hosted page",
+  locality: "remote",
+  input: z.object({}).passthrough(),
+  run: (session, input) => session.createShareLink(input),
 })
 
 export const hostedApiAction = defineAction({
   id: "hostedApi",
-  label: "List hosted API ids (HTTP to mint)",
+  label: "List hosted API ids",
   locality: "remote",
   input: z.object({}),
-  run: (session) => session.getSnapshot().hostedApiIds,
+  run: (session) => session.listHostedApis(),
+})
+
+export const createHostedApiAction = defineAction({
+  id: "createHostedApi",
+  label: "Deploy hosted API",
+  locality: "remote",
+  input: z.object({}).passthrough(),
+  run: (session, input) => session.createHostedApi(input),
+})
+
+export const createScheduleAction = defineAction({
+  id: "createSchedule",
+  label: "Create pipeline schedule",
+  locality: "remote",
+  input: z.object({
+    name: z.string(),
+    cron: z.string(),
+    timezone: z.string(),
+  }).passthrough(),
+  run: (session, input) => session.createSchedule(input),
 })
 
 export const billingAction = defineAction({
@@ -240,7 +268,10 @@ export const SESSION_ACTIONS = [
   runTestAction,
   exportPipelineAction,
   shareLinkAction,
+  createShareLinkAction,
   hostedApiAction,
+  createHostedApiAction,
+  createScheduleAction,
   billingAction,
   cacheGetAction,
   humanReviewAction,
@@ -266,8 +297,11 @@ export const SESSION_ACTION_PARITY_ID: Record<string, string> = {
   startRun: "inference.start-run",
   runTest: "testing.run",
   exportPipeline: "pipeline.export",
-  shareLink: "share.create-link",
-  hostedApi: "share.deploy-api",
+  shareLink: "share.tab.link",
+  createShareLink: "share.create-link",
+  hostedApi: "share.tab.api",
+  createHostedApi: "share.deploy-api",
+  createSchedule: "schedule.create",
   billing: "billing.refresh",
   cacheGet: "cache.refresh",
   humanReview: "inference.human-review.approve",

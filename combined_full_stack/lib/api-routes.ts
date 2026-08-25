@@ -9,6 +9,7 @@ export const API_ROUTES = {
   billingCheckout: "/api/billing/checkout",
   billingKeys: "/api/billing/keys",
   secrets: "/api/secrets",
+  connectSession: "/api/connect/session",
   billingWebhook: "/api/billing/webhook",
   projects: "/api/projects",
   project: (id: string) => `/api/projects/${id}`,
@@ -80,6 +81,7 @@ export const API_ROUTES = {
   scheduleRun: (id: string) => `/api/schedules/${id}/run`,
   schedulesTick: "/api/schedules/tick",
   // AI : Embed reuses shared-links APIs + /embed/[id] UI (origin allowlist on emb_ rows).
+  // AI : Hosted page reuses the same APIs + /site/[id] HTML wrapper (site_ rows, no origin allowlist).
   landingDemoBuild: "/api/landing-demo/build-pipeline",
   landingDemoSignup: "/api/landing-demo/signup",
   landingDemoSessionReplay: "/api/landing-demo/session-replay",

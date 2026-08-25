@@ -1,6 +1,5 @@
 // AI : n8n export step bodies — bake catalog code + params so TS export matches UI runN8nPiece.
-// AI : TODO (n8n-sidecar-S7-export) — live mode must emit env-backed HTTP (N8N_BASE_URL / webhook), not baked Code-node JS.
-// AI :   py/go/rs already raise for local; keep that until live HTTP export exists.
+// AI : SUPERSEDED (n8n-sidecar-S7-export) — live apps export via connect-step.ts (NANGO_*), not this file.
 import {
   DEFAULT_N8N_TIMEOUT_MS,
   getN8nNode,

@@ -14,6 +14,7 @@ const PUBLIC_PATHS = [
   "/auth/callback",
   "/run",
   "/embed",
+  "/site",
   "/demo",
   "/privacy",
   "/terms",

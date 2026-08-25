@@ -1,5 +1,5 @@
 "use client"
-// AI : TODO (n8n-sidecar-S4-ui) — add local | live mode. Live: workflow id / webhook path + n8nResponseMode/Path.
+// AI : SUPERSEDED (n8n-sidecar-S4-ui) — live Slack/Gmail is Connect, not a live mode on this form.
 // AI :   Keep auto form for catalog pieces; do not list 400 n8n Cloud nodes here (see n8n-roadmap.ts).
 
 import { Input } from "@/components/ui/input"

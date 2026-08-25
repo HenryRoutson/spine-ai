@@ -33,9 +33,10 @@ import {
   type SharedLinkId,
 } from "./types";
 import { logger } from "./server_logger";
-import type { SharedLinkDefaultDoc, SharedLinkRecord, EmbedOptions } from "@/lib/shared-link-types";
+import type { SharedLinkDefaultDoc, SharedLinkRecord, EmbedOptions, HostedSiteBrand, HostedSiteOptions } from "@/lib/shared-link-types";
 import { DEFAULT_EMBED_OPTIONS } from "@/lib/shared-link-types";
 import { isEmbedLinkId, normalizeEmbedOrigins } from "@/lib/server/embed_origins";
+import { isSiteLinkId, normalizeHostedSiteOptions } from "@/lib/hosted-site";
 
 export type { SharedLinkDefaultDoc, SharedLinkRecord };
 
@@ -87,6 +88,7 @@ const linkLog = logger("shared-links");
 
 const SHARED_LINK_PREFIX = "pub_";
 const EMBED_LINK_PREFIX = "emb_";
+const SITE_LINK_PREFIX = "site_";
 
 function isServerless(): boolean {
   return !!process.env.VERCEL;
@@ -218,6 +220,10 @@ export function newEmbedLinkId(): SharedLinkId {
   return uid<SharedLinkId>(EMBED_LINK_PREFIX);
 }
 
+export function newSiteLinkId(): SharedLinkId {
+  return uid<SharedLinkId>(SITE_LINK_PREFIX);
+}
+
 export function newSessionId(): string {
   return randomBytes(16).toString("hex");
 }
@@ -240,6 +246,7 @@ function loadLocalLink(id: SharedLinkId): StoredSharedLink | null {
     enabled: row.enabled !== false,
     allowedOrigins: originsFromRow(row.allowedOrigins),
     embedOptions: normalizeEmbedOptions(row.embedOptions),
+    siteOptions: normalizeHostedSiteOptions(row.siteOptions),
   };
 }
 
@@ -290,6 +297,7 @@ async function loadSupabaseLink(id: SharedLinkId): Promise<StoredSharedLink | nu
     revoked: data.revoked,
     allowedOrigins: originsFromRow(data.allowed_origins),
     embedOptions: normalizeEmbedOptions(data.embed_options),
+    siteOptions: normalizeHostedSiteOptions(data.site_options),
   };
 }
 
@@ -345,6 +353,7 @@ export async function listSharedLinksForOwner(ownerId: user_id_string): Promise<
       revoked: row.revoked,
       allowedOrigins: originsFromRow(row.allowed_origins),
       embedOptions: normalizeEmbedOptions(row.embed_options),
+      siteOptions: normalizeHostedSiteOptions(row.site_options),
     }),
   );
 }
@@ -369,6 +378,7 @@ function toPublicRecord(row: StoredSharedLink): SharedLinkRecord {
     revoked: row.revoked,
     allowedOrigins: row.allowedOrigins ?? [],
     embedOptions: normalizeEmbedOptions(row.embedOptions),
+    siteOptions: normalizeHostedSiteOptions(row.siteOptions),
   };
 }
 
@@ -383,23 +393,29 @@ export type PublishSharedLinkInput = {
   flatFeeCents?: number;
   defaultDocsByModule: Partial<Record<ModuleId, DocId[]>>;
   store: Store;
-  kind?: "link" | "embed";
+  kind?: "link" | "embed" | "site";
   allowedOrigins?: string[];
   embedOptions?: Partial<EmbedOptions>;
+  siteOptions?: unknown;
 };
 
 export async function publishSharedLink(input: PublishSharedLinkInput): Promise<SharedLinkRecord> {
   const isEmbed = input.kind === "embed";
+  const isSite = input.kind === "site";
   const allowedOrigins = isEmbed ? normalizeEmbedOrigins(input.allowedOrigins ?? []) : [];
   if (isEmbed && allowedOrigins.length === 0) {
     throw new Error("Embed requires at least one allowed origin");
   }
-  const id = isEmbed ? newEmbedLinkId() : newSharedLinkId();
+  const id = isSite ? newSiteLinkId() : isEmbed ? newEmbedLinkId() : newSharedLinkId();
   const fundingMode = input.fundingMode ?? SharedLinkFundingMode.SharerPays;
   const billingMultiple = normalizeBillingMultiple(input.billingMultiple);
   const flatFeeCents = normalizeFlatFeeCents(input.flatFeeCents);
   assertValidSharedLinkPricing(fundingMode, billingMultiple, flatFeeCents);
   const embedOptions = normalizeEmbedOptions(isEmbed ? input.embedOptions : undefined);
+  const siteOptions = normalizeHostedSiteOptions(isSite ? input.siteOptions : undefined);
+  if (isSite && !siteOptions.brand.companyName.trim()) {
+    throw new Error("Hosted page requires a company name");
+  }
 
   const snapshot = projectWithAuthoredModules(migrateProjectModules(structuredClone(input.project)));
   const defaultDocs: SharedLinkDefaultDoc[] = [];
@@ -457,6 +473,7 @@ export async function publishSharedLink(input: PublishSharedLinkInput): Promise<
     revoked: false,
     allowedOrigins,
     embedOptions,
+    siteOptions,
   };
 
   if (!isServerless()) saveLocalLink(row);
@@ -488,13 +505,14 @@ export async function publishSharedLink(input: PublishSharedLinkInput): Promise<
     created_at: row.createdAt,
     allowed_origins: row.allowedOrigins,
     embed_options: row.embedOptions,
+    site_options: row.siteOptions,
   });
   if (error) {
-    // AI : pre-migration DBs lack embed columns — retry without them; local JSON still has full row.
-    const missingEmbedCols =
-      /allowed_origins|embed_options/i.test(error.message) || isMissingSchemaError(error);
-    if (missingEmbedCols && !isServerless()) {
-      linkLog.warn(`embed columns missing — upsert without them + local save`, {
+    // AI : pre-migration DBs lack embed/site columns — retry without them; local JSON still has full row.
+    const missingOptionalCols =
+      /allowed_origins|embed_options|site_options/i.test(error.message) || isMissingSchemaError(error);
+    if (missingOptionalCols && !isServerless()) {
+      linkLog.warn(`optional shared-link columns missing — upsert without them + local save`, {
         error: error.message,
       });
       const { error: retryErr } = await db.from("shared_links").upsert({
@@ -618,6 +636,44 @@ export async function updateSharedLinkEmbedSettings(
       })
       .eq("id", id)
       .eq("owner_id", ownerId);
+  }
+  return toPublicRecord(link);
+}
+
+// AI : Hosted HTML wrapper updates — only for site_ deployments.
+export async function updateSharedLinkSiteSettings(
+  ownerId: user_id_string,
+  id: SharedLinkId,
+  siteOptions: unknown,
+): Promise<SharedLinkRecord | null> {
+  const link = await getSharedLink(id);
+  if (!link || link.ownerId !== ownerId) return null;
+  if (!isSiteLinkId(link.id)) {
+    throw new Error("Only hosted pages support HTML / brand settings");
+  }
+  const patch = (siteOptions && typeof siteOptions === "object" ? siteOptions : {}) as Partial<HostedSiteOptions> & {
+    brand?: Partial<HostedSiteBrand>
+  }
+  const next = normalizeHostedSiteOptions({
+    ...link.siteOptions,
+    ...patch,
+    brand: { ...link.siteOptions.brand, ...patch.brand },
+  });
+  if (!next.brand.companyName.trim()) {
+    throw new Error("Hosted page requires a company name");
+  }
+  link.siteOptions = next;
+  saveLocalLink(link);
+  const db = await supabaseForSharedLinks();
+  if (db) {
+    const { error } = await db
+      .from("shared_links")
+      .update({ site_options: link.siteOptions })
+      .eq("id", id)
+      .eq("owner_id", ownerId);
+    if (error && !isMissingSchemaError(error) && !/site_options/i.test(error.message)) {
+      throw new Error(error.message);
+    }
   }
   return toPublicRecord(link);
 }
@@ -758,6 +814,7 @@ export function publicLinkView(link: StoredSharedLink) {
     // AI : SECURITY — omit allowlist from public GET so attackers cannot copy origins for Referer spoof mint.
     allowedOrigins: [],
     embedOptions: normalizeEmbedOptions(link.embedOptions),
+    siteOptions: normalizeHostedSiteOptions(link.siteOptions),
   };
 }
 

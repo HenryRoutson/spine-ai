@@ -19,6 +19,7 @@ import {
   UserCheck,
   Webhook,
   Puzzle,
+  Plug,
   MessagesSquare,
   type LucideIcon,
 } from "lucide-react"
@@ -65,6 +66,7 @@ export const KIND_ICON: Record<ModuleKind, ModuleIcon> = {
   [ModuleKind.HumanReview]: UserCheck,
   [ModuleKind.Webhook]: Webhook,
   [ModuleKind.N8n]: Puzzle,
+  [ModuleKind.Connect]: Plug,
   [ModuleKind.Chatbot]: MessagesSquare,
   [ModuleKind.Output]: FileOutput,
 }
@@ -88,6 +90,7 @@ export const KIND_COLOR: Record<ModuleKind, string> = {
   [ModuleKind.HumanReview]: "text-chart-1",
   [ModuleKind.Webhook]: "text-chart-4",
   [ModuleKind.N8n]: "text-chart-4",
+  [ModuleKind.Connect]: "text-chart-4",
   [ModuleKind.Chatbot]: "text-chart-2",
   [ModuleKind.Output]: "text-output",
 }
@@ -112,6 +115,7 @@ export const KIND_SURFACE: Record<ModuleKind, string> = {
   [ModuleKind.HumanReview]: "border-chart-1/40 bg-chart-1/10",
   [ModuleKind.Webhook]: "border-chart-4/40 bg-chart-4/10",
   [ModuleKind.N8n]: "border-chart-4/40 bg-chart-4/10",
+  [ModuleKind.Connect]: "border-chart-4/40 bg-chart-4/10",
   [ModuleKind.Chatbot]: "border-chart-2/40 bg-chart-2/10",
   [ModuleKind.Output]: "border-output/40 bg-output/10",
 }

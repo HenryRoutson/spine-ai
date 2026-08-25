@@ -29,11 +29,16 @@ const Share = dynamic(() => import("@/components/share/share-page").then((m) => 
 const Logging = dynamic(() => import("@/components/logging").then((m) => ({ default: m.Logging })), {
   loading: () => <PanelLoading label="loading logging…" />,
 })
+const Schedule = dynamic(() => import("@/components/schedule-page").then((m) => ({ default: m.SchedulePage })), {
+  loading: () => <PanelLoading label="loading schedule…" />,
+})
 
 function renderObservePanel(tab: VibeObserveTab) {
   switch (tab) {
     case AppWindowId.Inference:
       return <Inference simple />
+    case AppWindowId.Schedule:
+      return <Schedule simple />
     case AppWindowId.Share:
       return <Share simple />
     case AppWindowId.Logging:
@@ -41,7 +46,7 @@ function renderObservePanel(tab: VibeObserveTab) {
   }
 }
 
-// AI : chat left (create/edit from scratch); Inference / Share / Logging on the right.
+// AI : chat left (create/edit from scratch); Inference / Schedule / Share / Logging on the right.
 // AI : DONE (media-view-A-share) — InferenceRunOutputs → DataViewPanel; Play tab works in simple / share / embed.
 export function VibePanel() {
   useMarkPrimarySectionReady(AppPrimarySection.Build)

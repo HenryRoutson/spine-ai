@@ -997,3 +997,85 @@ export async function callWebhook(
   }
   return webhookGetAtPath(terminal, opts.responsePath);
 }
+
+function utf8ToBase64Url(s: string): string {
+  const bytes = new TextEncoder().encode(s);
+  let bin = "";
+  for (const b of bytes) bin += String.fromCharCode(b);
+  return btoa(bin).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+}
+
+function encodeGmailRaw(to: unknown, subject: unknown, body: unknown): string {
+  const msg = [
+    `To: ${String(to ?? "")}`,
+    `Subject: ${String(subject ?? "")}`,
+    "MIME-Version: 1.0",
+    "Content-Type: text/plain; charset=utf-8",
+    "",
+    String(body ?? ""),
+  ].join("\r\n");
+  return utf8ToBase64Url(msg);
+}
+
+// AI : connect export helper — Nango proxy using env; never bake Slack tokens or connection ids.
+export async function runConnectAction(req: {
+  kind?: "http" | "nango";
+  actionId?: string;
+  provider?: string;
+  endpoint?: string;
+  method?: string;
+  url?: string;
+  connectionId?: string;
+  encodeGmail?: boolean;
+  body: unknown;
+}): Promise<unknown> {
+  const method = String(req.method ?? "POST").toUpperCase();
+  if (req.kind === "http" || req.url) {
+    const url = String(req.url ?? "");
+    if (!/^https?:\/\//i.test(url)) throw new Error("http.request only allows http(s) URLs");
+    const res = await fetch(url, {
+      method,
+      headers: { "Content-Type": "application/json" },
+      body: method === "GET" ? undefined : JSON.stringify(req.body),
+      signal: AbortSignal.timeout(30_000),
+    });
+    const text = await res.text();
+    try {
+      return JSON.parse(text) as unknown;
+    } catch {
+      return { status: res.status, body: text.slice(0, 2_000) };
+    }
+  }
+  const host = (process.env.NANGO_HOST ?? "http://127.0.0.1:3003").replace(/\/$/, "");
+  const key = process.env.NANGO_SECRET_KEY?.trim();
+  if (!key) throw new Error("NANGO_SECRET_KEY is not set");
+  const endpoint = req.endpoint?.startsWith("/") ? req.endpoint : `/${req.endpoint ?? req.actionId ?? ""}`;
+  const payload =
+    req.encodeGmail && req.body && typeof req.body === "object" && !Array.isArray(req.body)
+      ? {
+          raw: encodeGmailRaw(
+            (req.body as { to?: unknown }).to,
+            (req.body as { subject?: unknown }).subject,
+            (req.body as { body?: unknown }).body,
+          ),
+        }
+      : req.body;
+  const res = await fetch(`${host}/proxy${endpoint}`, {
+    method,
+    headers: {
+      Authorization: `Bearer ${key}`,
+      "Content-Type": "application/json",
+      "Connection-Id": req.connectionId || process.env.NANGO_CONNECTION_ID || "",
+      ...(req.provider ? { "Provider-Config-Key": req.provider } : {}),
+    },
+    body: method === "GET" ? undefined : JSON.stringify(payload),
+    signal: AbortSignal.timeout(30_000),
+  });
+  const text = await res.text();
+  if (!res.ok) throw new Error(`connect ${res.status}: ${text.slice(0, 240)}`);
+  try {
+    return JSON.parse(text) as unknown;
+  } catch {
+    return { ok: true, body: text.slice(0, 2_000) };
+  }
+}

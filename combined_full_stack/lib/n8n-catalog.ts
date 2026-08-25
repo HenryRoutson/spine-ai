@@ -1,6 +1,6 @@
 // AI : Typed n8n-style pieces — schema + auto UI + shareable JSON. No live Slack/Gmail.
 // AI : Execution is local n8n Code-node JS (lib/n8n-run.ts), not n8n Cloud.
-// AI : TODO (n8n-sidecar-S4-ui) — catalog stays transform-only; live apps are workflows on n8n, not new pieces here.
+// AI : SUPERSEDED (n8n-sidecar-S4-ui) — live apps are ModuleKind.Connect, not catalog pieces.
 
 export const DEFAULT_N8N_TIMEOUT_MS = 60_000
 
@@ -319,9 +319,20 @@ export function listN8nNodes(): N8nNodeCatalogEntry[] {
   return [...byType.values()]
 }
 
+export function canonicalN8nNodeType(type: string): string {
+  const t = type.trim()
+  // AI : piece.set → n8n-nodes-base.set so MCP/vibe can avoid user-facing n8n-nodes-base ids.
+  if (t.startsWith("piece.")) return `n8n-nodes-base.${t.slice("piece.".length)}`
+  return t
+}
+
 export function getN8nNode(type: string | undefined): N8nNodeCatalogEntry | undefined {
   if (!type?.trim()) return undefined
-  return listN8nNodes().find((p) => p.n8nNodeType === type.trim() || p.id === type.trim() || p.displayName === type.trim())
+  const raw = type.trim()
+  const key = canonicalN8nNodeType(raw)
+  return listN8nNodes().find(
+    (p) => p.n8nNodeType === key || p.n8nNodeType === raw || p.id === raw || p.displayName === raw,
+  )
 }
 
 export function registerSharedPiece(pieceJson: ShareablePiece): N8nNodeCatalogEntry {

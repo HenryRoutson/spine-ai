@@ -56,6 +56,7 @@ import { stepEmitsList } from "./type_expr";
 import { uid } from "@/lib/id";
 import { inputTypesAreAllJsonNative, inputTypesForModule, isDocToTextInputType } from "@/lib/inference-input-core";
 import { USER_ADDABLE_MODULE_KINDS, asModuleKind, kindAlwaysEmitsList, stepRequiresNote } from "@/lib/module-kinds";
+import { getConnectAction } from "@/lib/connect-catalog";
 import { attachAssistantUsage } from "./assistant_billing";
 import { isUnnamedProjectName } from "@/lib/project-assistant-types";
 import { diffStructureModels } from "@/lib/proposal-shape-diff";
@@ -165,12 +166,20 @@ const moduleSpecSchema = z
     n8nNodeType: z
       .string()
       .optional()
-      .describe("n8n only — catalog id e.g. n8n-nodes-base.set (list_pieces)"),
+      .describe("n8n only — catalog id e.g. piece.set or n8n-nodes-base.set (list_pieces)"),
     n8nParameters: z
       .record(z.string(), z.unknown())
       .optional()
       .describe("n8n only — piece params matching the auto-generated form"),
     n8nCode: z.string().optional().describe("n8n only — optional Code-node JS override"),
+    connectActionId: z
+      .string()
+      .optional()
+      .describe("connect only — catalog id from list_connect_actions e.g. slack.postMessage"),
+    connectParameters: z
+      .record(z.string(), z.unknown())
+      .optional()
+      .describe("connect only — params matching the action props"),
   })
   .superRefine((spec, ctx) => {
     if (stepRequiresNote(asModuleKind(spec.kind)) && !spec.note?.trim()) {
@@ -237,6 +246,21 @@ const moduleSpecSchema = z
         });
       }
     }
+    if (spec.kind === ModuleKind.Connect) {
+      if (!spec.connectActionId?.trim()) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "connect requires connectActionId from list_connect_actions",
+          path: ["connectActionId"],
+        });
+      } else if (!getConnectAction(spec.connectActionId)) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: `unknown connect action "${spec.connectActionId}" — use list_connect_actions`,
+          path: ["connectActionId"],
+        });
+      }
+    }
   });
 
 // AI : patch entry — only the fields the agent wants to change; matched by 0-based index in current pipeline.
@@ -255,6 +279,10 @@ const modulePatchEntrySchema = z.object({
   model: z.string().optional(),
   inputMinCount: z.number().int().min(1).optional(),
   assembleBindings: assembleBindingsSchema.optional(),
+  n8nNodeType: z.string().optional(),
+  n8nParameters: z.record(z.string(), z.unknown()).optional(),
+  connectActionId: z.string().optional(),
+  connectParameters: z.record(z.string(), z.unknown()).optional(),
 });
 
 const modelSpecSchema = structureModelSpecSchema;
@@ -466,6 +494,8 @@ function makeModuleFromSpec(
       n8nNodeType: spec.kind === "n8n" ? spec.n8nNodeType : undefined,
       n8nParameters: spec.kind === "n8n" ? spec.n8nParameters : undefined,
       n8nCode: spec.kind === "n8n" ? spec.n8nCode : undefined,
+      connectActionId: spec.kind === "connect" ? spec.connectActionId : undefined,
+      connectParameters: spec.kind === "connect" ? spec.connectParameters : undefined,
     },
     models,
     globalModel,
@@ -620,6 +650,10 @@ function applyModulePatch(
     ...(modelId !== undefined ? { model: modelId } : {}),
     ...(patch.inputMinCount !== undefined ? { inputMinCount: patch.inputMinCount } : {}),
     ...(patch.assembleBindings !== undefined ? { assembleBindings: patch.assembleBindings } : {}),
+    ...(patch.n8nNodeType !== undefined ? { n8nNodeType: patch.n8nNodeType } : {}),
+    ...(patch.n8nParameters !== undefined ? { n8nParameters: patch.n8nParameters } : {}),
+    ...(patch.connectActionId !== undefined ? { connectActionId: patch.connectActionId } : {}),
+    ...(patch.connectParameters !== undefined ? { connectParameters: patch.connectParameters } : {}),
   };
   if (outHint) {
     next = { ...next, ...patchSpineOutList(next, kindAlwaysEmitsList(existing.kind) || outHint.isList) };

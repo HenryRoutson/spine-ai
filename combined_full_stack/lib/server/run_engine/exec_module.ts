@@ -20,6 +20,7 @@ import {
 } from "./steps/misc";
 import { execWebhookStep } from "./steps/webhook";
 import { execN8nStep } from "./steps/n8n";
+import { execConnectStep } from "./steps/connect";
 import { execChatbotStep } from "./steps/chatbot";
 import { execForkJoin } from "./steps/fork";
 
@@ -63,6 +64,8 @@ export async function execModule(m: PipelineModule, ctx: RunCtx, log: RunLogger)
       return execWebhookStep(m, ctx, log);
     case ModuleKind.N8n:
       return execN8nStep(m, ctx, log);
+    case ModuleKind.Connect:
+      return execConnectStep(m, ctx, log);
     case ModuleKind.Chatbot:
       return execChatbotStep(m, ctx, log);
     default: {

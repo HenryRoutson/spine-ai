@@ -1,6 +1,6 @@
 // AI : Local n8n Code-node runtime — typed spine in/out. Does not call n8n Cloud or vendor APIs.
-// AI : TODO (n8n-sidecar-S2-live) — keep this file local-only; live Slack/Gmail goes through steps/n8n.ts HTTP, not here.
-// AI : TODO (n8n-sidecar-S3-adapter) — reuse spineToN8nItems / n8nItemsToSpine for live payloads when wiring sidecar.
+// AI : SUPERSEDED (n8n-sidecar-S2-live) — live Slack/Gmail is steps/connect.ts, not this file.
+// AI : SUPERSEDED (n8n-sidecar-S3-adapter) — connect uses materializeStepOutput; spineToN8nItems stays local.
 import { DEFAULT_N8N_TIMEOUT_MS, getN8nNode, type n8n_node_type_string } from "@/lib/n8n-catalog"
 
 export type N8nItem = { json: Record<string, unknown> }

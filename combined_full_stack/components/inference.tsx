@@ -72,6 +72,7 @@ import { InferenceStepTracePanel } from "@/components/inference/inference-step-t
 import { RunInputsNeededHint, RunWithStopButton } from "@/components/run-with-stop-button"
 import { IsolatedErrorButton } from "@/components/logging/isolated-error-actions"
 import { MissingSecretsBanner } from "@/components/missing-secrets-banner"
+import { ConnectAppsBanner, ConnectTriggersHint } from "@/components/connect-apps-banner"
 import { useDiagnosisAgents } from "@/lib/diagnosis-agent-context"
 import { DiagnosisRunLink } from "@/components/diagnosis-agents/diagnosis-run-link"
 import { useProjectSecrets } from "@/lib/use-project-secrets"
@@ -677,6 +678,13 @@ export function Inference({ simple }: { simple?: boolean } = {}) {
                   }
                 />
                 )}
+
+                {run.phase !== "running" ? (
+                  <div className="flex flex-col gap-3">
+                    <ConnectAppsBanner modules={modules} simple={isSimple} />
+                    <ConnectTriggersHint modules={modules} simple={isSimple} />
+                  </div>
+                ) : null}
 
                 {previewOnly && run.phase !== "running" ? (
                   <div className="rounded-lg border border-border bg-muted/20 px-4 py-5 text-center">

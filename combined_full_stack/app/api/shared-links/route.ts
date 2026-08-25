@@ -49,9 +49,15 @@ export async function POST(req: NextRequest) {
       kind: body.kind,
       allowedOrigins: body.allowedOrigins,
       embedOptions: body.embedOptions,
+      siteOptions: body.siteOptions,
     });
     apiLog.info(`published shared link`, { linkId: link.id, projectId: body.projectId, kind: body.kind ?? "link" });
-    const url = body.kind === "embed" || link.id.startsWith("emb_") ? `/embed/${link.id}` : `/run/${link.id}`;
+    const url =
+      body.kind === "site" || link.id.startsWith("site_")
+        ? `/site/${link.id}`
+        : body.kind === "embed" || link.id.startsWith("emb_")
+          ? `/embed/${link.id}`
+          : `/run/${link.id}`;
     return NextResponse.json({ link, url });
   } catch (err) {
     apiLog.error(`POST failed`, { error: (err as Error).message });

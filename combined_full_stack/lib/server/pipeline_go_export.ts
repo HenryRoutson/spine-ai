@@ -33,6 +33,7 @@ function goImports(needs: ExportRuntimeNeeds, project: Project): string {
     needs.humanReview ||
     needs.exampleSelect ||
     needs.n8n ||
+    needs.connect ||
     project.modules.some((m) => m.kind === ModuleKind.Combine);
   if (needsFmt) pkgs.add("fmt");
   const sorted = [...pkgs].sort();

@@ -8,6 +8,7 @@ import {
   setSharedLinkEnabled,
   SharedLinkSpendLimitTooLowError,
   updateSharedLinkEmbedSettings,
+  updateSharedLinkSiteSettings,
   updateSharedLinkSpendLimit,
 } from "@/lib/server/shared_links";
 import type { SharedLinkRecord } from "@/lib/shared-link-types";
@@ -67,6 +68,15 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: strin
         allowedOrigins: parsed.allowedOrigins,
         embedOptions: parsed.embedOptions,
       });
+      if (!result) return apiError("link not found", 404);
+    } catch (err) {
+      return apiError((err as Error).message, 400);
+    }
+  }
+
+  if (parsed.siteOptions !== undefined) {
+    try {
+      result = await updateSharedLinkSiteSettings(authCtx.auth.userId, linkId, parsed.siteOptions);
       if (!result) return apiError("link not found", 404);
     } catch (err) {
       return apiError((err as Error).message, 400);

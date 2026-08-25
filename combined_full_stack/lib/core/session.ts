@@ -609,6 +609,123 @@ export class SpineSession {
     return this.egress.request(path, init)
   }
 
+  // AI : GUI Share/Schedule/Connect mint the same JSON the forms POST — MCP/CLI reuse this.
+  private async requestJson<T extends Record<string, unknown>>(path: string, init?: RequestInit): Promise<T> {
+    const res = await this.requestRemote(path, init)
+    const body = (await res.json().catch(() => ({}))) as { error?: string } & T
+    if (!res.ok) throw new Error(typeof body.error === "string" && body.error ? body.error : `HTTP ${res.status}`)
+    return body
+  }
+
+  private jsonBody(method: string, body: unknown): RequestInit {
+    return { method, headers: { "content-type": "application/json" }, body: JSON.stringify(body) }
+  }
+
+  async listShareLinks(): Promise<{ ids: string[]; links: Array<{ id: string }> }> {
+    const body = await this.requestJson<{ links?: Array<{ id: string }> }>("/api/shared-links")
+    const links = body.links ?? []
+    this.setShareLinkIds(links.map((l) => l.id))
+    return { ids: this.getSnapshot().shareLinkIds, links }
+  }
+
+  async createShareLink(input: Record<string, unknown> = {}): Promise<{ url: string; link: { id: string } }> {
+    const project = this.requireProject()
+    const body = await this.requestJson<{ url?: string; link?: { id: string } }>(
+      "/api/shared-links",
+      this.jsonBody("POST", { projectId: project.id, ...input }),
+    )
+    if (!body.link?.id) throw new Error("createShareLink: API returned no link")
+    const ids = this.getSnapshot().shareLinkIds
+    if (!ids.includes(body.link.id)) this.setShareLinkIds([...ids, body.link.id])
+    const url = body.url ?? `/run/${body.link.id}`
+    return { url, link: body.link }
+  }
+
+  async listHostedApis(): Promise<{ ids: string[]; apis: Array<{ id: string }> }> {
+    const body = await this.requestJson<{ apis?: Array<{ id: string }> }>("/api/hosted-apis")
+    const apis = body.apis ?? []
+    this.setHostedApiIds(apis.map((a) => a.id))
+    return { ids: this.getSnapshot().hostedApiIds, apis }
+  }
+
+  async createHostedApi(input: Record<string, unknown> = {}): Promise<{
+    apiKey?: string
+    invokeUrl?: string
+    progressUrl?: string
+    api?: { id: string }
+  }> {
+    const project = this.requireProject()
+    const body = await this.requestJson<{
+      apiKey?: string
+      invokeUrl?: string
+      progressUrl?: string
+      api?: { id: string }
+    }>("/api/hosted-apis", this.jsonBody("POST", { projectId: project.id, ...input }))
+    if (body.api?.id) {
+      const ids = this.getSnapshot().hostedApiIds
+      if (!ids.includes(body.api.id)) this.setHostedApiIds([...ids, body.api.id])
+    }
+    return body
+  }
+
+  async listSchedules(): Promise<{ schedules: unknown[]; runtime: unknown }> {
+    const project = this.requireProject()
+    return this.requestJson(`/api/schedules?projectId=${encodeURIComponent(project.id)}`)
+  }
+
+  async createSchedule(input: Record<string, unknown>): Promise<{ schedule: unknown; runtime: unknown }> {
+    const project = this.requireProject()
+    return this.requestJson("/api/schedules", this.jsonBody("POST", { projectId: project.id, ...input }))
+  }
+
+  async patchSchedule(id: string, input: Record<string, unknown>): Promise<{ schedule: unknown }> {
+    return this.requestJson(`/api/schedules/${id}`, this.jsonBody("PATCH", input))
+  }
+
+  async deleteSchedule(id: string): Promise<{ ok: boolean }> {
+    return this.requestJson(`/api/schedules/${id}`, { method: "DELETE" })
+  }
+
+  async runScheduleNow(id: string): Promise<{ jobId?: string }> {
+    return this.requestJson(`/api/schedules/${id}/run`, { method: "POST" })
+  }
+
+  async publishMarketplaceListing(input: {
+    title: string
+    description?: string
+    priceCents?: number
+  }): Promise<{ listing: unknown }> {
+    const project = this.requireProject()
+    return this.requestJson(
+      "/api/marketplace",
+      this.jsonBody("POST", { projectId: project.id, title: input.title, description: input.description, priceCents: input.priceCents }),
+    )
+  }
+
+  async startConnectSession(actionId: string): Promise<{
+    sessionToken: string
+    host: string
+    provider: string
+    actionId: string
+  }> {
+    const project = this.requireProject()
+    const body = await this.requestJson<{
+      sessionToken?: string
+      host?: string
+      provider?: string
+      actionId?: string
+    }>("/api/connect/session", this.jsonBody("POST", { actionId, projectId: project.id }))
+    if (!body.sessionToken || !body.host || !body.provider) {
+      throw new Error("startConnectSession: API returned no Nango session")
+    }
+    return {
+      sessionToken: body.sessionToken,
+      host: body.host,
+      provider: body.provider,
+      actionId: body.actionId ?? actionId,
+    }
+  }
+
   // AI : TODO (mcp-capability) — GUI Refresh example documents; wrap as session_action project.resync-examples.
   async resyncExamples(): Promise<number> {
     const res = await this.requestRemote("/api/projects/resync-examples", { method: "POST" })

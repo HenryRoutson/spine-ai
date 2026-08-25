@@ -22,6 +22,7 @@ export enum InvalidKind {
   MissingCombineBeforeInput = "missing-combine-before-input",
   MissingWebhookUrl = "missing-webhook-url",
   MissingN8nNodeType = "missing-n8n-node-type",
+  MissingConnectAction = "missing-connect-action",
 }
 
 export interface InvalidStep {

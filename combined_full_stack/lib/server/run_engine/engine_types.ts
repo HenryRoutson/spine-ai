@@ -80,6 +80,8 @@ export interface RunCtx {
   stepBaseCents?: number;
   // AI : Settings → Secrets merged over process.env for webhook URL/auth. Never serialize into checkpoints.
   webhookEnv?: Record<string, string>;
+  // AI : testing skips live Nango; live runs need connectConnectionId.
+  source?: import("../types").RunSource;
 }
 
 export type StepInputForCheck = {

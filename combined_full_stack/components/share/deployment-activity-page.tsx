@@ -27,7 +27,7 @@ import { useWorkspaceBilling } from "@/lib/use-workspace-billing"
 import type { PipelineRun } from "@/lib/types"
 import { cn } from "@/lib/utils"
 
-export type ActivityFilter = { kind: "link" | "embed" | "api"; id: string } | null
+export type ActivityFilter = { kind: "link" | "embed" | "site" | "api"; id: string } | null
 
 function deploymentLabel(
   deployments: DeploymentRow[],
@@ -122,7 +122,7 @@ export function DeploymentActivityPage({
             const sep = v.indexOf(":")
             if (sep < 0) return
             setFilter({
-              kind: v.slice(0, sep) as "link" | "embed" | "api",
+              kind: v.slice(0, sep) as "link" | "embed" | "site" | "api",
               id: v.slice(sep + 1),
             })
           }}
@@ -131,7 +131,14 @@ export function DeploymentActivityPage({
           <option value="">All deployments</option>
           {deployments.map((item) => (
             <option key={`${item.kind}-${item.row.id}`} value={`${item.kind}:${item.row.id}`}>
-              {item.kind === "link" ? "Link" : item.kind === "embed" ? "Embed" : "API"} · {item.row.name}
+              {item.kind === "link"
+                ? "Link"
+                : item.kind === "embed"
+                  ? "Embed"
+                  : item.kind === "site"
+                    ? "Page"
+                    : "API"}{" "}
+              · {item.row.name}
             </option>
           ))}
         </select>

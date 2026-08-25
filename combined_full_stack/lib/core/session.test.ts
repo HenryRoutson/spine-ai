@@ -218,6 +218,38 @@ describe("SpineSession React-like API", () => {
     expect(store.pendingProposal).toBeNull()
   })
 
+  it("createShareLink posts /api/shared-links and records the id", async () => {
+    const { createRecordingEgress } = await import("@/lib/core/transport")
+    const posts: { url: string; body: string }[] = []
+    const egress = createRecordingEgress(async (url, init) => {
+      posts.push({ url: String(url), body: String(init?.body ?? "") })
+      return new Response(JSON.stringify({ link: { id: "site_abc" }, url: "/site/site_abc" }), { status: 200 })
+    })
+    const store = createSpineSession({ egress })
+    store.addProject({ open: true })
+    store.renameProject(store.activeProjectId, "Acme")
+    const out = await store.createShareLink({ kind: "site", siteOptions: { brand: { companyName: "Acme" } } })
+    expect(out.link.id).toBe("site_abc")
+    expect(out.url).toBe("/site/site_abc")
+    expect(store.getSnapshot().shareLinkIds).toContain("site_abc")
+    expect(posts[0]?.url).toContain("/api/shared-links")
+    expect(posts[0]?.body).toContain("\"kind\":\"site\"")
+  })
+
+  it("createSchedule posts /api/schedules", async () => {
+    const { createRecordingEgress } = await import("@/lib/core/transport")
+    const posts: string[] = []
+    const egress = createRecordingEgress(async (url, init) => {
+      posts.push(`${init?.method ?? "GET"} ${url}`)
+      return new Response(JSON.stringify({ schedule: { id: "sch_1" }, runtime: {} }), { status: 200 })
+    })
+    const store = createSpineSession({ egress })
+    store.addProject({ open: true })
+    const out = await store.createSchedule({ name: "Daily", cron: "0 9 * * *", timezone: "UTC" })
+    expect((out.schedule as { id: string }).id).toBe("sch_1")
+    expect(posts[0]).toBe("POST /api/schedules")
+  })
+
   it("startRun fails closed without HTTP egress", async () => {
     const store = createSpineSession({ egress: createThrowingEgress() })
     store.addProject({ open: true })

@@ -5,7 +5,7 @@
 // AI : DONE (mcp-workspace pull/push) — named pull_remote_state / push_remote_state + session_action; seeds vs session vs GUI still three workspaces until auth sync is the default loop.
 // AI : session_action covers pull/push/quotes/resync/move-step/setDocProjects/execute-runs.
 // AI : ask_agent prefers POST /api/pipeline-assistant when egress+auth works; falls back in-process.
-// AI : Host-bound stays GUI: CodeHost, human-review, chatbot, share/hosted mint, Stripe, run cancel.
+// AI : Host-bound stays GUI: CodeHost, human-review, chatbot, Stripe, run cancel. Share/schedule mint via session_action HTTP.
 
 import { resolve } from "node:path"
 import "./bootstrap-env.js"
@@ -35,6 +35,7 @@ import {
   askAgentFromSession,
   authStatusFromSession,
   configureN8nStepFromSession,
+  configureConnectStepFromSession,
   getProjectFromSession,
   getRunFromSession,
   importSeedFromSession,
@@ -56,6 +57,7 @@ import {
   importPieceJson,
   listPiecesForMcp,
 } from "@/lib/n8n-share"
+import { connectActionsForMcp } from "@/lib/connect-catalog"
 
 const REPO_ROOT = process.env.SPINE_REPO_ROOT ?? resolve(process.cwd(), "..")
 const APP_ROOT = process.env.SPINE_APP_ROOT ?? resolve(REPO_ROOT, "combined_full_stack")
@@ -68,8 +70,14 @@ function textContent(data: unknown) {
 
 function nextHint(error: string): string {
   if (/not valid JSON|JSON\.parse|session file is not valid JSON/i.test(error)) return "Pass proposalJson as a JSON object string, or omit it to apply the pending Vibe proposal. If the session file is corrupt, delete it and call session_action id=project.add."
-  if (/unknown step kind/i.test(error)) return "Use session_action id=pipeline.add-step with kind from: input, llm, llm-batch, fork, n8n, custom-code, webhook, … — list_pieces for n8n types."
-  if (/unknown n8n piece|unknown piece/i.test(error)) return "Call list_pieces and use n8nNodeType exactly."
+  if (/unknown step kind/i.test(error)) return "Use session_action id=pipeline.add-step with kind from: input, llm, llm-batch, fork, n8n, connect, custom-code, webhook, … — list_pieces for local transforms, list_connect_actions for Slack/Gmail."
+  if (/unknown n8n piece|unknown piece/i.test(error)) return "Call list_pieces and use n8nNodeType exactly (piece.set aliases n8n-nodes-base.set)."
+  if (/unknown connect action/i.test(error)) return "Call list_connect_actions and use connectActionId exactly (slack.postMessage, gmail.send, sheets.append, http.request)."
+  if (/allowedOrigins/i.test(error)) return "share.create-embed needs allowedOrigins, e.g. https://example.com,https://app.example.com."
+  if (/company name|Hosted page requires/i.test(error)) return "share.create-site needs companyName (or name). Defaults to the project name if you pass none."
+  if (/scheduleId required/i.test(error)) return "Pass scheduleId from session_action id=nav.window.schedule."
+  if (/That schedule isn't valid|IANA/i.test(error)) return "schedule.create needs cron (5 fields, e.g. 0 9 * * *) and timezone (Australia/Sydney)."
+  if (/name required \(marketplace/i.test(error)) return "share.marketplace-publish needs name (listing title)."
   if (/no active project/i.test(error)) return "Call session_action id=project.add (or import_seed file from list_seeds) then retry."
   if (/no pending proposal/i.test(error)) return "ask_agent first, poll get_project until pendingProposal is set, then apply_project_changes with no proposalJson."
   if (/unknown step /i.test(error)) return "get_project and use the step id or label."
@@ -403,7 +411,7 @@ server.tool(
 
 server.tool(
   "session_action",
-  "Dispatch a GUI button id (data-spine-id) against the session file. Prefer named tools when they exist. Extra ids: structure.add-field/remove-field/set-relation/add-alias, pipeline.configure-step/remove-step/move-step/assign-structure, documents.set-projects, quotes.link, session.pull, session.push, project.resync-examples, assistant.execute-runs, assistant.reject, billing.refresh, earnings.refresh, cache.refresh, logging.errors-only, logging.hydrate / wait_for_run.",
+  "Dispatch a GUI button id (data-spine-id) against the session file. Prefer named tools when they exist. Extra ids: structure.add-field/remove-field/set-relation/add-alias, pipeline.configure-step/remove-step/move-step/assign-structure, documents.set-projects, quotes.link, session.pull, session.push, project.resync-examples, assistant.execute-runs, assistant.reject, billing.refresh, earnings.refresh, cache.refresh, logging.errors-only, logging.hydrate / wait_for_run, share.create-link/create-embed/create-site/deploy-api/marketplace-publish, schedule.create/toggle/run-now/delete, connect.start-session.",
   {
     id: z.string().describe("Parity catalog id, e.g. project.add, testing.run, assistant.send"),
     sessionPath: z.string().optional(),
@@ -438,6 +446,16 @@ server.tool(
     executeRuns: z.boolean().optional(),
     at: z.number().optional().describe("pipeline.move-step index"),
     projects: z.string().optional().describe("documents.set-projects comma-separated project ids"),
+    cron: z.string().optional().describe("schedule.create 5-field cron, e.g. 0 9 * * *"),
+    timezone: z.string().optional().describe("IANA timezone, e.g. Australia/Sydney"),
+    enabled: z.boolean().optional().describe("schedule.toggle enabled"),
+    fundingMode: z.string().optional().describe("sharer_pays | viewer_pays | viewer_signs_in | owner_pays | caller_pays"),
+    companyName: z.string().optional().describe("share.create-site brand name"),
+    allowedOrigins: z.string().optional().describe("share.create-embed comma-separated origins"),
+    spendLimitCents: z.number().optional(),
+    connectConnectionId: z.string().optional().describe("configure_connect_step after the human Connect chip"),
+    connectActionId: z.string().optional().describe("connect.start-session / configure_connect_step catalog id"),
+    scheduleId: z.string().optional().describe("schedule.toggle / run-now / delete id"),
   },
   wrapTool(async (args) => runSessionAction(args)),
 )
@@ -476,7 +494,7 @@ server.tool(
 
 server.tool(
   "list_pieces",
-  "List typed n8n/Activepieces-style catalog pieces (Set, Filter, CSV, …). Local Code-node JS — no live Slack/Gmail. Use before session_action id=pipeline.add-step kind=n8n.",
+  "List typed transform pieces (Set, Filter, CSV, …). Local Code-node JS — no live Slack/Gmail. piece.set aliases n8n-nodes-base.set. Use before session_action id=pipeline.add-step kind=n8n.",
   {},
   wrapTool(() => ({ pieces: listPiecesForMcp(APP_ROOT) })),
 )
@@ -510,6 +528,26 @@ server.tool(
     n8nCode: z.string().optional().describe("Optional n8n Code-node JS override"),
   },
   wrapTool((args) => configureN8nStepFromSession(args)),
+)
+
+server.tool(
+  "list_connect_actions",
+  "List live app actions (Slack, Gmail, Sheets, HTTP). Use before session_action id=pipeline.add-step kind=connect. Local Set/Filter stay in list_pieces.",
+  {},
+  wrapTool(() => ({ actions: connectActionsForMcp() })),
+)
+
+server.tool(
+  "configure_connect_step",
+  "Set connectActionId and parameters on a connect step. After Approve, the human taps Connect {App} — do not invent action ids.",
+  {
+    sessionPath: z.string().optional(),
+    stepId: z.string().describe("Step id or label"),
+    connectActionId: z.string().optional().describe("Catalog id, e.g. slack.postMessage"),
+    parametersJson: z.string().optional().describe("JSON object of action params"),
+    connectConnectionId: z.string().optional().describe("Nango connection id after the human Connect chip"),
+  },
+  wrapTool((args) => configureConnectStepFromSession(args)),
 )
 
 registerSpinePrompts(server)

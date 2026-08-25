@@ -34,9 +34,10 @@ export type RunCheckpoint = {
     byModel: Record<StructureModelId, unknown>;
     sourceText: string;
     sourceDocId: DocId;
-  prevModuleId?: ModuleId;
-  forkId?: ModuleId;
-  branchId?: string;
+    prevModuleId?: ModuleId;
+    forkId?: ModuleId;
+    branchId?: string;
+    source?: import("./types").RunSource;
   };
   clientStep: {
     moduleId: ModuleId;

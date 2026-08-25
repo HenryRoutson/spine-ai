@@ -15,6 +15,7 @@ import type { ProjectId } from "@/lib/server/types";
 import { logger } from "@/lib/server/server_logger";
 
 const apiLog = logger("api:schedules");
+// AI : DONE (connect-L-triggers) — Vibe Schedule tab + Inference hint call this API; no node canvas.
 
 export async function GET(req: NextRequest) {
   const ctx = await requireAuthStore("read");

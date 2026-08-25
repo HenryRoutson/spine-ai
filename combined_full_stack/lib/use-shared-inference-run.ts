@@ -20,6 +20,7 @@ import {
   startSharedRun,
   uploadSharedDoc,
 } from "@/lib/shared-run-client"
+import { sharedLinkPublicPath } from "@/lib/hosted-site"
 import { cacheUploadFileText, fetchSharedRunDocText } from "@/lib/shared-run-doc-cache"
 import { pipelineFinalOutputSteps } from "@/lib/step-doc"
 import { buildChatbotResult } from "@/lib/chatbot-step"
@@ -131,7 +132,7 @@ export function useSharedInferenceRun(
         auth.onAuthRequired()
         return
       }
-      window.location.href = `/login?next=${encodeURIComponent(`/run/${linkId}`)}`
+      window.location.href = `/login?next=${encodeURIComponent(sharedLinkPublicPath(linkId))}`
       return
     }
     const jobGen = ++activeJobGenRef.current
