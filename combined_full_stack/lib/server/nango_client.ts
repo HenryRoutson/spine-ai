@@ -1,4 +1,6 @@
 // AI : Headless Nango — Spine never sends users to nango.dev. Vendor OAuth popup only.
+// AI : load repo-root .env so NANGO_SECRET_KEY works when Next only auto-loads this app dir.
+import "@/lib/server/config"
 import { getConnectAction, type connect_action_id_string } from "@/lib/connect-catalog"
 import { buildConnectProxyCall } from "@/lib/connect-request"
 

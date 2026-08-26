@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
-# AI : one-command local hosting — Supabase + env + npm + seeds + dev servers.
+# AI : one-command local hosting — Supabase + Nango + env + npm + seeds + dev servers.
 from __future__ import annotations
 
 import argparse
+import base64
 import json
 import os
 import secrets
@@ -13,6 +14,7 @@ import time
 import urllib.error
 import urllib.parse
 import urllib.request
+import uuid
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable
@@ -20,6 +22,9 @@ from typing import Callable
 ROOT = Path(__file__).resolve().parent.parent
 APP_DIR = ROOT / "combined_full_stack"
 SUPABASE_DIR = APP_DIR / "supabase"
+NANGO_DIR = ROOT / "nango"
+NANGO_ENV = NANGO_DIR / ".env"
+NANGO_ENV_EXAMPLE = NANGO_DIR / ".env.example"
 ENV_FILE = ROOT / ".env"
 ENV_TEMPLATE = ROOT / ".env.template"
 APP_ENV_LOCAL = APP_DIR / ".env.local"
@@ -27,6 +32,7 @@ LOCAL_TEST_EMAIL = "dev-spine-ai-dev-testing-account@local.dev"
 LOCAL_TEST_PASSWORD = "local-dev-password-3950"
 SEED_USER_ENV = "SEED_USER_ID"
 OPENROUTER_ENV = "OPENROUTER_API_KEY"
+DEFAULT_NANGO_HOST = "http://127.0.0.1:3003"
 
 
 @dataclass(frozen=True)
@@ -42,6 +48,8 @@ SERVICE_URLS = (
     ServiceUrl("Supabase API", "http://127.0.0.1:54321"),
     ServiceUrl("Supabase Studio", "http://127.0.0.1:54323"),
     ServiceUrl("Inbucket (email)", "http://127.0.0.1:54324"),
+    ServiceUrl("Nango API / dashboard", "http://localhost:3003"),
+    ServiceUrl("Nango Connect UI", "http://localhost:3009"),
 )
 
 
@@ -148,6 +156,96 @@ def write_env_file(path: Path, values: dict[str, str]) -> None:
     path.write_text("\n".join(lines).rstrip() + "\n", encoding="utf-8")
 
 
+def nango_compose_cmd() -> list[str]:
+    return [
+        "docker",
+        "compose",
+        "-f",
+        str(NANGO_DIR / "docker-compose.yml"),
+        "--env-file",
+        str(NANGO_ENV),
+    ]
+
+
+def nango_encryption_key() -> str:
+    return base64.b64encode(secrets.token_bytes(32)).decode("ascii")
+
+
+def ensure_nango_env() -> dict[str, str]:
+    # AI : nango/.env is container-only; Spine reads NANGO_HOST / NANGO_SECRET_KEY from repo .env.
+    NANGO_DIR.mkdir(parents=True, exist_ok=True)
+    if not NANGO_ENV.exists():
+        if NANGO_ENV_EXAMPLE.exists():
+            shutil.copy(NANGO_ENV_EXAMPLE, NANGO_ENV)
+            log(f"created nango/.env from example")
+        else:
+            NANGO_ENV.write_text("", encoding="utf-8")
+
+    nango = read_env_file(NANGO_ENV)
+    nango_updates: dict[str, str] = {}
+    if not nango.get("NANGO_ENCRYPTION_KEY"):
+        nango_updates["NANGO_ENCRYPTION_KEY"] = nango_encryption_key()
+    if not nango.get("NANGO_SECRET_KEY_DEV"):
+        nango_updates["NANGO_SECRET_KEY_DEV"] = str(uuid.uuid4())
+    if not nango.get("NANGO_DASHBOARD_PASSWORD"):
+        nango_updates["NANGO_DASHBOARD_PASSWORD"] = random_hex(16)
+    if not nango.get("NANGO_SERVER_URL"):
+        nango_updates["NANGO_SERVER_URL"] = "http://localhost:3003"
+    if not nango.get("NANGO_PUBLIC_SERVER_URL"):
+        nango_updates["NANGO_PUBLIC_SERVER_URL"] = "http://localhost:3000"
+    if not nango.get("NANGO_PUBLIC_CONNECT_URL"):
+        nango_updates["NANGO_PUBLIC_CONNECT_URL"] = "http://localhost:3009"
+    if not nango.get("FLAG_AUTH_ENABLED"):
+        nango_updates["FLAG_AUTH_ENABLED"] = "false"
+    if not nango.get("NANGO_DASHBOARD_USERNAME"):
+        nango_updates["NANGO_DASHBOARD_USERNAME"] = "nango"
+    if nango_updates:
+        upsert_env(NANGO_ENV, nango_updates)
+        nango.update(nango_updates)
+        log("wrote Nango encryption + dashboard secrets to nango/.env")
+
+    secret = (nango.get("NANGO_SECRET_KEY_DEV") or "").strip()
+    enc = (nango.get("NANGO_ENCRYPTION_KEY") or "").strip()
+    spine = read_env_file(ENV_FILE)
+    spine_updates: dict[str, str] = {}
+    if not spine.get("NANGO_HOST"):
+        spine_updates["NANGO_HOST"] = DEFAULT_NANGO_HOST
+    if secret and not spine.get("NANGO_SECRET_KEY"):
+        spine_updates["NANGO_SECRET_KEY"] = secret
+    if enc and not spine.get("NANGO_ENCRYPTION_KEY"):
+        spine_updates["NANGO_ENCRYPTION_KEY"] = enc
+    if spine_updates:
+        upsert_env(ENV_FILE, spine_updates)
+        log(f"synced Nango keys into {ENV_FILE.name}")
+
+    app_nango = {
+        "NANGO_HOST": spine.get("NANGO_HOST") or spine_updates.get("NANGO_HOST") or DEFAULT_NANGO_HOST,
+    }
+    if secret:
+        app_nango["NANGO_SECRET_KEY"] = spine.get("NANGO_SECRET_KEY") or secret
+    upsert_env(APP_ENV_LOCAL, app_nango)
+    return nango
+
+
+def nango_start() -> None:
+    if not docker_ok():
+        raise SetupError(
+            "Docker is not running. Start Docker Desktop / dockerd, then rerun."
+        )
+    if not (NANGO_DIR / "docker-compose.yml").exists():
+        raise SetupError(f"missing {NANGO_DIR / 'docker-compose.yml'}")
+    ensure_nango_env()
+    run([*nango_compose_cmd(), "up", "-d"], cwd=NANGO_DIR)
+    wait_for_url(f"{DEFAULT_NANGO_HOST}/", timeout_sec=300.0)
+    log("local Nango is up")
+
+
+def nango_stop() -> None:
+    if not (NANGO_DIR / "docker-compose.yml").exists():
+        return
+    run([*nango_compose_cmd(), "down"], cwd=NANGO_DIR, check=False)
+
+
 def upsert_env(path: Path, updates: dict[str, str]) -> None:
     current = read_env_file(path)
     current.update(updates)
@@ -186,6 +284,7 @@ def ensure_env_bootstrap() -> None:
     app_local_updates = {"RATE_LIMIT_BACKEND": "memory"}
     upsert_env(APP_ENV_LOCAL, app_local_updates)
     log(f"set RATE_LIMIT_BACKEND=memory in {APP_ENV_LOCAL.relative_to(ROOT)}")
+    ensure_nango_env()
 
 
 def parse_supabase_status(stdout: str) -> dict[str, str]:
@@ -246,8 +345,14 @@ def wait_for_url(url: str, *, timeout_sec: float = 120.0) -> None:
             with urllib.request.urlopen(url, timeout=3) as res:
                 if res.status < 500:
                     return
-        except (urllib.error.URLError, TimeoutError):
+        except urllib.error.HTTPError as err:
+            # AI : 401/404 still means the process is accepting HTTP.
+            if err.code < 500:
+                return
+        except (urllib.error.URLError, TimeoutError, OSError, ConnectionError):
             time.sleep(2)
+            continue
+        time.sleep(2)
     raise SetupError(f"timed out waiting for {url}")
 
 
@@ -413,6 +518,20 @@ def cmd_env(_: argparse.Namespace) -> None:
         log("Supabase not running — env template/secrets ready; run `supabase` next")
 
 
+def cmd_nango(_: argparse.Namespace) -> None:
+    ensure_env_bootstrap()
+    nango_start()
+    nango = read_env_file(NANGO_ENV)
+    print_service_table(
+        {
+            "Nango dashboard user": nango.get("NANGO_DASHBOARD_USERNAME", "nango"),
+            "Nango dashboard password": nango.get("NANGO_DASHBOARD_PASSWORD", ""),
+            "OAuth callback": "http://localhost:3003/oauth/callback",
+        }
+    )
+    log("add Slack / Google integrations in the Nango dashboard, then Connect in Spine")
+
+
 def cmd_supabase(args: argparse.Namespace) -> None:
     ensure_env_bootstrap()
     supabase_start(reset_db=args.reset)
@@ -449,8 +568,9 @@ def cmd_dev(_: argparse.Namespace) -> None:
 
 
 def cmd_stop(_: argparse.Namespace) -> None:
+    nango_stop()
     supabase_stop()
-    log("supabase stopped")
+    log("nango + supabase stopped")
 
 
 def cmd_reset(_: argparse.Namespace) -> None:
@@ -469,11 +589,15 @@ def cmd_all(args: argparse.Namespace) -> None:
     service_key = status.get("SERVICE_ROLE_KEY", "")
     user_id = create_local_test_user(api_url, service_key)
     sync_seeds(user_id)
+    nango_start()
     check_openrouter()
     print_service_table(
         {
             "Test login email": LOCAL_TEST_EMAIL,
             "Test login password": LOCAL_TEST_PASSWORD,
+            "Nango dashboard user": read_env_file(NANGO_ENV).get("NANGO_DASHBOARD_USERNAME", "nango"),
+            "Nango dashboard password": read_env_file(NANGO_ENV).get("NANGO_DASHBOARD_PASSWORD", ""),
+            "OAuth callback": "http://localhost:3003/oauth/callback",
         }
     )
     if args.start_dev:
@@ -489,7 +613,7 @@ def cmd_all(args: argparse.Namespace) -> None:
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        description="Host locally with Supabase — automated setup (Python, minimal steps).",
+        description="Host locally with Supabase + Nango — automated setup (Python, minimal steps).",
     )
     sub = parser.add_subparsers(dest="command", required=True)
 
@@ -506,8 +630,9 @@ def build_parser() -> argparse.ArgumentParser:
 
     sub.add_parser("deps", help="npm install all apps + sync shared code")
     sub.add_parser("seeds", help="create local test user + sync example projects")
+    sub.add_parser("nango", help="start self-hosted Nango (auth + proxy on :3003)")
     sub.add_parser("dev", help="start app + landing + dashboard")
-    sub.add_parser("stop", help="stop local Supabase")
+    sub.add_parser("stop", help="stop local Nango + Supabase")
     sub.add_parser("reset", help="db reset + re-seed")
 
     all_cmd = sub.add_parser("all", help="full local hosting setup")
@@ -533,6 +658,7 @@ def main() -> int:
         "supabase": cmd_supabase,
         "deps": cmd_deps,
         "seeds": cmd_seeds,
+        "nango": cmd_nango,
         "dev": cmd_dev,
         "stop": cmd_stop,
         "reset": cmd_reset,

@@ -23,6 +23,34 @@ const sessionReplayEnabled =
   process.env.NEXT_PUBLIC_SESSION_REPLAY_ENABLED ??
   "false"
 
+// AI : Connect SDK talks to self-hosted Nango (API 3003, Connect UI 3009) from the Spine origin.
+function nangoCspOrigins() {
+  const raw = [
+    process.env.NANGO_HOST,
+    process.env.NANGO_PUBLIC_CONNECT_URL,
+    "http://127.0.0.1:3003",
+    "http://localhost:3003",
+    "http://127.0.0.1:3009",
+    "http://localhost:3009",
+  ]
+  const origins = new Set()
+  const frames = new Set()
+  for (const value of raw) {
+    if (!value) continue
+    try {
+      const u = new URL(String(value))
+      const http = `${u.protocol}//${u.host}`
+      origins.add(http)
+      origins.add(u.protocol === "https:" ? `wss://${u.host}` : `ws://${u.host}`)
+      frames.add(http)
+    } catch {
+      // AI : ignore unparsable host — CSP must stay valid
+    }
+  }
+  return { connect: [...origins].join(" "), frame: [...frames].join(" ") }
+}
+const nangoCsp = nangoCspOrigins()
+
 // AI : app root only — repo-wide root made Turbopack watch old/, landing_page/, etc.
 
 /** @type {import('next').NextConfig} */
@@ -61,8 +89,8 @@ const nextConfig = {
       "style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net",
       "img-src 'self' data: blob: https:",
       "font-src 'self' data: https://cdn.jsdelivr.net",
-      "connect-src 'self' https://*.supabase.co wss://*.supabase.co https://openrouter.ai https://api.stripe.com https://cdn.jsdelivr.net",
-      "frame-src 'self' https://js.stripe.com",
+      `connect-src 'self' https://*.supabase.co wss://*.supabase.co https://openrouter.ai https://api.stripe.com https://cdn.jsdelivr.net ${nangoCsp.connect}`.trim(),
+      `frame-src 'self' https://js.stripe.com ${nangoCsp.frame}`.trim(),
       "object-src 'none'",
       "base-uri 'self'",
       "form-action 'self'",

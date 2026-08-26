@@ -17,7 +17,7 @@
 // AI : DONE (connect-B-catalog) — short typed action list (Slack/Gmail/Sheets/HTTP); vibe must not invent ids
 // AI : DONE (connect-C-validity) — MissingConnectAction / unknown id / missing params; connection required to Run not Approve
 // AI : DONE (connect-D-exec) — steps/connect.ts + Nango client; testing source mocks; type gate on the way out
-// AI : DONE (connect-E-nango) — self-host Nango; NANGO_SECRET_KEY + NANGO_HOST; session token API; headless auth
+// AI : DONE (connect-E-nango) — nango/docker-compose.yml + setup_local.py nango; NANGO_SECRET_KEY + session API
 // AI : DONE (connect-F-vibe) — Connect chip on Inference (simple); never mention nodes/spine; hide Pipeline
 // AI : DONE (connect-G-oauth) — popup to vendor only (slack.com / accounts.google.com); same-origin Spine chrome
 // AI : DONE (connect-H-assistant) — vibe proposes kind=connect from catalog; everyday language; Connect as chip after Approve
