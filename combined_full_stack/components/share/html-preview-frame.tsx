@@ -7,6 +7,7 @@ import { Maximize2, Monitor, Smartphone, X } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { HTML_POPUP_CHROME, HTML_POPUP_OVERLAY_ATTR } from "@/lib/html-popup"
 import { spineActionProps } from "@/lib/core/parity"
+import { isHsPreviewMessage, type HsPreviewInlinePayload, type HsPreviewSelectPayload } from "@/lib/hosted-site-select"
 import { cn } from "@/lib/utils"
 
 type preview_viewport = "desktop" | "mobile"
@@ -34,12 +35,16 @@ export function HtmlPreviewFrame({
   className,
   bodyClassName,
   extraToolbar,
+  onSelect,
+  onInlineText,
 }: {
   label?: string
   children: ReactNode
   className?: string
   bodyClassName?: string
   extraToolbar?: ReactNode
+  onSelect?: (payload: HsPreviewSelectPayload) => void
+  onInlineText?: (payload: HsPreviewInlinePayload) => void
 }) {
   const [expanded, setExpanded] = useState(false)
   const [mounted, setMounted] = useState(false)
@@ -50,6 +55,18 @@ export function HtmlPreviewFrame({
   useEffect(() => {
     setMounted(true)
   }, [])
+
+  useEffect(() => {
+    if (!onSelect && !onInlineText) return
+    const onMsg = (e: MessageEvent) => {
+      if (e.origin !== window.location.origin) return
+      if (!isHsPreviewMessage(e.data)) return
+      if (e.data.kind === "select") onSelect?.(e.data)
+      if (e.data.kind === "inline") onInlineText?.(e.data)
+    }
+    window.addEventListener("message", onMsg)
+    return () => window.removeEventListener("message", onMsg)
+  }, [onSelect, onInlineText])
 
   useEffect(() => {
     if (!expanded) return
@@ -89,6 +106,8 @@ export function HtmlPreviewFrame({
             {label} · {viewport === "desktop" ? "Desktop" : "Mobile"}
           </p>
           <div className="flex items-center gap-0.5">
+            {onSelect ? <span className="sr-only" {...spineActionProps("share.site-preview-select")} /> : null}
+            {onInlineText ? <span className="sr-only" {...spineActionProps("share.site-preview-inline")} /> : null}
             {extraToolbar}
             {viewportButton}
             <Button

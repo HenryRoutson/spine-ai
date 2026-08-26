@@ -641,6 +641,10 @@ Grep an id (example): `rg 'project.add' combined_full_stack docs mcp_tool`.
 | `share.site-signin` | Sign-in page | no TUI [N] | siteOptions.auth on POST/PATCH /api/shared-links | pass siteOptions.auth on share.create-site [N] | normalizeHostedSiteOptions |
 | `share.site-preview-viewport` | Desktop / mobile preview | no TUI [N] | preview only [N] | preview only [N] | preview only [N] |
 | `share.site-signin-preview` | App / sign-in preview | no TUI [N] | preview only [N] | preview only [N] | preview only [N] |
+| `share.site-preview-select` | Click to select page element | no TUI [N] | preview only [N] | preview only [N] | preview only [N] |
+| `share.site-preview-inline` | Inline edit page text | no TUI [N] | preview only [N] | preview only [N] | preview only [N] |
+| `share.site-page-switch` | Hosted extra page | no TUI [N] | preview only [N] | preview only [N] | HostedSiteOptions.pages |
+| `share.site-add-page` | Add hosted page | no TUI [N] | preview only [N] | preview only [N] | nextHostedSitePagePath |
 | `share.create-link` | Create link | session share lists; mint HTTP/GUI [P] | POST /api/shared-links | session_action id=share.create-link | session.createShareLink |
 | `share.deploy-api` | Deploy API | session share lists hosted APIs [P] | POST /api/hosted-apis | session_action id=share.deploy-api | session.createHostedApi |
 | `share.create-embed` | Create website embed | no TUI [N] | POST /api/shared-links (emb_ rows) | session_action id=share.create-embed | session.createShareLink({ kind: 'embed' }) |

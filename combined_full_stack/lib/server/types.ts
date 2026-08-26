@@ -193,6 +193,8 @@ export enum ModuleKind {
   Parallel = "parallel",
   // AI : nested linear lanes + join (not Parallel LLM-only). See lib/server/fork-roadmap.ts.
   Fork = "fork",
+  // AI : exclusive Then/Else lanes — run one side from a typed bool path or field equals. Else may be empty (passthrough).
+  IfElse = "if-else",
   Combine = "combine",
   Chunk = "chunk", // AI : split text / document into list chunks (generated TS)
   Merge = "merge", // AI : recursive structural merge — dict deep, list concat/union/dedupe, per-path rules
@@ -306,6 +308,16 @@ export type ForkBranch = {
   modules: PipelineModule[];
 };
 
+// AI : if-else condition — path must type-check as bool; equals compares a spine field to a JSON value.
+export enum IfConditionKind {
+  Path = "path",
+  Equals = "equals",
+}
+
+export type IfCondition =
+  | { kind: IfConditionKind.Path; path: string }
+  | { kind: IfConditionKind.Equals; path: string; value: unknown };
+
 // AI : one language key per entry — e.g. { "typescript": "(input) => input" } or { "python": "..." }.
 export interface CustomCodeEntry { typescript?: string; python?: string };
 
@@ -364,8 +376,10 @@ export interface PipelineModule {
   // AI : parallel — fixed LLM branches sharing spine input; joined into auto product
   parallelBranches?: ParallelBranch[];
   // AI : fork — nested linear lanes; join product | assemble | merge
+  // AI : if-else reuses forkBranches as [Then, Else] (Else may be empty).
   forkBranches?: ForkBranch[];
   forkJoin?: ForkJoin;
+  ifCondition?: IfCondition;
   // AI : example-select — cached-prefix relevance filter (see lib/example-select.ts defaults)
   exampleContextLabel?: string; // prior step label supplying {description} text
   exampleContextField?: string; // optional dot path within that step output
@@ -895,6 +909,10 @@ export const MODULE_META: Record<ModuleKind, { label: string; description: strin
   [ModuleKind.Fork]: {
     label: "Fork",
     description: "Split into 2–12 lanes, then join: product (field per lane), assemble (named zip), or merge (fold)",
+  },
+  [ModuleKind.IfElse]: {
+    label: "If / Else",
+    description: "Run Then or Else from a typed spine condition (bool path or field equals). Else may be empty (passthrough).",
   },
   [ModuleKind.Combine]: { label: "Combine Inputs", description: "Bring in another document and merge it with the spine" },
   [ModuleKind.Chunk]: {

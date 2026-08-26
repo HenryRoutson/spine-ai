@@ -933,6 +933,16 @@ export function isMissingSchemaError(error: unknown): boolean {
   );
 }
 
+// AI : PostgREST rejects JWTs whose iat is slightly in the future (local clock skew) — retryable.
+export function isExpectedAuthSkewError(error: unknown): boolean {
+  const msg = storeErrorMessage(error, String(error));
+  const code =
+    typeof error === "object" && error !== null && "code" in error
+      ? String((error as { code: unknown }).code)
+      : "";
+  return code === "PGRST303" || /JWT issued at future/i.test(msg);
+}
+
 // AI : a ready store for one signed-in user — zero projects is valid (client shows the
 // AI : no-projects page), so nothing is auto-created here anymore.
 export async function openUserStore(db: SupabaseClient, userId: user_id_string): Promise<SupabaseStore> {

@@ -9,6 +9,9 @@ import {
   DEFAULT_HOSTED_SITE_AUTH_HTML,
   DEFAULT_HOSTED_SITE_HTML,
   HOSTED_SITE_AUTH_SLOT,
+  HOSTED_SITE_CHATBOT_SLOT,
+  HOSTED_SITE_DOCS_SLOT,
+  HOSTED_SITE_OUTPUT_SLOT,
   HOSTED_SITE_RUN_SLOT,
   normalizeHostedSiteOptions,
   parseHexColor,
@@ -50,6 +53,7 @@ You MUST NOT invent a custom Supabase URL or anon key — that stays a publisher
 
 The run form is injected where you place ${HOSTED_SITE_RUN_SLOT}. Always keep exactly one ${HOSTED_SITE_RUN_SLOT} on the app page.
 The sign-in form is injected where you place ${HOSTED_SITE_AUTH_SLOT}. If authEnabled is true, keep exactly one ${HOSTED_SITE_AUTH_SLOT} on the sign-in page.
+Optional widgets (existing runtimes, not new backends): ${HOSTED_SITE_OUTPUT_SLOT} (result viewer), ${HOSTED_SITE_CHATBOT_SLOT} (chat), ${HOSTED_SITE_DOCS_SLOT} (viewer markdown). Do not invent {{pay}} or {{table}} slots.
 Tokens: {{company}}, {{tagline}}, {{logo}}, {{email}} fill from brand fields. Default nav shows {{email}} as the signed-in account. Scripts, iframes, and event handlers are stripped.
 
 Return a short message for the publisher, then fields:
@@ -141,6 +145,7 @@ export function applyHostedSiteAssistantPatch(
       patch.authHtml != null
         ? ensureAuthSlot(patch.authHtml)
         : base.authHtml || (authEnabled ? DEFAULT_HOSTED_SITE_AUTH_HTML : ""),
+    pages: base.pages,
   })
 }
 

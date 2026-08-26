@@ -33,9 +33,12 @@ list_connect_actions → session_action id=pipeline.add-step kind=connect → co
 FORK DAG
 Pipelines are series-parallel. session_action id=pipeline.add-step kind=fork, then session_action with forkId + branchId into a lane. Nest another fork in a lane for a generic DAG (no cycles). Join: product | assemble | merge via session_action pipeline.configure-step forkJoin. get_project.steps[].branches shows the tree.
 
+IF / ELSE
+Exclusive router. session_action id=pipeline.add-step kind=if-else, then add steps into Then/Else with forkId + branchId. Else may be empty (passthrough). Set the condition with pipeline.configure-step ifConditionPath (bool field) or ifConditionKind=equals + ifConditionValue JSON. Out type is Then, or Then | Else when they differ.
+
 STEP KINDS
-input, llm, llm-batch, example-select, transform, chunk, merge, assemble, fork, combine, custom-code, assert, human-review, webhook, n8n, connect, chatbot, output.
-Aliases: code→custom-code, http→webhook, piece→n8n, app→connect, dag→fork. Case-insensitive.
+input, llm, llm-batch, example-select, transform, chunk, merge, assemble, fork, if-else, combine, custom-code, assert, human-review, webhook, n8n, connect, chatbot, output.
+Aliases: code→custom-code, http→webhook, piece→n8n, app→connect, dag→fork, ifelse→if-else. Case-insensitive.
 
 SHARE / HOSTED PAGE / API (same HTTP as the GUI Share tab)
 session_action share.create-link — public /run/{id} (fundingMode sharer_pays|viewer_pays|viewer_signs_in).
@@ -111,7 +114,7 @@ export function registerSpinePrompts(server: McpServer): void {
     },
     ({ kind, purpose }) =>
       userMessage(
-        `Add a ${kind} step: ${purpose}\n\nFollow Spine MCP instructions. auth_status → get_project → session_action id=pipeline.add-step → session_action pipeline.configure-step / pipeline.assign-structure / configure_n8n_step / configure_connect_step as needed → validate_project. For kind=n8n, list_pieces first. For kind=connect, list_connect_actions first. For kind=fork, add steps into lanes with forkId + branchId. Do not call seed tools on the session file.`,
+        `Add a ${kind} step: ${purpose}\n\nFollow Spine MCP instructions. auth_status → get_project → session_action id=pipeline.add-step → session_action pipeline.configure-step / pipeline.assign-structure / configure_n8n_step / configure_connect_step as needed → validate_project. For kind=n8n, list_pieces first. For kind=connect, list_connect_actions first. For kind=fork or if-else, add steps into lanes with forkId + branchId. For if-else, pipeline.configure-step ifConditionPath. Do not call seed tools on the session file.`,
       ),
   )
 

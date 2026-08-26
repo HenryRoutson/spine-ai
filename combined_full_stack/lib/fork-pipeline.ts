@@ -7,7 +7,7 @@ import {
   validateAssembleBindings,
   type AssembleBindingIssue,
 } from "@/lib/assemble-type-expr"
-import { stepSpineOutType } from "@/lib/server/type_expr"
+import { TypeExprKind, typeExprEqual, stepSpineOutType, type TypeExpr } from "@/lib/server/type_expr"
 import {
   type AssembleSource,
   type ModelField,
@@ -40,6 +40,14 @@ export type ForkModuleLoc = {
 
 export function isForkKind(kind: string): boolean {
   return kind === "fork"
+}
+
+export function isIfElseKind(kind: string): boolean {
+  return kind === "if-else"
+}
+
+export function isNestedLaneKind(kind: string): boolean {
+  return isForkKind(kind) || isIfElseKind(kind)
 }
 
 export function forkJoinOf(m: PipelineModule): ForkJoin {
@@ -76,7 +84,7 @@ export function flattenPipelineModules(modules: PipelineModule[]): PipelineModul
   const out: PipelineModule[] = []
   for (const m of modules) {
     out.push(m)
-    if (isForkKind(m.kind)) {
+    if (isNestedLaneKind(m.kind)) {
       for (const b of forkBranchesOf(m)) {
         out.push(...flattenPipelineModules(b.modules))
       }
@@ -105,7 +113,7 @@ export function locatePipelineModule(
     if (m.id === id) {
       return { module: m, siblings: modules, index: i, predecessor, parentFork, branchId }
     }
-    if (!isForkKind(m.kind)) continue
+    if (!isNestedLaneKind(m.kind)) continue
     for (const b of forkBranchesOf(m)) {
       const found = locatePipelineModule(b.modules, id, predecessor, m, b.id)
       if (found) return found
@@ -127,7 +135,7 @@ export function mapPipelineModules(
 ): PipelineModule[] {
   return modules.map((m) => {
     const mapped = fn(m)
-    if (!isForkKind(mapped.kind)) return mapped
+    if (!isNestedLaneKind(mapped.kind)) return mapped
     return {
       ...mapped,
       forkBranches: forkBranchesOf(mapped).map((b) => ({
@@ -145,7 +153,7 @@ export function updatePipelineModule(
 ): PipelineModule[] {
   return modules.map((m) => {
     if (m.id === id) return updater(m)
-    if (!isForkKind(m.kind)) return m
+    if (!isNestedLaneKind(m.kind)) return m
     return {
       ...m,
       forkBranches: forkBranchesOf(m).map((b) => ({
@@ -166,7 +174,7 @@ export function insertPipelineModules(
     return [...modules.slice(0, at), ...fresh, ...modules.slice(at)]
   }
   return modules.map((m) => {
-    if (!isForkKind(m.kind)) return m
+    if (!isNestedLaneKind(m.kind)) return m
     if (m.id === loc.forkId) {
       return {
         ...m,
@@ -202,7 +210,7 @@ export function replacePipelineSiblings(
 }
 
 export function pipelineHasFork(modules: PipelineModule[]): boolean {
-  return modules.some((m) => isForkKind(m.kind))
+  return flattenPipelineModules(modules).some((m) => isNestedLaneKind(m.kind))
 }
 
 export function removePipelineModules(
@@ -211,7 +219,7 @@ export function removePipelineModules(
 ): PipelineModule[] {
   return modules.flatMap((m) => {
     if (drop.has(m.id)) return []
-    if (!isForkKind(m.kind)) return [m]
+    if (!isNestedLaneKind(m.kind)) return [m]
     return [
       {
         ...m,
@@ -224,14 +232,14 @@ export function removePipelineModules(
   })
 }
 
-export function laneLastModule(branch: ForkBranch): PipelineModule | undefined {
+export function laneLastModule(branch: { modules: PipelineModule[] }): PipelineModule | undefined {
   const mods = branch.modules
   return mods.length ? mods[mods.length - 1] : undefined
 }
 
 export function forkContainsNestedFork(m: PipelineModule): boolean {
-  if (!isForkKind(m.kind)) return false
-  return forkBranchesOf(m).some((b) => flattenPipelineModules(b.modules).some((x) => isForkKind(x.kind)))
+  if (!isNestedLaneKind(m.kind)) return false
+  return forkBranchesOf(m).some((b) => flattenPipelineModules(b.modules).some((x) => isNestedLaneKind(x.kind)))
 }
 
 export type LinearSpan = {
@@ -249,7 +257,7 @@ export function visitLinearSpans(
   visit({ modules, startPrev, scopePrefix })
   for (let i = 0; i < modules.length; i++) {
     const m = modules[i]!
-    if (!isForkKind(m.kind)) continue
+    if (!isNestedLaneKind(m.kind)) continue
     const pred = i > 0 ? modules[i - 1] : startPrev
     const prefix = [...scopePrefix, ...modules.slice(0, i)]
     for (const b of forkBranchesOf(m)) {
@@ -333,6 +341,64 @@ export function deriveForkStepTypes(
   return { module: next, models: nextModels }
 }
 
+function unionTypeExprs(a?: TypeExpr, b?: TypeExpr): TypeExpr | undefined {
+  if (!a) return b
+  if (!b) return a
+  if (typeExprEqual(a, b)) return a
+  const variants: TypeExpr[] = []
+  const push = (x: TypeExpr) => {
+    const parts = x.kind === TypeExprKind.Union ? x.variants : [x]
+    for (const p of parts) {
+      if (!variants.some((v) => typeExprEqual(v, p))) variants.push(p)
+    }
+  }
+  push(a)
+  push(b)
+  return variants.length === 1 ? variants[0]! : { kind: TypeExprKind.Union, variants }
+}
+
+function laneOutOrSpine(branch: { modules: PipelineModule[] }, spineType?: TypeExpr): TypeExpr | undefined {
+  const last = laneLastModule(branch)
+  return last ? stepSpineOutType(last) : spineType
+}
+
+export function deriveIfElseStepTypes(
+  m: PipelineModule,
+  prev: PipelineModule | undefined,
+  models: StructureModel[],
+): { module: PipelineModule; models: StructureModel[] } {
+  if (!isIfElseKind(m.kind)) return { module: m, models }
+  const spineType = prev ? stepSpineOutType(prev) : m.inType
+  let next: PipelineModule = { ...m }
+  if (spineType) {
+    next = {
+      ...next,
+      inType: spineType,
+      inStructureId:
+        spineType.kind === "ref"
+          ? spineType.modelId
+          : spineType.kind === "list" && spineType.item.kind === "ref"
+            ? spineType.item.modelId
+            : next.inStructureId,
+    }
+  }
+  const branches = forkBranchesOf(m)
+  const outType = unionTypeExprs(laneOutOrSpine(branches[0] ?? { modules: [] }, spineType), laneOutOrSpine(branches[1] ?? { modules: [] }, spineType))
+  if (outType) {
+    next = {
+      ...next,
+      outType,
+      outStructureId:
+        outType.kind === "ref"
+          ? outType.modelId
+          : outType.kind === "list" && outType.item.kind === "ref"
+            ? outType.item.modelId
+            : undefined,
+    }
+  }
+  return { module: next, models }
+}
+
 export function syncForkModules(
   modules: PipelineModule[],
   models: StructureModel[],
@@ -342,14 +408,16 @@ export function syncForkModules(
   let scratch = models
   const nextModules = modules.map((m, i) => {
     const prev = i > 0 ? modules[i - 1] : startPrev
-    if (isForkKind(m.kind)) {
+    if (isNestedLaneKind(m.kind)) {
       const nested = forkBranchesOf(m).map((b) => {
         const syncedLane = syncForkModules(b.modules, scratch, typeAliases, prev)
         scratch = syncedLane.models
         return { ...b, modules: syncedLane.modules }
       })
       const withLanes = { ...m, forkBranches: nested }
-      const synced = deriveForkStepTypes(withLanes, prev, scratch, typeAliases)
+      const synced = isIfElseKind(m.kind)
+        ? deriveIfElseStepTypes(withLanes, prev, scratch)
+        : deriveForkStepTypes(withLanes, prev, scratch, typeAliases)
       scratch = synced.models
       return synced.module
     }

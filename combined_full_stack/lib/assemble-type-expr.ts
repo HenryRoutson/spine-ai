@@ -307,7 +307,7 @@ export function syncAssembleModules(
   let scratch = models
   const nextModules = modules.map((m, i) => {
     const prev = i > 0 ? modules[i - 1] : undefined
-    if (m.kind === ModuleKind.Fork) {
+    if (m.kind === ModuleKind.Fork || m.kind === ModuleKind.IfElse) {
       const nested = (m.forkBranches ?? []).map((b) => {
         const syncedLane = syncAssembleModules(b.modules, scratch, typeAliases)
         scratch = syncedLane.models

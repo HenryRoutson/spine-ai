@@ -4,7 +4,7 @@ import type { PipelineModule } from "@/lib/types"
 import { isLlmKind } from "@/lib/module-kinds"
 import { isAutoQuoteStep } from "@/lib/quote-steps"
 import { isAutoDocToTextStep, isAutoStructureParseStep, isInputManagedFollower } from "@/lib/structure-parse-steps"
-import { forkBranchesOf, locatePipelineModule } from "@/lib/fork-pipeline"
+import { forkBranchesOf, isNestedLaneKind, locatePipelineModule } from "@/lib/fork-pipeline"
 
 export type ForkLaneSegment = {
   id: string
@@ -69,7 +69,7 @@ export function segmentPipeline(
     if (g) {
       segments.push({ kind: "combine", combine: m, input: g.input, parse: g.parse, convert: g.convert, index: i })
     } else if (!inGroup.has(m.id)) {
-      if (m.kind === ModuleKind.Fork && !nestedForkAsStep) {
+      if (isNestedLaneKind(m.kind) && !nestedForkAsStep) {
         segments.push({
           kind: "fork",
           fork: m,

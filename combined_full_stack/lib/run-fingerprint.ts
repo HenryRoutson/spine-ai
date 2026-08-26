@@ -74,6 +74,16 @@ function moduleForFingerprint(m: PipelineModule): ModuleFingerprint | null {
           })) ?? null,
         }
       : {}),
+    ...(m.kind === "if-else"
+      ? {
+          ifCondition: m.ifCondition ?? null,
+          forkBranches: m.forkBranches?.map((b) => ({
+            id: b.id,
+            label: b.label,
+            modules: b.modules.map(moduleForFingerprint),
+          })) ?? null,
+        }
+      : {}),
   }
 }
 

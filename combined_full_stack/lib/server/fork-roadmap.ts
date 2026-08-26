@@ -54,7 +54,7 @@
 //   Drop "strictly linear". Prefer a single spine when one chain suffices; Fork when
 //   independent sub-pipelines share an input and must run before a join.
 //
-// Out of v1: conditional router (run one lane), multi-sink (no join / multiple Output),
+// Out of v1: multi-sink (no join / multiple Output), PipelineRef components, React Flow.
 //   nested fork UI, PipelineRef components, React Flow.
 export {}
 
@@ -72,7 +72,8 @@ export {}
 // AI :   Ink list with indent.
 // AI : DONE (allow-pipeline-non-linear-fork) — stage F seeds: contract_diligence_fork, invoice_triage_fork,
 // AI :   lead_notify_fork (+ docs).
-// AI : TODO (allow-pipeline-non-linear-fork) — later: router (one lane), sinks join, PipelineRef, React Flow.
+// AI : TODO (allow-pipeline-non-linear-fork) — later: sinks join, PipelineRef, React Flow.
+// AI : DONE (allow-pipeline-if-else) — ModuleKind.IfElse exclusive Then/Else + typed ifCondition (path bool | equals).
 // AI : DONE (allow-pipeline-non-linear-fork) — nested fork UI: canvas recurses fork boxes; max 12 lanes.
 
 // ---------------------------------------------------------------------------

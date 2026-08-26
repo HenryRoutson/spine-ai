@@ -11,7 +11,7 @@ import {
   orderedInputModules,
 } from "../../inference-input";
 import { unknownProject } from "../api-errors";
-import { flattenPipelineModules, findPipelineModule, forkBranchesOf, laneLastModule, locatePipelineModule } from "@/lib/fork-pipeline";
+import { flattenPipelineModules, findPipelineModule, forkBranchesOf, isIfElseKind, laneLastModule, locatePipelineModule } from "@/lib/fork-pipeline";
 import { dataDir } from "../config";
 import { fileWriteHelper } from "../file_write_helper";
 import { collectLogsDuring, withStepModuleContext } from "../job_log_sink";
@@ -57,6 +57,7 @@ import { missingRequiredSecretsError } from "../secret_preflight";
 import { createWriteLive } from "./live";
 import { runLinearStepsFrom } from "./linear";
 import { execForkJoin } from "./steps/fork";
+import { execIfElseJoin } from "./steps/if_else";
 import { buildAssertResult, buildClientResult, buildHumanReviewResult, buildChatbotResult, buildLlmClientResult, failedStepResult } from "./results";
 import type { ClientStepResume, RunCtx, RunOptions } from "./engine_types";
 
@@ -481,29 +482,37 @@ export async function resumeRunPipeline(
       loc.index + 1,
     )
     const forkPrev = locatePipelineModule(project.modules, loc.parentFork.id)?.predecessor?.id
-    await Promise.all(
-      forkBranchesOf(loc.parentFork).map(async (b) => {
-        if (b.id === loc.branchId) return
-        const last = laneLastModule(b)
-        if (last && ctx.outputs.has(last.id)) return
-        const status = await runLinearStepsFrom(
-          {
-            ...linearParams,
-            ctx: { ...ctx, prevModuleId: forkPrev },
-            modules: b.modules,
-            forkId: loc.parentFork!.id,
-            branchId: b.id,
-          },
-          0,
-        )
-        if (status === "error") throw new Error(`fork lane "${b.label}" failed`)
-      }),
-    )
-    ctx.prevModuleId = forkPrev
-    const join = await execForkJoin(loc.parentFork, ctx, log)
-    ctx.outputs.set(loc.parentFork.id, join.value)
-    ctx.byLabel[loc.parentFork.label.trim()] = join.value
-    ctx.prevModuleId = loc.parentFork.id
+    if (isIfElseKind(loc.parentFork.kind)) {
+      ctx.prevModuleId = forkPrev
+      const join = await execIfElseJoin(loc.parentFork, ctx, log)
+      ctx.outputs.set(loc.parentFork.id, join.value)
+      ctx.byLabel[loc.parentFork.label.trim()] = join.value
+      ctx.prevModuleId = loc.parentFork.id
+    } else {
+      await Promise.all(
+        forkBranchesOf(loc.parentFork).map(async (b) => {
+          if (b.id === loc.branchId) return
+          const last = laneLastModule(b)
+          if (last && ctx.outputs.has(last.id)) return
+          const status = await runLinearStepsFrom(
+            {
+              ...linearParams,
+              ctx: { ...ctx, prevModuleId: forkPrev },
+              modules: b.modules,
+              forkId: loc.parentFork!.id,
+              branchId: b.id,
+            },
+            0,
+          )
+          if (status === "error") throw new Error(`fork lane "${b.label}" failed`)
+        }),
+      )
+      ctx.prevModuleId = forkPrev
+      const join = await execForkJoin(loc.parentFork, ctx, log)
+      ctx.outputs.set(loc.parentFork.id, join.value)
+      ctx.byLabel[loc.parentFork.label.trim()] = join.value
+      ctx.prevModuleId = loc.parentFork.id
+    }
     const forkLoc = locatePipelineModule(project.modules, loc.parentFork.id)
     if (forkLoc) {
       await runLinearStepsFrom({ ...linearParams, modules: forkLoc.siblings }, forkLoc.index + 1)

@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { uid } from "@/lib/id";
 import { dataDir } from "@/lib/server/config";
 import { createAdminClient } from "@/lib/server/supabase_admin";
-import { isMissingSchemaError } from "@/lib/server/supabase_store";
+import { isExpectedAuthSkewError, isMissingSchemaError } from "@/lib/server/supabase_store";
 import { LOCAL_DEV_USER_ID, type user_id_string } from "@/lib/server/require_auth";
 import { logger } from "@/lib/server/server_logger";
 
@@ -35,6 +35,11 @@ type StoredUserBillingKey = UserBillingKeyRecord & {
 
 const KEY_PREFIX = "bill_";
 const RAW_KEY_PREFIX = "spine_bill_";
+const AUTH_SKEW_RETRY_MS = 600;
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
 
 function keysDir(): string {
   return join(dataDir(), "user_billing_keys");
@@ -141,11 +146,14 @@ export async function verifyUserBillingKey(key: string): Promise<user_id_string>
 export async function listUserBillingKeys(userId: user_id_string): Promise<UserBillingKeyRecord[]> {
   const db = await createAdminClient();
   if (!db) return listLocalKeys(userId);
-  const { data, error } = await db
-    .from("user_billing_keys")
-    .select("*")
-    .eq("user_id", userId)
-    .eq("revoked", false);
+  const query = () =>
+    db.from("user_billing_keys").select("*").eq("user_id", userId).eq("revoked", false);
+  let { data, error } = await query();
+  if (error && isExpectedAuthSkewError(error)) {
+    keyLog.warn(`listUserBillingKeys JWT skew — retrying`, { userId });
+    await sleep(AUTH_SKEW_RETRY_MS);
+    ({ data, error } = await query());
+  }
   if (error) {
     if (isMissingSchemaError(error)) return listLocalKeys(userId);
     throw error;

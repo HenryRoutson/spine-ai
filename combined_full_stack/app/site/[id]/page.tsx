@@ -31,5 +31,5 @@ export default async function HostedSitePage({ params }: { params: Promise<{ id:
       </div>
     )
   }
-  return <HostedSiteViewer linkId={link.id} siteOptions={link.siteOptions} />
+  return <HostedSiteViewer linkId={link.id} siteOptions={link.siteOptions} viewerMarkdown={link.viewerMarkdown ?? ""} />
 }

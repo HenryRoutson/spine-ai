@@ -70,6 +70,10 @@ import {
   generateForkStepBodyPy,
   generateForkStepBodyRust,
   generateForkStepBodyTs,
+  generateIfElseStepBodyGo,
+  generateIfElseStepBodyPy,
+  generateIfElseStepBodyRust,
+  generateIfElseStepBodyTs,
   generateQuoteStepBodyGo,
   generateQuoteStepBodyPy,
   generateQuoteStepBodyRust,
@@ -746,6 +750,12 @@ export const STEP_BODY: Record<ModuleKind, Record<ExportLang, StepBodyEmitter>> 
     py: (ctx) => generateForkStepBodyPy(ctx.m, ctx.project, ctx.outType),
     go: (ctx) => generateForkStepBodyGo(ctx.m, ctx.project, ctx.outType),
     rs: (ctx) => generateForkStepBodyRust(ctx.m, ctx.project, ctx.outType),
+  },
+  [ModuleKind.IfElse]: {
+    ts: (ctx) => generateIfElseStepBodyTs(ctx.m, ctx.project, ctx.outType),
+    py: (ctx) => generateIfElseStepBodyPy(ctx.m, ctx.project, ctx.outType),
+    go: (ctx) => generateIfElseStepBodyGo(ctx.m, ctx.project, ctx.outType),
+    rs: (ctx) => generateIfElseStepBodyRust(ctx.m, ctx.project, ctx.outType),
   },
   [ModuleKind.Chunk]: {
     ts: emitTsMergeChunkCustom,

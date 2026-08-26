@@ -58,6 +58,13 @@ export const DEFAULT_HOSTED_SITE_AUTH: HostedSiteAuth = {
   customSupabaseAnonKey: "",
 };
 
+export type hosted_site_page_path = string & { __brand: "hosted_site_page_path" };
+
+export type HostedSitePage = {
+  path: hosted_site_page_path;
+  html: string;
+};
+
 export type HostedSiteOptions = {
   brand: HostedSiteBrand;
   customHtml: string;
@@ -65,6 +72,8 @@ export type HostedSiteOptions = {
   hideSpineFooter: boolean;
   auth: HostedSiteAuth;
   authHtml: string;
+  // AI : extra pages beyond index (customHtml) + auth.html — empty keeps today's single-page export.
+  pages: HostedSitePage[];
 };
 
 export const DEFAULT_HOSTED_SITE_OPTIONS: HostedSiteOptions = {
@@ -82,6 +91,7 @@ export const DEFAULT_HOSTED_SITE_OPTIONS: HostedSiteOptions = {
   hideSpineFooter: false,
   auth: { ...DEFAULT_HOSTED_SITE_AUTH },
   authHtml: "",
+  pages: [],
 };
 
 export type SharedLinkRecord = {

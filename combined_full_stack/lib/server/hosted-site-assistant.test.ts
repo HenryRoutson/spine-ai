@@ -4,7 +4,7 @@ import {
   buildHostedSiteAssistantSystemPrompt,
   buildHostedSiteAssistantUserPrompt,
 } from "@/lib/server/hosted-site-assistant"
-import { DEFAULT_HOSTED_SITE_HTML, HOSTED_SITE_AUTH_SLOT, HOSTED_SITE_RUN_SLOT } from "@/lib/hosted-site"
+import { DEFAULT_HOSTED_SITE_HTML, HOSTED_SITE_AUTH_SLOT, HOSTED_SITE_CHATBOT_SLOT, HOSTED_SITE_DOCS_SLOT, HOSTED_SITE_OUTPUT_SLOT, HOSTED_SITE_RUN_SLOT } from "@/lib/hosted-site"
 import { DEFAULT_HOSTED_SITE_OPTIONS } from "@/lib/shared-link-types"
 import { InputType, ModuleKind, type Project, type ProjectId } from "@/lib/types"
 
@@ -54,6 +54,9 @@ describe("hosted site UI vibe agent prompts", () => {
     expect(system).toMatch(/MUST NOT change the pipeline/)
     expect(system).toMatch(/signed-in workspace/i)
     expect(system).toContain(HOSTED_SITE_RUN_SLOT)
+    expect(system).toContain(HOSTED_SITE_OUTPUT_SLOT)
+    expect(system).toContain(HOSTED_SITE_CHATBOT_SLOT)
+    expect(system).toContain(HOSTED_SITE_DOCS_SLOT)
   })
 
   it("sends page HTML plus a short app summary, not docs/prompts/code", () => {

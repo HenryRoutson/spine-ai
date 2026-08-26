@@ -1,4 +1,5 @@
 // AI : list chunk + merge step codegen and legacy list-merge migration.
+import { isNestedLaneKind } from "@/lib/fork-pipeline"
 import { isMergeModuleKind } from "@/lib/module-kinds"
 import { makeCustomCodeEntry } from "@/lib/custom_code_entries"
 import { buildMergeTypeScript, DEFAULT_MERGE_POLICY, EMPTY_MERGE_LAYER_POLICY } from "@/lib/merger"
@@ -218,7 +219,7 @@ export function syncListOpsModules(
   let scratchModels = models
   const nextModules = modules.map((m, i) => {
     const prev = i > 0 ? modules[i - 1] : undefined
-    if (m.kind === ModuleKind.Fork) {
+    if (isNestedLaneKind(m.kind)) {
       const nested = (m.forkBranches ?? []).map((b) => {
         const syncedLane = syncListOpsModules(b.modules, scratchModels)
         scratchModels = syncedLane.models

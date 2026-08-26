@@ -1,7 +1,22 @@
 import { escapeHtml } from "@/lib/standalone-html"
 import { DEFAULT_HOSTED_SITE_AUTH_HTML, DEFAULT_HOSTED_SITE_HTML, defaultHostedSiteCss } from "@/lib/hosted-site-defaults"
-import { HOSTED_SITE_AUTH_SLOT, HOSTED_SITE_RUN_SLOT } from "@/lib/hosted-site-slots"
-import type { HostedSiteAuth, HostedSiteAuthProvider, HostedSiteBrand, HostedSiteOptions } from "@/lib/shared-link-types"
+import {
+  HOSTED_SITE_AUTH_SLOT,
+  HOSTED_SITE_RUN_SLOT,
+  HOSTED_SITE_SLOT_CLASS,
+  splitHostedSiteSlots,
+  type HostedSiteHtmlSegment,
+  type hosted_site_widget_slot,
+} from "@/lib/hosted-site-slots"
+import { stampHostedSiteHsIds } from "@/lib/hosted-site-select"
+import type {
+  HostedSiteAuth,
+  HostedSiteAuthProvider,
+  HostedSiteBrand,
+  HostedSiteOptions,
+  HostedSitePage,
+  hosted_site_page_path,
+} from "@/lib/shared-link-types"
 import { DEFAULT_HOSTED_SITE_AUTH, DEFAULT_HOSTED_SITE_OPTIONS } from "@/lib/shared-link-types"
 
 export type hex_color_string = string & { __brand: "hex_color" }
@@ -9,8 +24,18 @@ export type logo_url_string = string & { __brand: "logo_url" }
 export type hosted_site_surface = "app" | "signin"
 export type hosted_site_viewport = "desktop" | "mobile"
 
-export { DEFAULT_HOSTED_SITE_AUTH_HTML, DEFAULT_HOSTED_SITE_HTML, defaultHostedSiteCss } from "@/lib/hosted-site-defaults"
-export { HOSTED_SITE_AUTH_SLOT, HOSTED_SITE_RUN_SLOT } from "@/lib/hosted-site-slots"
+export { DEFAULT_HOSTED_SITE_AUTH_HTML, DEFAULT_HOSTED_SITE_HTML, DEFAULT_HOSTED_SITE_WORKSPACE_HTML, defaultHostedSiteCss } from "@/lib/hosted-site-defaults"
+export {
+  HOSTED_SITE_AUTH_SLOT,
+  HOSTED_SITE_CHATBOT_SLOT,
+  HOSTED_SITE_DOCS_SLOT,
+  HOSTED_SITE_OUTPUT_SLOT,
+  HOSTED_SITE_RUN_SLOT,
+  HOSTED_SITE_IGNORED_SLOT_SELECTOR,
+  HOSTED_SITE_SLOT_CLASS,
+  splitHostedSiteSlots,
+} from "@/lib/hosted-site-slots"
+export type { HostedSiteHtmlSegment, hosted_site_widget_slot } from "@/lib/hosted-site-slots"
 
 export const SITE_LINK_PREFIX = "site_"
 
@@ -140,6 +165,12 @@ export type HostedSiteHtmlParts = {
   before: string
   after: string
   css: string
+  segments: HostedSiteHtmlSegment[]
+}
+
+export type CompileHostedSiteOpts = {
+  // AI : studio preview stamps data-hs-id for click-to-edit; export / public compile stay clean.
+  preview?: boolean
 }
 
 export type HostedSiteLookIssue = {
@@ -175,36 +206,61 @@ export function unwrapVibeCodedHtml(html: string): { html: string; cssFromHtml: 
   return { html: inner.trim(), cssFromHtml: cssFromHtml.trim() }
 }
 
+function htmlJoin(segments: HostedSiteHtmlSegment[], until?: number, from?: number): string {
+  const slice = segments.slice(from ?? 0, until)
+  return slice.map((s) => (s.kind === "html" ? s.html : "")).join("")
+}
+
 function compileHostedSiteMarkup(
   sourceHtml: string,
   extraCss: string,
   brand: HostedSiteBrand,
-  slot: string,
+  primary: hosted_site_widget_slot,
+  opts?: CompileHostedSiteOpts,
 ): HostedSiteHtmlParts {
   const unwrapped = unwrapVibeCodedHtml(sourceHtml)
-  const html = applyHostedSiteTokens(sanitizeHostedSiteHtml(unwrapped.html), brand)
-  const splitAt = html.indexOf(slot)
-  const before = splitAt < 0 ? html : html.slice(0, splitAt)
-  const after = splitAt < 0 ? "" : html.slice(splitAt + slot.length)
+  let html = sanitizeHostedSiteHtml(unwrapped.html)
+  if (opts?.preview) html = stampHostedSiteHsIds(html)
+  html = applyHostedSiteTokens(html, brand)
+  const segments = splitHostedSiteSlots(html)
+  const primaryIdx = segments.findIndex((s) => s.kind === "slot" && s.slot === primary)
+  const before = primaryIdx < 0 ? htmlJoin(segments) : htmlJoin(segments, primaryIdx)
+  const after = primaryIdx < 0 ? "" : htmlJoin(segments, undefined, primaryIdx + 1)
   const css = `${defaultHostedSiteCss()}\n${sanitizeHostedSiteCss(unwrapped.cssFromHtml)}\n${sanitizeHostedSiteCss(extraCss)}`
-  return { before, after, css }
+  return { before, after, css, segments }
 }
 
-export function compileHostedSiteHtml(options: HostedSiteOptions): HostedSiteHtmlParts {
+export function compileHostedSiteHtml(options: HostedSiteOptions, opts?: CompileHostedSiteOpts): HostedSiteHtmlParts {
   return compileHostedSiteMarkup(
     options.customHtml.trim() || DEFAULT_HOSTED_SITE_HTML,
     options.customCss,
     options.brand,
-    HOSTED_SITE_RUN_SLOT,
+    "run",
+    opts,
   )
 }
 
-export function compileHostedSiteAuthHtml(options: HostedSiteOptions): HostedSiteHtmlParts {
+export function compileHostedSiteAuthHtml(options: HostedSiteOptions, opts?: CompileHostedSiteOpts): HostedSiteHtmlParts {
   return compileHostedSiteMarkup(
     options.authHtml.trim() || DEFAULT_HOSTED_SITE_AUTH_HTML,
     options.customCss,
     options.brand,
-    HOSTED_SITE_AUTH_SLOT,
+    "auth",
+    opts,
+  )
+}
+
+export function compileHostedSitePageHtml(
+  options: HostedSiteOptions,
+  html: string,
+  opts?: CompileHostedSiteOpts,
+): HostedSiteHtmlParts {
+  return compileHostedSiteMarkup(
+    html.trim() || DEFAULT_HOSTED_SITE_HTML,
+    options.customCss,
+    options.brand,
+    "run",
+    opts,
   )
 }
 
@@ -212,6 +268,14 @@ export function hostedSiteSourceHtml(options: HostedSiteOptions, surface: hosted
   return surface === "signin"
     ? options.authHtml.trim() || DEFAULT_HOSTED_SITE_AUTH_HTML
     : options.customHtml.trim() || DEFAULT_HOSTED_SITE_HTML
+}
+
+function renderLookBody(parts: HostedSiteHtmlParts, slotClass: string): string {
+  const body = parts.segments
+    .map((s) => (s.kind === "html" ? s.html : `<div class="${HOSTED_SITE_SLOT_CLASS[s.slot]}"></div>`))
+    .join("")
+  if (body.includes(`class="${slotClass}"`)) return body
+  return `${body}<div class="${slotClass}"></div>`
 }
 
 function collectHostedSiteLookIssues(
@@ -227,7 +291,7 @@ function collectHostedSiteLookIssues(
   const styleAttr = Object.entries(vars)
     .map(([key, value]) => `${key}: ${value}`)
     .join("; ")
-  const pageHtml = `<div class="hs-root" style="${styleAttr}"><style>${parts.css}</style>${parts.before}<div class="${slotClass}"></div>${parts.after}${options.hideSpineFooter ? "" : `<p class="hs-foot">${company}</p>`}</div>`
+  const pageHtml = `<div class="hs-root" style="${styleAttr}"><style>${parts.css}</style>${renderLookBody(parts, slotClass)}${options.hideSpineFooter ? "" : `<p class="hs-foot">${company}</p>`}</div>`
   const markup = `${parts.before}${parts.after}`
   const unwrapped = unwrapVibeCodedHtml(hostedSiteSourceHtml(options, surface))
   const slotCount = sanitizeHostedSiteHtml(unwrapped.html).split(slot).length - 1
@@ -295,7 +359,7 @@ export function compileHostedSiteLooksOk(options: HostedSiteOptions): HostedSite
   try {
     parts = compileHostedSiteHtml(options)
   } catch (err) {
-    parts = { before: "", after: "", css: "" }
+    parts = { before: "", after: "", css: "", segments: [] }
     issues.push({
       level: "error",
       code: "compile-throw",
@@ -310,7 +374,7 @@ export function compileHostedSiteLooksOk(options: HostedSiteOptions): HostedSite
     try {
       authParts = compileHostedSiteAuthHtml(options)
     } catch (err) {
-      authParts = { before: "", after: "", css: "" }
+      authParts = { before: "", after: "", css: "", segments: [] }
       issues.push({
         level: "error",
         code: "compile-throw",
@@ -348,6 +412,43 @@ function normalizeHostedSiteAuth(raw: unknown): HostedSiteAuth {
   }
 }
 
+const HOSTED_SITE_PAGE_PATH_RE = /^[a-z0-9][a-z0-9_-]{0,47}$/
+const HOSTED_SITE_RESERVED_PAGE_PATHS = new Set(["index", "auth", "styles"])
+
+export function normalizeHostedSitePagePath(raw: string): hosted_site_page_path | null {
+  const path = raw.trim().replace(/^\//, "").toLowerCase()
+  if (!HOSTED_SITE_PAGE_PATH_RE.test(path) || HOSTED_SITE_RESERVED_PAGE_PATHS.has(path)) return null
+  return path as hosted_site_page_path
+}
+
+export function normalizeHostedSitePages(raw: unknown): HostedSitePage[] {
+  if (!Array.isArray(raw)) return []
+  const seen = new Set<string>()
+  const pages: HostedSitePage[] = []
+  for (const item of raw.slice(0, 8)) {
+    if (!item || typeof item !== "object") continue
+    const o = item as Partial<HostedSitePage>
+    const path = typeof o.path === "string" ? normalizeHostedSitePagePath(o.path) : null
+    if (!path || seen.has(path)) continue
+    seen.add(path)
+    pages.push({
+      path,
+      html: typeof o.html === "string" ? o.html.slice(0, 50_000) : "",
+    })
+  }
+  return pages
+}
+
+export function nextHostedSitePagePath(existing: HostedSitePage[]): hosted_site_page_path {
+  const used = new Set(existing.map((p) => p.path))
+  if (!used.has("app" as hosted_site_page_path)) return "app" as hosted_site_page_path
+  for (let i = 2; i < 20; i++) {
+    const candidate = `app${i}` as hosted_site_page_path
+    if (!used.has(candidate)) return candidate
+  }
+  return `page${existing.length + 1}` as hosted_site_page_path
+}
+
 export function normalizeHostedSiteOptions(raw: unknown): HostedSiteOptions {
   const o = (raw && typeof raw === "object" ? raw : {}) as Partial<HostedSiteOptions>
   return {
@@ -357,6 +458,7 @@ export function normalizeHostedSiteOptions(raw: unknown): HostedSiteOptions {
     hideSpineFooter: o.hideSpineFooter === true,
     auth: normalizeHostedSiteAuth(o.auth ?? DEFAULT_HOSTED_SITE_AUTH),
     authHtml: typeof o.authHtml === "string" ? o.authHtml.slice(0, 50_000) : "",
+    pages: normalizeHostedSitePages(o.pages),
   }
 }
 
@@ -375,6 +477,8 @@ export function keepConcurrentHostedSiteEdits(
     }
     return next
   }
+  const samePages = (a: HostedSitePage[], b: HostedSitePage[]): boolean =>
+    a.length === b.length && a.every((page, i) => page.path === b[i]?.path && page.html === b[i]?.html)
   return {
     brand: pick(received.brand, sent.brand, latest.brand),
     customHtml: keep(received.customHtml, sent.customHtml, latest.customHtml),
@@ -382,5 +486,6 @@ export function keepConcurrentHostedSiteEdits(
     hideSpineFooter: keep(received.hideSpineFooter, sent.hideSpineFooter, latest.hideSpineFooter),
     auth: pick(received.auth, sent.auth, latest.auth),
     authHtml: keep(received.authHtml, sent.authHtml, latest.authHtml),
+    pages: samePages(received.pages, sent.pages) ? latest.pages : received.pages,
   }
 }

@@ -49,6 +49,7 @@ const AUTHORED_MODULE_KINDS = [
   "assemble",
   "parallel",
   "fork",
+  "if-else",
   "combine",
   "chunk",
   "merge",
@@ -250,6 +251,12 @@ const SeedFileSchema = z.object({
             modules: z.array(z.any()),
           }),
         )
+        .optional(),
+      ifCondition: z
+        .discriminatedUnion("kind", [
+          z.object({ kind: z.literal("path"), path: z.string() }),
+          z.object({ kind: z.literal("equals"), path: z.string(), value: z.unknown() }),
+        ])
         .optional(),
       mergePolicy: z
         .object({

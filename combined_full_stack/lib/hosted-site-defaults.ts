@@ -60,6 +60,17 @@ ${HOSTED_SITE_AUTH_SLOT}
 </section>
 `
 
+// AI : extra page default — workspace around {{run}}; landing stays customHtml / hosted/index.html.
+export const DEFAULT_HOSTED_SITE_WORKSPACE_HTML = `<section class="hs-run" id="run">
+  <div class="hs-workspace-head">
+    <p class="hs-kicker">Live workspace</p>
+    <h2 class="hs-workspace-title">Run {{company}}</h2>
+    <p class="hs-lede hs-lede-tight">Drop files in, run, and read the result in place.</p>
+  </div>
+${HOSTED_SITE_RUN_SLOT}
+</section>
+`
+
 export function defaultHostedSiteCss(): string {
   return `
 .hs-root { min-height: 100dvh; background: var(--hs-bg); color: var(--hs-fg); font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif; letter-spacing: -0.014em; }
@@ -88,7 +99,8 @@ export function defaultHostedSiteCss(): string {
 .hs-run { padding: 0 1rem 2.75rem; }
 .hs-workspace-head { max-width: 56rem; margin: 0 auto 1rem; text-align: center; }
 .hs-workspace-title { margin: 0.4rem 0 0; font-size: 1.25rem; font-weight: 650; letter-spacing: -0.025em; }
-.hs-run-slot { margin: 0 auto; max-width: 56rem; border-radius: 1.1rem; overflow: hidden; border: 1px solid color-mix(in srgb, var(--hs-fg) 10%, transparent); box-shadow: 0 22px 60px color-mix(in srgb, var(--hs-fg) 12%, transparent); background: #fff; color: inherit; }
+.hs-run-slot, .hs-output-slot, .hs-chatbot-slot, .hs-docs-slot { margin: 0 auto; max-width: 56rem; border-radius: 1.1rem; overflow: hidden; border: 1px solid color-mix(in srgb, var(--hs-fg) 10%, transparent); box-shadow: 0 22px 60px color-mix(in srgb, var(--hs-fg) 12%, transparent); background: #fff; color: inherit; }
+.hs-output-slot, .hs-chatbot-slot, .hs-docs-slot { margin-top: 1rem; margin-bottom: 1rem; }
 .hs-foot, .hs-footer { padding: 0 1.5rem 2rem; text-align: center; font-size: 0.72rem; opacity: 0.55; }
 .hs-footer { display: flex; justify-content: center; gap: 0.75rem; flex-wrap: wrap; }
 .hs-footer a, .hs-foot a { color: inherit; }

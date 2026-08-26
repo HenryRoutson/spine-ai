@@ -53,7 +53,7 @@ export function SharePage({ simple }: { simple?: boolean } = {}) {
   const isConsumer = !builder
   const { setActiveWindow, activeWindow, activeSharedLinkId, openSharedRun } = useAppShell()
   const isVibe = isVibeWindow(activeWindow)
-  // AI : vibe/simple — share-a-link only; inbound Shared with me / Marketplace live on the project picker.
+  // AI : vibe/simple — hosted page studio + mint; Link / API / Embed stay on the full Share page.
   const isSimple = simple === true || isVibe
   const { typesInvalid, pipelineInvalid, pipelineEmpty, runTabsBlocked } = builder
     ? computeWorkspaceValidity(builder.modules, builder.models, builder.typeAliases)
@@ -208,14 +208,13 @@ export function SharePage({ simple }: { simple?: boolean } = {}) {
             </div>
           </div>
         ) : isSimple ? (
-          <div className="mx-auto flex max-w-xl flex-col gap-8">
+          <div className="mx-auto flex max-w-7xl flex-col gap-8">
             <section className="rounded-lg border border-border bg-card p-4">
-              <ShareLinkForm
+              <ShareSiteForm
                 project={builder.project}
                 docs={builder.docs}
                 inferenceInputDocIds={builder.inferenceInputDocIds}
                 onCreated={() => setRefreshToken((n) => n + 1)}
-                simple
               />
             </section>
             <section className="rounded-lg border border-border bg-card p-4">

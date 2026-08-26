@@ -90,7 +90,7 @@ const ACTION_COMMANDS: TuiCommand[] = [
   { id: "new-project", key: "n", aliases: ["new", "create", "project"], label: "New project", hint: "Start a pipeline" },
   { id: "configure-step", key: "e", aliases: ["edit", "configure", "inspect", "step"], label: "Configure step", hint: "Switch step and edit prompt / structure / note", needsProject: true, needsSteps: true },
   { id: "add-model", key: "m", aliases: ["model", "structure", "schema"], label: "Add model", hint: "Named structure — fixes Input / Output", needsProject: true },
-  { id: "add-step", key: "s", aliases: ["step", "llm", "module", "fork"], label: "Add step", hint: "Insert llm, fork, combine, chunk, …", needsProject: true },
+  { id: "add-step", key: "s", aliases: ["step", "llm", "module", "fork", "if-else"], label: "Add step", hint: "Insert llm, fork, if-else, combine, chunk, …", needsProject: true },
   { id: "vibe", key: "a", aliases: ["vibe", "agent", "ask"], label: "Ask vibe", hint: "Describe a change in plain language", needsProject: true },
   { id: "run-inference", key: "i", aliases: ["run", "infer", "inference"], label: "Run inference", hint: "Execute the pipeline — appears in Logging", needsProject: true },
   { id: "run-test", key: "t", aliases: ["test", "testing"], label: "Run test", hint: "Run *_testing.json and record the verdict", needsProject: true },

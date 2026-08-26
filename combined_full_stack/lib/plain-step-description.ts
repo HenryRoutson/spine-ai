@@ -69,6 +69,8 @@ export function simpleKindBlurb(kind?: string): string | undefined {
       return "Does several things at once"
     case "fork":
       return "Splits the work into separate paths"
+    case "if-else":
+      return "Picks one path or the other"
     case "assert":
       return "Checks that the result looks right"
     case "human-review":

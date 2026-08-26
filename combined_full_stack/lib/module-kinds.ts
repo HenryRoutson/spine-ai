@@ -14,6 +14,7 @@ export const USER_ADDABLE_MODULE_KINDS = [
   "assemble",
   "parallel",
   "fork",
+  "if-else",
   "combine",
   "custom-code",
   "assert",
@@ -36,6 +37,10 @@ const ADDABLE_KIND_ALIASES: Record<string, UserAddableModuleKind> = {
   piece: "n8n",
   app: "connect",
   dag: "fork",
+  ifelse: "if-else",
+  if: "if-else",
+  cond: "if-else",
+  router: "if-else",
 }
 
 export function parseUserAddableKind(raw: string): UserAddableModuleKind | undefined {
@@ -94,6 +99,7 @@ export function stepRequiresNote(kind: ModuleKind): boolean {
     kind === ModuleKind.Assemble ||
     kind === ModuleKind.Parallel ||
     kind === ModuleKind.Fork ||
+    kind === ModuleKind.IfElse ||
     isLlmKind(kind)
   )
 }

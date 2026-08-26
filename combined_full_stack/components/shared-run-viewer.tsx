@@ -27,11 +27,13 @@ export function SharedRunViewer({
   variant = "page",
   embedSessionToken,
   onRunEvent,
+  hideViewerMarkdown = false,
 }: {
   linkId: string
   variant?: "page" | "embed" | "site"
   embedSessionToken?: string
   onRunEvent?: (event: SharedRunLifecycleEvent) => void
+  hideViewerMarkdown?: boolean
 }) {
   const [link, setLink] = useState<SharedLinkPublicView | null>(null)
   const [loadError, setLoadError] = useState<string | null>(null)
@@ -75,6 +77,7 @@ export function SharedRunViewer({
       variant={variant}
       embedSessionToken={embedSessionToken}
       onRunEvent={onRunEvent}
+      hideViewerMarkdown={hideViewerMarkdown}
     />
   )
 }
@@ -85,12 +88,14 @@ function SharedRunContent({
   variant,
   embedSessionToken,
   onRunEvent,
+  hideViewerMarkdown,
 }: {
   link: SharedLinkPublicView
   linkId: string
   variant: "page" | "embed" | "site"
   embedSessionToken?: string
   onRunEvent?: (event: SharedRunLifecycleEvent) => void
+  hideViewerMarkdown: boolean
 }) {
   const { email, isAuthenticated, ready, signOut } = useSupabaseSession()
   const isEmbed = variant === "embed"
@@ -182,7 +187,7 @@ function SharedRunContent({
       )}
 
       <main className={cn("mx-auto w-full max-w-4xl flex-1 overflow-y-auto", isEmbed || isSite ? "p-3" : "p-5")}>
-        {link.viewerMarkdown?.trim() ? (
+        {hideViewerMarkdown ? null : link.viewerMarkdown?.trim() ? (
           <div className="mb-4 rounded-lg border border-border bg-card px-4 py-3">
             <MarkdownView md={link.viewerMarkdown} />
           </div>

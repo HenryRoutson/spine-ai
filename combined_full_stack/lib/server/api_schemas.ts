@@ -325,6 +325,12 @@ const pipelineModulePatchSchema = z
       )
       .max(12)
       .optional(),
+    ifCondition: z
+      .discriminatedUnion("kind", [
+        z.object({ kind: z.literal("path"), path: z.string().max(512) }).strict(),
+        z.object({ kind: z.literal("equals"), path: z.string().max(512), value: z.unknown() }).strict(),
+      ])
+      .optional(),
     // AI : example-select — allowlisted on PUT so .strict() does not reject builder saves
     exampleContextLabel: z.string().max(200).optional(),
     exampleContextField: z.string().max(512).optional(),
@@ -726,6 +732,17 @@ export const hostedSiteOptionsSchema = z
       .strict()
       .optional(),
     authHtml: z.string().max(50_000).optional(),
+    pages: z
+      .array(
+        z
+          .object({
+            path: z.string().trim().max(64),
+            html: z.string().max(50_000),
+          })
+          .strict(),
+      )
+      .max(8)
+      .optional(),
   })
   .strict();
 

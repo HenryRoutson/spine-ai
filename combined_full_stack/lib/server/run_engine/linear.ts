@@ -2,8 +2,10 @@ import { invariant } from "@/lib/assert";
 import { isLlmKind, usesPassthroughStructure } from "@/lib/module-kinds";
 import { compactPreview } from "@/lib/text-preview";
 import { labelAsStateKey } from "../pipeline_state";
-import { forkBranchesOf } from "@/lib/fork-pipeline";
+import { forkBranchesOf, isIfElseKind } from "@/lib/fork-pipeline";
+import { evalIfCondition, ifElseBranch, ifThenBranch } from "@/lib/if-else-pipeline";
 import { inputTypeLabel } from "../../inference-input";
+import { serializeCtx, resolveStepInputForCheck, requireLinearInput } from "./context";
 import { assertInputMatchesDescription, InputDescriptionRejectedError, shouldCheckInputDescription } from "../input_description_check";
 import { collectLogsDuring, withStepModuleContext } from "../job_log_sink";
 import { ClientStepPendingError, HumanReviewPendingError, ChatbotPendingError, LlmClientStepPendingError, PipelinePausedError } from "../run_checkpoint";
@@ -14,7 +16,6 @@ import { hasQuoteField, stepOutputTypeName, validateStepOutput } from "../struct
 import { llmStepCostLimitCents, StepCostLimitExceededError } from "../step_cost_limit";
 import { customCodeMaxRunMs } from "@/lib/custom-code-max-run";
 import { DEFAULT_INPUT_CHECK_MODEL, FailureKind, ModuleKind, RunStepStatus, type LlmCallRecord } from "../types";
-import { serializeCtx, resolveStepInputForCheck } from "./context";
 import { execModule } from "./exec_module";
 import {
   applyModuleSideEffects,
@@ -153,6 +154,26 @@ export async function runLinearStepsFrom(
                 }),
               ),
             );
+            ctx.prevModuleId = forkPrev;
+          }
+          if (isIfElseKind(m.kind)) {
+            const forkPrev = ctx.prevModuleId;
+            const inputData = requireLinearInput(m, ctx);
+            const takeThen = evalIfCondition(m.ifCondition, inputData);
+            const branch = takeThen ? ifThenBranch(m) : ifElseBranch(m);
+            if (branch?.modules.length) {
+              const laneStatus = await runLinearStepsFrom(
+                {
+                  ...params,
+                  ctx: { ...ctx, prevModuleId: forkPrev },
+                  modules: branch.modules,
+                  forkId: m.id,
+                  branchId: branch.id,
+                },
+                0,
+              );
+              if (laneStatus === "error") throw new Error(`if/else lane "${branch.label}" failed`);
+            }
             ctx.prevModuleId = forkPrev;
           }
           if (cached) {

@@ -157,7 +157,7 @@ export function StepExcelSidebar({
 
 function groupParts(modules: PipelineModule[], selected?: PipelineModule): { id: ModuleId; label: string }[] {
   if (!selected) return []
-  if (isForkKind(selected.kind)) {
+  if (isForkKind(selected.kind) || selected.kind === ModuleKind.IfElse) {
     const parts: { id: ModuleId; label: string }[] = [{ id: selected.id, label: `${selected.label} · join` }]
     for (const b of forkBranchesOf(selected)) {
       for (const m of flattenPipelineModules(b.modules)) {

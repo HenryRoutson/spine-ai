@@ -17,7 +17,7 @@ import { BUILTIN_DOCUMENT_ID, BUILTIN_CHATBOT_PROMPT_ID, BUILTIN_CHATBOT_RESULT_
 import { migrateCustomCodeModule } from "@/lib/custom_code_entries";
 import { migrateListMergeModule, syncListOpsModules } from "@/lib/list-ops-steps";
 import { syncAssembleModules } from "@/lib/assemble-type-expr";
-import { mapPipelineModules, syncForkModules } from "@/lib/fork-pipeline";
+import { isNestedLaneKind, mapPipelineModules, syncForkModules } from "@/lib/fork-pipeline";
 import { resolveModuleNote } from "@/lib/pipeline-module-factory";
 import { usesPassthroughStructure, isLlmKind } from "@/lib/module-kinds";
 import { assertEntriesForModule, parseAssertReferencedLabels } from "@/lib/assert_steps";
@@ -203,7 +203,7 @@ export function authoredPipelineModules(modules: PipelineModule[]): PipelineModu
       out.push(foldConvertOcrOntoInput(m, convert));
       continue;
     }
-    if (m.kind === ModuleKind.Fork) {
+    if (isNestedLaneKind(m.kind)) {
       out.push({
         ...m,
         forkBranches: (m.forkBranches ?? []).map((b) => ({

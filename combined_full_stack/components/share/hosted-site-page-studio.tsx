@@ -1,14 +1,14 @@
 "use client"
 // AI : parity ids — share.site-vibe
 
-import { useRef, useState } from "react"
-import { Code2, Sparkles } from "lucide-react"
+import { useCallback, useRef, useState } from "react"
+import { Code2, Plus, Sparkles, X } from "lucide-react"
 import { AssistantChat } from "@/components/assistant-chat"
 import { MonacoCodeEditor } from "@/components/code-viewer"
 import { HtmlPreviewFrame } from "@/components/share/html-preview-frame"
 import { HostedSiteChrome } from "@/components/share/hosted-site-chrome"
 import { HostedSiteSignInCard } from "@/components/share/hosted-site-sign-in"
-import { SharedLinkPreview } from "@/components/share/shared-link-preview"
+import { HostedSiteSlotWidgets } from "@/components/share/hosted-site-slot-widgets"
 import { PipelineExportDialog } from "@/components/pipeline-export-dialog"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -20,10 +20,15 @@ import { spineActionProps } from "@/lib/core/parity"
 import {
   DEFAULT_HOSTED_SITE_AUTH_HTML,
   DEFAULT_HOSTED_SITE_HTML,
+  DEFAULT_HOSTED_SITE_WORKSPACE_HTML,
   htmlColorInputValue,
   keepConcurrentHostedSiteEdits,
-  type hosted_site_surface,
+  nextHostedSitePagePath,
+  sanitizeHostedSiteHtml,
+  unwrapVibeCodedHtml,
 } from "@/lib/hosted-site"
+import { HOSTED_SITE_DOCS_SLOT } from "@/lib/hosted-site-slots"
+import { patchHostedSiteHtmlText, type HsPreviewInlinePayload, type HsPreviewSelectPayload } from "@/lib/hosted-site-select"
 import type { HostedSiteAuth, HostedSiteBrand, HostedSiteOptions } from "@/lib/shared-link-types"
 import { DEFAULT_HOSTED_SITE_OPTIONS } from "@/lib/shared-link-types"
 import { useStore } from "@/lib/store"
@@ -31,6 +36,7 @@ import type { Project } from "@/lib/types"
 import { cn } from "@/lib/utils"
 
 type PageStudioTab = "vibe" | "code"
+type studio_preview_target = { kind: "app" } | { kind: "signin" } | { kind: "page"; index: number }
 
 const VIBE_WELCOME =
   "Describe the product — nav, hero, workspace. The page is signed in. I'll only change the HTML around the run form, not your pipeline."
@@ -51,10 +57,16 @@ export function HostedSitePageStudio({
   const [chatWidth, setChatWidth] = useState(320)
   const [brandOpen, setBrandOpen] = useState(false)
   const [authOpen, setAuthOpen] = useState(false)
-  const [surface, setSurface] = useState<hosted_site_surface>("app")
+  const [target, setTarget] = useState<studio_preview_target>({ kind: "app" })
+  const [selection, setSelection] = useState<{ cssPath: string; snippet: string } | null>(null)
   const valueRef = useRef(value)
   valueRef.current = value
-  const previewSurface: hosted_site_surface = value.auth.enabled ? surface : "app"
+  const resolvedTarget: studio_preview_target =
+    target.kind === "signin" && !value.auth.enabled
+      ? { kind: "app" }
+      : target.kind === "page" && !value.pages[target.index]
+        ? { kind: "app" }
+        : target
 
   function patchBrand(partial: Partial<HostedSiteBrand>) {
     onChange({ ...value, brand: { ...value.brand, ...partial } })
@@ -64,36 +76,157 @@ export function HostedSitePageStudio({
     onChange({ ...value, auth: { ...value.auth, ...partial } })
   }
 
+  function activeSourceHtml(): string {
+    if (resolvedTarget.kind === "signin") return value.authHtml.trim() || DEFAULT_HOSTED_SITE_AUTH_HTML
+    if (resolvedTarget.kind === "page") {
+      return value.pages[resolvedTarget.index]?.html.trim() || DEFAULT_HOSTED_SITE_WORKSPACE_HTML
+    }
+    return value.customHtml.trim() || DEFAULT_HOSTED_SITE_HTML
+  }
+
+  function setActiveSourceHtml(html: string) {
+    if (resolvedTarget.kind === "signin") {
+      onChange({ ...value, authHtml: html })
+      return
+    }
+    if (resolvedTarget.kind === "page") {
+      onChange({
+        ...value,
+        pages: value.pages.map((page, i) => (i === resolvedTarget.index ? { ...page, html } : page)),
+      })
+      return
+    }
+    onChange({ ...value, customHtml: html })
+  }
+
+  const hideDocsInRun = activeSourceHtml().includes(HOSTED_SITE_DOCS_SLOT)
+  const slotWidgets = HostedSiteSlotWidgets({
+    projectName: project.name,
+    viewerMarkdown,
+    modules: project.modules,
+    hideDocsInRun,
+  })
+
   const preview = (
-    <HostedSiteChrome options={value} surface={previewSurface}>
-      {previewSurface === "signin" ? (
-        <HostedSiteSignInCard
-          companyName={value.brand.companyName}
-          nextPath="#"
-          provider={value.auth.provider}
-          preview
-        />
-      ) : (
-        <SharedLinkPreview
-          projectName={project.name}
-          viewerMarkdown={viewerMarkdown}
-          modules={project.modules}
-          variant="site"
-        />
-      )}
-    </HostedSiteChrome>
+    <HostedSiteChrome
+      options={value}
+      surface={resolvedTarget.kind === "signin" ? "signin" : "app"}
+      pageHtml={resolvedTarget.kind === "page" ? value.pages[resolvedTarget.index]?.html : undefined}
+      slots={{
+        ...slotWidgets,
+        auth: (
+          <HostedSiteSignInCard
+            companyName={value.brand.companyName}
+            nextPath="#"
+            provider={value.auth.provider}
+            preview
+          />
+        ),
+      }}
+      editable
+    />
   )
 
-  const previewToolbar = value.auth.enabled ? (
-    <button
-      type="button"
-      className="h-6 rounded px-1.5 text-[10px] text-muted-foreground hover:text-foreground"
-      onClick={() => setSurface((s) => (s === "app" ? "signin" : "app"))}
-      {...spineActionProps("share.site-signin-preview")}
-    >
-      {previewSurface === "signin" ? "Sign in" : "App"}
-    </button>
-  ) : null
+  const onPreviewSelect = useCallback((payload: HsPreviewSelectPayload) => {
+    setSelection({ cssPath: payload.cssPath, snippet: payload.snippet })
+  }, [])
+
+  const onPreviewInline = useCallback(
+    (payload: HsPreviewInlinePayload) => {
+      const latest = valueRef.current
+      const raw =
+        resolvedTarget.kind === "signin"
+          ? latest.authHtml.trim() || DEFAULT_HOSTED_SITE_AUTH_HTML
+          : resolvedTarget.kind === "page"
+            ? latest.pages[resolvedTarget.index]?.html.trim() || DEFAULT_HOSTED_SITE_WORKSPACE_HTML
+            : latest.customHtml.trim() || DEFAULT_HOSTED_SITE_HTML
+      const inner = unwrapVibeCodedHtml(raw).html
+      const sanitized = sanitizeHostedSiteHtml(inner)
+      const next = patchHostedSiteHtmlText(sanitized, payload.hsId, payload.text)
+      if (next === sanitized) return
+      if (resolvedTarget.kind === "signin") onChange({ ...latest, authHtml: next })
+      else if (resolvedTarget.kind === "page") {
+        onChange({
+          ...latest,
+          pages: latest.pages.map((page, i) => (i === resolvedTarget.index ? { ...page, html: next } : page)),
+        })
+      } else onChange({ ...latest, customHtml: next })
+    },
+    [onChange, resolvedTarget],
+  )
+
+  const previewToolbar = (
+    <div className="flex max-w-[18rem] flex-wrap items-center gap-0.5">
+      <button
+        type="button"
+        className={cn(
+          "h-6 rounded px-1.5 text-[10px]",
+          resolvedTarget.kind === "app" ? "bg-background text-foreground" : "text-muted-foreground hover:text-foreground",
+        )}
+        onClick={() => setTarget({ kind: "app" })}
+        {...spineActionProps("share.site-signin-preview")}
+      >
+        App
+      </button>
+      {value.auth.enabled ? (
+        <button
+          type="button"
+          className={cn(
+            "h-6 rounded px-1.5 text-[10px]",
+            resolvedTarget.kind === "signin" ? "bg-background text-foreground" : "text-muted-foreground hover:text-foreground",
+          )}
+          onClick={() => setTarget({ kind: "signin" })}
+          {...spineActionProps("share.site-signin-preview")}
+        >
+          Sign in
+        </button>
+      ) : null}
+      {value.pages.map((page, index) => (
+        <span key={page.path} className="flex items-center">
+          <button
+            type="button"
+            className={cn(
+              "h-6 rounded px-1.5 text-[10px]",
+              resolvedTarget.kind === "page" && resolvedTarget.index === index
+                ? "bg-background text-foreground"
+                : "text-muted-foreground hover:text-foreground",
+            )}
+            onClick={() => setTarget({ kind: "page", index })}
+            {...spineActionProps("share.site-page-switch")}
+          >
+            /{page.path}
+          </button>
+          <button
+            type="button"
+            className="h-6 w-5 text-muted-foreground hover:text-foreground"
+            aria-label={`Remove /${page.path}`}
+            onClick={() => {
+              onChange({ ...value, pages: value.pages.filter((_, i) => i !== index) })
+              setTarget({ kind: "app" })
+            }}
+          >
+            <X className="mx-auto h-3 w-3" />
+          </button>
+        </span>
+      ))}
+      <button
+        type="button"
+        className="flex h-6 items-center gap-0.5 rounded px-1.5 text-[10px] text-muted-foreground hover:text-foreground"
+        onClick={() => {
+          const path = nextHostedSitePagePath(value.pages)
+          onChange({
+            ...value,
+            pages: [...value.pages, { path, html: DEFAULT_HOSTED_SITE_WORKSPACE_HTML }],
+          })
+          setTarget({ kind: "page", index: value.pages.length })
+        }}
+        {...spineActionProps("share.site-add-page")}
+      >
+        <Plus className="h-3 w-3" />
+        Page
+      </button>
+    </div>
+  )
 
   return (
     <div className="space-y-3">
@@ -222,7 +355,7 @@ export function HostedSitePageStudio({
                 auth: { ...value.auth, enabled },
                 authHtml: enabled ? value.authHtml.trim() || DEFAULT_HOSTED_SITE_AUTH_HTML : value.authHtml,
               })
-              if (!enabled) setSurface("app")
+              if (!enabled) setTarget({ kind: "app" })
             }}
             {...spineActionProps("share.site-signin")}
           />
@@ -295,6 +428,20 @@ export function HostedSitePageStudio({
             maxLeading={480}
             leading={
               <div className="flex h-full min-h-0 flex-col">
+                {selection ? (
+                  <div className="flex items-start gap-1 border-b border-border bg-muted/30 px-2 py-1">
+                    <p className="min-w-0 flex-1 truncate font-mono text-[10px] text-muted-foreground" title={selection.cssPath}>
+                      {selection.cssPath}
+                    </p>
+                    <button
+                      type="button"
+                      className="text-[10px] text-muted-foreground hover:text-foreground"
+                      onClick={() => setSelection(null)}
+                    >
+                      Clear
+                    </button>
+                  </div>
+                ) : null}
                 <AssistantChat
                 title="Page"
                 subtitle="HTML around the run form"
@@ -310,13 +457,16 @@ export function HostedSitePageStudio({
                 onReject={() => undefined}
                 requestAssistant={async (text, history) => {
                   const sent = valueRef.current
+                  const message = selection
+                    ? `Selected page element (${selection.cssPath}):\n${selection.snippet}\n\n${text}`
+                    : text
                   const res = await fetch(API_ROUTES.hostedSiteAssistant, {
                     method: "POST",
                     headers: JSON_HEADERS,
                     credentials: "same-origin",
                     body: JSON.stringify({
                       projectId: project.id,
-                      message: text,
+                      message,
                       history,
                       model,
                       siteOptions: sent,
@@ -339,6 +489,8 @@ export function HostedSitePageStudio({
                   label="Page preview"
                   bodyClassName="max-h-none"
                   extraToolbar={previewToolbar}
+                  onSelect={onPreviewSelect}
+                  onInlineText={onPreviewInline}
                 >
                   {preview}
                 </HtmlPreviewFrame>
@@ -349,11 +501,17 @@ export function HostedSitePageStudio({
       ) : (
         <div className="space-y-3">
           <div className="space-y-1.5">
-            <Label className="text-xs">Custom HTML</Label>
+            <Label className="text-xs">
+              {resolvedTarget.kind === "signin"
+                ? "Sign-in HTML"
+                : resolvedTarget.kind === "page"
+                  ? `/${value.pages[resolvedTarget.index]?.path ?? "page"} HTML`
+                  : "Custom HTML"}
+            </Label>
             <div className="overflow-hidden rounded-md border border-border">
               <MonacoCodeEditor
-                value={value.customHtml || DEFAULT_HOSTED_SITE_HTML}
-                onChange={(next) => onChange({ ...value, customHtml: next })}
+                value={activeSourceHtml()}
+                onChange={setActiveSourceHtml}
                 language="html"
                 compact
                 height="200px"
@@ -361,28 +519,10 @@ export function HostedSitePageStudio({
               />
             </div>
             <p className="text-[10px] text-muted-foreground">
-              Place {`{{run}}`} where the pipeline should appear. {`{{company}}`}, {`{{tagline}}`}, {`{{logo}}`}, and{" "}
-              {`{{email}}`} fill from brand. Scripts are stripped.
+              Place {`{{run}}`} {`{{auth}}`} {`{{output}}`} {`{{chatbot}}`} {`{{docs}}`} where widgets belong.{" "}
+              {`{{company}}`}, {`{{tagline}}`}, {`{{logo}}`}, and {`{{email}}`} fill from brand. Scripts are stripped.
             </p>
           </div>
-          {value.auth.enabled ? (
-            <div className="space-y-1.5">
-              <Label className="text-xs">Sign-in HTML</Label>
-              <div className="overflow-hidden rounded-md border border-border">
-                <MonacoCodeEditor
-                  value={value.authHtml || DEFAULT_HOSTED_SITE_AUTH_HTML}
-                  onChange={(next) => onChange({ ...value, authHtml: next })}
-                  language="html"
-                  compact
-                  height="160px"
-                  wordWrap="on"
-                />
-              </div>
-              <p className="text-[10px] text-muted-foreground">
-                Place {`{{auth}}`} where the sign-in form should appear. Spine handles the form.
-              </p>
-            </div>
-          ) : null}
           <div className="space-y-1.5">
             <Label className="text-xs">Extra CSS</Label>
             <div className="overflow-hidden rounded-md border border-border">
@@ -399,6 +539,8 @@ export function HostedSitePageStudio({
           <HtmlPreviewFrame
             label="Page preview"
             extraToolbar={previewToolbar}
+            onSelect={onPreviewSelect}
+            onInlineText={onPreviewInline}
           >
             {preview}
           </HtmlPreviewFrame>

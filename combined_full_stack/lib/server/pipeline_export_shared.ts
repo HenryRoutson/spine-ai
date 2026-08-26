@@ -10,6 +10,8 @@ import { quoteFieldPaths } from "./quote_schema";
 import { BUILTIN_DOCUMENT_ID, withSharedModels } from "./builtin_models";
 import { labelAsStateKey } from "./pipeline_state";
 import { forkBranchesOf, forkJoinOf, forkProductField, laneLastModule, locatePipelineModule, flattenPipelineModules } from "@/lib/fork-pipeline";
+import { ifElseBranch, ifThenBranch } from "@/lib/if-else-pipeline";
+import { FieldType, IfConditionKind, ModuleKind } from "./types";
 import { migrateProjectModules } from "./validity";
 import {
   fieldToTypeExpr,
@@ -23,12 +25,11 @@ import {
   typeExprToRust,
   typeExprToTs,
 } from "./type_expr";
-import { FieldType, ModuleKind } from "./types";
-import type { StepLabel } from "../run-types";
-import type { PipelineModule, Project, StructureModelId, TypeExpr } from "./types";
 import { assemblePolymorphicTsSignature } from "@/lib/type-expr-polymorph";
 import { llmSchema } from "./structure";
 import { z } from "zod";
+import type { StepLabel } from "../run-types";
+import type { PipelineModule, Project, StructureModelId, TypeExpr } from "./types";
 
 export type PipelineSetupFile = {
   filename: string;
@@ -1234,6 +1235,87 @@ export function generateForkStepBodyRust(m: PipelineModule, project: Project, ou
   ].join("\n");
 }
 
+function exportDotPathTs(root: string, path: string): string {
+  return path
+    .split(".")
+    .map((p) => p.trim())
+    .filter(Boolean)
+    .reduce((acc, p) => `(${acc} as Record<string, unknown>)?.[${JSON.stringify(p)}]`, root);
+}
+
+function ifConditionExportTs(m: PipelineModule, root: string): string {
+  const path = m.ifCondition?.path.trim() ?? "";
+  const access = exportDotPathTs(root, path);
+  if (m.ifCondition?.kind === IfConditionKind.Equals) return `${access} === ${JSON.stringify(m.ifCondition.value)}`;
+  return `${access} === true`;
+}
+
+function ifConditionExportPy(m: PipelineModule, root: string): string {
+  const parts = JSON.stringify((m.ifCondition?.path.trim() ?? "").split(".").map((p) => p.trim()).filter(Boolean));
+  const walk = `_cur = ${root}\nfor _p in ${parts}:\n    _cur = _cur.get(_p) if isinstance(_cur, dict) else getattr(_cur, _p, None)`;
+  if (m.ifCondition?.kind === IfConditionKind.Equals) {
+    return `${walk}\n_cond = _cur == ${JSON.stringify(m.ifCondition.value)}`;
+  }
+  return `${walk}\n_cond = _cur is True`;
+}
+
+function ifElseStateExprTs(m: PipelineModule, thenSide: boolean): string {
+  const branch = thenSide ? ifThenBranch(m) : ifElseBranch(m);
+  const last = branch ? laneLastModule(branch) : undefined;
+  return last ? `state[${JSON.stringify(last.label.trim())}]` : "input";
+}
+
+function ifElseStateExprPy(m: PipelineModule, thenSide: boolean): string {
+  const branch = thenSide ? ifThenBranch(m) : ifElseBranch(m);
+  const last = branch ? laneLastModule(branch) : undefined;
+  return last ? `state.get(${JSON.stringify(last.label.trim())})` : "input";
+}
+
+export function generateIfElseStepBodyTs(m: PipelineModule, _project: Project, outTs: string): string {
+  const cond = ifConditionExportTs(m, "input");
+  return `return ((${cond}) ? ${ifElseStateExprTs(m, true)} : ${ifElseStateExprTs(m, false)}) as ${outTs};`;
+}
+
+export function generateIfElseStepBodyPy(m: PipelineModule, _project: Project, outPy: string): string {
+  return [
+    ifConditionExportPy(m, "input"),
+    `return cast(${outPy}, ${ifElseStateExprPy(m, true)} if _cond else ${ifElseStateExprPy(m, false)})`,
+  ].join("\n");
+}
+
+export function generateIfElseStepBodyGo(m: PipelineModule, _project: Project, _outGo: string): string {
+  const thenLast = laneLastModule(ifThenBranch(m) ?? { id: "", label: "", modules: [] });
+  const elseLast = laneLastModule(ifElseBranch(m) ?? { id: "", label: "", modules: [] });
+  const thenKey = thenLast ? JSON.stringify(thenLast.label.trim()) : "";
+  const elseKey = elseLast ? JSON.stringify(elseLast.label.trim()) : "";
+  return [
+    exportComment("//", "if/else — orchestrator ran the chosen lane; pick last output or passthrough"),
+    thenKey ? `if v, ok := state[${thenKey}]; ok && v != nil { return v, nil }` : "",
+    elseKey ? `if v, ok := state[${elseKey}]; ok && v != nil { return v, nil }` : "",
+    "return input, nil",
+  ]
+    .filter(Boolean)
+    .join("\n");
+}
+
+export function generateIfElseStepBodyRust(m: PipelineModule, _project: Project, outRust: string): string {
+  const thenLast = laneLastModule(ifThenBranch(m) ?? { id: "", label: "", modules: [] });
+  const elseLast = laneLastModule(ifElseBranch(m) ?? { id: "", label: "", modules: [] });
+  return [
+    exportComment("//", "if/else — orchestrator ran the chosen lane; pick last output or passthrough"),
+    thenLast
+      ? `if let Some(v) = state.get(${JSON.stringify(thenLast.label.trim())}) { let out: ${outRust} = serde_json::from_value(v.clone())?; return Ok(out); }`
+      : "",
+    elseLast
+      ? `if let Some(v) = state.get(${JSON.stringify(elseLast.label.trim())}) { let out: ${outRust} = serde_json::from_value(v.clone())?; return Ok(out); }`
+      : "",
+    `let out: ${outRust} = serde_json::from_value(serde_json::to_value(&input)?)?;`,
+    "Ok(out)",
+  ]
+    .filter(Boolean)
+    .join("\n");
+}
+
 export function generateAssembleStepBodyRust(m: PipelineModule, project: Project, outRust: string): string {
   const bindings = m.assembleBindings ?? {};
   const rawOutName = modelName(project, m.outStructureId);
@@ -1546,6 +1628,35 @@ function emitTsOrchestratorWalk(
       lines.push(`${indent}}`, "");
       continue;
     }
+    if (m.kind === ModuleKind.IfElse) {
+      const thenB = ifThenBranch(m);
+      const elseB = ifElseBranch(m);
+      const cond = ifConditionExportTs(m, "__ifIn");
+      lines.push(`${indent}// ${i + 1}. ${m.label} (if/else)`);
+      lines.push(`${indent}{`);
+      lines.push(`${indent}  const __ifIn = spine;`);
+      lines.push(`${indent}  if (${cond}) {`);
+      lines.push(`${indent}    let spine: unknown = __ifIn;`);
+      if (thenB?.modules.length) {
+        lines.push(...emitTsOrchestratorWalk(thenB.modules, project, stepFnName, indexById, multi, indent + "    "));
+      }
+      lines.push(`${indent}  } else {`);
+      lines.push(`${indent}    let spine: unknown = __ifIn;`);
+      if (elseB?.modules.length) {
+        lines.push(...emitTsOrchestratorWalk(elseB.modules, project, stepFnName, indexById, multi, indent + "    "));
+      }
+      lines.push(`${indent}  }`);
+      lines.push(`${indent}  spine = __ifIn;`);
+      lines.push(`${indent}  ${orchestratorInvokeLine(m, fn, "ts", !multi, inTs).trim()}`);
+      if (label) {
+        lines.push(`${indent}  state[${JSON.stringify(label)}] = spine as ${outTs};`);
+        lines.push(
+          `${indent}  lastRunTrace.push({ label: ${JSON.stringify(label)}, output: snapshotTraceOutput(spine) });`,
+        );
+      }
+      lines.push(`${indent}}`, "");
+      continue;
+    }
     lines.push(`${indent}// ${i + 1}. ${m.label}`);
     lines.push(`${indent}${orchestratorInvokeLine(m, fn, "ts", !multi, inTs).trim()}`);
     if (label) {
@@ -1671,6 +1782,37 @@ function emitPyOrchestratorWalk(
       lines.push("");
       continue;
     }
+    if (m.kind === ModuleKind.IfElse) {
+      const thenB = ifThenBranch(m);
+      const elseB = ifElseBranch(m);
+      lines.push(`${indent}# ${i + 1}. ${m.label} (if/else)`);
+      lines.push(`${indent}__if_in = spine`);
+      lines.push(
+        ...ifConditionExportPy(m, "__if_in")
+          .split("\n")
+          .map((l) => `${indent}${l}`),
+      );
+      lines.push(`${indent}if _cond:`);
+      lines.push(`${indent}    spine = __if_in`);
+      if (thenB?.modules.length) {
+        lines.push(...emitPyOrchestratorWalk(thenB.modules, project, stepFnName, indexById, multi, indent + "    "));
+      }
+      lines.push(`${indent}else:`);
+      lines.push(`${indent}    spine = __if_in`);
+      if (elseB?.modules.length) {
+        lines.push(...emitPyOrchestratorWalk(elseB.modules, project, stepFnName, indexById, multi, indent + "    "));
+      }
+      lines.push(`${indent}spine = __if_in`);
+      lines.push(`${indent}${orchestratorInvokeLine(m, fn, "py", !multi, inPy).trim()}`);
+      if (label) {
+        lines.push(`${indent}state[${JSON.stringify(label)}] = spine`);
+        lines.push(
+          `${indent}last_run_trace.append({"label": ${JSON.stringify(label)}, "output": json.loads(json.dumps(spine, default=str))})`,
+        );
+      }
+      lines.push("");
+      continue;
+    }
     lines.push(`${indent}# ${i + 1}. ${m.label}`);
     lines.push(`${indent}${orchestratorInvokeLine(m, fn, "py", !multi, inPy).trim()}`);
     if (label) {
@@ -1737,6 +1879,31 @@ function emitRsOrchestratorWalk(
       lines.push("");
       continue;
     }
+    if (m.kind === ModuleKind.IfElse) {
+      const thenB = ifThenBranch(m);
+      const elseB = ifElseBranch(m);
+      lines.push(`${indent}// ${i + 1}. ${m.label} (if/else sequential in export)`);
+      lines.push(`${indent}let __if_in = spine.clone();`);
+      lines.push(`${indent}{`);
+      lines.push(`${indent}    let mut spine = __if_in.clone();`);
+      if (thenB?.modules.length) {
+        lines.push(...emitRsOrchestratorWalk(thenB.modules, project, stepFnName, indexById, multi, indent + "    "));
+      }
+      lines.push(`${indent}}`);
+      lines.push(`${indent}{`);
+      lines.push(`${indent}    let mut spine = __if_in.clone();`);
+      if (elseB?.modules.length) {
+        lines.push(...emitRsOrchestratorWalk(elseB.modules, project, stepFnName, indexById, multi, indent + "    "));
+      }
+      lines.push(`${indent}}`);
+      lines.push(`${indent}spine = __if_in;`);
+      lines.push(`${indent}${orchestratorInvokeLine(m, fn, "rs", !multi, inRust).trim()}`);
+      if (label) {
+        lines.push(`${indent}state.insert(${JSON.stringify(label)}.to_string(), spine.clone());`);
+      }
+      lines.push("");
+      continue;
+    }
     lines.push(`${indent}// ${i + 1}. ${m.label}`);
     lines.push(`${indent}${orchestratorInvokeLine(m, fn, "rs", !multi, inRust).trim()}`);
     if (label) {
@@ -1792,6 +1959,26 @@ function emitGoOrchestratorWalk(
         lines.push(`${indent}}`);
       }
       lines.push(`${indent}spine = forkIn`);
+      lines.push(orchestratorInvokeLine(m, fn, "go", !multi, inGo).split("\n").map((l) => indent + l.trimStart()).join("\n"));
+      if (label) {
+        lines.push(`${indent}state[${JSON.stringify(label)}] = append(json.RawMessage(nil), spine...)`);
+      }
+      lines.push("");
+      continue;
+    }
+    if (m.kind === ModuleKind.IfElse) {
+      const thenB = ifThenBranch(m);
+      const elseB = ifElseBranch(m);
+      lines.push(`${indent}// ${i + 1}. ${m.label} (if/else sequential in export)`);
+      lines.push(`${indent}ifIn := append(json.RawMessage(nil), spine...)`);
+      for (const b of [thenB, elseB]) {
+        if (!b?.modules.length) continue;
+        lines.push(`${indent}{`);
+        lines.push(`${indent}    spine = append(json.RawMessage(nil), ifIn...)`);
+        lines.push(...emitGoOrchestratorWalk(b.modules, project, stepFnName, indexById, multi, indent + "    "));
+        lines.push(`${indent}}`);
+      }
+      lines.push(`${indent}spine = ifIn`);
       lines.push(orchestratorInvokeLine(m, fn, "go", !multi, inGo).split("\n").map((l) => indent + l.trimStart()).join("\n"));
       if (label) {
         lines.push(`${indent}state[${JSON.stringify(label)}] = append(json.RawMessage(nil), spine...)`);

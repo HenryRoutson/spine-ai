@@ -15,6 +15,7 @@ import {
   flattenPipelineModules,
   forkBranchesOf,
   insertPipelineModules,
+  isNestedLaneKind,
   locatePipelineModule,
   removePipelineModules,
   replacePipelineSiblings,
@@ -147,12 +148,13 @@ function resolveForkInsertLoc(
   opts?: { forkId?: string; branchId?: string },
 ): { forkId: string; branchId: string } | undefined {
   if (!opts?.branchId) return undefined
-  if (opts.forkId) return { forkId: opts.forkId, branchId: opts.branchId }
-  const fork = flattenPipelineModules(modules).find(
-    (m) =>
-      m.kind === ModuleKind.Fork &&
-      forkBranchesOf(m).some((b) => b.id === opts.branchId || b.label === opts.branchId),
-  )
+  const fork = opts.forkId
+    ? flattenPipelineModules(modules).find((m) => m.id === opts.forkId && isNestedLaneKind(m.kind))
+    : flattenPipelineModules(modules).find(
+        (m) =>
+          isNestedLaneKind(m.kind) &&
+          forkBranchesOf(m).some((b) => b.id === opts.branchId || b.label === opts.branchId),
+      )
   const branch = fork
     ? forkBranchesOf(fork).find((b) => b.id === opts.branchId || b.label === opts.branchId)
     : undefined

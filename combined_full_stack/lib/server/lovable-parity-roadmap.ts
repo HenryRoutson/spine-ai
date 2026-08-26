@@ -17,23 +17,23 @@ export {}
 // ---------------------------------------------------------------------------
 // F0 — Put the existing studio on Vibe Share
 // ---------------------------------------------------------------------------
-// AI : TODO (lovable-F0-vibe-share) — SharePage simple/isVibe renders ShareSiteForm, not only ShareLinkForm
+// AI : DONE (lovable-F0-vibe-share) — SharePage simple/isVibe renders ShareSiteForm, not only ShareLinkForm
 // AI : keep Inference / Schedule / Logging; do not auto-mint site_ on project create
 // AI : Link / API / Embed stay on the full (non-simple) Share page
 
 // ---------------------------------------------------------------------------
 // F1 — Point at the page
 // ---------------------------------------------------------------------------
-// AI : TODO (lovable-F1-select) — HtmlPreviewFrame postMessage css-path; ignore .hs-run-slot / .hs-auth-slot
-// AI : TODO (lovable-F1-inline) — inline text patches customHtml without LLM
-// AI : TODO (lovable-F1-snippet) — selection goes to hosted-site-assistant (studio chat), not pipeline assistant
+// AI : DONE (lovable-F1-select) — HtmlPreviewFrame postMessage css-path; ignore .hs-run-slot / .hs-auth-slot
+// AI : DONE (lovable-F1-inline) — inline text patches customHtml without LLM
+// AI : DONE (lovable-F1-snippet) — selection goes to hosted-site-assistant (studio chat), not pipeline assistant
 // AI : viewport desktop/mobile already shipped (share.site-preview-viewport)
 
 // ---------------------------------------------------------------------------
 // F2 — More page, same export
 // ---------------------------------------------------------------------------
-// AI : TODO (lovable-F2-pages) — optional HostedSiteOptions.pages[]; default stays one app HTML + auth HTML
-// AI : TODO (lovable-F2-slots) — {{output}} {{chatbot}} {{docs}} mount DataViewPanel / ChatbotPanel / viewerMarkdown
-// AI : TODO (lovable-F2-export) — generateHostedSiteExportFiles emits one HTML per page; dialog tabs stay hosted/*
+// AI : DONE (lovable-F2-pages) — optional HostedSiteOptions.pages[]; default stays one app HTML + auth HTML
+// AI : DONE (lovable-F2-slots) — {{output}} {{chatbot}} {{docs}} mount DataViewPanel / ChatbotPanel / viewerMarkdown
+// AI : DONE (lovable-F2-export) — generateHostedSiteExportFiles emits one HTML per page; dialog tabs stay hosted/*
 // AI : skip {{pay}} / {{table:Model}} — not frontend
 // AI : optional later: drop inference_ui.html into .hs-run-slot in the zip (SETUP already says to do it by hand)

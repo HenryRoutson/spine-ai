@@ -40,6 +40,7 @@ import { makeModule } from "@/lib/pipeline-module-factory"
 import { MODULE_META, ModuleKind, type PipelineModule, type ModuleId } from "@/lib/types"
 import {
   deriveForkStepTypes,
+  deriveIfElseStepTypes,
   findPipelineModule,
   flattenPipelineModules,
   pipelineHasFork,
@@ -186,6 +187,11 @@ export function PipelineBuilder() {
       }
       if (updated.kind === ModuleKind.Parallel) {
         const synced = deriveParallelStepTypes(updated, prev, derivedModels)
+        derivedModels = synced.models
+        return synced.module
+      }
+      if (updated.kind === ModuleKind.IfElse) {
+        const synced = deriveIfElseStepTypes(updated, prev, derivedModels)
         derivedModels = synced.models
         return synced.module
       }

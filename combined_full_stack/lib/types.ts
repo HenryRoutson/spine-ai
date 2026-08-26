@@ -8,6 +8,7 @@ export {
   ModelFieldTypeSource,
   InputType,
   ModuleKind,
+  IfConditionKind,
   ChatbotMode,
   WebhookMethod,
   WebhookBodyMode,

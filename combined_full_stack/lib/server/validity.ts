@@ -16,7 +16,7 @@ import type {
   StructureModelId,
   TypeAlias,
 } from "./types";
-import { ModuleKind, FieldType } from "./types";
+import { ModuleKind, FieldType, IfConditionKind } from "./types";
 import { getN8nNode, missingN8nParams } from "@/lib/n8n-catalog";
 import { getConnectAction, missingConnectParams } from "@/lib/connect-catalog";
 import { customCodeEntriesForModule } from "@/lib/custom_code_entries";
@@ -43,6 +43,7 @@ import {
   typeExprEqual,
   typeExprItemRef,
   TypeExprKind,
+  PrimName,
   type TypeExpr,
 } from "./type_expr";
 import { typeExprAssignable, validateAssembleBindings } from "@/lib/assemble-type-expr";
@@ -54,9 +55,13 @@ import {
   forkJoinOf,
   forkProductField,
   isForkKind,
+  isIfElseKind,
+  isNestedLaneKind,
   locatePipelineModule,
   validateForkAssembleJoin,
 } from "@/lib/fork-pipeline";
+import { ifThenBranch } from "@/lib/if-else-pipeline";
+import { typeExprAtPath } from "@/lib/type-expr-polymorph";
 import { exampleSelectAcceptsWrapper, isExampleSelectKind } from "@/lib/example-select";
 import {
   stepEmits,
@@ -963,6 +968,63 @@ function computeForkInvalid(
   return invalid;
 }
 
+function computeIfElseInvalid(
+  modules: PipelineModule[],
+  models: StructureModel[],
+  typeAliases: TypeAlias[] = [],
+): InvalidMap {
+  const invalid: InvalidMap = new Map();
+  for (const m of flattenPipelineModules(modules)) {
+    if (!isIfElseKind(m.kind)) continue;
+    const branches = forkBranchesOf(m);
+    if (branches.length !== 2) {
+      pushInvalid(invalid, {
+        moduleId: m.id,
+        kind: InvalidKind.StructureField,
+        structureMessage: "if/else needs Then and Else lanes",
+      });
+    }
+    const thenLane = ifThenBranch(m);
+    if (!thenLane?.modules.length) {
+      pushInvalid(invalid, {
+        moduleId: m.id,
+        kind: InvalidKind.StructureField,
+        structureMessage: "Then lane is empty — add at least one step",
+      });
+    }
+    const path = m.ifCondition?.path.trim() ?? "";
+    if (!path) {
+      pushInvalid(invalid, {
+        moduleId: m.id,
+        kind: InvalidKind.StructureField,
+        structureMessage: "if/else needs a condition path on the spine",
+      });
+      continue;
+    }
+    const loc = locatePipelineModule(modules, m.id);
+    const spineType = loc?.predecessor ? stepSpineOutType(loc.predecessor) : m.inType;
+    if (!spineType) continue;
+    const at = typeExprAtPath(spineType, path, models, typeAliases);
+    if (!at) {
+      pushInvalid(invalid, {
+        moduleId: m.id,
+        kind: InvalidKind.StructureField,
+        structureMessage: `unknown condition path "${path}"`,
+      });
+    } else if (m.ifCondition?.kind !== IfConditionKind.Equals) {
+      const isBool = at.kind === TypeExprKind.Prim && at.name === PrimName.Bool;
+      if (!isBool) {
+        pushInvalid(invalid, {
+          moduleId: m.id,
+          kind: InvalidKind.StructureField,
+          structureMessage: `condition path "${path}" must be bool`,
+        });
+      }
+    }
+  }
+  return invalid;
+}
+
 function mergeInvalid(into: InvalidMap, from: InvalidMap): void {
   for (const [, issues] of from) {
     for (const issue of issues) pushInvalid(into, issue);
@@ -989,11 +1051,12 @@ export function computeInvalid(
   mergeInvalid(invalid, computeParallelInvalid(flat, models));
   mergeInvalid(invalid, computeMissingCombineBeforeInputInvalid(flat));
   mergeInvalid(invalid, computeForkInvalid(modules, models, opts?.typeAliases ?? []));
+  mergeInvalid(invalid, computeIfElseInvalid(modules, models, opts?.typeAliases ?? []));
   if (opts?.requireInputDescriptions) {
     mergeInvalid(invalid, computeInputDescriptionInvalid(flat));
   }
   for (const m of flat) {
-    if (isForkKind(m.kind)) continue;
+    if (isForkKind(m.kind) || isIfElseKind(m.kind)) continue;
     if (usesPassthroughStructure(m.kind)) {
       if (!m.inStructureId) pushInvalid(invalid, { moduleId: m.id, kind: InvalidKind.NoOutput });
       continue;
@@ -1051,7 +1114,7 @@ export function computeInvalid(
       continue;
     }
 
-    if (isForkKind(m.kind)) {
+    if (isNestedLaneKind(m.kind)) {
       const upstreamType = (prev && stepSpineOutType(prev)) ?? flowType;
       const expected = stepSpineInType(m) ?? upstreamType;
       if (expected && upstreamType && !stepAcceptsSpineType(m, expected, upstreamType, models, opts?.typeAliases ?? [])) {
@@ -1060,9 +1123,10 @@ export function computeInvalid(
       for (const b of forkBranchesOf(m)) {
         mergeInvalid(invalid, computeInvalid(b.modules, models, { ...opts, startPrev: prev, laneJoinConsumesLast: true }));
       }
+      const outType = stepSpineOutType(m);
+      if (outType) flowType = outType;
       if (m.outStructureId) {
         flowId = m.outStructureId;
-        flowType = stepSpineOutType(m);
         byModel.add(m.outStructureId);
       }
       continue;
@@ -1214,7 +1278,7 @@ function computeUnusedOutputInvalid(
     if (!emitted || m.kind === ModuleKind.Input || usesPassthroughStructure(m.kind)) continue;
     if (laneJoinConsumesLast && i === modules.length - 1) continue;
     // AI : a combine consumes the previous step's output as its newDocument regardless of inStructureId.
-    if (modules[i + 1]?.kind === ModuleKind.Combine || modules[i + 1]?.kind === ModuleKind.Assemble || isForkKind(modules[i + 1]?.kind ?? "")) continue;
+    if (modules[i + 1]?.kind === ModuleKind.Combine || modules[i + 1]?.kind === ModuleKind.Assemble || isNestedLaneKind(modules[i + 1]?.kind ?? "")) continue;
     if (assembleLabels.has(m.label.trim())) continue;
     // AI : Link Quotes is a managed follower — assemble binding the LLM still consumes the quote step.
     if (isAutoQuoteStep(m) && i > 0 && assembleLabels.has(modules[i - 1]!.label.trim())) continue;

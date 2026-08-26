@@ -78,6 +78,7 @@ export function AccountBilling() {
     () => readBillingKeysSnapshot() ?? [],
   )
   const [billingKeysBusy, setBillingKeysBusy] = useState(false)
+  const [billingKeysError, setBillingKeysError] = useState<string | null>(null)
   const [newBillingKey, setNewBillingKey] = useState<string | null>(null)
   const [projectRunsVersion, setProjectRunsVersion] = useState(0)
 
@@ -138,10 +139,11 @@ export function AccountBilling() {
   const loadBillingKeys = useCallback(async (opts?: { force?: boolean }) => {
     const cached = readBillingKeysSnapshot()
     if (cached) setBillingKeys(cached)
-    setBillingKeysBusy(!cached?.length)
+    setBillingKeysBusy(opts?.force === true || !cached?.length)
     try {
-      const keys = await fetchBillingKeys(opts)
+      const { keys, error } = await fetchBillingKeys(opts)
       setBillingKeys(keys)
+      setBillingKeysError(error)
     } finally {
       setBillingKeysBusy(false)
     }
@@ -311,6 +313,22 @@ export function AccountBilling() {
               <code className="block truncate font-mono text-[10px]">{newBillingKey}</code>
             </div>
           ) : null}
+          {billingKeysError ? (
+            <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border bg-destructive/10 px-4 py-3">
+              <p className="font-mono text-xs text-destructive">{billingKeysError}</p>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                disabled={billingKeysBusy}
+                onClick={() => void loadBillingKeys({ force: true })}
+                spineId="billing.refresh-keys"
+              >
+                {billingKeysBusy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
+                Retry
+              </Button>
+            </div>
+          ) : null}
           {billingKeysBusy && !billingKeys.length ? (
             <BillingKeysListSkeleton />
           ) : billingKeys.length ? (
@@ -322,7 +340,7 @@ export function AccountBilling() {
                 </li>
               ))}
             </ul>
-          ) : (
+          ) : billingKeysError ? null : (
             <p className="px-4 py-6 font-mono text-xs text-muted-foreground">
               No billing keys — create one to call billable APIs programmatically.
             </p>

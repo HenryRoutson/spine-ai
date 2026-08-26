@@ -68,6 +68,7 @@ import {
   InputType,
   ModuleKind,
   ChatbotMode,
+  IfConditionKind,
   type ModelId,
   type ModuleId,
   type PipelineModule,
@@ -159,10 +160,17 @@ const moduleSpecSchema = z
           modules: z.array(z.any()).max(50),
         }),
       )
-      .min(2)
+      .min(1)
       .max(12)
       .optional()
-      .describe("fork only — 2–12 linear lanes; nest Fork in a lane for a DAG"),
+      .describe("fork / if-else — linear lanes; if-else is Then then Else (Else may be empty)"),
+    ifCondition: z
+      .discriminatedUnion("kind", [
+        z.object({ kind: z.literal("path"), path: z.string() }),
+        z.object({ kind: z.literal("equals"), path: z.string(), value: z.unknown() }),
+      ])
+      .optional()
+      .describe("if-else only — bool spine path, or equals path + JSON value"),
     n8nNodeType: z
       .string()
       .optional()
@@ -246,6 +254,15 @@ const moduleSpecSchema = z
         });
       }
     }
+    if (spec.kind === ModuleKind.IfElse) {
+      if (!spec.ifCondition?.path?.trim()) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "if-else requires ifCondition.path on the spine",
+          path: ["ifCondition"],
+        });
+      }
+    }
     if (spec.kind === ModuleKind.Connect) {
       if (!spec.connectActionId?.trim()) {
         ctx.addIssue({
@@ -279,6 +296,12 @@ const modulePatchEntrySchema = z.object({
   model: z.string().optional(),
   inputMinCount: z.number().int().min(1).optional(),
   assembleBindings: assembleBindingsSchema.optional(),
+  ifCondition: z
+    .discriminatedUnion("kind", [
+      z.object({ kind: z.literal("path"), path: z.string() }),
+      z.object({ kind: z.literal("equals"), path: z.string(), value: z.unknown() }),
+    ])
+    .optional(),
   n8nNodeType: z.string().optional(),
   n8nParameters: z.record(z.string(), z.unknown()).optional(),
   connectActionId: z.string().optional(),
@@ -440,7 +463,7 @@ function makeModuleFromSpec(
       : undefined;
 
   const forkBranches =
-    spec.kind === ModuleKind.Fork
+    spec.kind === ModuleKind.Fork || spec.kind === ModuleKind.IfElse
       ? (spec.forkBranches ?? []).map((b) => ({
           id: uid("fbr_"),
           label: b.label,
@@ -466,12 +489,13 @@ function makeModuleFromSpec(
         spec.kind !== "input" &&
         spec.kind !== ModuleKind.Assemble &&
         spec.kind !== ModuleKind.Parallel &&
-        spec.kind !== ModuleKind.Fork
+        spec.kind !== ModuleKind.Fork &&
+        spec.kind !== ModuleKind.IfElse
           ? inId
           : undefined,
-      // AI : assemble/parallel/fork without structureOut → auto-derive product on sync
+      // AI : assemble/parallel/fork/if-else without structureOut → auto-derive on sync
       outStructureId:
-        (spec.kind === ModuleKind.Assemble || spec.kind === ModuleKind.Parallel || spec.kind === ModuleKind.Fork) &&
+        (spec.kind === ModuleKind.Assemble || spec.kind === ModuleKind.Parallel || spec.kind === ModuleKind.Fork || spec.kind === ModuleKind.IfElse) &&
         !outHint
           ? undefined
           : outId,
@@ -491,6 +515,12 @@ function makeModuleFromSpec(
       parallelBranches,
       forkJoin: spec.kind === ModuleKind.Fork ? (spec.forkJoin ?? "product") : undefined,
       forkBranches,
+      ifCondition:
+        spec.kind === ModuleKind.IfElse && spec.ifCondition
+          ? spec.ifCondition.kind === "equals"
+            ? { kind: IfConditionKind.Equals, path: spec.ifCondition.path, value: spec.ifCondition.value }
+            : { kind: IfConditionKind.Path, path: spec.ifCondition.path }
+          : undefined,
       n8nNodeType: spec.kind === "n8n" ? spec.n8nNodeType : undefined,
       n8nParameters: spec.kind === "n8n" ? spec.n8nParameters : undefined,
       n8nCode: spec.kind === "n8n" ? spec.n8nCode : undefined,

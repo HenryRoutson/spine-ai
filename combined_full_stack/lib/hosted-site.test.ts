@@ -12,6 +12,7 @@ import {
   isSafeLogoUrl,
   isSiteLinkId,
   keepConcurrentHostedSiteEdits,
+  normalizeHostedSiteOptions,
   parseHexColor,
   sanitizeHostedSiteCss,
   sanitizeHostedSiteHtml,
@@ -142,5 +143,33 @@ describe("hosted site wrapper", () => {
     expect(authParts.before).toContain("Sign in")
     expect(authParts.before).toContain("Acme")
     expect(authParts.before).not.toContain(HOSTED_SITE_AUTH_SLOT)
+  })
+
+  it("splits extra widget slots and still compiles", () => {
+    const brand = { ...DEFAULT_HOSTED_SITE_OPTIONS.brand, companyName: "Acme", tagline: "Invoices" }
+    const html = `<header><h1>{{tagline}}</h1></header>{{docs}}{{run}}{{output}}{{chatbot}}`
+    const parts = compileHostedSiteHtml({ ...DEFAULT_HOSTED_SITE_OPTIONS, brand, customHtml: html })
+    expect(parts.segments.filter((s) => s.kind === "slot").map((s) => (s.kind === "slot" ? s.slot : ""))).toEqual([
+      "docs",
+      "run",
+      "output",
+      "chatbot",
+    ])
+    const report = compileHostedSiteLooksOk({ ...DEFAULT_HOSTED_SITE_OPTIONS, brand, customHtml: html })
+    expect(report.ok, report.issues.map((i) => `${i.level}:${i.code} ${i.message}`).join("\n")).toBe(true)
+    expect(report.pageHtml).toContain("hs-output-slot")
+    expect(report.pageHtml).toContain("hs-chatbot-slot")
+    expect(report.pageHtml).toContain("hs-docs-slot")
+  })
+
+  it("normalizes extra pages and skips reserved paths", () => {
+    const next = normalizeHostedSiteOptions({
+      pages: [
+        { path: "/app", html: "<p>{{run}}</p>" },
+        { path: "index", html: "nope" },
+        { path: "APP", html: "dup" },
+      ],
+    })
+    expect(next.pages).toEqual([{ path: "app", html: "<p>{{run}}</p>" }])
   })
 })

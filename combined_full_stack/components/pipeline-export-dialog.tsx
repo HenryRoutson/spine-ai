@@ -115,6 +115,9 @@ function setupFileTabMeta(filename: string): { id: ExportTabId; label: string; l
     case "connector_server.py":
       return { id: "connector-py", label: "connector (Py)", language: "python" }
     default:
+      if (/^hosted\/.+\.html$/.test(filename)) {
+        return { id: `hosted:${filename}` as ExportTabId, label: filename.replace(/^hosted\//, ""), language: "plaintext" }
+      }
       return { id: "setup", label: filename, language: "plaintext" }
   }
 }
@@ -282,6 +285,23 @@ export function PipelineExportDialog({
                       </button>
                     )
                   })}
+                  {files
+                    .filter((f) => !TAB_ORDER.includes(f.id))
+                    .map((file) => (
+                      <button
+                        key={file.id}
+                        type="button"
+                        onClick={() => setTab(file.id)}
+                        className={cn(
+                          "rounded px-2 py-1 font-mono text-[10px] transition-colors",
+                          tab === file.id
+                            ? "bg-secondary text-foreground"
+                            : "text-muted-foreground hover:text-foreground",
+                        )}
+                      >
+                        {file.label}
+                      </button>
+                    ))}
                 </div>
                 <span className="font-mono text-[10px] text-muted-foreground">{lineCount} lines</span>
               </div>

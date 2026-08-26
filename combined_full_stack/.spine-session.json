@@ -1244,6 +1244,141 @@
       ],
       "createdAt": 1787504027500,
       "lastOpenedAt": 1787504027500
+    },
+    {
+      "id": "p_1c5222d2282b4df19444d819",
+      "name": "Untitled Pipeline",
+      "kind": "custom",
+      "createdAt": 1787727446048,
+      "lastOpenedAt": 1787727446048,
+      "models": [
+        {
+          "id": "m_f71d8daf10da429da019e0e5",
+          "name": "Route",
+          "description": "",
+          "fields": [
+            {
+              "id": "f_59b91cb817864c099ebfb1c6",
+              "name": "summary",
+              "type": "text",
+              "optional": false,
+              "description": "Short summary"
+            },
+            {
+              "id": "f_98b50ab0c5a1453585354d51",
+              "name": "is_legal",
+              "type": "bool",
+              "optional": false,
+              "description": ""
+            }
+          ]
+        }
+      ],
+      "modules": [
+        {
+          "id": "mod_blank_in_p_1c5222d2282b4df19444d819",
+          "kind": "input",
+          "label": "Input",
+          "note": "Pipeline input document",
+          "inputType": "text",
+          "cached": true,
+          "avgMs": 80,
+          "avgCostCents": 0,
+          "outStructureId": "m_builtin_document",
+          "outType": {
+            "kind": "ref",
+            "modelId": "m_builtin_document"
+          }
+        },
+        {
+          "id": "mod_struct_mod_blank_in_p_1c5222d2282b4df19444d819",
+          "kind": "llm",
+          "auto": true,
+          "label": "Parse to structure · Input",
+          "note": "Auto · Document → Route · LLM maps uploaded content into your structure.",
+          "inStructureId": "m_builtin_document",
+          "outStructureId": "m_f71d8daf10da429da019e0e5",
+          "inType": {
+            "kind": "ref",
+            "modelId": "m_builtin_document"
+          },
+          "outType": {
+            "kind": "ref",
+            "modelId": "m_f71d8daf10da429da019e0e5"
+          },
+          "prompt": "Extract structured data from the uploaded document into the Route schema. Use only content from the document.",
+          "model": "openrouter:deepseek-v4",
+          "costLimitCents": 100,
+          "cached": true,
+          "avgMs": 0,
+          "avgCostCents": 0
+        },
+        {
+          "id": "b0f582b6b7f94de082431f5f",
+          "kind": "if-else",
+          "label": "Route",
+          "note": "If / Else",
+          "cached": true,
+          "avgMs": 0,
+          "avgCostCents": 0,
+          "forkBranches": [
+            {
+              "id": "fbr_0f446b4a30cc496ebe05ae86",
+              "label": "Then",
+              "modules": [
+                {
+                  "id": "8ffc50513dce42a4bbafb4f7",
+                  "kind": "transform",
+                  "label": "LegalThen",
+                  "note": "",
+                  "cached": true,
+                  "avgMs": 0,
+                  "avgCostCents": 0,
+                  "inStructureId": "m_builtin_document",
+                  "outStructureId": "m_f71d8daf10da429da019e0e5",
+                  "outType": {
+                    "kind": "ref",
+                    "modelId": "m_builtin_document"
+                  },
+                  "inType": {
+                    "kind": "ref",
+                    "modelId": "m_builtin_document"
+                  }
+                }
+              ]
+            },
+            {
+              "id": "fbr_48ac8303e61b4b1b98240e7b",
+              "label": "Else",
+              "modules": []
+            }
+          ],
+          "ifCondition": {
+            "kind": "path",
+            "path": "is_legal"
+          }
+        },
+        {
+          "id": "mod_blank_out_p_1c5222d2282b4df19444d819",
+          "kind": "output",
+          "label": "Output",
+          "note": "",
+          "cached": true,
+          "avgMs": 40,
+          "avgCostCents": 0,
+          "inStructureId": "m_f71d8daf10da429da019e0e5",
+          "outStructureId": "m_f71d8daf10da429da019e0e5",
+          "outType": {
+            "kind": "ref",
+            "modelId": "m_f71d8daf10da429da019e0e5"
+          },
+          "inType": {
+            "kind": "ref",
+            "modelId": "m_f71d8daf10da429da019e0e5"
+          }
+        }
+      ],
+      "strategies": []
     }
   ],
   "docs": [
@@ -1471,7 +1606,7 @@
     "sha_486bf7229d84817e": "{\n  \"name\": \"Ada Lovelace\",\n  \"email\": \"ada@example.com\",\n  \"company\": \"Analytical Engines\",\n  \"created_at\": \"2026-08-23T10:00:00Z\"\n}\n"
   },
   "runs": [],
-  "activeProjectId": "p_160feb8e2634431790198d5e",
+  "activeProjectId": "p_1c5222d2282b4df19444d819",
   "model": "openrouter:deepseek-v4",
   "inferenceInputDocIds": {},
   "pendingCreates": [],
@@ -1489,199 +1624,10 @@
     "p_596fda01b12149038d2bf277": [],
     "p_f45568e37fb040bd92c0c414": [],
     "p_558962e951314a319e092a18": [],
-    "p_160feb8e2634431790198d5e": []
+    "p_160feb8e2634431790198d5e": [],
+    "p_1c5222d2282b4df19444d819": []
   },
-  "pendingProposal": {
-    "modules": [
-      {
-        "id": "08b23d66714744f9ba3b4728",
-        "kind": "input",
-        "label": "Contract Upload",
-        "note": "Single contract text file input.",
-        "cached": true,
-        "avgMs": 0,
-        "avgCostCents": 0,
-        "inputType": "text",
-        "inputDescription": "Contract text document",
-        "outStructureId": "m_builtin_document",
-        "outType": {
-          "kind": "ref",
-          "modelId": "m_builtin_document"
-        }
-      },
-      {
-        "id": "e6a87129a37d474299738148",
-        "kind": "llm",
-        "label": "Extract Contract Data",
-        "note": "Extract risks, parties, and dates with source quotes.",
-        "cached": true,
-        "avgMs": 0,
-        "avgCostCents": 0,
-        "inputDescription": "Contract Document text",
-        "inStructureId": "m_builtin_document",
-        "outStructureId": "8f2b60447bf84e6ea29cac2c",
-        "outType": {
-          "kind": "ref",
-          "modelId": "8f2b60447bf84e6ea29cac2c"
-        },
-        "prompt": "From this contract text, extract: 1) List of risks (include direct quotes) 2) List of parties (include direct quotes) 3) List of key dates (include direct quotes). Return as structured ExtractedData.",
-        "model": "openrouter:deepseek-v4",
-        "costLimitCents": 100,
-        "inType": {
-          "kind": "ref",
-          "modelId": "m_builtin_document"
-        }
-      },
-      {
-        "id": "mod_quote_e6a87129a37d474299738148",
-        "kind": "quote",
-        "label": "Link Quotes",
-        "auto": true,
-        "note": "Auto · ExtractedData → ExtractedData · links LLM quote strings to source spans.",
-        "inStructureId": "8f2b60447bf84e6ea29cac2c",
-        "outStructureId": "8f2b60447bf84e6ea29cac2c",
-        "outType": {
-          "kind": "ref",
-          "modelId": "8f2b60447bf84e6ea29cac2c"
-        },
-        "cached": true,
-        "avgMs": 12,
-        "avgCostCents": 0,
-        "inType": {
-          "kind": "ref",
-          "modelId": "8f2b60447bf84e6ea29cac2c"
-        }
-      },
-      {
-        "id": "5e609acc9ced40d3adcba1e3",
-        "kind": "llm",
-        "label": "Synthesize Memo",
-        "note": "Generate one-paragraph diligence memo from extractions.",
-        "cached": true,
-        "avgMs": 0,
-        "avgCostCents": 0,
-        "inputDescription": "ExtractedData with risks, parties, and dates",
-        "inStructureId": "8f2b60447bf84e6ea29cac2c",
-        "outStructureId": "a32e0de59ed94a98baa1a373",
-        "outType": {
-          "kind": "ref",
-          "modelId": "a32e0de59ed94a98baa1a373"
-        },
-        "prompt": "Write a one-paragraph diligence memo using these extracted elements: Risks: {risks}, Parties: {parties}, Dates: {dates}",
-        "model": "openrouter:deepseek-v4",
-        "costLimitCents": 100,
-        "inType": {
-          "kind": "ref",
-          "modelId": "8f2b60447bf84e6ea29cac2c"
-        }
-      },
-      {
-        "id": "e3716667ce454f2abca0842f",
-        "kind": "output",
-        "label": "Memo Output",
-        "note": "",
-        "cached": true,
-        "avgMs": 0,
-        "avgCostCents": 0,
-        "inputDescription": "Final DiligenceMemo content",
-        "inStructureId": "a32e0de59ed94a98baa1a373",
-        "outStructureId": "a32e0de59ed94a98baa1a373",
-        "outType": {
-          "kind": "ref",
-          "modelId": "a32e0de59ed94a98baa1a373"
-        },
-        "inType": {
-          "kind": "ref",
-          "modelId": "a32e0de59ed94a98baa1a373"
-        }
-      }
-    ],
-    "models": [
-      {
-        "id": "cc6ce963d0db45b7a4706815",
-        "name": "ContractText",
-        "description": "Uploaded contract text document.",
-        "fields": [
-          {
-            "id": "48578ea1b89246c99718ff00",
-            "name": "content",
-            "optional": false,
-            "description": "Full contract text",
-            "type": "text"
-          },
-          {
-            "id": "85c1a319df014ad0a4bb0da3",
-            "name": "filename",
-            "optional": false,
-            "description": "Original filename",
-            "type": "text"
-          }
-        ]
-      },
-      {
-        "id": "8f2b60447bf84e6ea29cac2c",
-        "name": "ExtractedData",
-        "description": "Structured extractions from contract text.",
-        "fields": [
-          {
-            "id": "becca41c0be1445f99639eb6",
-            "name": "risks",
-            "optional": false,
-            "description": "List of risk clauses with source quotes",
-            "type": "list[tuple[text,quote]]"
-          },
-          {
-            "id": "511b471a98a94d9f9f85749b",
-            "name": "parties",
-            "optional": false,
-            "description": "List of parties with source quotes",
-            "type": "list[tuple[text,quote]]"
-          },
-          {
-            "id": "4477aa7632f843c6bd44a73b",
-            "name": "dates",
-            "optional": false,
-            "description": "List of key dates with source quotes",
-            "type": "list[tuple[text,quote]]"
-          }
-        ]
-      },
-      {
-        "id": "a32e0de59ed94a98baa1a373",
-        "name": "DiligenceMemo",
-        "description": "Final synthesized memo.",
-        "fields": [
-          {
-            "id": "b0a05ffaaaca4dd880a8b7ac",
-            "name": "content",
-            "optional": false,
-            "description": "One-paragraph memo summarizing risks, parties, and dates",
-            "type": "text"
-          }
-        ]
-      }
-    ],
-    "typeAliases": [],
-    "docs": [
-      {
-        "name": "sample_contract.txt",
-        "type": "text",
-        "content": "AGREEMENT dated 2024-03-15 between Acme Corp ('Company') and Beta LLC ('Vendor').\n\nSection 5: 'Supplier bears all risk of loss during transport.'\n\nSection 8: 'Term begins 2024-04-01, ends 2025-03-31. Late delivery incurs 2% daily penalty.'\n\nNotices to: John Doe (Vendor), Jane Smith (Company).\n\nForce majeure applies if delay exceeds 30 days.",
-        "label": "inference"
-      }
-    ],
-    "documentation": "# Contract Diligence Analyzer\n\n1. Upload contract text\n2. Extract risks, parties, and dates with source quotes\n3. Synthesize one-paragraph memo\n\nOutput is a text memo summarizing key contract elements.",
-    "projectName": "Contract Diligence Analyzer",
-    "changed": {
-      "modules": true,
-      "models": true,
-      "typeAliases": false,
-      "docs": true,
-      "documentation": true,
-      "name": true,
-      "actions": false
-    }
-  },
+  "pendingProposal": null,
   "assistantInFlight": null,
   "modelOptions": [],
   "billingRuns": [],
@@ -1697,6 +1643,7 @@
     "p_596fda01b12149038d2bf277",
     "p_f45568e37fb040bd92c0c414",
     "p_558962e951314a319e092a18",
-    "p_160feb8e2634431790198d5e"
+    "p_160feb8e2634431790198d5e",
+    "p_1c5222d2282b4df19444d819"
   ]
 }

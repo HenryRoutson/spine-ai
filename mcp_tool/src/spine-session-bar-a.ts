@@ -591,12 +591,12 @@ export function addStepFromSession(
 
 export function patchStepFromSession(
   id: string,
-  patch: { label?: string; prompt?: string; note?: string; forkJoin?: string } & Record<string, unknown>,
+  patch: { label?: string; prompt?: string; note?: string; forkJoin?: string; ifCondition?: unknown } & Record<string, unknown>,
   sessionPath?: string,
 ) {
   const session = openMcpSession(sessionPath, true)
   const step = patchStep(session, id, patch as Parameters<typeof patchStep>[2])
-  return { id: step.id, label: step.label, kind: step.kind, n8nNodeType: step.n8nNodeType, forkJoin: step.forkJoin }
+  return { id: step.id, label: step.label, kind: step.kind, n8nNodeType: step.n8nNodeType, forkJoin: step.forkJoin, ifCondition: step.ifCondition }
 }
 
 export function configureN8nStepFromSession(opts: {
@@ -1101,6 +1101,9 @@ export type SessionActionArgs = {
   forkId?: string
   branchId?: string
   forkJoin?: string
+  ifConditionPath?: string
+  ifConditionKind?: string
+  ifConditionValue?: string
   runId?: string
   timeoutMs?: number
   quote?: string
@@ -1231,11 +1234,28 @@ export async function runSessionAction(args: SessionActionArgs): Promise<unknown
       })
     case "pipeline.configure-step":
       if (!args.stepId) throw new Error("stepId required")
-      return patchStepFromSession(
-        args.stepId,
-        { label: args.label, prompt: args.prompt, note: args.note, forkJoin: args.forkJoin },
-        sessionPath,
-      )
+      {
+        const patch: { label?: string; prompt?: string; note?: string; forkJoin?: string; ifCondition?: { kind: "path" | "equals"; path: string; value?: unknown } } = {
+          label: args.label,
+          prompt: args.prompt,
+          note: args.note,
+          forkJoin: args.forkJoin,
+        }
+        const path = typeof args.ifConditionPath === "string" ? args.ifConditionPath.trim() : ""
+        if (path) {
+          const equals = args.ifConditionKind === "equals"
+          let value: unknown = true
+          if (equals && typeof args.ifConditionValue === "string" && args.ifConditionValue.trim()) {
+            try {
+              value = JSON.parse(args.ifConditionValue) as unknown
+            } catch {
+              value = args.ifConditionValue
+            }
+          }
+          patch.ifCondition = equals ? { kind: "equals", path, value } : { kind: "path", path }
+        }
+        return patchStepFromSession(args.stepId, patch, sessionPath)
+      }
     case "pipeline.remove-step":
       if (!args.stepId) throw new Error("stepId required")
       return removeStepFromSession(args.stepId, sessionPath)

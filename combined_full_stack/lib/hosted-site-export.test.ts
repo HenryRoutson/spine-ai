@@ -85,4 +85,22 @@ describe("hosted site export files", () => {
     expect(readme).toContain("hosted/index.html")
     expect(readme).toContain("hosted/.env.example")
   })
+
+  it("emits one HTML file per extra page as hosted/app.html", () => {
+    const { project } = loadProjectSeed(join(SEEDS_DIR, "batch_llm_example.json"))
+    const files = generateHostedSiteExportFiles(project, {
+      ...DEFAULT_HOSTED_SITE_OPTIONS,
+      brand: { ...DEFAULT_HOSTED_SITE_OPTIONS.brand, companyName: "Acme" },
+      customHtml: "<header><h1>Landing</h1></header>",
+      pages: [{ path: "app", html: "<section>{{run}}</section>{{output}}" }],
+    })
+    const names = files.map((f) => f.filename)
+    expect(names).toContain("hosted/index.html")
+    expect(names).toContain("hosted/app.html")
+    const landing = fileOf(files, "hosted/index.html")
+    expect(landing).toContain("Landing")
+    const workspace = fileOf(files, "hosted/app.html")
+    expect(workspace).toContain("hs-run-slot")
+    expect(workspace).toContain("hs-output-slot")
+  })
 })

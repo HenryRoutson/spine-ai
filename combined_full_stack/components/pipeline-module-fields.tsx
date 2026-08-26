@@ -46,6 +46,7 @@ import { ListOpsModuleFields } from "@/components/pipeline-fields/list-ops-field
 import { AssembleModuleFields } from "@/components/pipeline-fields/assemble-fields"
 import { ParallelModuleFields } from "@/components/pipeline-fields/parallel-fields"
 import { ForkModuleFields } from "@/components/pipeline-fields/fork-fields"
+import { IfElseModuleFields } from "@/components/pipeline-fields/if-else-fields"
 import { ExampleSelectModuleFields } from "@/components/pipeline-fields/example-select-fields"
 import { WebhookModuleFields } from "@/components/pipeline-fields/webhook-fields"
 import { N8nModuleFields } from "@/components/pipeline-fields/n8n-fields"
@@ -340,6 +341,7 @@ export function PipelineModuleFields({
         selected.kind === ModuleKind.Assemble ||
         selected.kind === ModuleKind.Parallel ||
         selected.kind === ModuleKind.Fork ||
+        selected.kind === ModuleKind.IfElse ||
         isLlmKind(selected.kind)) && (
         <PipelineField
           label="Annotation / purpose"
@@ -381,7 +383,7 @@ export function PipelineModuleFields({
         />
       )}
 
-      {selected.kind !== ModuleKind.Input && selected.kind !== ModuleKind.Chatbot && selected.kind !== ModuleKind.Fork && (
+      {selected.kind !== ModuleKind.Input && selected.kind !== ModuleKind.Chatbot && selected.kind !== ModuleKind.Fork && selected.kind !== ModuleKind.IfElse && (
         <PipelineField
           label={usesPassthroughStructure(selected.kind) ? "Structure to materialize" : "Input model"}
           hint={
@@ -468,6 +470,10 @@ export function PipelineModuleFields({
 
       {selected.kind === ModuleKind.Fork && (
         <ForkModuleFields selected={selected} edit={!!edit} onUpdate={onUpdate} />
+      )}
+
+      {selected.kind === ModuleKind.IfElse && (
+        <IfElseModuleFields selected={selected} edit={!!edit} onUpdate={onUpdate} />
       )}
 
       {selected.kind === ModuleKind.Fork && forkJoinOf(selected) === "assemble" && (

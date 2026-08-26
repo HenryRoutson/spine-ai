@@ -71,7 +71,7 @@ function textContent(data: unknown) {
 function nextHint(error: string): string {
   if (/not valid JSON|JSON\.parse|session file is not valid JSON/i.test(error)) return "Pass proposalJson as a JSON object string, or omit it to apply the pending Vibe proposal. If the session file is corrupt, delete it and call session_action id=project.add."
   if (/unknown session_action/i.test(error)) return "session_action id is a GUI catalog id (project.add, pipeline.add-step, structure.add-field). There is no named add_step tool."
-  if (/unknown step kind/i.test(error)) return "Use session_action id=pipeline.add-step with kind from: input, llm, llm-batch, fork, n8n, connect, custom-code, webhook, … — list_pieces for local transforms, list_connect_actions for Slack/Gmail."
+  if (/unknown step kind/i.test(error)) return "Use session_action id=pipeline.add-step with kind from: input, llm, llm-batch, fork, if-else, n8n, connect, custom-code, webhook, … — list_pieces for local transforms, list_connect_actions for Slack/Gmail."
   if (/unknown n8n piece|unknown piece/i.test(error)) return "Call list_pieces and use n8nNodeType exactly (piece.set aliases n8n-nodes-base.set)."
   if (/unknown connect action/i.test(error)) return "Call list_connect_actions and use connectActionId exactly (slack.postMessage, gmail.send, sheets.append, http.request)."
   if (/allowedOrigins/i.test(error)) return "share.create-embed needs allowedOrigins, e.g. https://example.com,https://app.example.com."
@@ -442,6 +442,9 @@ server.tool(
     forkId: z.string().optional(),
     branchId: z.string().optional(),
     forkJoin: z.string().optional().describe("pipeline.configure-step on a fork: product | assemble | merge"),
+    ifConditionPath: z.string().optional().describe("pipeline.configure-step on if-else: spine field path"),
+    ifConditionKind: z.string().optional().describe("pipeline.configure-step on if-else: path | equals"),
+    ifConditionValue: z.string().optional().describe("pipeline.configure-step on if-else equals: JSON value"),
     runId: z.string().optional(),
     timeoutMs: z.number().optional(),
     quote: z.string().optional(),

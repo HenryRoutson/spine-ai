@@ -3,7 +3,7 @@
 
 import { readFileSync } from "node:fs"
 import { basename } from "node:path"
-import { DocLabel, InputType } from "@/lib/types"
+import { DocLabel, IfConditionKind, InputType, type IfCondition } from "@/lib/types"
 import {
   toAgentView,
   toBillingView,
@@ -58,8 +58,8 @@ Usage:
   spine session ids [--type work_item_id] [--filter missing|unused|duplicate]
   spine session remove-field --model <Name> --name <field>
   spine session add-alias --name <Name> --expr <TypeExpr> [--params A,B]
-  spine session add-step --kind <llm|input|...> [--label <Label>]
-  spine session patch-step --id <id|label> [--label] [--prompt] [--note]
+  spine session add-step --kind <llm|input|fork|if-else|...> [--label <Label>] [--fork-id <id>] [--branch-id <id|Then|Else>]
+  spine session patch-step --id <id|label> [--label] [--prompt] [--note] [--if-path <field>] [--if-kind path|equals] [--if-value <json>]
   spine session assign-structure --id <id|label> --model <Name>
   spine session remove-step --id <id|label>
   spine session move-step --id <id|label> --at <index>
@@ -262,7 +262,10 @@ async function runSessionCommandInner(
     if (!kindRaw) return usage("session add-step requires --kind")
     const kind = parseAddableKind(kindRaw)
     if (!kind) return usage(`unknown step kind: ${kindRaw}`)
-    const added = addPipelineStep(session, kind, flagString(flags, "label"))
+    const added = addPipelineStep(session, kind, flagString(flags, "label"), {
+      forkId: flagString(flags, "fork-id"),
+      branchId: flagString(flags, "branch-id"),
+    })
     return ok("session add-step", {
       action: "setModules",
       added: added.map((m) => ({ id: m.id, kind: m.kind, label: m.label })),
@@ -273,13 +276,29 @@ async function runSessionCommandInner(
   if (sub === "patch-step") {
     const id = flagString(flags, "id") ?? positional[2]
     if (!id) return usage("session patch-step requires --id")
-    const patch: { label?: string; prompt?: string; note?: string } = {}
+    const patch: { label?: string; prompt?: string; note?: string; ifCondition?: IfCondition } = {}
     const label = flagString(flags, "label")
     const prompt = flagString(flags, "prompt")
     const note = flagString(flags, "note")
     if (label) patch.label = label
     if (prompt) patch.prompt = prompt
     if (note) patch.note = note
+    const ifPath = flagString(flags, "if-path")
+    if (ifPath) {
+      const equals = flagString(flags, "if-kind") === "equals"
+      let value: unknown = true
+      const raw = flagString(flags, "if-value")
+      if (equals && raw) {
+        try {
+          value = JSON.parse(raw) as unknown
+        } catch {
+          value = raw
+        }
+      }
+      patch.ifCondition = equals
+        ? { kind: IfConditionKind.Equals, path: ifPath, value }
+        : { kind: IfConditionKind.Path, path: ifPath }
+    }
     const step = patchStep(session, id, patch)
     return ok("session patch-step", { step: { id: step.id, label: step.label, kind: step.kind } })
   }

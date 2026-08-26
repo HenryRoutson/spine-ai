@@ -10,6 +10,7 @@ import { withSharedModels, formatTypeExpr, stepSpineInType, stepSpineOutType } f
 import { quoteHref, type QuoteMatch } from "@/lib/quotes"
 import { isTestingFileName, lastTestRunVerdictForDoc, testReportPassed } from "@/lib/testing-files"
 import { flattenPipelineModules, forkJoinOf } from "@/lib/fork-pipeline"
+import { formatIfCondition } from "@/lib/if-else-pipeline"
 import { collectSecretRequirements, groupSecretRequirements } from "@/lib/webhook-step"
 import { derivePipelineMermaid } from "@/lib/pipeline-mermaid"
 import { formatTypeExprPy } from "@/lib/type-expr-parse"
@@ -114,7 +115,7 @@ function pipelineStepViews(
       parentForkId,
       indent,
     }
-    if (m.kind !== "fork") return [view]
+    if (m.kind !== "fork" && m.kind !== "if-else") return [view]
     return [
       view,
       ...((m.forkBranches ?? []).flatMap((b) =>
@@ -593,6 +594,7 @@ export type McpStepReview = {
   connectParameters?: Record<string, unknown>
   connectConnected?: boolean
   forkJoin?: string
+  ifCondition?: string
   prompt?: string
   note?: string
   inputDescription?: string
@@ -621,7 +623,7 @@ function mcpStepReview(modules: PipelineModule[], models: StructureModel[]): Mcp
     const structureIn = stepSpineInType(m)
     const structureOut = stepSpineOutType(m)
     const branches =
-      m.kind === "fork"
+      m.kind === "fork" || m.kind === "if-else"
         ? (m.forkBranches ?? []).map((b) => ({
             id: b.id,
             label: b.label,
@@ -641,6 +643,7 @@ function mcpStepReview(modules: PipelineModule[], models: StructureModel[]): Mcp
       ...(m.kind === "connect" && m.connectParameters ? { connectParameters: m.connectParameters } : {}),
       ...(m.kind === "connect" ? { connectConnected: Boolean(m.connectConnectionId?.trim()) } : {}),
       ...(m.kind === "fork" ? { forkJoin: forkJoinOf(m) } : {}),
+      ...(m.kind === "if-else" ? { ifCondition: formatIfCondition(m.ifCondition) } : {}),
       ...(m.prompt?.trim() ? { prompt: m.prompt.trim().slice(0, 240) } : {}),
       ...(m.note?.trim() ? { note: m.note.trim().slice(0, 160) } : {}),
       ...(m.inputDescription?.trim() ? { inputDescription: m.inputDescription.trim().slice(0, 160) } : {}),
