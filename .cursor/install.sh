@@ -7,7 +7,10 @@ cd "$(dirname "$0")/.."
 # AI : nested-VM Docker + Supabase CLI. Only install when missing so snapshot boots stay fast.
 if ! command -v docker >/dev/null 2>&1 || ! command -v supabase >/dev/null 2>&1; then
   sudo apt-get update -qq
-  sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -qq --force-confold \
+  # AI : keep existing conffiles non-interactively (fuse3 prompts on /etc/fuse.conf otherwise).
+  # AI : --force-confold is a dpkg option, so pass it via -o Dpkg::Options, not directly to apt-get.
+  sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -qq \
+    -o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confold \
     docker.io fuse-overlayfs iptables git curl
   if ! command -v supabase >/dev/null 2>&1; then
     arch="$(dpkg --print-architecture)"
