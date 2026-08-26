@@ -139,6 +139,7 @@ describe("SpineSession React-like API", () => {
     expect(linked.href).toContain(doc.id)
     expect(linked.start).toBeLessThan(linked.end)
     expect(store.egress?.bytesSent).toBe(0)
+    expect(store.project?.seedDocNames).toContain("lease.txt")
   })
 
   it("toPipelineView reads the same snapshot CLI would render", () => {

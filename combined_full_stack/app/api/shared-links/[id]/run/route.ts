@@ -97,9 +97,9 @@ async function resolveAssignment(
 
     if (viewerIds.length) {
       for (const docId of viewerIds) {
-        const content = sessionDocContent(linkId, sessionId, docId);
+        const content = await sessionDocContent(linkId, sessionId, docId);
         if (content === undefined) continue;
-        const meta = sessionDocsForModule(linkId, sessionId, m.id).find((d) => d.id === docId);
+        const meta = (await sessionDocsForModule(linkId, sessionId, m.id)).find((d) => d.id === docId);
         if (!meta) continue;
         docs.push(meta);
         contentByDocId[docId] = content;
@@ -173,7 +173,7 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
   }
 
   const sharerStore = await openStoreForUser(link.ownerId);
-  const overlay = overlayStoreForSharedRun(
+  const overlay = await overlayStoreForSharedRun(
     sharerStore,
     link.id,
     sessionId,

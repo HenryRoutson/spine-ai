@@ -637,6 +637,7 @@ Grep an id (example): `rg 'project.add' combined_full_stack docs mcp_tool`.
 | `share.tab.api` | API | session share lists hostedApiIds [P] | POST /api/hosted-apis | session_action id=share.tab.api lists; share.deploy-api mints | session.listHostedApis / createHostedApi |
 | `share.tab.embed` | Embed | no TUI embed mint [N] | POST /api/shared-links (embed/origin allowlist) | session_action id=share.create-embed (allowedOrigins) | session.createShareLink({ kind: 'embed' }) |
 | `share.tab.site` | Page | no TUI site mint [N] | POST /api/shared-links (site HTML wrapper) | session_action id=share.create-site (companyName) | session.createShareLink({ kind: 'site' }) |
+| `share.site-vibe` | Page vibe | no TUI [N] | POST /api/hosted-site-assistant | isolated UI agent — not ask_agent [N] | proposeHostedSitePage |
 | `share.create-link` | Create link | session share lists; mint HTTP/GUI [P] | POST /api/shared-links | session_action id=share.create-link | session.createShareLink |
 | `share.deploy-api` | Deploy API | session share lists hosted APIs [P] | POST /api/hosted-apis | session_action id=share.deploy-api | session.createHostedApi |
 | `share.create-embed` | Create website embed | no TUI [N] | POST /api/shared-links (emb_ rows) | session_action id=share.create-embed | session.createShareLink({ kind: 'embed' }) |

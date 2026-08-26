@@ -135,6 +135,9 @@ describe("MCP stdio boot", () => {
     expect(result?.instructions).toContain("testDocName")
     expect(result?.instructions).toContain("share.create-site")
     expect(result?.instructions).toContain("schedule.create")
+    expect(result?.instructions).toContain("list_connect_actions")
+    expect(result?.instructions).toContain("pipeline.add-step")
+    expect(result?.instructions).not.toContain("add_step kind")
     expect(tools.error, JSON.stringify(tools.error)).toBeUndefined()
     const names = ((tools.result as { tools?: Array<{ name: string }> })?.tools ?? []).map((t) => t.name)
     expect(names).toContain("get_project")
@@ -174,11 +177,12 @@ describe("MCP stdio boot", () => {
     expect(badApply.error, JSON.stringify(badApply.error)).toBeUndefined()
     const applyText = (badApply.result as { content?: Array<{ text?: string }>; isError?: boolean }) ?? {}
     expect(applyText.isError).toBe(true)
-    expect(applyText.content?.[0]?.text).toContain('"ok": false')
+    expect(applyText.content?.[0]?.text).toContain('"ok":false')
     expect(applyText.content?.[0]?.text).toContain("next")
     const piecesText = (pieces.result as { content?: Array<{ text?: string }> })?.content?.[0]?.text ?? ""
     expect(piecesText).toContain("n8n-nodes-base.set")
     expect(piecesText).toContain("n8n-nodes-base.filter")
+    expect(piecesText).not.toContain('"props"')
   }, 30_000)
 
   it("launcher + official SDK client works without SPINE_* env", async () => {
@@ -220,6 +224,10 @@ describe("MCP stdio boot", () => {
       const promptText = JSON.stringify(prompt)
       expect(promptText).toContain("Do not clone or search the repo")
       expect(promptText).toContain("auth_status")
+      const addStep = await client.getPrompt({ name: "add_pipeline_step", arguments: { kind: "n8n", purpose: "limit rows" } })
+      const addStepText = JSON.stringify(addStep)
+      expect(addStepText).toContain("pipeline.add-step")
+      expect(addStepText).not.toContain("add_step kind")
     } finally {
       await client.close()
       rmSync(dir, { recursive: true, force: true })

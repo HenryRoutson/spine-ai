@@ -3,12 +3,17 @@ import {
   applyHostedSiteTokens,
   compileHostedSiteHtml,
   DEFAULT_HOSTED_SITE_HTML,
+  expandHexColor,
   HOSTED_SITE_RUN_SLOT,
+  htmlColorInputValue,
   isSafeLogoUrl,
   isSiteLinkId,
+  keepConcurrentHostedSiteEdits,
+  parseHexColor,
   sanitizeHostedSiteCss,
   sanitizeHostedSiteHtml,
   sharedLinkPublicPath,
+  type hex_color_string,
 } from "@/lib/hosted-site"
 import { DEFAULT_HOSTED_SITE_OPTIONS } from "@/lib/shared-link-types"
 
@@ -57,5 +62,40 @@ describe("hosted site wrapper", () => {
     expect(isSafeLogoUrl("https://cdn.example.com/logo.png")).toBe(true)
     expect(isSafeLogoUrl("javascript:alert(1)")).toBe(false)
     expect(isSafeLogoUrl("https://x.com/a.png onerror=alert(1)")).toBe(false)
+  })
+
+  it("expands 3-digit hex so color inputs get #rrggbb", () => {
+    expect(expandHexColor("#abc")).toBe("#aabbcc")
+    expect(expandHexColor("#AABBCC")).toBe("#AABBCC")
+    expect(expandHexColor("#ff0")).toBe("#ffff00")
+    expect(expandHexColor("#gggggg")).toBeNull()
+    expect(parseHexColor("#0f0", "#111827" as hex_color_string)).toBe("#00ff00")
+    expect(htmlColorInputValue("#f00", "#111827")).toBe("#ff0000")
+    expect(htmlColorInputValue("nope", "#111827")).toBe("#111827")
+  })
+
+  it("keeps concurrent hosted-site edits the assistant did not touch", () => {
+    const sent = {
+      ...DEFAULT_HOSTED_SITE_OPTIONS,
+      brand: { ...DEFAULT_HOSTED_SITE_OPTIONS.brand, companyName: "Acme", tagline: "Old" },
+      customHtml: "<p>{{run}}</p>",
+      customCss: ".a{}",
+    }
+    const received = {
+      ...sent,
+      customHtml: "<header>{{run}}</header>",
+      brand: { ...sent.brand, primaryColor: "#ff0000" },
+    }
+    const latest = {
+      ...sent,
+      customCss: ".user{}",
+      brand: { ...sent.brand, tagline: "Typed during wait" },
+    }
+    const merged = keepConcurrentHostedSiteEdits(sent, received, latest)
+    expect(merged.customHtml).toBe("<header>{{run}}</header>")
+    expect(merged.brand.primaryColor).toBe("#ff0000")
+    expect(merged.customCss).toBe(".user{}")
+    expect(merged.brand.tagline).toBe("Typed during wait")
+    expect(merged.brand.companyName).toBe("Acme")
   })
 })

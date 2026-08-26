@@ -718,6 +718,24 @@ export const hostedSiteOptionsSchema = z
   })
   .strict();
 
+export const hostedSiteAssistantBodySchema = z
+  .object({
+    projectId: projectIdSchema,
+    message: z.string().trim().min(1).max(MAX_ASSISTANT_MESSAGE_CHARS),
+    history: z
+      .array(
+        z.object({
+          role: z.enum(["user", "assistant"]),
+          content: z.string().max(MAX_ASSISTANT_MESSAGE_CHARS),
+        }),
+      )
+      .max(16)
+      .optional(),
+    model: z.string().max(128).optional(),
+    siteOptions: hostedSiteOptionsSchema,
+  })
+  .strict();
+
 export const createSharedLinkBodySchema = z
   .object({
     projectId: projectIdSchema,
@@ -734,6 +752,7 @@ export const createSharedLinkBodySchema = z
     allowedOrigins: z.array(z.string().trim().min(1).max(256)).max(32).optional(),
     embedOptions: embedOptionsSchema.optional(),
     siteOptions: hostedSiteOptionsSchema.optional(),
+    viewerMarkdown: z.string().max(48_000).optional(),
   })
   .strict()
   .superRefine((data, ctx) => {
@@ -783,6 +802,7 @@ export const updateDeploymentBodySchema = z
     allowedOrigins: z.array(z.string().trim().min(1).max(256)).max(32).optional(),
     embedOptions: embedOptionsSchema.optional(),
     siteOptions: hostedSiteOptionsSchema.optional(),
+    viewerMarkdown: z.string().max(48_000).nullable().optional(),
   })
   .strict()
   .refine(
@@ -791,9 +811,10 @@ export const updateDeploymentBodySchema = z
       data.enabled !== undefined ||
       data.allowedOrigins !== undefined ||
       data.embedOptions !== undefined ||
-      data.siteOptions !== undefined,
+      data.siteOptions !== undefined ||
+      data.viewerMarkdown !== undefined,
     {
-      message: "Provide spendLimitCents, enabled, allowedOrigins, embedOptions, and/or siteOptions",
+      message: "Provide spendLimitCents, enabled, allowedOrigins, embedOptions, siteOptions, and/or viewerMarkdown",
     },
   );
 

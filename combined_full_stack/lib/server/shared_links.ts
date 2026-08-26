@@ -37,6 +37,7 @@ import type { SharedLinkDefaultDoc, SharedLinkRecord, EmbedOptions, HostedSiteBr
 import { DEFAULT_EMBED_OPTIONS } from "@/lib/shared-link-types";
 import { isEmbedLinkId, normalizeEmbedOrigins } from "@/lib/server/embed_origins";
 import { isSiteLinkId, normalizeHostedSiteOptions } from "@/lib/hosted-site";
+import { normalizeViewerMarkdown } from "@/lib/share-viewer-markdown";
 
 export type { SharedLinkDefaultDoc, SharedLinkRecord };
 
@@ -247,6 +248,7 @@ function loadLocalLink(id: SharedLinkId): StoredSharedLink | null {
     allowedOrigins: originsFromRow(row.allowedOrigins),
     embedOptions: normalizeEmbedOptions(row.embedOptions),
     siteOptions: normalizeHostedSiteOptions(row.siteOptions),
+    viewerMarkdown: normalizeViewerMarkdown(row.viewerMarkdown),
   };
 }
 
@@ -275,6 +277,7 @@ async function loadSupabaseLink(id: SharedLinkId): Promise<StoredSharedLink | nu
     projectId: data.project_id as ProjectId,
     name: (data.snapshot as Project).name,
     description: undefined,
+    viewerMarkdown: normalizeViewerMarkdown(data.viewer_markdown),
     snapshot: migrateProjectModules(data.snapshot as Project),
     defaultModel: (data.default_model as ModelId | null) ?? undefined,
     fundingMode: data.funding_mode as SharedLinkFundingMode,
@@ -333,6 +336,7 @@ export async function listSharedLinksForOwner(ownerId: user_id_string): Promise<
       projectId: row.project_id as ProjectId,
       name: (row.snapshot as Project).name,
       description: undefined,
+      viewerMarkdown: normalizeViewerMarkdown(row.viewer_markdown),
       snapshot: row.snapshot as Project,
       defaultModel: (row.default_model as ModelId | null) ?? undefined,
       fundingMode: row.funding_mode as SharedLinkFundingMode,
@@ -364,6 +368,7 @@ function toPublicRecord(row: StoredSharedLink): SharedLinkRecord {
     projectId: row.projectId,
     name: row.name,
     description: row.description,
+    viewerMarkdown: normalizeViewerMarkdown(row.viewerMarkdown),
     defaultModel: row.defaultModel,
     fundingMode: row.fundingMode,
     viewerNameRequired: row.viewerNameRequired,
@@ -397,6 +402,7 @@ export type PublishSharedLinkInput = {
   allowedOrigins?: string[];
   embedOptions?: Partial<EmbedOptions>;
   siteOptions?: unknown;
+  viewerMarkdown?: string;
 };
 
 export async function publishSharedLink(input: PublishSharedLinkInput): Promise<SharedLinkRecord> {
@@ -457,6 +463,7 @@ export async function publishSharedLink(input: PublishSharedLinkInput): Promise<
     projectId: input.project.id,
     name: snapshot.name,
     description: undefined,
+    viewerMarkdown: normalizeViewerMarkdown(input.viewerMarkdown),
     snapshot,
     defaultModel: input.defaultModel,
     fundingMode,
@@ -506,11 +513,12 @@ export async function publishSharedLink(input: PublishSharedLinkInput): Promise<
     allowed_origins: row.allowedOrigins,
     embed_options: row.embedOptions,
     site_options: row.siteOptions,
+    viewer_markdown: row.viewerMarkdown ?? "",
   });
   if (error) {
     // AI : pre-migration DBs lack embed/site columns — retry without them; local JSON still has full row.
     const missingOptionalCols =
-      /allowed_origins|embed_options|site_options/i.test(error.message) || isMissingSchemaError(error);
+      /allowed_origins|embed_options|site_options|viewer_markdown/i.test(error.message) || isMissingSchemaError(error);
     if (missingOptionalCols && !isServerless()) {
       linkLog.warn(`optional shared-link columns missing — upsert without them + local save`, {
         error: error.message,
@@ -640,6 +648,33 @@ export async function updateSharedLinkEmbedSettings(
   return toPublicRecord(link);
 }
 
+// AI : public usage markdown — baked in at publish/PATCH so live project Docs never leak.
+export async function updateSharedLinkViewerMarkdown(
+  ownerId: user_id_string,
+  id: SharedLinkId,
+  viewerMarkdown: string,
+): Promise<SharedLinkRecord | null> {
+  const link = await getSharedLink(id);
+  if (!link || link.ownerId !== ownerId) return null;
+  link.viewerMarkdown = normalizeViewerMarkdown(viewerMarkdown);
+  saveLocalLink(link);
+  const db = await supabaseForSharedLinks();
+  if (db) {
+    const { error } = await db
+      .from("shared_links")
+      .update({ viewer_markdown: link.viewerMarkdown })
+      .eq("id", id)
+      .eq("owner_id", ownerId);
+    if (error) {
+      // AI : local pre-migration can keep JSON; serverless GET is Supabase-only so missing column must fail.
+      if (isServerless() || (!isMissingSchemaError(error) && !/viewer_markdown/i.test(error.message))) {
+        throw new Error(error.message);
+      }
+    }
+  }
+  return toPublicRecord(link);
+}
+
 // AI : Hosted HTML wrapper updates — only for site_ deployments.
 export async function updateSharedLinkSiteSettings(
   ownerId: user_id_string,
@@ -671,8 +706,10 @@ export async function updateSharedLinkSiteSettings(
       .update({ site_options: link.siteOptions })
       .eq("id", id)
       .eq("owner_id", ownerId);
-    if (error && !isMissingSchemaError(error) && !/site_options/i.test(error.message)) {
-      throw new Error(error.message);
+    if (error) {
+      if (isServerless() || (!isMissingSchemaError(error) && !/site_options/i.test(error.message))) {
+        throw new Error(error.message);
+      }
     }
   }
   return toPublicRecord(link);
@@ -801,6 +838,7 @@ export function publicLinkView(link: StoredSharedLink) {
     id: link.id,
     name: link.name,
     description: link.description,
+    viewerMarkdown: normalizeViewerMarkdown(link.viewerMarkdown),
     defaultModel: link.defaultModel,
     fundingMode: link.fundingMode,
     viewerNameRequired: link.viewerNameRequired,

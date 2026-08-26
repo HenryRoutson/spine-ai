@@ -28,7 +28,7 @@ import { findPipelineModule } from "@/lib/fork-pipeline"
 import { downloadBlob } from "@/lib/download-blob"
 import { formatErrorForClipboard } from "@/lib/error-copy"
 import { fetchSharedDownload } from "@/lib/shared-run-client"
-import { useSharedInferenceRun } from "@/lib/use-shared-inference-run"
+import { useSharedInferenceRun, type SharedRunLifecycleEvent } from "@/lib/use-shared-inference-run"
 import { sharedLinkRequiresSignIn, viewerFundsSharedRun } from "@/lib/shared-link-funding"
 import { SharedRunDocScopeProvider } from "@/lib/shared-run-doc-scope"
 import type { SharedLinkPublicView } from "@/lib/shared-link-types"
@@ -42,6 +42,7 @@ type SharedRunPanelProps = {
   insufficientCredit?: boolean
   onOpenBilling?: () => void
   embedSessionToken?: string
+  onRunEvent?: (event: SharedRunLifecycleEvent) => void
 }
 
 export function SharedRunPanel({
@@ -53,6 +54,7 @@ export function SharedRunPanel({
   insufficientCredit = false,
   onOpenBilling,
   embedSessionToken,
+  onRunEvent,
 }: SharedRunPanelProps) {
   const run = useSharedInferenceRun(
     link,
@@ -60,6 +62,7 @@ export function SharedRunPanel({
     { isAuthenticated, onAuthRequired },
     onRunComplete,
     embedSessionToken,
+    onRunEvent,
   )
   const [downloadBusy, setDownloadBusy] = useState(false)
   const [downloadError, setDownloadError] = useState<string | null>(null)
@@ -86,12 +89,11 @@ export function SharedRunPanel({
   const needsSignIn = sharedLinkRequiresSignIn(link.fundingMode) && !isAuthenticated
   const viewerFunds = viewerFundsSharedRun(link.fundingMode)
   const runBlocked =
-    !run.allInputsReady ||
     run.phase === "running" ||
     link.spendLimitReached ||
     link.disabled ||
-    needsSignIn ||
-    insufficientCredit
+    insufficientCredit ||
+    (!needsSignIn && !run.allInputsReady)
 
   return (
     <SharedRunDocScopeProvider scope={{ linkId }}>

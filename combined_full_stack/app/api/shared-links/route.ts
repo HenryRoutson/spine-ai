@@ -50,6 +50,7 @@ export async function POST(req: NextRequest) {
       allowedOrigins: body.allowedOrigins,
       embedOptions: body.embedOptions,
       siteOptions: body.siteOptions,
+      viewerMarkdown: body.viewerMarkdown,
     });
     apiLog.info(`published shared link`, { linkId: link.id, projectId: body.projectId, kind: body.kind ?? "link" });
     const url =

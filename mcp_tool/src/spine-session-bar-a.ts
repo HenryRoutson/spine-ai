@@ -35,6 +35,7 @@ import { filterRunsByErrorStatus } from "@/lib/run-error-log"
 import { testReportPassed } from "@/lib/testing-files"
 import { exclusionReasonForInputModule, exclusionReasonLabel } from "@/lib/inference-input-picker"
 import { flattenPipelineModules } from "@/lib/fork-pipeline"
+import { docsForProject } from "@/lib/project-docs"
 import { shareDefaultDocsByModule } from "@/lib/share-default-docs"
 import { describeCronExpr, isValidCronExpr, isValidIanaTimeZone } from "@/lib/cron-expr"
 import { DEFAULT_EMBED_OPTIONS, DEFAULT_HOSTED_SITE_OPTIONS } from "@/lib/shared-link-types"
@@ -54,6 +55,7 @@ export function resolveMcpApiUrl(): string {
 }
 
 let cachedApiReachable: { url: string; ok: boolean; at: number } | null = null
+let cachedRunsAuthorized: { url: string; hasToken: boolean; ok: boolean; at: number } | null = null
 
 async function probeApi(url: string): Promise<boolean> {
   const now = Date.now()
@@ -66,6 +68,35 @@ async function probeApi(url: string): Promise<boolean> {
     return true
   } catch {
     cachedApiReachable = { url, ok: false, at: now }
+    return false
+  }
+}
+
+async function probeRunsAuthorized(url: string, hasToken: boolean): Promise<boolean> {
+  const now = Date.now()
+  if (
+    cachedRunsAuthorized &&
+    cachedRunsAuthorized.url === url &&
+    cachedRunsAuthorized.hasToken === hasToken &&
+    now - cachedRunsAuthorized.at < 15_000
+  ) {
+    return cachedRunsAuthorized.ok
+  }
+  try {
+    const headers: Record<string, string> = {}
+    const token = process.env[SPINE_API_TOKEN_ENV]?.trim()
+    if (token) headers.authorization = `Bearer ${token}`
+    const res = await fetch(`${url}/api/runs?limit=1`, {
+      method: "GET",
+      redirect: "manual",
+      headers,
+      signal: AbortSignal.timeout(800),
+    })
+    const ok = res.status !== 401 && res.status !== 403
+    cachedRunsAuthorized = { url, hasToken, ok, at: now }
+    return ok
+  } catch {
+    cachedRunsAuthorized = { url, hasToken, ok: false, at: now }
     return false
   }
 }
@@ -144,14 +175,14 @@ type mcp_review_with_inflight = Omit<mcp_review, "assistantInFlight"> & { assist
 
 function mcpProjectNext(review: mcp_review_with_inflight, assistantError?: string): string {
   if (assistantError) {
-    return `Vibe failed: ${assistantError}. Fix that, then ask_agent again or edit with add_step / configure_n8n_step / configure_connect_step.`
+    return `Vibe failed: ${assistantError}. Fix that, then ask_agent again or edit with session_action id=pipeline.add-step / configure_n8n_step / configure_connect_step.`
   }
   if (review.assistantInFlight) return "Vibe still running. Poll get_project. Do not re-send ask_agent."
   if (review.pendingProposal) {
     return "Unapplied proposal. apply_project_changes with no proposalJson to Approve, or session_action id=assistant.reject to discard."
   }
   if (!review.ok) {
-    return "Issues listed above. Fix with add_step / configure_n8n_step / configure_connect_step / session_action structure.add-field, or ask_agent. Then validate_project."
+    return "Issues listed above. Fix with session_action id=pipeline.add-step / configure_n8n_step / configure_connect_step / session_action structure.add-field, or ask_agent. Then validate_project."
   }
   const connectNeeded = reviewConnectGaps(review.steps)
   if (connectNeeded.length) {
@@ -309,6 +340,7 @@ export async function authStatusFromSession(sessionPath?: string) {
   const apiUrl = resolveMcpApiUrl()
   const hasApiToken = Boolean(process.env[SPINE_API_TOKEN_ENV])
   const apiReachable = await probeApi(apiUrl)
+  const runsAuthorized = apiReachable ? await probeRunsAuthorized(apiUrl, hasApiToken) : false
   const seeds = listSeedIds()
   let projectCount = 0
   let projects: { id: string; name: string; active: boolean }[] = []
@@ -324,7 +356,7 @@ export async function authStatusFromSession(sessionPath?: string) {
   } catch (err) {
     loadError = err instanceof Error ? err.message : String(err)
   }
-  const canRun = apiReachable
+  const canRun = apiReachable && runsAuthorized
   return {
     ok: !loadError,
     sessionPath: path,
@@ -343,11 +375,13 @@ export async function authStatusFromSession(sessionPath?: string) {
         ? seeds.length
           ? "Call session_action id=project.add for a blank pipeline, or import_seed with file from seeds (e.g. lead_enrich_n8n). Then get_project."
           : "Call session_action id=project.add, then get_project."
-        : canRun && hasApiToken
-          ? "Call get_project. Same GUI project: pull_remote_state → edit → push_remote_state. Or start_run → wait_for_run."
-          : canRun
-            ? "Call get_project. You can start_run / wait_for_run. For the signed-in GUI project set SPINE_API_TOKEN then pull_remote_state."
-            : `Call get_project. Local edits work. To run, start combined_full_stack (npm run dev) so ${apiUrl} is up, then start_run → wait_for_run. Production also needs SPINE_API_TOKEN + pull_remote_state.`,
+        : canRun
+          ? hasApiToken
+            ? "Call get_project. Same GUI project: pull_remote_state → edit → push_remote_state. Or start_run → wait_for_run."
+            : "Call get_project. You can start_run / wait_for_run."
+          : apiReachable
+            ? "Call get_project. Local edits work. start_run needs SPINE_API_TOKEN (Supabase access token), then retry."
+            : `Call get_project. Local edits work. To run, start combined_full_stack (npm run dev) so ${apiUrl} is up. start_run also needs SPINE_API_TOKEN.`,
   }
 }
 
@@ -363,6 +397,8 @@ export function listSeedsForMcp() {
 
 export function sessionLogs(sessionPath?: string, errorsOnly = false) {
   const session = openMcpSession(sessionPath, true)
+  const project = session.project
+  const scopedDocs = project ? docsForProject(session.docs, project) : session.docs
   const runs = filterRunsByErrorStatus(session.runs, errorsOnly ? "errors" : "all").map((r) => ({
     ...compactRun(r, false),
     notes: r.notes,
@@ -371,8 +407,8 @@ export function sessionLogs(sessionPath?: string, errorsOnly = false) {
   return {
     runs,
     cache: session.getSnapshot().cacheEntries,
-    tests: session.docs.filter((d) => d.name.endsWith("_testing.json")).map((d) => d.name),
-    docs: session.docs.map((d) => ({ name: d.name, type: d.type, label: d.label })),
+    tests: scopedDocs.filter((d) => d.name.endsWith("_testing.json")).map((d) => d.name),
+    docs: scopedDocs.map((d) => ({ name: d.name, type: d.type, label: d.label })),
     ...(pendingDocs.length ? { pendingDocs } : {}),
     next: "runs include step status/previews when hydrated (wait_for_run / logging.hydrate). tests are names for pinpoint_failure.testDocName. pendingDocs need apply_project_changes.",
   }
@@ -398,14 +434,14 @@ export function pinpointFailureFromSession(
   const session = openMcpSession(input.sessionPath, true)
   const project = session.project
   if (!project) throw new Error("no active project")
-  const tests = session.docs.filter((d) => d.name.endsWith("_testing.json"))
+  const tests = docsForProject(session.docs, project).filter((d) => d.name.endsWith("_testing.json"))
   const testName = input.testDocName?.trim()
   if (!testName) {
     throw new Error(
       `testDocName required. Available: ${tests.map((d) => d.name).join(", ") || "(none — add a *_testing.json doc)"}`,
     )
   }
-  const doc = session.docs.find((d) => d.id === testName || d.name === testName)
+  const doc = tests.find((d) => d.id === testName || d.name === testName)
   if (!doc) {
     throw new Error(
       `unknown test doc: ${testName}. Available: ${tests.map((d) => d.name).join(", ") || "(none)"}`,
@@ -1030,6 +1066,66 @@ export type SessionActionArgs = {
   scheduleId?: string
 }
 
+export const SESSION_ACTION_CANONICAL_IDS = [
+  "project.add",
+  "project.rename",
+  "project.delete",
+  "project.open",
+  "project.clone",
+  "project.clone-template",
+  "structure.add-model",
+  "structure.add-field",
+  "structure.set-relation",
+  "structure.remove-field",
+  "structure.add-alias",
+  "pipeline.add-step",
+  "pipeline.configure-step",
+  "pipeline.remove-step",
+  "pipeline.move-step",
+  "pipeline.assign-structure",
+  "documents.upload",
+  "documents.remove",
+  "documents.set-projects",
+  "docs.set",
+  "inference.assign-input",
+  "assistant.send",
+  "assistant.approve",
+  "assistant.reject",
+  "assistant.execute-runs",
+  "inference.start-run",
+  "testing.run",
+  "logging.hydrate",
+  "logging.get-run",
+  "logging.errors-only",
+  "quotes.link",
+  "session.pull",
+  "session.push",
+  "project.resync-examples",
+  "share.create-link",
+  "share.create-embed",
+  "share.create-site",
+  "share.deploy-api",
+  "share.marketplace-publish",
+  "schedule.create",
+  "schedule.toggle",
+  "schedule.run-now",
+  "schedule.delete",
+  "connect.start-session",
+  "nav.window.share",
+  "nav.window.schedule",
+] as const
+
+export function suggestSessionActionId(id: string): string {
+  const needle = id.trim().toLowerCase().replace(/_/g, ".")
+  const ids = SESSION_ACTION_CANONICAL_IDS as readonly string[]
+  const suffix = ids.filter((k) => k === needle || k.endsWith(`.${needle}`) || k.endsWith(`.${id.replace(/_/g, "-")}`))
+  if (suffix.length === 1) return `Did you mean ${suffix[0]}?`
+  if (suffix.length > 1) return `Did you mean ${suffix.join(" | ")}?`
+  const fuzzy = ids.filter((k) => k.includes(needle) || needle.includes(k.split(".").pop() ?? k))
+  if (fuzzy.length && fuzzy.length <= 8) return `Closest: ${fuzzy.join(", ")}`
+  return `Valid ids include: ${ids.slice(0, 12).join(", ")}, …`
+}
+
 export async function runSessionAction(args: SessionActionArgs): Promise<unknown> {
   const { id, sessionPath } = args
   switch (id) {
@@ -1227,6 +1323,6 @@ export async function runSessionAction(args: SessionActionArgs): Promise<unknown
     // AI : Host-bound (no session method): inference.stop, jobs.stop, inference.human-review.*,
     // AI :   inference.chatbot.send, inference.custom-code, Stripe, auth.sign-in. OAuth popup is GUI.
     default:
-      throw new Error(`unknown session_action id: ${id}`)
+      throw new Error(`unknown session_action id: ${id}. ${suggestSessionActionId(id)}`)
   }
 }

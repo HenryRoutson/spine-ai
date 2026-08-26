@@ -174,7 +174,7 @@ function nextChatForNewProject(
 
 export class SpineSession {
   // AI : MCP session_action + named tools wrap public methods (see mcp_tool/spine-session-bar-a.ts).
-  // AI :   Host-bound stays GUI-only: CodeHost, human-review, chatbot, share mint, Stripe, run cancel.
+  // AI :   Host-bound stays GUI-only: CodeHost, human-review, chatbot, Stripe, run cancel. Share/schedule mint via HTTP.
   private snap: SessionSnapshot
   private readonly listeners = new Set<() => void>()
   private readonly persist: PersistPort | undefined
@@ -449,7 +449,16 @@ export class SpineSession {
       docs,
       docContents: { ...this.snap.docContents, [id]: input.content },
     })
+    // AI : GUI upload links the filename to the open pipeline; MCP get_project scopes docs the same way.
+    this.linkDocNameToActiveProject(doc.name)
     return doc
+  }
+
+  private linkDocNameToActiveProject(docName: string): void {
+    const project = this.project
+    if (!project) return
+    if (project.seedDocNames?.includes(docName)) return
+    this.patchProject({ seedDocNames: [...(project.seedDocNames ?? []), docName] })
   }
 
   // AI : GUI Documents delete — MCP remove_doc / session_action documents.remove.

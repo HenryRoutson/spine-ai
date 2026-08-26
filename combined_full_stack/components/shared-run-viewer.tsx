@@ -16,16 +16,22 @@ import { openSharedLinkInWorkspace } from "@/lib/open-shared-in-workspace"
 import { addSharedWithMe } from "@/lib/shared-with-me"
 import { viewerFundsSharedRun } from "@/lib/shared-link-funding"
 import type { SharedLinkPublicView } from "@/lib/shared-link-types"
+import { MarkdownView } from "@/components/highlight"
 import { cn } from "@/lib/utils"
+import { API_ROUTES } from "@/lib/api-routes"
+import { MIN_RUN_BALANCE_CENTS } from "@/lib/billing_config"
+import type { SharedRunLifecycleEvent } from "@/lib/use-shared-inference-run"
 
 export function SharedRunViewer({
   linkId,
   variant = "page",
   embedSessionToken,
+  onRunEvent,
 }: {
   linkId: string
   variant?: "page" | "embed" | "site"
   embedSessionToken?: string
+  onRunEvent?: (event: SharedRunLifecycleEvent) => void
 }) {
   const [link, setLink] = useState<SharedLinkPublicView | null>(null)
   const [loadError, setLoadError] = useState<string | null>(null)
@@ -68,6 +74,7 @@ export function SharedRunViewer({
       linkId={linkId}
       variant={variant}
       embedSessionToken={embedSessionToken}
+      onRunEvent={onRunEvent}
     />
   )
 }
@@ -77,17 +84,41 @@ function SharedRunContent({
   linkId,
   variant,
   embedSessionToken,
+  onRunEvent,
 }: {
   link: SharedLinkPublicView
   linkId: string
   variant: "page" | "embed" | "site"
   embedSessionToken?: string
+  onRunEvent?: (event: SharedRunLifecycleEvent) => void
 }) {
   const { email, isAuthenticated, ready, signOut } = useSupabaseSession()
   const isEmbed = variant === "embed"
   const isSite = variant === "site"
   const hideBranding = (isEmbed && link.embedOptions?.hideBranding) || isSite
   const loginNext = isSite ? `/site/${linkId}` : isEmbed ? `/embed/${linkId}` : `/run/${linkId}`
+  const viewerPays = viewerFundsSharedRun(link.fundingMode)
+  const [balanceCents, setBalanceCents] = useState<number | null>(null)
+  const [minRunBalanceCents, setMinRunBalanceCents] = useState(MIN_RUN_BALANCE_CENTS)
+
+  useEffect(() => {
+    if (!isAuthenticated || !viewerPays) return
+    let cancelled = false
+    fetch(API_ROUTES.billing, { credentials: "same-origin" })
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data: { balanceCents?: number; minRunBalanceCents?: number } | null) => {
+        if (cancelled || !data || typeof data.balanceCents !== "number") return
+        setBalanceCents(data.balanceCents)
+        if (typeof data.minRunBalanceCents === "number") setMinRunBalanceCents(data.minRunBalanceCents)
+      })
+      .catch(() => {})
+    return () => {
+      cancelled = true
+    }
+  }, [isAuthenticated, viewerPays])
+
+  const insufficientCredit =
+    viewerPays && isAuthenticated && balanceCents != null && balanceCents < minRunBalanceCents
 
   return (
     <DocViewerProvider>
@@ -99,9 +130,6 @@ function SharedRunContent({
           <Share2 className="h-4 w-4 text-primary" />
           <div className="min-w-0 flex-1">
             <h1 className="truncate text-sm font-semibold">{link.name}</h1>
-            {link.description && (
-              <p className="truncate text-xs text-muted-foreground">{link.description}</p>
-            )}
           </div>
           <Badge variant="outline" className="font-mono text-[9px]">
             {isEmbed ? "embedded pipeline" : "shared pipeline"}
@@ -154,6 +182,12 @@ function SharedRunContent({
       )}
 
       <main className={cn("mx-auto w-full max-w-4xl flex-1 overflow-y-auto", isEmbed || isSite ? "p-3" : "p-5")}>
+        {link.viewerMarkdown?.trim() ? (
+          <div className="mb-4 rounded-lg border border-border bg-card px-4 py-3">
+            <MarkdownView md={link.viewerMarkdown} />
+          </div>
+        ) : null}
+
         {isAuthenticated && viewerFundsSharedRun(link.fundingMode) ? (
           <div className="mb-4 rounded-lg border border-primary/30 bg-primary/5 px-4 py-3 text-sm">
             <p className="font-medium">{isSite ? "This page bills your credits" : "Run this in your workspace for Billing access"}</p>
@@ -162,7 +196,18 @@ function SharedRunContent({
                 ? "Viewer-paid pages need credit in your account. Top up from Billing in Spine after you sign in."
                 : "Viewer-paid links need credit in your account. Use Open in workspace, then go to the Billing tab to top up."}
             </p>
-            {!isEmbed && !isSite && (
+            {isSite ? (
+            <Button
+              size="sm"
+              className="mt-3 gap-1.5"
+              onClick={() => {
+                window.location.href = "/"
+              }}
+            >
+              <LayoutGrid className="h-3.5 w-3.5" />
+              Open Billing
+            </Button>
+            ) : !isEmbed ? (
             <Button
               size="sm"
               className="mt-3 gap-1.5"
@@ -171,7 +216,7 @@ function SharedRunContent({
               <LayoutGrid className="h-3.5 w-3.5" />
               Open in workspace
             </Button>
-            )}
+            ) : null}
           </div>
         ) : null}
 
@@ -180,9 +225,14 @@ function SharedRunContent({
           linkId={linkId}
           isAuthenticated={isAuthenticated}
           embedSessionToken={embedSessionToken}
+          insufficientCredit={insufficientCredit}
+          onOpenBilling={() => {
+            window.location.href = "/"
+          }}
           onAuthRequired={() => {
             window.location.href = `/login?next=${encodeURIComponent(loginNext)}`
           }}
+          onRunEvent={onRunEvent}
         />
       </main>
     </div>

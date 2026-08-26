@@ -224,7 +224,12 @@ export function SharePage({ simple }: { simple?: boolean } = {}) {
           </div>
         ) : (
           <>
-            <div className="mx-auto grid max-w-6xl gap-5 lg:grid-cols-2">
+            <div
+              className={cn(
+                "mx-auto grid gap-5",
+                tab === PublishTab.Site ? "max-w-7xl grid-cols-1" : "max-w-6xl lg:grid-cols-2",
+              )}
+            >
               <section className="rounded-lg border border-border bg-card p-4">
                 <div className="mb-4 flex gap-1 rounded-md border border-border bg-muted/30 p-1">
                   <button

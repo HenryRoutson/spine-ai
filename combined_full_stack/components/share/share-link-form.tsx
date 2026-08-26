@@ -11,9 +11,13 @@ import { Input } from "@/components/ui/input"
 import { ShareDefaultFiles } from "@/components/share/share-default-files"
 import { ShareFundingPicker } from "@/components/share/share-funding-flow"
 import { parseSharePricing, parseSpendLimitUsd, SharePricingFields } from "@/components/share/share-pricing-fields"
+import { HtmlPreviewFrame } from "@/components/share/html-preview-frame"
+import { ShareViewerDocsFields } from "@/components/share/share-viewer-docs-fields"
+import { SharedLinkPreview } from "@/components/share/shared-link-preview"
 import { API_ROUTES } from "@/lib/api-routes"
 import { apiJson, JSON_HEADERS } from "@/lib/api-client"
 import { shareDefaultDocsByModule } from "@/lib/share-default-docs"
+import { composeViewerMarkdown } from "@/lib/share-viewer-markdown"
 import { SharedLinkFundingMode } from "@/lib/types"
 import { viewerFundsSharedRun } from "@/lib/shared-link-funding"
 import type { DocId, DocRef, ModuleId, Project } from "@/lib/types"
@@ -84,12 +88,21 @@ export function ShareLinkForm({
   const [billingMultiple, setBillingMultiple] = useState("1.0")
   const [flatFeeEnabled, setFlatFeeEnabled] = useState(false)
   const [flatFeeUsd, setFlatFeeUsd] = useState("0.50")
+  const [showDocs, setShowDocs] = useState(false)
+  const [instructions, setInstructions] = useState("")
+  const [appendProjectDocs, setAppendProjectDocs] = useState(false)
 
   const viewerFunds = viewerFundsSharedRun(fundingMode)
   const defaultDocsByModule = useMemo(
     () => shareDefaultDocsByModule(project, docs, inferenceInputDocIds),
     [project, docs, inferenceInputDocIds],
   )
+  const viewerMarkdown = composeViewerMarkdown({
+    showDocs,
+    instructions,
+    appendProjectDocs,
+    projectDocumentation: project.documentation ?? "",
+  })
 
   async function createLink() {
     setBusy(true)
@@ -121,6 +134,7 @@ export function ShareLinkForm({
           billingMultiple: pricing.billingMultiple,
           flatFeeCents: pricing.flatFeeCents || undefined,
           defaultDocsByModule,
+          viewerMarkdown,
         }),
       })
       setUrl(`${window.location.origin}${body.url}`)
@@ -150,71 +164,94 @@ export function ShareLinkForm({
         </p>
       </div>
 
-      <ShareFundingPicker
-        value={fundingMode}
-        onChange={(v) => setFundingMode(v as SharedLinkFundingMode)}
-        senderLabel="You"
-        receiverLabel="Viewer"
-        options={simple ? [...SIMPLE_LINK_FUNDING_OPTIONS] : [...LINK_FUNDING_OPTIONS]}
-        simple={simple}
-      />
-
-      {viewerFunds && !simple && (
-        <SharePricingFields
-          billingMultiple={billingMultiple}
-          onBillingMultipleChange={setBillingMultiple}
-          flatFeeUsd={flatFeeUsd}
-          onFlatFeeUsdChange={setFlatFeeUsd}
-          flatFeeEnabled={flatFeeEnabled}
-          onFlatFeeEnabledChange={setFlatFeeEnabled}
-          perUnitLabel="run"
-        />
-      )}
-
-      {simple ? null : (
-        <label className="flex items-center gap-2 text-xs">
-          <input
-            type="checkbox"
-            checked={viewerNameRequired}
-            onChange={(e) => setViewerNameRequired(e.target.checked)}
+      {!url ? (
+        <>
+          <ShareFundingPicker
+            value={fundingMode}
+            onChange={(v) => setFundingMode(v as SharedLinkFundingMode)}
+            senderLabel="You"
+            receiverLabel="Viewer"
+            options={simple ? [...SIMPLE_LINK_FUNDING_OPTIONS] : [...LINK_FUNDING_OPTIONS]}
+            simple={simple}
           />
-          Require viewer name
-        </label>
-      )}
 
-      <div className="space-y-2">
-        <label className="flex items-center gap-2 text-xs">
-          <input
-            type="checkbox"
-            checked={spendLimitEnabled}
-            onChange={(e) => setSpendLimitEnabled(e.target.checked)}
-          />
-          {simple ? "Stop after this much is spent" : "Set spending limit"}
-        </label>
-        {spendLimitEnabled && (
-          <div className="flex items-center gap-2 pl-5">
-            <span className="text-xs text-muted-foreground">$</span>
-            <Input
-              type="number"
-              min="0.01"
-              step="0.01"
-              value={spendLimitUsd}
-              onChange={(e) => setSpendLimitUsd(e.target.value)}
-              className={cn("h-8 w-28 text-xs", !simple && "font-mono")}
+          {viewerFunds && !simple && (
+            <SharePricingFields
+              billingMultiple={billingMultiple}
+              onBillingMultipleChange={setBillingMultiple}
+              flatFeeUsd={flatFeeUsd}
+              onFlatFeeUsdChange={setFlatFeeUsd}
+              flatFeeEnabled={flatFeeEnabled}
+              onFlatFeeEnabledChange={setFlatFeeEnabled}
+              perUnitLabel="run"
             />
-            {simple ? null : (
-              <span className="text-[10px] text-muted-foreground">max billed via this link</span>
+          )}
+
+          {simple ? null : (
+            <label className="flex items-center gap-2 text-xs">
+              <input
+                type="checkbox"
+                checked={viewerNameRequired}
+                onChange={(e) => setViewerNameRequired(e.target.checked)}
+              />
+              Require viewer name
+            </label>
+          )}
+
+          <div className="space-y-2">
+            <label className="flex items-center gap-2 text-xs">
+              <input
+                type="checkbox"
+                checked={spendLimitEnabled}
+                onChange={(e) => setSpendLimitEnabled(e.target.checked)}
+              />
+              {simple ? "Stop after this much is spent" : "Set spending limit"}
+            </label>
+            {spendLimitEnabled && (
+              <div className="flex items-center gap-2 pl-5">
+                <span className="text-xs text-muted-foreground">$</span>
+                <Input
+                  type="number"
+                  min="0.01"
+                  step="0.01"
+                  value={spendLimitUsd}
+                  onChange={(e) => setSpendLimitUsd(e.target.value)}
+                  className={cn("h-8 w-28 text-xs", !simple && "font-mono")}
+                />
+                {simple ? null : (
+                  <span className="text-[10px] text-muted-foreground">max billed via this link</span>
+                )}
+              </div>
             )}
           </div>
-        )}
-      </div>
 
-      <ShareDefaultFiles
-        project={project}
-        docs={docs}
-        defaultDocsByModule={defaultDocsByModule}
-        simple={simple}
-      />
+          <ShareDefaultFiles
+            project={project}
+            docs={docs}
+            defaultDocsByModule={defaultDocsByModule}
+            simple={simple}
+          />
+
+          <ShareViewerDocsFields
+            showDocs={showDocs}
+            onShowDocsChange={setShowDocs}
+            instructions={instructions}
+            onInstructionsChange={setInstructions}
+            appendProjectDocs={appendProjectDocs}
+            onAppendProjectDocsChange={setAppendProjectDocs}
+            projectDocumentation={project.documentation ?? ""}
+            simple={simple}
+          />
+
+          <HtmlPreviewFrame label="Link preview">
+            <SharedLinkPreview
+              projectName={project.name}
+              viewerMarkdown={viewerMarkdown}
+              modules={project.modules}
+            />
+          </HtmlPreviewFrame>
+        </>
+      ) : null}
 
       {error && <p className="text-xs text-destructive">{error}</p>}
 

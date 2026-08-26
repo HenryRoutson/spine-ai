@@ -3,7 +3,7 @@ import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { describe, expect, it } from "vitest"
 import { listN8nNodes } from "@/lib/n8n-catalog"
-import { exportAllPiecesToDisk } from "@/lib/n8n-share"
+import { exportAllPiecesToDisk, listPiecesForMcp } from "@/lib/n8n-share"
 
 describe("n8n piece sharing", () => {
   it("exports every catalog piece as shareable JSON", () => {
@@ -17,5 +17,15 @@ describe("n8n piece sharing", () => {
     } finally {
       rmSync(dir, { recursive: true, force: true })
     }
+  })
+
+  it("MCP list is compact until a piece id is requested", () => {
+    const listed = listPiecesForMcp(process.cwd())
+    expect(listed.some((p) => p.n8nNodeType === "n8n-nodes-base.set")).toBe(true)
+    expect(listed.every((p) => !("props" in p))).toBe(true)
+    const one = listPiecesForMcp(process.cwd(), "piece.set")
+    expect(one).toHaveLength(1)
+    expect(one[0]?.n8nNodeType).toBe("n8n-nodes-base.set")
+    expect(one[0] && "props" in one[0]).toBe(true)
   })
 })

@@ -27,6 +27,7 @@ import { DocLabel, RunStepStatus, type DocRef, type ModuleId, type PipelineModul
 import type { SessionChatTurn, SessionSnapshot } from "@/lib/core/types"
 import type { ProjectProposal } from "@/lib/project-assistant-types"
 import { mergeDocsByName, overlayProposalOnProject } from "@/lib/project-proposal-overlay"
+import { docsForProject } from "@/lib/project-docs"
 import { chatForActiveProject } from "@/lib/core/types"
 import { AppWindowId } from "@/lib/app-window-id"
 import {
@@ -693,7 +694,7 @@ export function toMcpProjectReview(snap: SessionSnapshot) {
     })),
     steps: mcpStepReview(viewed.modules, viewed.models),
     docs: mergeDocsByName(
-      snap.docs.map((d) => ({ name: d.name, type: d.type, label: d.label })),
+      docsForProject(snap.docs, viewed).map((d) => ({ name: d.name, type: d.type, label: d.label })),
       pendingDocs,
     ),
     requiredSecrets: groupSecretRequirements(collectSecretRequirements(viewed.modules)).map((g) => ({

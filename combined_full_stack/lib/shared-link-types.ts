@@ -68,6 +68,8 @@ export type SharedLinkRecord = {
   projectId: Project["id"];
   name: string;
   description?: string;
+  // AI : optional public usage markdown — empty unless the publisher opted in (project Docs stay private).
+  viewerMarkdown?: string;
   defaultModel?: ModelId;
   fundingMode: SharedLinkFundingMode;
   viewerNameRequired: boolean;
@@ -92,6 +94,7 @@ export type SharedLinkPublicView = Pick<
   | "id"
   | "name"
   | "description"
+  | "viewerMarkdown"
   | "defaultModel"
   | "fundingMode"
   | "viewerNameRequired"

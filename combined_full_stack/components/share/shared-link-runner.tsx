@@ -6,6 +6,7 @@ import { ArrowLeft, Loader2, Share2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { SharedRunPanel } from "@/components/share/shared-run-panel"
+import { MarkdownView } from "@/components/highlight"
 import { ErrorBanner } from "@/components/inference/inference-run-chrome"
 import { MIN_RUN_BALANCE_CENTS } from "@/lib/billing_config"
 import { fetchSharedLink } from "@/lib/shared-run-client"
@@ -73,9 +74,6 @@ export function SharedLinkRunner({ linkId }: { linkId: string }) {
         <Share2 className="h-4 w-4 text-primary" />
         <div className="min-w-0 flex-1">
           <h2 className="truncate text-sm font-semibold">{link.name}</h2>
-          {link.description ? (
-            <p className="truncate text-xs text-muted-foreground">{link.description}</p>
-          ) : null}
         </div>
         <Badge variant="outline" className="font-mono text-[9px]">
           shared pipeline
@@ -84,6 +82,11 @@ export function SharedLinkRunner({ linkId }: { linkId: string }) {
 
       <div className="min-h-0 flex-1 overflow-y-auto p-5">
         <div className="mx-auto max-w-4xl">
+          {link.viewerMarkdown?.trim() ? (
+            <div className="mb-4 rounded-lg border border-border bg-card px-4 py-3">
+              <MarkdownView md={link.viewerMarkdown} />
+            </div>
+          ) : null}
           <SharedRunPanel
             link={link}
             linkId={linkId}

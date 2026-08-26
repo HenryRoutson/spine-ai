@@ -39,7 +39,7 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string;
   );
   const docId = parseSharedDocId(rawDocId);
   if (!docId) return apiError(unknownDoc(rawDocId), HTTP.NOT_FOUND);
-  const text = resolveSharedDocParserText(linkId, docId, sessionId, link.defaultDocs);
+  const text = await resolveSharedDocParserText(linkId, docId, sessionId, link.defaultDocs);
   if (text === undefined) return apiError(unknownDoc(rawDocId), HTTP.NOT_FOUND);
 
   return NextResponse.json({

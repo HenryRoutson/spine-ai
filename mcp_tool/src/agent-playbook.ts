@@ -7,16 +7,12 @@ export const SPINE_MCP_INSTRUCTIONS = `Spine MCP — schema-first pipeline build
 WHAT SPINE IS
 Spine sits on top of n8n-class automation with Pydantic/Zod structures. You define models, wire steps, generate the inference form automatically, run golden tests, then share a drag-and-drop page. Data between steps is typed. n8n pieces run local Code-node JavaScript against that type — they do NOT call Slack/Gmail/HTTP live. Live apps use kind=connect (list_connect_actions). Webhook is the generic HTTP escape hatch. Pieces are shareable JSON (list_pieces / import_piece / export_piece).
 
-CONNECT (Claude Code / Cursor — no codebase required)
-From the Spine repo: claude mcp add spine -- node "$PWD/mcp_tool/spine-mcp.mjs"
-Or commit .mcp.json { "mcpServers": { "spine": { "command": "node", "args": ["mcp_tool/spine-mcp.mjs"] } } }
-Cursor: .cursor/mcp.json command node + args [absolute path to mcp_tool/spine-mcp.mjs]. The launcher sets SPINE_* paths itself. Local runs default to http://127.0.0.1:3000 (start combined_full_stack with npm run dev).
-You are already connected if you can call tools. First tool: auth_status. Then get_project. Follow each tool's next field.
+You are already connected. First tool: auth_status. Then get_project. Follow each tool's next field. Local API is http://127.0.0.1:3000 (start combined_full_stack with npm run dev).
 
 WORKSPACES — never mix:
 - Session tools mutate .spine-session.json (omit sessionPath). This is the editable project. Prefer these.
 - Bundled templates: list_seeds → import_seed file=<id>. Seed-path tools are optional; lint_pipeline with no args lints the session. pinpoint_failure uses testDocName from session_logs.tests + runJson from wait_for_run.
-- Signed-in GUI uses Supabase cookies. MCP start_run sends SPINE_API_TOKEN as Bearer (Supabase access token). Local npm run dev does not need a token.
+- Signed-in GUI uses Supabase cookies. MCP start_run sends SPINE_API_TOKEN as Bearer (Supabase access token). auth_status.canRun is true only when /api/runs accepts that token.
 
 DEFAULT LOOP
 1. auth_status — session path, projects, seeds, canRun. Follow next.
@@ -115,7 +111,7 @@ export function registerSpinePrompts(server: McpServer): void {
     },
     ({ kind, purpose }) =>
       userMessage(
-        `Add a ${kind} step: ${purpose}\n\nFollow Spine MCP instructions. auth_status → get_project → add_step (or session_action pipeline.add-step) → session_action pipeline.configure-step / pipeline.assign-structure / configure_n8n_step / configure_connect_step as needed → validate_project. For kind=n8n, list_pieces first. For kind=connect, list_connect_actions first. For kind=fork, add_step into lanes with forkId + branchId. Do not call seed tools on the session file.`,
+        `Add a ${kind} step: ${purpose}\n\nFollow Spine MCP instructions. auth_status → get_project → session_action id=pipeline.add-step → session_action pipeline.configure-step / pipeline.assign-structure / configure_n8n_step / configure_connect_step as needed → validate_project. For kind=n8n, list_pieces first. For kind=connect, list_connect_actions first. For kind=fork, add steps into lanes with forkId + branchId. Do not call seed tools on the session file.`,
       ),
   )
 
@@ -142,7 +138,7 @@ export function registerSpinePrompts(server: McpServer): void {
     },
     ({ purpose }) =>
       userMessage(
-        `Purpose: ${purpose}\n\nlist_pieces → pick n8nNodeType (piece.set aliases n8n-nodes-base.set) → add_step kind=n8n → configure_n8n_step with parametersJson matching props → pipeline.assign-structure for typed in/out → validate_project. Optional n8nCode is n8n Code-node JS (items/json). Do not hit vendor APIs — use kind=connect for Slack/Gmail.`,
+        `Purpose: ${purpose}\n\nlist_pieces → pick n8nNodeType (piece.set aliases n8n-nodes-base.set) → session_action id=pipeline.add-step kind=n8n → configure_n8n_step with parametersJson matching props → pipeline.assign-structure for typed in/out → validate_project. Optional n8nCode is n8n Code-node JS (items/json). Do not hit vendor APIs — use kind=connect for Slack/Gmail.`,
       ),
   )
 
@@ -157,7 +153,7 @@ export function registerSpinePrompts(server: McpServer): void {
     },
     ({ purpose }) =>
       userMessage(
-        `Purpose: ${purpose}\n\nlist_connect_actions → pick connectActionId (slack.postMessage | gmail.send | sheets.append | http.request) → add_step kind=connect → configure_connect_step with parametersJson → pipeline.assign-structure → validate_project. After Approve, the human taps Connect {App}. run_test mocks connect output. Do not use n8n Cloud or invent action ids.`,
+        `Purpose: ${purpose}\n\nlist_connect_actions → pick connectActionId (slack.postMessage | gmail.send | sheets.append | http.request) → session_action id=pipeline.add-step kind=connect → configure_connect_step with parametersJson → pipeline.assign-structure → validate_project. After Approve, the human taps Connect {App}. run_test mocks connect output. Do not use n8n Cloud or invent action ids.`,
       ),
   )
 
@@ -172,7 +168,7 @@ export function registerSpinePrompts(server: McpServer): void {
     },
     ({ lanes }) =>
       userMessage(
-        `Lanes: ${lanes}\n\nget_project → add_step kind=fork → add_step into each lane with forkId + branchId (kind n8n/llm/assert/…). Nest fork in a lane if a lane itself branches. session_action pipeline.configure-step forkJoin=product|assemble|merge. validate_project. get_project.steps[].branches is the DAG tree.`,
+        `Lanes: ${lanes}\n\nget_project → session_action id=pipeline.add-step kind=fork → session_action id=pipeline.add-step into each lane with forkId + branchId (kind n8n/llm/assert/…). Nest fork in a lane if a lane itself branches. session_action pipeline.configure-step forkJoin=product|assemble|merge. validate_project. get_project.steps[].branches is the DAG tree.`,
       ),
   )
 

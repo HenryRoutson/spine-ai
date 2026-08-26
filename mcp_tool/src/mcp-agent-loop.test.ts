@@ -127,8 +127,16 @@ describe("MCP agent loop without the codebase", () => {
         expect(fork?.branches?.length).toBeGreaterThanOrEqual(2)
         expect(fork?.branches?.some((b) => b.steps.some((st) => st.n8nNodeType === "n8n-nodes-base.crypto"))).toBe(true)
 
-        const pieces = parseTool(await call(4, "list_pieces", {})) as { pieces: Array<{ n8nNodeType: string }> }
+        const pieces = parseTool(await call(4, "list_pieces", {})) as { pieces: Array<{ n8nNodeType: string; props?: unknown }> }
         expect(pieces.pieces.some((p) => p.n8nNodeType === "n8n-nodes-base.filter")).toBe(true)
+        expect(pieces.pieces.every((p) => p.props === undefined)).toBe(true)
+
+        const one = parseTool(await call(9, "list_pieces", { n8nNodeType: "piece.limit" })) as {
+          pieces: Array<{ n8nNodeType: string; props?: Array<{ name: string }> }>
+        }
+        expect(one.pieces).toHaveLength(1)
+        expect(one.pieces[0]?.n8nNodeType).toBe("n8n-nodes-base.limit")
+        expect(one.pieces[0]?.props?.some((p) => p.name === "maxItems")).toBe(true)
 
         const added = parseTool(
           await call(5, "session_action", {

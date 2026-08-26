@@ -230,6 +230,31 @@ describe("MCP Bar A session tools", () => {
     }
   })
 
+  it("auth_status.canRun is false when /api/runs returns 401", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "mcp-auth-401-"))
+    const sessionPath = join(dir, "session.json")
+    const prevUrl = process.env.SPINE_API_URL
+    vi.stubGlobal("fetch", async (url: string | URL) => {
+      const href = String(url)
+      if (href.includes("/api/runs")) return new Response("", { status: 401 })
+      return new Response("", { status: 200 })
+    })
+    try {
+      process.env.SPINE_API_URL = "http://127.0.0.1:3998"
+      const { addProjectFromSession, authStatusFromSession } = await import("./spine-session-bar-a.js")
+      addProjectFromSession(sessionPath)
+      const status = await authStatusFromSession(sessionPath)
+      expect(status.apiReachable).toBe(true)
+      expect(status.canRun).toBe(false)
+      expect(status.next).toMatch(/SPINE_API_TOKEN/)
+    } finally {
+      vi.unstubAllGlobals()
+      if (prevUrl === undefined) delete process.env.SPINE_API_URL
+      else process.env.SPINE_API_URL = prevUrl
+      rmSync(dir, { recursive: true, force: true })
+    }
+  })
+
   it("auth_status and kind aliases work on a fresh session file", async () => {
     const dir = mkdtempSync(join(tmpdir(), "mcp-status-"))
     const sessionPath = join(dir, "session.json")
@@ -357,6 +382,20 @@ describe("MCP Bar A session tools", () => {
     } finally {
       if (prev === undefined) delete process.env.SPINE_API_URL
       else process.env.SPINE_API_URL = prev
+      rmSync(dir, { recursive: true, force: true })
+    }
+  })
+
+  it("unknown session_action id suggests pipeline.add-step", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "mcp-unknown-action-"))
+    const sessionPath = join(dir, "session.json")
+    try {
+      const { addProjectFromSession, runSessionAction } = await import("./spine-session-bar-a.js")
+      addProjectFromSession(sessionPath)
+      await expect(runSessionAction({ id: "add-step", sessionPath, kind: "llm" })).rejects.toThrow(
+        /pipeline\.add-step/,
+      )
+    } finally {
       rmSync(dir, { recursive: true, force: true })
     }
   })

@@ -8,7 +8,8 @@ export type logo_url_string = string & { __brand: "logo_url" }
 export const HOSTED_SITE_RUN_SLOT = "{{run}}"
 export const SITE_LINK_PREFIX = "site_"
 
-const HEX_RE = /^#([0-9a-f]{3}|[0-9a-f]{6})$/i
+const HEX6_RE = /^#[0-9a-f]{6}$/i
+const HEX3_RE = /^#([0-9a-f]{3})$/i
 const LOGO_URL_RE = /^(https?:\/\/[^\s]+|data:image\/[a-z0-9.+-]+;base64,[a-z0-9+/=]+)$/i
 
 export function isSiteLinkId(id: string): boolean {
@@ -21,13 +22,29 @@ export function sharedLinkPublicPath(id: string): string {
   return `/run/${id}`
 }
 
+// AI : <input type="color"> only accepts #rrggbb — expand #abc so pickers and Zod stay in sync.
+export function expandHexColor(raw: string): hex_color_string | null {
+  const v = raw.trim()
+  const short = HEX3_RE.exec(v)
+  if (short) {
+    const digits = short[1]
+    if (digits && digits.length === 3) {
+      return `#${digits[0]}${digits[0]}${digits[1]}${digits[1]}${digits[2]}${digits[2]}` as hex_color_string
+    }
+  }
+  return HEX6_RE.test(v) ? (v as hex_color_string) : null
+}
+
 export function isHexColor(raw: string): raw is hex_color_string {
-  return HEX_RE.test(raw.trim())
+  return expandHexColor(raw) !== null
 }
 
 export function parseHexColor(raw: string, fallback: hex_color_string): hex_color_string {
-  const v = raw.trim()
-  return isHexColor(v) ? (v as hex_color_string) : fallback
+  return expandHexColor(raw) ?? fallback
+}
+
+export function htmlColorInputValue(raw: string, fallback: string): string {
+  return expandHexColor(raw) ?? expandHexColor(fallback) ?? "#000000"
 }
 
 export function isSafeLogoUrl(raw: string): raw is logo_url_string {
@@ -249,5 +266,30 @@ export function normalizeHostedSiteOptions(raw: unknown): HostedSiteOptions {
     customHtml: typeof o.customHtml === "string" ? o.customHtml.slice(0, 50_000) : "",
     customCss: typeof o.customCss === "string" ? o.customCss.slice(0, 20_000) : "",
     hideSpineFooter: o.hideSpineFooter === true,
+  }
+}
+
+// AI : vibe response is a full snapshot of what was sent — keep fields the user edited while the LLM ran.
+export function keepConcurrentHostedSiteEdits(
+  sent: HostedSiteOptions,
+  received: HostedSiteOptions,
+  latest: HostedSiteOptions,
+): HostedSiteOptions {
+  const pickBrand = <K extends keyof HostedSiteBrand>(key: K): HostedSiteBrand[K] =>
+    received.brand[key] !== sent.brand[key] ? received.brand[key] : latest.brand[key]
+  return {
+    brand: {
+      companyName: pickBrand("companyName"),
+      tagline: pickBrand("tagline"),
+      logoUrl: pickBrand("logoUrl"),
+      primaryColor: pickBrand("primaryColor"),
+      accentColor: pickBrand("accentColor"),
+      backgroundColor: pickBrand("backgroundColor"),
+      textColor: pickBrand("textColor"),
+    },
+    customHtml: received.customHtml !== sent.customHtml ? received.customHtml : latest.customHtml,
+    customCss: received.customCss !== sent.customCss ? received.customCss : latest.customCss,
+    hideSpineFooter:
+      received.hideSpineFooter !== sent.hideSpineFooter ? received.hideSpineFooter : latest.hideSpineFooter,
   }
 }

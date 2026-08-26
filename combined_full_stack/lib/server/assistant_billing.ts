@@ -25,6 +25,7 @@ export const ASSISTANT_BILLING_CHART_KEY = "Agent" as const;
 export const TESTING_ASSISTANT_BILLING_CHART_KEY = "testing assistant" as const;
 export const PIPELINE_SUMMARY_BILLING_CHART_KEY = "pipeline summary" as const;
 export const DIAGNOSIS_ASSISTANT_BILLING_CHART_KEY = "Diagnosis agent" as const;
+export const HOSTED_SITE_ASSISTANT_BILLING_CHART_KEY = "Page vibe" as const;
 
 export type AssistantBillingInput = {
   store: Store;

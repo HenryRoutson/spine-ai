@@ -34,6 +34,11 @@ type SharedRunAuth = {
   onAuthRequired?: () => void
 }
 
+export type SharedRunLifecycleEvent =
+  | { type: "started" }
+  | { type: "finished" }
+  | { type: "error"; error: string }
+
 import { sharedLinkRequiresSignIn } from "@/lib/shared-link-funding"
 
 export function useSharedInferenceRun(
@@ -42,6 +47,7 @@ export function useSharedInferenceRun(
   auth?: SharedRunAuth,
   onRunComplete?: () => void,
   embedSessionToken?: string,
+  onRunEvent?: (event: SharedRunLifecycleEvent) => void,
 ) {
   const modules = link.modules
   const inputModules = useMemo(() => orderedInputModules(modules), [modules])
@@ -122,11 +128,7 @@ export function useSharedInferenceRun(
   }
 
   async function start() {
-    if (!allInputsReady) return
-    if (link.viewerNameRequired && !viewerName.trim()) {
-      setError("Please enter your name")
-      return
-    }
+    // AI : sign-in before input-ready — hosted pages hide chrome, so this button is the only login path.
     if (sharedLinkRequiresSignIn(link.fundingMode) && !auth?.isAuthenticated) {
       if (auth?.onAuthRequired) {
         auth.onAuthRequired()
@@ -135,11 +137,17 @@ export function useSharedInferenceRun(
       window.location.href = `/login?next=${encodeURIComponent(sharedLinkPublicPath(linkId))}`
       return
     }
+    if (!allInputsReady) return
+    if (link.viewerNameRequired && !viewerName.trim()) {
+      setError("Please enter your name")
+      return
+    }
     const jobGen = ++activeJobGenRef.current
     setPhase(RunPhase.Running)
     setError(null)
     setRun(null)
     setStepStates(new Map())
+    onRunEvent?.({ type: "started" })
     try {
       const byModule: Partial<Record<ModuleId, DocId[]>> = {}
       for (const m of inputModules) {
@@ -184,11 +192,14 @@ export function useSharedInferenceRun(
       if (jobGen !== activeJobGenRef.current) return
       setRun(finished)
       setPhase(RunPhase.Done)
+      onRunEvent?.({ type: "finished" })
       onRunComplete?.()
     } catch (e) {
       if (jobGen !== activeJobGenRef.current) return
-      setError((e as Error).message)
+      const message = (e as Error).message
+      setError(message)
       setPhase(RunPhase.Idle)
+      onRunEvent?.({ type: "error", error: message })
     }
   }
 

@@ -32,14 +32,16 @@ export function loadSharedPiecesFromDisk(appRoot: string): ShareablePiece[] {
   }
 }
 
-export function listPiecesForMcp(appRoot: string) {
+export function listPiecesForMcp(appRoot: string, n8nNodeType?: string) {
   loadSharedPiecesFromDisk(appRoot)
-  return listN8nNodes().map((p) => ({
+  const alias = (p: { n8nNodeType: string }) =>
+    p.n8nNodeType.startsWith("n8n-nodes-base.")
+      ? `piece.${p.n8nNodeType.slice("n8n-nodes-base.".length)}`
+      : undefined
+  const detail = (p: ReturnType<typeof listN8nNodes>[number]) => ({
     id: p.id,
     n8nNodeType: p.n8nNodeType,
-    pieceAlias: p.n8nNodeType.startsWith("n8n-nodes-base.")
-      ? `piece.${p.n8nNodeType.slice("n8n-nodes-base.".length)}`
-      : undefined,
+    pieceAlias: alias(p),
     displayName: p.displayName,
     description: p.description,
     category: p.category,
@@ -49,8 +51,18 @@ export function listPiecesForMcp(appRoot: string) {
       type: prop.type,
       required: prop.required ?? false,
     })),
-    shareable: true,
-  }))
+  })
+  const compact = (p: ReturnType<typeof listN8nNodes>[number]) => ({
+    n8nNodeType: p.n8nNodeType,
+    pieceAlias: alias(p),
+    displayName: p.displayName,
+  })
+  if (n8nNodeType?.trim()) {
+    const entry = getN8nNode(n8nNodeType)
+    if (!entry) throw new Error(`unknown piece: ${n8nNodeType}`)
+    return [detail(entry)]
+  }
+  return listN8nNodes().map(compact)
 }
 
 export function exportAllPiecesToDisk(appRoot: string): { path: string; piece: ShareablePiece }[] {

@@ -64,12 +64,13 @@ const APP_ROOT = process.env.SPINE_APP_ROOT ?? resolve(REPO_ROOT, "combined_full
 
 function textContent(data: unknown) {
   return {
-    content: [{ type: "text" as const, text: JSON.stringify(data, null, 2) }],
+    content: [{ type: "text" as const, text: JSON.stringify(data) }],
   }
 }
 
 function nextHint(error: string): string {
   if (/not valid JSON|JSON\.parse|session file is not valid JSON/i.test(error)) return "Pass proposalJson as a JSON object string, or omit it to apply the pending Vibe proposal. If the session file is corrupt, delete it and call session_action id=project.add."
+  if (/unknown session_action/i.test(error)) return "session_action id is a GUI catalog id (project.add, pipeline.add-step, structure.add-field). There is no named add_step tool."
   if (/unknown step kind/i.test(error)) return "Use session_action id=pipeline.add-step with kind from: input, llm, llm-batch, fork, n8n, connect, custom-code, webhook, … — list_pieces for local transforms, list_connect_actions for Slack/Gmail."
   if (/unknown n8n piece|unknown piece/i.test(error)) return "Call list_pieces and use n8nNodeType exactly (piece.set aliases n8n-nodes-base.set)."
   if (/unknown connect action/i.test(error)) return "Call list_connect_actions and use connectActionId exactly (slack.postMessage, gmail.send, sheets.append, http.request)."
@@ -81,7 +82,7 @@ function nextHint(error: string): string {
   if (/no active project/i.test(error)) return "Call session_action id=project.add (or import_seed file from list_seeds) then retry."
   if (/no pending proposal/i.test(error)) return "ask_agent first, poll get_project until pendingProposal is set, then apply_project_changes with no proposalJson."
   if (/unknown step /i.test(error)) return "get_project and use the step id or label."
-  if (/401|sign in required/i.test(error)) return "start_run needs a signed-in API. Local npm run dev without Supabase works. Remote: set SPINE_API_TOKEN to a Supabase access token, then retry."
+  if (/401|sign in required/i.test(error)) return "start_run needs SPINE_API_TOKEN set to a Supabase access token, then retry. auth_status.canRun is false until that works."
   if (/SPINE_API_URL|remote action|not reachable|timed out talking/i.test(error)) return "Start combined_full_stack (`npm run dev`) so http://127.0.0.1:3000 responds, then start_run → wait_for_run. Production also needs SPINE_API_TOKEN."
   if (/ECONNREFUSED|fetch failed|Failed to parse URL|ENOTFOUND|network|EgressBlocked|AbortError|aborted/i.test(error)) return "The Next app is not reachable at http://127.0.0.1:3000. Start combined_full_stack with npm run dev, then retry start_run."
   if (/no run to wait for/i.test(error)) return "Call start_run or run_test first, then wait_for_run with that run id."
@@ -97,7 +98,7 @@ function mcpError(err: unknown, code = "tool_error") {
   const error = err instanceof Error ? err.message : String(err)
   return {
     isError: true as const,
-    content: [{ type: "text" as const, text: JSON.stringify({ ok: false, code, error, next: nextHint(error) }, null, 2) }],
+    content: [{ type: "text" as const, text: JSON.stringify({ ok: false, code, error, next: nextHint(error) }) }],
   }
 }
 
@@ -169,7 +170,7 @@ server.tool(
 
 server.tool(
   "compare_run_to_test",
-  "Full per-step deterministic comparison between a run and a test file. Returns every pinned step status plus failure field records.",
+  "Seed only. Full per-step deterministic comparison between a run and a test file. For the session, use pinpoint_failure with testDocName + runJson.",
   {
     projectSeedPath: z.string(),
     testFilePath: z.string(),
@@ -180,7 +181,7 @@ server.tool(
 
 server.tool(
   "validate_test",
-  "Validate a *_testing.json file against the current pipeline (labels, types, inputs) — same rules as the Testing tab.",
+  "Seed only. Validate a *_testing.json file against a seed pipeline. For the session, use validate_project.",
   {
     projectSeedPath: z.string(),
     testFilePath: z.string(),
@@ -190,7 +191,7 @@ server.tool(
 
 server.tool(
   "parse_test",
-  "Parse a *_testing.json file without a project context.",
+  "Seed only. Parse a *_testing.json file without a project context.",
   {
     testFilePath: z.string(),
   },
@@ -199,7 +200,7 @@ server.tool(
 
 server.tool(
   "list_project_tests",
-  "List all *_testing.json files referenced by a project seed.",
+  "Seed only. List *_testing.json files referenced by a project seed. For the session, use session_logs.tests.",
   {
     projectSeedPath: z.string(),
   },
@@ -208,7 +209,7 @@ server.tool(
 
 server.tool(
   "describe_pipeline_steps",
-  "Break a *seed* pipeline into per-step pydantic models (not the session file). Filter with stepLabel to inspect one step. For the session project, edit with add_step / session_action instead.",
+  "Seed only. Break a seed pipeline into per-step pydantic models. For the session, use get_project / session_action id=pipeline.add-step.",
   {
     projectSeedPath: z.string(),
     stepLabel: z.string().optional().describe("Optional step label — omit to list all steps"),
@@ -218,7 +219,7 @@ server.tool(
 
 server.tool(
   "validate_step_output",
-  "Validate a JSON value against a step's pydantic / pipeline-state schema — same rules as runtime step output validation.",
+  "Seed only. Validate a JSON value against a seed step's schema. For the session, use validate_project.",
   {
     projectSeedPath: z.string(),
     stepLabel: z.string(),
@@ -229,7 +230,7 @@ server.tool(
 
 server.tool(
   "derive_step_prompt",
-  "Derive the structured LLM prompt for an llm or llm-batch step (user prompt + JSON Schema suffix). Optional sampleInputJson fills the input block.",
+  "Seed only. Derive the structured LLM prompt for a seed llm/llm-batch step. For the session, use get_project.steps[].prompt.",
   {
     projectSeedPath: z.string(),
     stepLabel: z.string(),
@@ -240,7 +241,7 @@ server.tool(
 
 server.tool(
   "validate_pipeline_wiring",
-  "Check series-parallel spine I/O validity across all steps (including Fork lanes) — same computeInvalid rules as the pipeline editor.",
+  "Seed only. Check series-parallel spine I/O on a seed. For the session, use validate_project.",
   {
     projectSeedPath: z.string(),
   },
@@ -273,7 +274,7 @@ server.tool(
 
 server.tool(
   "export_pydantic",
-  "Export all structure models as pydantic Python plus generated per-step pipeline signatures, schema.sql, and branded id types.",
+  "Seed only. Export structure models as pydantic Python plus generated pipeline signatures. For the session, inspect models via get_project.",
   {
     projectSeedPath: z.string(),
     includePipelineSignatures: z.boolean().optional().describe("Include generated step function stubs (default true)"),
@@ -411,7 +412,7 @@ server.tool(
 
 server.tool(
   "session_action",
-  "Dispatch a GUI button id (data-spine-id) against the session file. Prefer named tools when they exist. Extra ids: structure.add-field/remove-field/set-relation/add-alias, pipeline.configure-step/remove-step/move-step/assign-structure, documents.set-projects, quotes.link, session.pull, session.push, project.resync-examples, assistant.execute-runs, assistant.reject, billing.refresh, earnings.refresh, cache.refresh, logging.errors-only, logging.hydrate / wait_for_run, share.create-link/create-embed/create-site/deploy-api/marketplace-publish, schedule.create/toggle/run-now/delete, connect.start-session.",
+  "GUI catalog id: project.add, pipeline.add-step, structure.add-field, share.create-site, schedule.create. Prefer named tools when they exist. More: pipeline.configure-step/remove-step/move-step/assign-structure, documents.upload/remove/set-projects, quotes.link, session.pull/push, assistant.reject, share.create-link/create-embed/deploy-api, schedule.toggle/run-now/delete, connect.start-session.",
   {
     id: z.string().describe("Parity catalog id, e.g. project.add, testing.run, assistant.send"),
     sessionPath: z.string().optional(),
@@ -494,9 +495,11 @@ server.tool(
 
 server.tool(
   "list_pieces",
-  "List typed transform pieces (Set, Filter, CSV, …). Local Code-node JS — no live Slack/Gmail. piece.set aliases n8n-nodes-base.set. Use before session_action id=pipeline.add-step kind=n8n.",
-  {},
-  wrapTool(() => ({ pieces: listPiecesForMcp(APP_ROOT) })),
+  "Compact catalog of local transform pieces (Set, Filter, CSV). Pass n8nNodeType for that piece's props. piece.set aliases n8n-nodes-base.set. Then session_action id=pipeline.add-step kind=n8n.",
+  {
+    n8nNodeType: z.string().optional().describe("If set, return props for this piece only"),
+  },
+  wrapTool((args) => ({ pieces: listPiecesForMcp(APP_ROOT, args.n8nNodeType) })),
 )
 
 server.tool(

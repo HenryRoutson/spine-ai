@@ -156,6 +156,32 @@ describe("MCP vibe coding performance regressions", () => {
     })
   })
 
+  it("get_project lists only the active project's docs", async () => {
+    await withTempSession("mcp-vibe-scope-", (sessionPath) => {
+      const session = createSpineSession({ persist: createFilePersist(sessionPath) })
+      const first = session.addProject({ open: true })
+      session.addDocContent({
+        name: "lease.txt",
+        content: "keep insured",
+        type: InputType.Text,
+        label: DocLabel.Inference,
+      })
+      session.addProject({ open: true })
+      session.addDocContent({
+        name: "other.txt",
+        content: "other",
+        type: InputType.Text,
+        label: DocLabel.Inference,
+      })
+      const active = getProjectFromSession(sessionPath)
+      expect(active.docs.map((d: { name: string }) => d.name)).toEqual(["other.txt"])
+      expect(JSON.stringify(active)).not.toContain("lease.txt")
+      session.openProject(first.id)
+      const previous = getProjectFromSession(sessionPath)
+      expect(previous.docs.map((d: { name: string }) => d.name)).toEqual(["lease.txt"])
+    })
+  })
+
   it("hot path tools stay under latency budgets (validate + auth_status)", async () => {
     await withTempSession("mcp-vibe-hot-", async (sessionPath) => {
       importSeedFromSession("lead_enrich_n8n", sessionPath)

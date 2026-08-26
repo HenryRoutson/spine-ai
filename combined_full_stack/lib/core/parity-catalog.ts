@@ -681,6 +681,15 @@ export const PARITY_ROWS: ParityRow[] = [
     y("session.createShareLink({ kind: 'site' })"),
   ),
   row(
+    "share.site-vibe",
+    "share",
+    { label: "Page vibe", file: "components/share/hosted-site-page-studio.tsx" },
+    n("no TUI"),
+    y("POST /api/hosted-site-assistant", "/api/hosted-site-assistant"),
+    n("isolated UI agent — not ask_agent"),
+    y("proposeHostedSitePage"),
+  ),
+  row(
     "share.create-link",
     "share",
     { label: "Create link", file: "components/share/share-link-form.tsx" },
@@ -1058,6 +1067,7 @@ export const PARITY_LABELED_FILES = [
   "components/cache.tsx",
   "components/share/share-embed-form.tsx",
   "components/share/share-site-form.tsx",
+  "components/share/hosted-site-page-studio.tsx",
   "components/share/marketplace-browse-panel.tsx",
   "components/share/shared-link-runner.tsx",
   "components/schedule-page.tsx",

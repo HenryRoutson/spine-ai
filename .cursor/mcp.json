@@ -8,7 +8,8 @@
       "cwd": "/Users/henry/Documents/documents.nosync/Git.nosync/antler_vc_hackathon",
       "env": {
         "PATH": "/Users/henry/.nvm/versions/node/v20.17.0/bin:/usr/bin:/bin",
-        "DOTENV_CONFIG_QUIET": "true"
+        "DOTENV_CONFIG_QUIET": "true",
+        "NODE_NO_WARNINGS": "1"
       }
     }
   }

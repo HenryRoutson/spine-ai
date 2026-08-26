@@ -39,6 +39,7 @@ export const API_ROUTES = {
   pipelineExportDocuments: "/api/pipeline-export/documents",
   diagnosisAssistant: "/api/diagnosis-assistant",
   testingAssistant: "/api/testing-assistant",
+  hostedSiteAssistant: "/api/hosted-site-assistant",
   testingEvaluate: "/api/testing-evaluate",
   docsContent: "/api/docs/content",
   feedback: "/api/feedback",

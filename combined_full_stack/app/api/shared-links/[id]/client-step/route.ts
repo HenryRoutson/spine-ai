@@ -91,7 +91,7 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
   invariant(checkpoint.clientStep, `checkpoint for job ${jobId} missing clientStep`);
 
   const sharerStore = await openStoreForUser(link.ownerId);
-  const overlay = overlayStoreForSharedRun(
+  const overlay = await overlayStoreForSharedRun(
     sharerStore,
     link.id,
     sessionId,
