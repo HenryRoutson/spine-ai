@@ -275,6 +275,7 @@ def install_deps() -> None:
     run(["npm", "install"], cwd=APP_DIR)
     run(["npm", "install"], cwd=ROOT / "landing_page")
     run(["npm", "install"], cwd=ROOT / "dashboard")
+    run(["npm", "install"], cwd=ROOT / "mcp_tool")
     run(["npm", "run", "sync:shared"], cwd=ROOT)
     log("npm dependencies installed")
 
