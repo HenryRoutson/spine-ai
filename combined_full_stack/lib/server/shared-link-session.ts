@@ -4,7 +4,15 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { isAbsolute, join, relative, resolve } from "node:path";
 import { Redis } from "@upstash/redis";
 import { dataDir } from "./config";
-import { EXT_MIME, hashContent, ORIGINAL_DOC_EXTS, overlayStore, saveOriginalDocBytes, type Store } from "./store";
+import {
+  EXT_MIME,
+  hashContent,
+  ORIGINAL_DOC_EXTS,
+  overlayStore,
+  parseOriginalDocExt,
+  saveOriginalDocBytes,
+  type Store,
+} from "./store";
 import { shouldSaveOriginalBytes } from "./doc_upload_parse";
 import { DocLabel } from "./types";
 import { InputType, type DocId, type DocRef, type ModuleId, type SharedLinkId } from "./types";
@@ -69,7 +77,10 @@ type SessionDocMeta = {
   type: InputType;
   label: DocLabel;
   moduleId: ModuleId;
+  bytes?: number;
 };
+
+type SessionOriginalBlob = { ext: string; b64: string };
 
 type SessionRedisState = {
   docs: SessionDocMeta[];
@@ -79,13 +90,67 @@ type SessionRedisState = {
 
 const SESSION_TTL_SEC = 172_800;
 
+let cachedSessionRedis: Redis | undefined
+
+function sessionRedis(): Redis | null {
+  if (!upstashConfigured()) return null
+  cachedSessionRedis ??= Redis.fromEnv()
+  return cachedSessionRedis
+}
+
 function sessionRedisKey(linkId: SharedLinkId, sessionId: string): string {
   return `shared_session:${linkId}:${sessionId}`;
 }
 
+function originalRedisKey(linkId: SharedLinkId, sessionId: string, docId: DocId): string {
+  return `shared_session_orig:${linkId}:${sessionId}:${docId}`;
+}
+
+async function saveRedisOriginal(
+  linkId: SharedLinkId,
+  sessionId: string,
+  docId: DocId,
+  bytes: Uint8Array,
+  ext: string,
+): Promise<void> {
+  if (!upstashConfigured()) return;
+  const safe = parseOriginalDocExt(ext);
+  if (!safe) return;
+  const redis = sessionRedis();
+  if (!redis) return;
+  try {
+    await redis.set(
+      originalRedisKey(linkId, sessionId, docId),
+      { ext: safe, b64: Buffer.from(bytes).toString("base64") } satisfies SessionOriginalBlob,
+      { ex: SESSION_TTL_SEC },
+    );
+  } catch {
+    // AI : oversized originals stay on instance /tmp; same-instance file GET still works.
+  }
+}
+
+async function loadRedisOriginal(
+  linkId: SharedLinkId,
+  sessionId: string,
+  docId: DocId,
+): Promise<{ ext: string; bytes: Uint8Array } | null> {
+  const redis = sessionRedis();
+  if (!redis) return null;
+  const row = await redis.get<SessionOriginalBlob>(originalRedisKey(linkId, sessionId, docId));
+  if (!row?.b64 || !row.ext) return null;
+  return { ext: row.ext, bytes: new Uint8Array(Buffer.from(row.b64, "base64")) };
+}
+
+async function deleteRedisOriginal(linkId: SharedLinkId, sessionId: string, docId: DocId): Promise<void> {
+  if (!upstashConfigured()) return;
+  const redis = sessionRedis();
+  if (!redis) return;
+  await redis.del(originalRedisKey(linkId, sessionId, docId));
+}
+
 async function loadRedisSession(linkId: SharedLinkId, sessionId: string): Promise<SessionRedisState | null> {
-  if (!upstashConfigured()) return null;
-  const redis = Redis.fromEnv();
+  const redis = sessionRedis();
+  if (!redis) return null;
   return (await redis.get<SessionRedisState>(sessionRedisKey(linkId, sessionId))) ?? null;
 }
 
@@ -94,13 +159,13 @@ async function saveRedisSession(
   sessionId: string,
   state: SessionRedisState,
 ): Promise<void> {
-  if (!upstashConfigured()) {
+  const redis = sessionRedis();
+  if (!redis) {
     if (process.env.VERCEL) {
       throw new Error("Shared session uploads require UPSTASH_REDIS_REST_URL/TOKEN on Vercel");
     }
     return;
   }
-  const redis = Redis.fromEnv();
   await redis.set(sessionRedisKey(linkId, sessionId), state, { ex: SESSION_TTL_SEC });
 }
 
@@ -119,23 +184,28 @@ function writeSessionDocs(linkId: SharedLinkId, sessionId: string, docs: Session
   writeFileSync(sessionMetaPath(linkId, sessionId), JSON.stringify(docs, null, 2));
 }
 
-export async function sessionUploadCount(linkId: SharedLinkId, sessionId: string): Promise<number> {
+export async function sessionUploadUsage(
+  linkId: SharedLinkId,
+  sessionId: string,
+): Promise<{ count: number; bytes: number; redis: SessionRedisState | null }> {
   const redis = await loadRedisSession(linkId, sessionId);
-  if (redis) return redis.docs.length;
-  return readSessionDocs(linkId, sessionId).length;
+  if (redis) return { count: redis.docs.length, bytes: redis.bytes, redis };
+  const dir = sessionDocsDir(linkId, sessionId);
+  if (!existsSync(dir)) return { count: 0, bytes: 0, redis: null };
+  const docs = readSessionDocs(linkId, sessionId);
+  let bytes = 0;
+  for (const meta of docs) bytes += sessionDocDiskBytes(dir, meta);
+  return { count: docs.length, bytes, redis: null };
 }
 
-export async function sessionUploadBytes(linkId: SharedLinkId, sessionId: string): Promise<number> {
-  const redis = await loadRedisSession(linkId, sessionId);
-  if (redis) return redis.bytes;
-  const dir = sessionDocsDir(linkId, sessionId);
-  if (!existsSync(dir)) return 0;
-  let total = 0;
-  for (const meta of readSessionDocs(linkId, sessionId)) {
-    const textPath = join(dir, `${meta.id}.txt`);
-    if (existsSync(textPath)) total += readFileSync(textPath).byteLength;
+function sessionDocDiskBytes(dir: string, meta: SessionDocMeta): number {
+  if (typeof meta.bytes === "number") return meta.bytes;
+  for (const ext of ORIGINAL_DOC_EXTS) {
+    const origPath = join(dir, `${meta.id}.${ext}`);
+    if (existsSync(origPath)) return readFileSync(origPath).byteLength;
   }
-  return total;
+  const textPath = join(dir, `${meta.id}.txt`);
+  return existsSync(textPath) ? readFileSync(textPath).byteLength : 0;
 }
 
 export function loadDefaultDocContent(
@@ -171,6 +241,7 @@ export async function saveSessionUpload(
   type: InputType,
   bytes?: Uint8Array,
   append = false,
+  knownRedis?: SessionRedisState | null,
 ): Promise<DocRef> {
   if (!parseSharedSessionId(sessionId)) throw new Error("invalid shared session id");
   const id = hashContent(`${linkId}:${sessionId}:${file.name}:${content.slice(0, 64)}`);
@@ -187,35 +258,36 @@ export async function saveSessionUpload(
   mkdirSync(dir, { recursive: true });
   writeFileSync(join(dir, `${id}.txt`), content, "utf8");
   writeFileSync(join(dir, `${id}.meta.json`), JSON.stringify({ ...doc, moduleId }));
-  if (bytes && shouldSaveOriginalBytes(type)) {
-    const ext = file.name.split(".").pop()?.toLowerCase() ?? "bin";
-    writeFileSync(join(dir, `${id}.${ext}`), bytes);
-    saveOriginalDocBytes(id, bytes, ext);
-  } else if (type === "pdf" || type === "image") {
-    const fileBytes = bytes ?? new Uint8Array(await file.arrayBuffer());
-    const ext = file.name.split(".").pop()?.toLowerCase() ?? "bin";
-    writeFileSync(join(dir, `${id}.${ext}`), fileBytes);
-    saveOriginalDocBytes(id, fileBytes, ext);
+  const origBytes = bytes ?? ((type === "pdf" || type === "image") ? new Uint8Array(await file.arrayBuffer()) : undefined);
+  const ext = file.name.split(".").pop()?.toLowerCase() ?? "bin";
+  if (origBytes && (shouldSaveOriginalBytes(type) || type === "pdf" || type === "image")) {
+    writeFileSync(join(dir, `${id}.${ext}`), origBytes);
+    saveOriginalDocBytes(id, origBytes, ext);
+    await saveRedisOriginal(linkId, sessionId, id, origBytes, ext);
   }
-  const prevRedis = await loadRedisSession(linkId, sessionId);
+  const prevRedis = knownRedis !== undefined ? knownRedis : await loadRedisSession(linkId, sessionId);
   const sessionDocs = prevRedis?.docs ?? readSessionDocs(linkId, sessionId);
   const forModule = sessionDocs.filter((d) => d.moduleId === moduleId);
   const otherModules = sessionDocs.filter((d) => d.moduleId !== moduleId);
+  const addedBytes = origBytes?.byteLength ?? Buffer.byteLength(content, "utf8");
   const nextForModule = append
-    ? [...forModule, { id, name: doc.name, type, label: DocLabel.Inference, moduleId }]
-    : [{ id, name: doc.name, type, label: DocLabel.Inference, moduleId }];
+    ? [...forModule, { id, name: doc.name, type, label: DocLabel.Inference, moduleId, bytes: addedBytes }]
+    : [{ id, name: doc.name, type, label: DocLabel.Inference, moduleId, bytes: addedBytes }];
   const nextDocs = [...otherModules, ...nextForModule];
   writeSessionDocs(linkId, sessionId, nextDocs);
   const nextContent = { ...(prevRedis?.content ?? {}), [id]: content };
   if (!append) {
     for (const old of forModule) {
-      if (old.id !== id) delete nextContent[old.id];
+      if (old.id !== id) {
+        delete nextContent[old.id];
+        await deleteRedisOriginal(linkId, sessionId, old.id);
+      }
     }
   }
   await saveRedisSession(linkId, sessionId, {
     docs: nextDocs,
     content: nextContent,
-    bytes: Object.values(nextContent).reduce((n, text) => n + text.length, 0),
+    bytes: nextDocs.reduce((n, d) => n + (d.bytes ?? 0), 0),
   });
   return doc;
 }
@@ -273,12 +345,8 @@ export async function resolveSharedDocParserText(
   if (!parseSharedDocId(docId)) return undefined;
   const safeSessionId = parseSharedSessionId(sessionId);
   if (safeSessionId) {
-    try {
-      const sessionText = await sessionDocContent(linkId, safeSessionId, docId);
-      if (sessionText !== undefined) return sessionText;
-    } catch {
-      return undefined;
-    }
+    const sessionText = await sessionDocContent(linkId, safeSessionId, docId);
+    if (sessionText !== undefined) return sessionText;
   }
   for (const def of defaultDocs) {
     if (defaultDocIdForLink(linkId, def.moduleId, def.filename) !== docId) continue;
@@ -287,10 +355,9 @@ export async function resolveSharedDocParserText(
   return undefined;
 }
 
-export type SharedOriginalDocFile = { path: string; mime: string };
+export type SharedOriginalDocFile = { mime: string; path?: string; bytes?: Uint8Array };
 
-function sharedOriginalInDir(dir: string, baseName: string): SharedOriginalDocFile | null {
-  if (!parseSharedDocId(baseName)) return null;
+function originalFileInDir(dir: string, baseName: string): SharedOriginalDocFile | null {
   for (const ext of ORIGINAL_DOC_EXTS) {
     const path = safeJoinUnder(dir, `${baseName}.${ext}`);
     if (!path || !existsSync(path)) continue;
@@ -299,16 +366,26 @@ function sharedOriginalInDir(dir: string, baseName: string): SharedOriginalDocFi
   return null;
 }
 
-export function resolveSharedDocOriginalFile(
+function sharedOriginalInDir(dir: string, baseName: string): SharedOriginalDocFile | null {
+  if (!parseSharedDocId(baseName)) return null;
+  return originalFileInDir(dir, baseName);
+}
+
+export async function resolveSharedDocOriginalFile(
   linkId: SharedLinkId,
   docId: DocId,
   sessionId: string | undefined,
   defaultDocs: SharedLinkDefaultDoc[],
-): SharedOriginalDocFile | null {
+): Promise<SharedOriginalDocFile | null> {
   if (!parseSharedDocId(docId)) return null;
   const safeSessionId = parseSharedSessionId(sessionId);
   if (safeSessionId) {
     try {
+      const redisOrig = await loadRedisOriginal(linkId, safeSessionId, docId);
+      if (redisOrig) {
+        const safeExt = parseOriginalDocExt(redisOrig.ext);
+        if (safeExt) return { mime: EXT_MIME[safeExt], bytes: redisOrig.bytes };
+      }
       const sessionFile = sharedOriginalInDir(sessionDocsDir(linkId, safeSessionId), docId);
       if (sessionFile) return sessionFile;
     } catch {
@@ -317,8 +394,7 @@ export function resolveSharedDocOriginalFile(
   }
   for (const def of defaultDocs) {
     if (defaultDocIdForLink(linkId, def.moduleId, def.filename) !== docId) continue;
-    const storageKey = `${def.moduleId}_${def.filename}`;
-    const defaultFile = sharedOriginalInDir(defaultDocsDir(linkId), storageKey);
+    const defaultFile = originalFileInDir(defaultDocsDir(linkId), defaultDocStorageKey(def.moduleId, def.filename));
     if (defaultFile) return defaultFile;
   }
   return null;
@@ -330,7 +406,6 @@ export async function overlayStoreForSharedRun(
   linkId: SharedLinkId,
   sessionId: string,
   defaultDocs: SharedLinkDefaultDoc[],
-  inputModules: { id: ModuleId }[],
 ): Promise<Store> {
   if (!parseSharedSessionId(sessionId)) throw new Error("invalid shared session id");
   const extraDocs = new Map<DocId, DocRef>();
@@ -339,7 +414,7 @@ export async function overlayStoreForSharedRun(
   for (const def of defaultDocs) {
     const loaded = loadDefaultDocContent(linkId, def.moduleId, def.filename, defaultDocs);
     if (!loaded) continue;
-    const id = hashContent(`shared_default:${linkId}:${def.moduleId}:${def.filename}`);
+    const id = defaultDocIdForLink(linkId, def.moduleId, def.filename);
     extraDocs.set(id, {
       id,
       name: loaded.name,
@@ -355,7 +430,7 @@ export async function overlayStoreForSharedRun(
   const redis = await loadRedisSession(linkId, sessionId);
   const sessionDocs = redis?.docs ?? readSessionDocs(linkId, sessionId);
   for (const meta of sessionDocs) {
-    const content = redis?.content[meta.id] ?? (await sessionDocContent(linkId, sessionId, meta.id));
+    const content = redis ? redis.content[meta.id] : await sessionDocContent(linkId, sessionId, meta.id);
     if (content === undefined) continue;
     extraDocs.set(meta.id, {
       id: meta.id,

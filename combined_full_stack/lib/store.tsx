@@ -66,7 +66,7 @@ import {
 } from "@/lib/active-project-session"
 import { navigateToBuildWorkspace, navigateToProjectPicker } from "@/lib/app-mode-nav"
 import { registerStoreNavigationBridge } from "@/lib/store-navigation-bridge"
-import { dedupeDocsNewestByName } from "@/lib/project-docs"
+import { dedupeDocsNewestByName, projectsWithDocAvailability } from "@/lib/project-docs"
 import { readStateSnapshot, seedProjectInStateSnapshot, writeStateSnapshot } from "@/lib/state-snapshot-cache"
 import { queueBackgroundProjectPrefetches } from "@/lib/background-project-prefetch"
 import {
@@ -1489,17 +1489,7 @@ export function StoreProvider({
       if (!prev) return prev
       const doc = prev.docs.find((d) => d.id === docId)
       if (!doc) return prev
-      const want = new Set(saved)
-      const nextProjects = prev.projects.map((p) => {
-        const names = p.seedDocNames ?? []
-        const has = names.includes(doc.name)
-        const should = want.has(p.id)
-        if (has === should) return p
-        return {
-          ...p,
-          seedDocNames: should ? [...names, doc.name] : names.filter((n) => n !== doc.name),
-        }
-      })
+      const nextProjects = projectsWithDocAvailability(prev.projects, doc.name, saved)
       const stillLinked = nextProjects.some((p) => p.seedDocNames?.includes(doc.name))
       return {
         ...prev,

@@ -142,6 +142,38 @@ describe("SpineSession React-like API", () => {
     expect(store.project?.seedDocNames).toContain("lease.txt")
   })
 
+  it("setDocProjects updates seedDocNames so get_project-style scoping sees the bind", () => {
+    const store = createSpineSession()
+    const first = store.addProject({ open: true })
+    store.addDocContent({
+      name: "lease.txt",
+      type: InputType.Text,
+      content: "insured",
+      label: DocLabel.Inference,
+    })
+    const second = store.addProject({ open: true })
+    expect(store.project?.seedDocNames ?? []).not.toContain("lease.txt")
+    store.setDocProjects(store.docs.find((d) => d.name === "lease.txt")!.id, [first.id, second.id])
+    expect(store.project?.seedDocNames).toContain("lease.txt")
+    store.openProject(first.id)
+    expect(store.project?.seedDocNames).toContain("lease.txt")
+  })
+
+  it("removeDoc unlinks seedDocNames on the active project", () => {
+    const store = createSpineSession()
+    store.addProject({ open: true })
+    const doc = store.addDocContent({
+      name: "scratch.txt",
+      type: InputType.Text,
+      content: "hi",
+      label: DocLabel.Inference,
+    })
+    expect(store.project?.seedDocNames).toContain("scratch.txt")
+    store.removeDoc(doc.id)
+    expect(store.project?.seedDocNames ?? []).not.toContain("scratch.txt")
+    expect(store.docs.some((d) => d.id === doc.id)).toBe(false)
+  })
+
   it("toPipelineView reads the same snapshot CLI would render", () => {
     const store = createSpineSession()
     store.addProject({ open: true })
@@ -235,6 +267,37 @@ describe("SpineSession React-like API", () => {
     expect(store.getSnapshot().shareLinkIds).toContain("site_abc")
     expect(posts[0]?.url).toContain("/api/shared-links")
     expect(posts[0]?.body).toContain("\"kind\":\"site\"")
+  })
+
+  it("createShareLink falls back to /site when the API omits url", async () => {
+    const { createRecordingEgress } = await import("@/lib/core/transport")
+    const egress = createRecordingEgress(async () => {
+      return new Response(JSON.stringify({ link: { id: "site_abc" } }), { status: 200 })
+    })
+    const store = createSpineSession({ egress })
+    store.addProject({ open: true })
+    const out = await store.createShareLink({ kind: "site" })
+    expect(out.url).toBe("/site/site_abc")
+  })
+
+  it("hydrateRunDetail fails closed on HTTP errors", async () => {
+    const { createRecordingEgress } = await import("@/lib/core/transport")
+    const egress = createRecordingEgress(async () => {
+      return new Response(JSON.stringify({ error: "sign in required" }), { status: 401 })
+    })
+    const store = createSpineSession({ egress })
+    store.addProject({ open: true })
+    await expect(store.hydrateRunDetail("run_1" as never)).rejects.toThrow(/sign in required/)
+  })
+
+  it("pullRemoteState fails closed on HTTP errors", async () => {
+    const { createRecordingEgress } = await import("@/lib/core/transport")
+    const egress = createRecordingEgress(async () => {
+      return new Response(JSON.stringify({ error: "sign in required" }), { status: 401 })
+    })
+    const store = createSpineSession({ egress })
+    store.addProject({ open: true })
+    await expect(store.pullRemoteState()).rejects.toThrow(/sign in required/)
   })
 
   it("createSchedule posts /api/schedules", async () => {

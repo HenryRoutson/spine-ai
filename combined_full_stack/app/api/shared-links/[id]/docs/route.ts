@@ -18,8 +18,7 @@ import {
   MAX_SHARED_SESSION_DOCS,
   parseSharedSessionId,
   saveSessionUpload,
-  sessionUploadBytes,
-  sessionUploadCount,
+  sessionUploadUsage,
   SHARED_RUN_SESSION_COOKIE,
 } from "@/lib/server/shared-link-session";
 import { secureSessionCookieOptions } from "@/lib/server/cookie_options";
@@ -80,12 +79,13 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
 
   const jar = await cookies();
   let sessionId = parseSharedSessionId(jar.get(SHARED_RUN_SESSION_COOKIE)?.value) ?? newSessionId();
-  if ((await sessionUploadCount(link.id, sessionId)) >= MAX_SHARED_SESSION_DOCS) {
+  const usage = await sessionUploadUsage(link.id, sessionId);
+  if (usage.count >= MAX_SHARED_SESSION_DOCS) {
     return apiError(`session upload limit reached (max ${MAX_SHARED_SESSION_DOCS} files)`, HTTP.BAD_REQUEST);
   }
   const type = inputTypeFromFilename(file.name);
   const bytes = new Uint8Array(await file.arrayBuffer());
-  if ((await sessionUploadBytes(link.id, sessionId)) + bytes.byteLength > MAX_SHARED_SESSION_BYTES) {
+  if (usage.bytes + bytes.byteLength > MAX_SHARED_SESSION_BYTES) {
     return apiError("session storage limit reached", HTTP.BAD_REQUEST);
   }
   const bytesErr = validateUploadBytes(bytes, file.name, type);
@@ -107,6 +107,7 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
     type,
     bytes,
     inputModule ? isMultiDocInputModule(inputModule) : false,
+    usage.redis,
   );
   const res = NextResponse.json(doc);
   res.cookies.set(SHARED_RUN_SESSION_COOKIE, sessionId, secureSessionCookieOptions(60 * 60 * 24 * 30));

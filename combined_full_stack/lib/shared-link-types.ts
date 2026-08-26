@@ -41,11 +41,30 @@ export type HostedSiteBrand = {
   textColor: string;
 };
 
+export type HostedSiteAuthProvider = "spine" | "custom_supabase";
+
+export type HostedSiteAuth = {
+  enabled: boolean;
+  provider: HostedSiteAuthProvider;
+  // AI : placeholder — custom project instance is not allocated yet.
+  customSupabaseUrl: string;
+  customSupabaseAnonKey: string;
+};
+
+export const DEFAULT_HOSTED_SITE_AUTH: HostedSiteAuth = {
+  enabled: false,
+  provider: "spine",
+  customSupabaseUrl: "",
+  customSupabaseAnonKey: "",
+};
+
 export type HostedSiteOptions = {
   brand: HostedSiteBrand;
   customHtml: string;
   customCss: string;
   hideSpineFooter: boolean;
+  auth: HostedSiteAuth;
+  authHtml: string;
 };
 
 export const DEFAULT_HOSTED_SITE_OPTIONS: HostedSiteOptions = {
@@ -61,6 +80,8 @@ export const DEFAULT_HOSTED_SITE_OPTIONS: HostedSiteOptions = {
   customHtml: "",
   customCss: "",
   hideSpineFooter: false,
+  auth: { ...DEFAULT_HOSTED_SITE_AUTH },
+  authHtml: "",
 };
 
 export type SharedLinkRecord = {

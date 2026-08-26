@@ -178,7 +178,6 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
     link.id,
     sessionId,
     link.defaultDocs,
-    orderedInputModules(link.snapshot.modules),
   );
 
   const project = link.snapshot;

@@ -12,12 +12,11 @@ import { ShareDefaultFiles } from "@/components/share/share-default-files"
 import { ShareFundingPicker } from "@/components/share/share-funding-flow"
 import { parseSharePricing, parseSpendLimitUsd, SharePricingFields } from "@/components/share/share-pricing-fields"
 import { HtmlPreviewFrame } from "@/components/share/html-preview-frame"
-import { ShareViewerDocsFields } from "@/components/share/share-viewer-docs-fields"
+import { ShareViewerDocsFields, useShareViewerMarkdown } from "@/components/share/share-viewer-docs-fields"
 import { SharedLinkPreview } from "@/components/share/shared-link-preview"
 import { API_ROUTES } from "@/lib/api-routes"
 import { apiJson, JSON_HEADERS } from "@/lib/api-client"
 import { shareDefaultDocsByModule } from "@/lib/share-default-docs"
-import { composeViewerMarkdown } from "@/lib/share-viewer-markdown"
 import { SharedLinkFundingMode } from "@/lib/types"
 import { viewerFundsSharedRun } from "@/lib/shared-link-funding"
 import type { DocId, DocRef, ModuleId, Project } from "@/lib/types"
@@ -88,21 +87,13 @@ export function ShareLinkForm({
   const [billingMultiple, setBillingMultiple] = useState("1.0")
   const [flatFeeEnabled, setFlatFeeEnabled] = useState(false)
   const [flatFeeUsd, setFlatFeeUsd] = useState("0.50")
-  const [showDocs, setShowDocs] = useState(false)
-  const [instructions, setInstructions] = useState("")
-  const [appendProjectDocs, setAppendProjectDocs] = useState(false)
+  const { viewerMarkdown, fieldsProps } = useShareViewerMarkdown(project.documentation ?? "")
 
   const viewerFunds = viewerFundsSharedRun(fundingMode)
   const defaultDocsByModule = useMemo(
     () => shareDefaultDocsByModule(project, docs, inferenceInputDocIds),
     [project, docs, inferenceInputDocIds],
   )
-  const viewerMarkdown = composeViewerMarkdown({
-    showDocs,
-    instructions,
-    appendProjectDocs,
-    projectDocumentation: project.documentation ?? "",
-  })
 
   async function createLink() {
     setBusy(true)
@@ -232,16 +223,7 @@ export function ShareLinkForm({
             simple={simple}
           />
 
-          <ShareViewerDocsFields
-            showDocs={showDocs}
-            onShowDocsChange={setShowDocs}
-            instructions={instructions}
-            onInstructionsChange={setInstructions}
-            appendProjectDocs={appendProjectDocs}
-            onAppendProjectDocsChange={setAppendProjectDocs}
-            projectDocumentation={project.documentation ?? ""}
-            simple={simple}
-          />
+          <ShareViewerDocsFields {...fieldsProps} simple={simple} />
 
           <HtmlPreviewFrame label="Link preview">
             <SharedLinkPreview

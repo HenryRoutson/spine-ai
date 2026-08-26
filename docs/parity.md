@@ -627,7 +627,7 @@ Grep an id (example): `rg 'project.add' combined_full_stack docs mcp_tool`.
 | `quotes.link` | Quote as context / link quotes | spine session link-quotes --quote --doc | quote step in run engine; offsets are local [P] | session_action id=quotes.link | session.linkQuotes({ quote, sourceText, docId }) |
 | `logging.simple-view` | Simplified view | no TUI simple view [N] | client pref [n/a] | no MCP [N] | localStorage simple-step-trace [host] |
 | `logging.errors-only` | Errors only | Ink: press f | GET /api/runs (filter client-side) | session_action id=logging.errors-only | toLogsView → runs with hasErrors |
-| `logging.hydrate` | Load run detail | session pull hydrates; no per-run TUI hydrate [P] | GET /api/runs/:id | wait_for_run / get_run / session_logs steps | session.hydrateRunDetail(runId) |
+| `logging.hydrate` | Load run detail | session pull hydrates; no per-run TUI hydrate [P] | GET /api/runs/:id | session_action logging.hydrate (one-shot GET /api/runs/:id) | session.hydrateRunDetail(runId) |
 | `logging.compare` | Compare runs | no TUI compare [N] | GET /api/runs/:id × 2 | compare_run_to_test (run vs test file) | no session.compareRuns [P] |
 | `logging.copy-error` | Copy isolated error | JSON --json on session logs [P] | clipboard is GUI [n/a] | pinpoint_failure.isolatedText | formatTestFailuresForClipboard |
 | `jobs.stop` | Stop job | no TUI job hub cancel [N] | abort client poll [P] | no MCP [N] | useCancellableRunRegistry in the browser [host] |
@@ -638,6 +638,9 @@ Grep an id (example): `rg 'project.add' combined_full_stack docs mcp_tool`.
 | `share.tab.embed` | Embed | no TUI embed mint [N] | POST /api/shared-links (embed/origin allowlist) | session_action id=share.create-embed (allowedOrigins) | session.createShareLink({ kind: 'embed' }) |
 | `share.tab.site` | Page | no TUI site mint [N] | POST /api/shared-links (site HTML wrapper) | session_action id=share.create-site (companyName) | session.createShareLink({ kind: 'site' }) |
 | `share.site-vibe` | Page vibe | no TUI [N] | POST /api/hosted-site-assistant | isolated UI agent — not ask_agent [N] | proposeHostedSitePage |
+| `share.site-signin` | Sign-in page | no TUI [N] | siteOptions.auth on POST/PATCH /api/shared-links | pass siteOptions.auth on share.create-site [N] | normalizeHostedSiteOptions |
+| `share.site-preview-viewport` | Desktop / mobile preview | no TUI [N] | preview only [N] | preview only [N] | preview only [N] |
+| `share.site-signin-preview` | App / sign-in preview | no TUI [N] | preview only [N] | preview only [N] | preview only [N] |
 | `share.create-link` | Create link | session share lists; mint HTTP/GUI [P] | POST /api/shared-links | session_action id=share.create-link | session.createShareLink |
 | `share.deploy-api` | Deploy API | session share lists hosted APIs [P] | POST /api/hosted-apis | session_action id=share.deploy-api | session.createHostedApi |
 | `share.create-embed` | Create website embed | no TUI [N] | POST /api/shared-links (emb_ rows) | session_action id=share.create-embed | session.createShareLink({ kind: 'embed' }) |

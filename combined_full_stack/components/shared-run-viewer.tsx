@@ -188,7 +188,7 @@ function SharedRunContent({
           </div>
         ) : null}
 
-        {isAuthenticated && viewerFundsSharedRun(link.fundingMode) ? (
+        {isAuthenticated && viewerPays ? (
           <div className="mb-4 rounded-lg border border-primary/30 bg-primary/5 px-4 py-3 text-sm">
             <p className="font-medium">{isSite ? "This page bills your credits" : "Run this in your workspace for Billing access"}</p>
             <p className="mt-1 text-xs text-muted-foreground">

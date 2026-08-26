@@ -44,6 +44,8 @@ import {
   issuesForSavedInferenceAssignment,
 } from "@/lib/inference-validity"
 import { orderedInputModules } from "@/lib/inference-input-core"
+import { projectsWithDocAvailability } from "@/lib/project-docs"
+import { sharedLinkPublicPath } from "@/lib/hosted-site"
 import type { ProjectProposal } from "@/lib/project-assistant-types"
 import type {
   AddDocContentInput,
@@ -115,6 +117,22 @@ export function emptySessionSnapshot(): SessionSnapshot {
     hostedApiIds: [],
     docProjectIds: {},
   }
+}
+
+function keepInferenceAssignment(
+  assignment: Partial<Record<ModuleId, DocId | DocId[]>>,
+  keep: Set<string>,
+): Partial<Record<ModuleId, DocId | DocId[]>> {
+  const out: Partial<Record<ModuleId, DocId | DocId[]>> = {}
+  for (const [moduleId, value] of Object.entries(assignment)) {
+    if (Array.isArray(value)) {
+      const next = value.filter((id) => keep.has(id))
+      if (next.length) out[moduleId as ModuleId] = next
+    } else if (value && keep.has(value)) {
+      out[moduleId as ModuleId] = value
+    }
+  }
+  return out
 }
 
 // AI : TODO (arch-blank-project) — twins seed.blankProject; one factory (session/seed only differ on id/strategies).
@@ -461,13 +479,29 @@ export class SpineSession {
     this.patchProject({ seedDocNames: [...(project.seedDocNames ?? []), docName] })
   }
 
-  // AI : GUI Documents delete — MCP remove_doc / session_action documents.remove.
+  // AI : GUI Documents delete — unlink seedDocNames on the open pipeline, drop bytes only if unused.
   removeDoc(docId: DocId): void {
+    const doc = this.snap.docs.find((d) => d.id === docId)
+    if (!doc) return
+    const activeId = this.snap.activeProjectId
+    const unlink = (list: Project[]) =>
+      list.map((p) =>
+        p.id === activeId
+          ? { ...p, seedDocNames: (p.seedDocNames ?? []).filter((n) => n !== doc.name) }
+          : p,
+      )
+    const projects = unlink(this.snap.projects)
+    const pendingCreates = unlink(this.snap.pendingCreates)
+    const stillLinked = projects.some((p) => p.seedDocNames?.includes(doc.name))
     const { [docId]: _removed, ...docContents } = this.snap.docContents
+    const { [docId]: _ids, ...docProjectIds } = this.snap.docProjectIds
     this.commit({
       ...this.snap,
-      docs: this.snap.docs.filter((d) => d.id !== docId),
-      docContents,
+      projects,
+      pendingCreates,
+      docs: stillLinked ? this.snap.docs : this.snap.docs.filter((d) => d.id !== docId),
+      docContents: stillLinked ? this.snap.docContents : docContents,
+      docProjectIds: stillLinked ? this.snap.docProjectIds : docProjectIds,
     })
   }
 
@@ -568,9 +602,21 @@ export class SpineSession {
 
   // AI : GUI document↔project binding — MCP session_action documents.set-projects / CLI set-doc-projects.
   setDocProjects(docId: DocId, projectIds: ProjectId[]): void {
+    const doc = this.snap.docs.find((d) => d.id === docId)
+    if (!doc) return
+    const projects = projectsWithDocAvailability(this.snap.projects, doc.name, projectIds)
+    const pendingCreates = projectsWithDocAvailability(this.snap.pendingCreates, doc.name, projectIds)
+    const stillLinked = projects.some((p) => p.seedDocNames?.includes(doc.name))
+    const { [docId]: _removed, ...docContents } = this.snap.docContents
+    const nextIds: Partial<Record<DocId, ProjectId[]>> = { ...this.snap.docProjectIds, [docId]: projectIds }
+    if (!stillLinked) delete nextIds[docId]
     this.commit({
       ...this.snap,
-      docProjectIds: { ...this.snap.docProjectIds, [docId]: projectIds },
+      projects,
+      pendingCreates,
+      docs: stillLinked ? this.snap.docs : this.snap.docs.filter((d) => d.id !== docId),
+      docContents: stillLinked ? this.snap.docContents : docContents,
+      docProjectIds: nextIds,
     })
   }
 
@@ -646,7 +692,7 @@ export class SpineSession {
     if (!body.link?.id) throw new Error("createShareLink: API returned no link")
     const ids = this.getSnapshot().shareLinkIds
     if (!ids.includes(body.link.id)) this.setShareLinkIds([...ids, body.link.id])
-    const url = body.url ?? `/run/${body.link.id}`
+    const url = body.url ?? sharedLinkPublicPath(body.link.id)
     return { url, link: body.link }
   }
 
@@ -742,11 +788,11 @@ export class SpineSession {
     return body.count ?? 0
   }
 
-  // AI : TODO (mcp-capability) — GUI Logging load-run-detail; wrap as session_action logging.hydrate after start_run.
+  // AI : GUI Logging load-run-detail — one GET; fail closed so wait_for_run cannot poll a stale run forever.
   async hydrateRunDetail(runId: PipelineRun["id"]): Promise<void> {
-    const res = await this.requestRemote(`/api/runs/${runId}`)
-    const body = (await res.json()) as { run?: PipelineRun }
-    if (body.run) this.addRun(body.run)
+    const body = await this.requestJson<{ run?: PipelineRun }>(`/api/runs/${runId}`)
+    if (!body.run) throw new Error("hydrateRunDetail: API returned no run")
+    this.addRun(body.run)
   }
 
   async startRun(opts?: { source?: RunSource; testDocName?: string }): Promise<PipelineRun> {
@@ -808,15 +854,21 @@ export class SpineSession {
 
   // AI : TODO (mcp-capability) — GUI GET /api/state; wrap as MCP session pull so the agent can use the same project as a signed-in human.
   async pullRemoteState(): Promise<void> {
-    const res = await this.requestRemote("/api/state")
-    const data = (await res.json()) as {
+    const data = await this.requestJson<{
       projects?: Project[]
       docs?: DocRef[]
       runs?: PipelineRun[]
       modelOptions?: ModelOptionView[]
-    }
+    }>("/api/state")
     if (data.projects) this.ingestRemoteProjects(data.projects)
-    if (data.docs) this.commit({ ...this.snap, docs: data.docs })
+    if (data.docs) {
+      const keep = new Set(data.docs.map((d) => d.id))
+      const inferenceInputDocIds = keepInferenceAssignment(this.snap.inferenceInputDocIds, keep)
+      const docContents = Object.fromEntries(
+        Object.entries(this.snap.docContents).filter(([id]) => keep.has(id as DocId)),
+      )
+      this.commit({ ...this.snap, docs: data.docs, inferenceInputDocIds, docContents })
+    }
     if (data.runs) this.ingestRemoteRuns(data.runs)
     if (data.modelOptions) this.setModelOptions(data.modelOptions)
   }

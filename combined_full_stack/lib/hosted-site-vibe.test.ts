@@ -186,6 +186,11 @@ describe("lovable-style vibe HTML compile", () => {
     )
     expect(report.ok).toBe(true)
     expect(report.parts.before).toContain("hs-hero")
+    expect(report.parts.before).toContain("hs-nav")
+    expect(report.parts.before).toContain("hs-features")
+    expect(report.parts.before).toContain("hs-nav-account")
+    expect(report.parts.before).toContain("you@company.com")
+    expect(report.parts.before).not.toMatch(/href="#signin"/)
     expect(report.parts.after).toContain("</section>")
   })
 

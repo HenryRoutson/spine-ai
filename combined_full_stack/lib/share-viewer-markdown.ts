@@ -2,8 +2,6 @@
 
 export const MAX_VIEWER_MARKDOWN_CHARS = 48_000
 
-export type viewer_markdown_string = string & { __brand: "viewer_markdown" }
-
 export function normalizeViewerMarkdown(raw: unknown): string {
   if (typeof raw !== "string") return ""
   return raw.trim().slice(0, MAX_VIEWER_MARKDOWN_CHARS)

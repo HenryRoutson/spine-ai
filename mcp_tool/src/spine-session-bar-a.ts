@@ -328,6 +328,23 @@ export async function waitForRunFromSession(opts: {
   }
 }
 
+export async function hydrateRunFromSession(opts: {
+  sessionPath?: string
+  runId?: string
+}) {
+  const session = openMcpSession(opts.sessionPath, false)
+  let runId = opts.runId as RunId | undefined
+  if (!runId) {
+    const latest = session.runs[0]
+    if (!latest) throw new Error("no run to wait for — call start_run or run_test first")
+    runId = latest.id
+  }
+  await session.hydrateRunDetail(runId)
+  const run = session.runs.find((r) => r.id === runId)
+  if (!run) throw new Error(`run ${runId} not found after hydrate`)
+  return compactRun(run, true)
+}
+
 export function getRunFromSession(opts: { sessionPath?: string; runId?: string }) {
   const session = openMcpSession(opts.sessionPath, true)
   const run = opts.runId ? session.runs.find((r) => r.id === opts.runId) : session.runs[0]
@@ -852,8 +869,9 @@ export async function createShareFromSession(kind: "link" | "embed" | "site", ar
   const spendLimitCents =
     args.spendLimitCents ??
     (typeof extra.spendLimitCents === "number" ? extra.spendLimitCents : DEFAULT_SHARE_SPEND_CENTS)
-  const allowedOrigins = csvList(args.allowedOrigins).length
-    ? csvList(args.allowedOrigins)
+  const fromArgs = csvList(args.allowedOrigins)
+  const allowedOrigins = fromArgs.length
+    ? fromArgs
     : Array.isArray(extra.allowedOrigins)
       ? (extra.allowedOrigins as string[])
       : []
@@ -867,21 +885,43 @@ export async function createShareFromSession(kind: "link" | "embed" | "site", ar
     args.name?.trim() ||
     (typeof extra.companyName === "string" ? extra.companyName.trim() : "") ||
     project.name
+  const extraSite =
+    kind === "site" && extra.siteOptions && typeof extra.siteOptions === "object" && !Array.isArray(extra.siteOptions)
+      ? (extra.siteOptions as Record<string, unknown>)
+      : {}
+  const extraBrand =
+    extraSite.brand && typeof extraSite.brand === "object" && !Array.isArray(extraSite.brand)
+      ? (extraSite.brand as Record<string, unknown>)
+      : {}
+  const taglineFromExtra =
+    typeof extra.tagline === "string" && extra.tagline.trim()
+      ? extra.tagline
+      : typeof extraBrand.tagline === "string" && extraBrand.tagline.trim()
+        ? extraBrand.tagline
+        : "Run this pipeline"
   const siteOptions =
     kind === "site"
       ? normalizeHostedSiteOptions({
+          ...extraSite,
           brand: {
             ...DEFAULT_HOSTED_SITE_OPTIONS.brand,
+            ...extraBrand,
             companyName,
-            tagline:
-              typeof extra.tagline === "string" && extra.tagline.trim()
-                ? extra.tagline
-                : "Run this pipeline",
+            tagline: taglineFromExtra,
           },
-          customHtml: typeof extra.customHtml === "string" ? extra.customHtml : DEFAULT_HOSTED_SITE_HTML,
-          customCss: typeof extra.customCss === "string" ? extra.customCss : "",
-          hideSpineFooter: extra.hideSpineFooter === true,
-          ...(typeof extra.siteOptions === "object" && extra.siteOptions ? (extra.siteOptions as object) : {}),
+          customHtml:
+            typeof extra.customHtml === "string"
+              ? extra.customHtml
+              : typeof extraSite.customHtml === "string"
+                ? extraSite.customHtml
+                : DEFAULT_HOSTED_SITE_HTML,
+          customCss:
+            typeof extra.customCss === "string"
+              ? extra.customCss
+              : typeof extraSite.customCss === "string"
+                ? extraSite.customCss
+                : "",
+          hideSpineFooter: extra.hideSpineFooter === true || extraSite.hideSpineFooter === true,
         })
       : undefined
   const minted = await session.createShareLink({
@@ -964,10 +1004,23 @@ function requireScheduleId(args: SessionActionArgs): string {
   return id
 }
 
+const SCHEDULE_PATCH_KEYS = [
+  "name",
+  "cron",
+  "timezone",
+  "enabled",
+  "defaultDocsByModule",
+  "tickUrl",
+  "defaultModel",
+] as const
+
 export async function patchScheduleFromSession(args: SessionActionArgs) {
   const session = await requireLiveSession(args.sessionPath)
   const extra = parseObjectParams(args.params)
-  const patch: Record<string, unknown> = { ...extra }
+  const patch: Record<string, unknown> = {}
+  for (const key of SCHEDULE_PATCH_KEYS) {
+    if (extra[key] !== undefined) patch[key] = extra[key]
+  }
   if (args.name) patch.name = args.name
   if (args.cron) patch.cron = args.cron
   if (args.timezone) patch.timezone = args.timezone
@@ -1242,6 +1295,7 @@ export async function runSessionAction(args: SessionActionArgs): Promise<unknown
     case "run_test":
       return startRunFromSession({ sessionPath, testDocName: args.testDocName, testing: true })
     case "logging.hydrate":
+      return hydrateRunFromSession({ sessionPath, runId: args.runId })
     case "wait_for_run":
       return waitForRunFromSession({ sessionPath, runId: args.runId, timeoutMs: args.timeoutMs })
     case "logging.get-run":

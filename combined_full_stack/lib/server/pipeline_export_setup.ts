@@ -1,4 +1,5 @@
 // AI : zip extras (.env, README, runners). Runtime libraries are copied on the server (pipeline_export_runtime_files).
+import { HOSTED_APP_ENV_PLACEHOLDERS } from "@/lib/hosted-site-export";
 import { orderedInputModules } from "@/lib/inference-input";
 import { labelAsStateKey } from "./pipeline_state";
 import type { PipelineSetupFile } from "./pipeline_export_shared";
@@ -172,9 +173,9 @@ export function generateEnvExample(project: Project): string {
     'PIPELINE_GRPC_PORT="50051"',
     'PIPELINE_HTTP_PORT="8080"',
     "",
+    HOSTED_APP_ENV_PLACEHOLDERS,
+    "",
     "# Optional — Supabase persistence for exported app (TODO: migrations in export bundle)",
-    '# NEXT_PUBLIC_SUPABASE_URL=""',
-    '# NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=""',
     '# SUPABASE_SERVICE_ROLE_KEY=""',
     "",
     "# Optional — step cache store (TODO: wire Redis/Supabase in connector + orchestrator)",
@@ -218,12 +219,21 @@ export function generateSetupReadme(project: Project, slug: string): string {
     "- `pipeline_connector.proto` — gRPC contract (same for TS and Python)",
     "- `connector_server.ts` / `connector_server.py` — gRPC + HTTP JSON bridge",
     "- `inference_ui.html` — standalone inference UI (open in browser, POST to connector)",
+    "- `hosted/index.html` — vibe-coded app page (signed-in workspace; mount the run form in `.hs-run-slot`)",
+    "- `hosted/auth.html` — sign-in page kept for later",
+    "- `hosted/styles.css` — hosted page CSS",
+    "- `hosted/.env.example` — empty Supabase placeholders for the hosted app",
     "- `documents/` — sample input files, `inference_setup.json`, and `testing_setup.json` when bundled",
     "- `run_example.ts` / `run_example.py` — load documents/ and print step trace",
     "- `.env.example` — copy to `.env` and fill in (never commit real secrets)",
     "- `requirements.txt` — Python deps (`pip install -r requirements.txt`)",
     "- `README.md` — this file",
     "- `SETUP.md` — pointer to this README",
+    "",
+    "## Hosted page",
+    "",
+    "`hosted/index.html` is the vibe-coded product page in a signed-in state. Drop `inference_ui.html` (or your form) into `.hs-run-slot`.",
+    "`hosted/auth.html` is the sign-in page kept for later. Copy `hosted/.env.example` when you wire a separate Supabase — keys stay empty in this export.",
     "",
     "## 1. Environment",
     "",

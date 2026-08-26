@@ -44,6 +44,25 @@ export function projectIdsForDoc(projects: Project[], docName: string): ProjectI
   return projects.filter((p) => docLinkedToProject(p, docName)).map((p) => p.id);
 }
 
+// AI : GUI + MCP bind docs by filename on each pipeline — seedDocNames is the source of truth.
+export function projectsWithDocAvailability(
+  projects: Project[],
+  docName: string,
+  projectIds: readonly ProjectId[],
+): Project[] {
+  const want = new Set(projectIds);
+  return projects.map((p) => {
+    const names = p.seedDocNames ?? [];
+    const has = names.includes(docName);
+    const should = want.has(p.id);
+    if (has === should) return p;
+    return {
+      ...p,
+      seedDocNames: should ? [...names, docName] : names.filter((n) => n !== docName),
+    };
+  });
+}
+
 export function defaultInferenceDoc(docs: DocRef[], project: Project): DocRef | undefined {
   const mine = docsForProject(docs, project);
   const names = project.seedDocNames;

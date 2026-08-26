@@ -1,7 +1,7 @@
 "use client"
 
+import { useState } from "react"
 import { Textarea } from "@/components/ui/textarea"
-import { MarkdownView } from "@/components/highlight"
 import { composeViewerMarkdown } from "@/lib/share-viewer-markdown"
 
 const PLACEHOLDER = `# How to use
@@ -10,6 +10,29 @@ const PLACEHOLDER = `# How to use
 2. Click Run
 3. Download the result when it finishes
 `
+
+export function useShareViewerMarkdown(projectDocumentation: string) {
+  const [showDocs, setShowDocs] = useState(false)
+  const [instructions, setInstructions] = useState("")
+  const [appendProjectDocs, setAppendProjectDocs] = useState(false)
+  return {
+    viewerMarkdown: composeViewerMarkdown({
+      showDocs,
+      instructions,
+      appendProjectDocs,
+      projectDocumentation,
+    }),
+    fieldsProps: {
+      showDocs,
+      onShowDocsChange: setShowDocs,
+      instructions,
+      onInstructionsChange: setInstructions,
+      appendProjectDocs,
+      onAppendProjectDocsChange: setAppendProjectDocs,
+      projectDocumentation,
+    },
+  }
+}
 
 export function ShareViewerDocsFields({
   showDocs,
@@ -31,12 +54,6 @@ export function ShareViewerDocsFields({
   simple?: boolean
 }) {
   const hasProjectDocs = projectDocumentation.trim().length > 0
-  const previewMd = composeViewerMarkdown({
-    showDocs: true,
-    instructions,
-    appendProjectDocs,
-    projectDocumentation,
-  })
 
   return (
     <div className="space-y-2">
@@ -79,12 +96,6 @@ export function ShareViewerDocsFields({
                 </span>
               </span>
             </label>
-          ) : null}
-          {previewMd ? (
-            <div className="rounded-md border border-border bg-background p-3">
-              <p className="mb-2 text-[10px] uppercase tracking-wider text-muted-foreground">Markdown preview</p>
-              <MarkdownView md={previewMd} />
-            </div>
           ) : null}
         </div>
       ) : null}

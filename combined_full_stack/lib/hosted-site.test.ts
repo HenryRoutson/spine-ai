@@ -1,9 +1,12 @@
 import { describe, expect, it } from "vitest"
 import {
   applyHostedSiteTokens,
+  compileHostedSiteAuthHtml,
   compileHostedSiteHtml,
+  compileHostedSiteLooksOk,
   DEFAULT_HOSTED_SITE_HTML,
   expandHexColor,
+  HOSTED_SITE_AUTH_SLOT,
   HOSTED_SITE_RUN_SLOT,
   htmlColorInputValue,
   isSafeLogoUrl,
@@ -41,6 +44,17 @@ describe("hosted site wrapper", () => {
     expect(clean).toContain(HOSTED_SITE_RUN_SLOT)
   })
 
+  it("strips entity-encoded javascript: and null-byte handlers", () => {
+    const encoded = sanitizeHostedSiteHtml(`<a href="&#106;avascript:alert(1)">x</a>{{run}}`)
+    expect(encoded).not.toMatch(/javascript:/i)
+    expect(encoded).not.toMatch(/alert\(1\)/i)
+    const hex = sanitizeHostedSiteHtml(`<a href="&#x6a;avascript:alert(1)">x</a>{{run}}`)
+    expect(hex).not.toMatch(/javascript:/i)
+    const nul = sanitizeHostedSiteHtml(`<img onerror\0="alert(1)" src="x">{{run}}`)
+    expect(nul).not.toMatch(/onerror/i)
+    expect(nul).not.toMatch(/alert\(1\)/i)
+  })
+
   it("strips CSS imports and expressions", () => {
     const css = sanitizeHostedSiteCss("@import url('https://evil'); body{background:expression(alert(1))}")
     expect(css).not.toMatch(/@import/)
@@ -52,6 +66,9 @@ describe("hosted site wrapper", () => {
     const filled = applyHostedSiteTokens(DEFAULT_HOSTED_SITE_HTML, brand)
     expect(filled).toContain("Acme &lt;Co&gt;")
     expect(filled).toContain("Invoices")
+    expect(filled).toContain("you@company.com")
+    expect(filled).toContain("hs-nav-account")
+    expect(filled).not.toMatch(/href="#signin"/)
     const parts = compileHostedSiteHtml({ ...DEFAULT_HOSTED_SITE_OPTIONS, brand, customHtml: DEFAULT_HOSTED_SITE_HTML })
     expect(parts.before).toContain("Acme")
     expect(parts.before).not.toContain(HOSTED_SITE_RUN_SLOT)
@@ -97,5 +114,33 @@ describe("hosted site wrapper", () => {
     expect(merged.customCss).toBe(".user{}")
     expect(merged.brand.tagline).toBe("Typed during wait")
     expect(merged.brand.companyName).toBe("Acme")
+  })
+
+  it("fills a professional default page and compiles a sign-in surface", () => {
+    const brand = { ...DEFAULT_HOSTED_SITE_OPTIONS.brand, companyName: "Acme", tagline: "Workspace" }
+    const app = compileHostedSiteHtml({ ...DEFAULT_HOSTED_SITE_OPTIONS, brand, customHtml: DEFAULT_HOSTED_SITE_HTML })
+    expect(app.before).toContain("hs-nav")
+    expect(app.before).toContain("hs-features")
+    expect(app.before).toContain("hs-nav-account")
+    expect(app.before).toContain("you@company.com")
+    expect(app.before).not.toMatch(/href="#signin"/)
+    expect(app.before).not.toMatch(/>Sign in</)
+    expect(DEFAULT_HOSTED_SITE_OPTIONS.auth.enabled).toBe(false)
+    expect(app.before).not.toContain(HOSTED_SITE_RUN_SLOT)
+    const signedIn = compileHostedSiteLooksOk({
+      ...DEFAULT_HOSTED_SITE_OPTIONS,
+      brand,
+      customHtml: DEFAULT_HOSTED_SITE_HTML,
+      auth: { ...DEFAULT_HOSTED_SITE_OPTIONS.auth, enabled: true },
+    })
+    expect(signedIn.ok, signedIn.issues.map((i) => `${i.level}:${i.code} ${i.message}`).join("\n")).toBe(true)
+    const authParts = compileHostedSiteAuthHtml({
+      ...DEFAULT_HOSTED_SITE_OPTIONS,
+      brand,
+      auth: { ...DEFAULT_HOSTED_SITE_OPTIONS.auth, enabled: true },
+    })
+    expect(authParts.before).toContain("Sign in")
+    expect(authParts.before).toContain("Acme")
+    expect(authParts.before).not.toContain(HOSTED_SITE_AUTH_SLOT)
   })
 })

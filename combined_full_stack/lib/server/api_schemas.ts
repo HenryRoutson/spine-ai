@@ -18,6 +18,7 @@ import {
   type SharedLinkId,
 } from "@/lib/server/types";
 import { MAX_ASSISTANT_MESSAGE_CHARS } from "./assistant-route";
+import { MAX_VIEWER_MARKDOWN_CHARS } from "@/lib/share-viewer-markdown";
 import {
   MAX_UI_CONTEXT_FIELD_PATH_CHARS,
   MAX_UI_CONTEXT_ITEMS,
@@ -715,6 +716,16 @@ export const hostedSiteOptionsSchema = z
     customHtml: z.string().max(50_000).optional(),
     customCss: z.string().max(20_000).optional(),
     hideSpineFooter: z.boolean().optional(),
+    auth: z
+      .object({
+        enabled: z.boolean().optional(),
+        provider: z.enum(["spine", "custom_supabase"]).optional(),
+        customSupabaseUrl: z.string().max(2048).optional(),
+        customSupabaseAnonKey: z.string().max(2048).optional(),
+      })
+      .strict()
+      .optional(),
+    authHtml: z.string().max(50_000).optional(),
   })
   .strict();
 
@@ -729,7 +740,7 @@ export const hostedSiteAssistantBodySchema = z
           content: z.string().max(MAX_ASSISTANT_MESSAGE_CHARS),
         }),
       )
-      .max(16)
+      .max(ASSISTANT_HISTORY_LIMIT * 2)
       .optional(),
     model: z.string().max(128).optional(),
     siteOptions: hostedSiteOptionsSchema,
@@ -752,7 +763,7 @@ export const createSharedLinkBodySchema = z
     allowedOrigins: z.array(z.string().trim().min(1).max(256)).max(32).optional(),
     embedOptions: embedOptionsSchema.optional(),
     siteOptions: hostedSiteOptionsSchema.optional(),
-    viewerMarkdown: z.string().max(48_000).optional(),
+    viewerMarkdown: z.string().max(MAX_VIEWER_MARKDOWN_CHARS).optional(),
   })
   .strict()
   .superRefine((data, ctx) => {
@@ -802,7 +813,7 @@ export const updateDeploymentBodySchema = z
     allowedOrigins: z.array(z.string().trim().min(1).max(256)).max(32).optional(),
     embedOptions: embedOptionsSchema.optional(),
     siteOptions: hostedSiteOptionsSchema.optional(),
-    viewerMarkdown: z.string().max(48_000).nullable().optional(),
+    viewerMarkdown: z.string().max(MAX_VIEWER_MARKDOWN_CHARS).nullable().optional(),
   })
   .strict()
   .refine(

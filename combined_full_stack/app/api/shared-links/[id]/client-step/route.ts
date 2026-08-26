@@ -10,7 +10,6 @@ import { PUBLIC_RUN_SPEND_RESERVE_CENTS } from "@/lib/billing_config";
 import { billSharedLinkRun, sharedLinkBillingKey, viewerFundsSharedRun } from "@/lib/server/shared_link_billing";
 import { sharedLinkRequiresSignIn } from "@/lib/shared-link-funding";
 import { isAuthSession, requireAuth, type user_id_string } from "@/lib/server/require_auth";
-import { orderedInputModules } from "@/lib/inference-input";
 import { PipelinePausedError } from "@/lib/server/run_checkpoint";
 import { resumeRunPipeline } from "@/lib/server/run_engine";
 import {
@@ -96,7 +95,6 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
     link.id,
     sessionId,
     link.defaultDocs,
-    orderedInputModules(link.snapshot.modules),
   );
 
   apiLog.info(`POST client-step — scheduling resume`, {

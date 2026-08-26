@@ -34,7 +34,7 @@ async function sharedDocFileResponse(req: NextRequest, ctx: { params: Promise<{ 
   );
   const docId = parseSharedDocId(rawDocId);
   if (!docId) return apiError(unknownDoc(rawDocId), HTTP.NOT_FOUND);
-  const file = resolveSharedDocOriginalFile(linkId, docId, sessionId, link.defaultDocs);
+  const file = await resolveSharedDocOriginalFile(linkId, docId, sessionId, link.defaultDocs);
   if (!file) return apiError(unknownDoc(rawDocId), HTTP.NOT_FOUND);
 
   return { file, docId: rawDocId };
@@ -44,9 +44,11 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string;
   const resolved = await sharedDocFileResponse(req, ctx);
   if (resolved instanceof NextResponse) return resolved;
   const { file } = resolved;
+  const body = file.bytes ?? (file.path ? new Uint8Array(readFileSync(file.path)) : null);
+  if (!body) return apiError(unknownDoc(resolved.docId), HTTP.NOT_FOUND);
   // AI : SECURITY — attachment for PDFs; nosniff blocks MIME sniffing to script/html.
   const disposition = file.mime === "application/pdf" ? "attachment" : "inline";
-  return new NextResponse(new Uint8Array(readFileSync(file.path)), {
+  return new NextResponse(body, {
     headers: {
       "Content-Type": file.mime,
       "Content-Disposition": disposition,

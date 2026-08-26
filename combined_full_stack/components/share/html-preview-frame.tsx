@@ -3,25 +3,49 @@
 
 import { useCallback, useEffect, useState, type ReactNode } from "react"
 import { createPortal } from "react-dom"
-import { Maximize2, X } from "lucide-react"
+import { Maximize2, Monitor, Smartphone, X } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { HTML_POPUP_CHROME, HTML_POPUP_OVERLAY_ATTR } from "@/lib/html-popup"
+import { spineActionProps } from "@/lib/core/parity"
 import { cn } from "@/lib/utils"
+
+type preview_viewport = "desktop" | "mobile"
+
+const MOBILE_FRAME_WIDTH_PX = 390
+const MOBILE_FRAME_HEIGHT_PX = 720
+
+function PreviewViewport({ viewport, children }: { viewport: preview_viewport; children: ReactNode }) {
+  if (viewport === "desktop") return children
+  return (
+    <div className="flex justify-center bg-muted/40 p-3">
+      <div
+        className="overflow-hidden rounded-[1.65rem] border-[7px] border-neutral-800 bg-background shadow-xl"
+        style={{ width: MOBILE_FRAME_WIDTH_PX, height: MOBILE_FRAME_HEIGHT_PX }}
+      >
+        <div className="h-full overflow-auto">{children}</div>
+      </div>
+    </div>
+  )
+}
 
 export function HtmlPreviewFrame({
   label = "Preview",
   children,
   className,
   bodyClassName,
+  extraToolbar,
 }: {
   label?: string
   children: ReactNode
   className?: string
   bodyClassName?: string
+  extraToolbar?: ReactNode
 }) {
   const [expanded, setExpanded] = useState(false)
   const [mounted, setMounted] = useState(false)
+  const [viewport, setViewport] = useState<preview_viewport>("desktop")
   const close = useCallback(() => setExpanded(false), [])
+  const nextViewport: preview_viewport = viewport === "desktop" ? "mobile" : "desktop"
 
   useEffect(() => {
     setMounted(true)
@@ -33,40 +57,55 @@ export function HtmlPreviewFrame({
       if (e.key === "Escape") close()
     }
     window.addEventListener("keydown", onKey)
-    return () => window.removeEventListener("keydown", onKey)
-  }, [expanded, close])
-
-  useEffect(() => {
-    if (!expanded) return
     document.body.style.overflow = "hidden"
     return () => {
+      window.removeEventListener("keydown", onKey)
       document.body.style.overflow = ""
     }
-  }, [expanded])
+  }, [expanded, close])
+
+  const framed = <PreviewViewport viewport={viewport}>{children}</PreviewViewport>
+  const viewportButton = (
+    <Button
+      type="button"
+      variant="ghost"
+      size="sm"
+      className="h-6 gap-1 px-1.5 text-[10px] text-muted-foreground hover:text-foreground"
+      onClick={() => setViewport(nextViewport)}
+      title={`Switch to ${nextViewport} preview`}
+      aria-label={`Switch to ${nextViewport} preview`}
+      {...spineActionProps("share.site-preview-viewport")}
+    >
+      {viewport === "desktop" ? <Monitor className="h-3 w-3" /> : <Smartphone className="h-3 w-3" />}
+      {viewport === "desktop" ? "Desktop" : "Mobile"}
+    </Button>
+  )
 
   return (
     <>
       <div className={cn("overflow-hidden rounded-md border border-border", className)}>
-        <div className="flex items-center justify-between border-b border-border bg-muted/30 px-2 py-1">
-          <p className="text-[10px] text-muted-foreground">{label}</p>
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon"
-            className="h-6 w-6 text-muted-foreground hover:text-foreground"
-            onClick={() => setExpanded(true)}
-            title="Expand preview"
-            aria-label="Expand preview"
-          >
-            <Maximize2 className="h-3 w-3" />
-          </Button>
+        <div className="flex items-center justify-between gap-2 border-b border-border bg-muted/30 px-2 py-1">
+          <p className="min-w-0 truncate text-[10px] text-muted-foreground">
+            {label} · {viewport === "desktop" ? "Desktop" : "Mobile"}
+          </p>
+          <div className="flex items-center gap-0.5">
+            {extraToolbar}
+            {viewportButton}
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              className="h-6 w-6 text-muted-foreground hover:text-foreground"
+              onClick={() => setExpanded(true)}
+              title="Expand preview"
+              aria-label="Expand preview"
+            >
+              <Maximize2 className="h-3 w-3" />
+            </Button>
+          </div>
         </div>
         <div className={cn("max-h-72 overflow-auto bg-background", bodyClassName)}>
-          {expanded ? (
-            <p className="p-4 text-[10px] text-muted-foreground">Preview is expanded</p>
-          ) : (
-            children
-          )}
+          {expanded ? <p className="p-4 text-[10px] text-muted-foreground">Preview is expanded</p> : framed}
         </div>
       </div>
 
@@ -81,18 +120,24 @@ export function HtmlPreviewFrame({
               />
               <div className={HTML_POPUP_CHROME.panel}>
                 <div className={HTML_POPUP_CHROME.header}>
-                  <span className={HTML_POPUP_CHROME.title}>{label} · Esc to close</span>
-                  <button
-                    type="button"
-                    className={HTML_POPUP_CHROME.close}
-                    onClick={close}
-                    aria-label="Close preview"
-                    title="Close preview"
-                  >
-                    <X className="h-4 w-4" />
-                  </button>
+                  <span className={HTML_POPUP_CHROME.title}>
+                    {label} · {viewport === "desktop" ? "Desktop" : "Mobile"} · Esc to close
+                  </span>
+                  <div className="flex items-center gap-1">
+                    {extraToolbar}
+                    {viewportButton}
+                    <button
+                      type="button"
+                      className={HTML_POPUP_CHROME.close}
+                      onClick={close}
+                      aria-label="Close preview"
+                      title="Close preview"
+                    >
+                      <X className="h-4 w-4" />
+                    </button>
+                  </div>
                 </div>
-                <div className={cn(HTML_POPUP_CHROME.body, "overflow-auto bg-background")}>{children}</div>
+                <div className={cn(HTML_POPUP_CHROME.body, "overflow-auto bg-background")}>{framed}</div>
               </div>
             </div>,
             document.body,

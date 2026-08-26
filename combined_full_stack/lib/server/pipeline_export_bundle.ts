@@ -1,3 +1,4 @@
+import { generateHostedSiteExportFiles } from "@/lib/hosted-site-export";
 import { generatePipelineSourceBaml } from "./pipeline_baml_export";
 import { generatePipelineConnectorFiles } from "./pipeline_export_connector";
 import { generatePipelineDocumentFiles } from "./pipeline_export_documents";
@@ -15,7 +16,7 @@ import { generatePipelineSourceTs } from "./pipeline_ts_export";
 import type { Project } from "./types";
 
 // AI : full zip contents — must stay server-side (fs for documents + runtime libraries).
-export function generatePipelineExportBundle(project: Project): PipelineSetupFile[] {
+export function generatePipelineExportBundle(project: Project, siteOptions?: unknown): PipelineSetupFile[] {
   const slug = projectSlug(project.name);
   const pipelineFiles: PipelineSetupFile[] = [
     { filename: `${slug}_pipeline.ts`, content: generatePipelineSourceTs(project), mime: "text/typescript" },
@@ -26,11 +27,14 @@ export function generatePipelineExportBundle(project: Project): PipelineSetupFil
   ];
   const setupFiles = generatePipelineSetupFiles(project);
   const connectorFiles = generatePipelineConnectorFiles(project);
+  const hostedFiles = generateHostedSiteExportFiles(project, siteOptions);
   for (const f of connectorFiles) assertNoSecretValuesInExport(f.content);
+  for (const f of hostedFiles) assertNoSecretValuesInExport(f.content);
   return [
     ...pipelineFiles,
     ...setupFiles,
     ...connectorFiles,
+    ...hostedFiles,
     ...generatePipelineDocumentFiles(project),
     ...exportRuntimeLibraryFiles(),
     // AI : TODO (media-view-C-export) — visualizers/*.html from Project.visualizers (not documents/).

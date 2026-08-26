@@ -13,6 +13,7 @@ import { apiJson, JSON_HEADERS } from "@/lib/api-client"
 import { COPY_FEEDBACK_MS } from "@/lib/ui-timing"
 import { downloadBlob } from "@/lib/download-blob"
 import { API_ROUTES } from "@/lib/api-routes"
+import type { HostedSiteOptions } from "@/lib/shared-link-types"
 import type { Project, StructureModel, TypeAlias, PipelineModule } from "@/lib/types"
 import { cn } from "@/lib/utils"
 
@@ -24,6 +25,10 @@ type ExportTabId =
   | "baml"
   | "proto"
   | "ui"
+  | "hosted-html"
+  | "hosted-auth"
+  | "hosted-css"
+  | "hosted-env"
   | "connector-ts"
   | "connector-py"
   | "env"
@@ -60,6 +65,10 @@ const TAB_ORDER: ExportTabId[] = [
   "baml",
   "proto",
   "ui",
+  "hosted-html",
+  "hosted-auth",
+  "hosted-css",
+  "hosted-env",
   "connector-ts",
   "connector-py",
   "env",
@@ -93,6 +102,14 @@ function setupFileTabMeta(filename: string): { id: ExportTabId; label: string; l
       return { id: "proto", label: "connector.proto", language: "plaintext" }
     case "inference_ui.html":
       return { id: "ui", label: "inference UI", language: "plaintext" }
+    case "hosted/index.html":
+      return { id: "hosted-html", label: "hosted app", language: "plaintext" }
+    case "hosted/auth.html":
+      return { id: "hosted-auth", label: "hosted sign-in", language: "plaintext" }
+    case "hosted/styles.css":
+      return { id: "hosted-css", label: "hosted CSS", language: "plaintext" }
+    case "hosted/.env.example":
+      return { id: "hosted-env", label: "hosted .env", language: "plaintext" }
     case "connector_server.ts":
       return { id: "connector-ts", label: "connector (TS)", language: "typescript" }
     case "connector_server.py":
@@ -107,11 +124,13 @@ export function PipelineExportDialog({
   modules,
   models,
   typeAliases,
+  siteOptions,
 }: {
   project: Project
   modules: PipelineModule[]
   models: StructureModel[]
   typeAliases: TypeAlias[]
+  siteOptions?: HostedSiteOptions
 }) {
   const [open, setOpen] = useState(false)
   const [tab, setTab] = useState<ExportTabId>("typescript")
@@ -123,6 +142,10 @@ export function PipelineExportDialog({
   const exportProject = useMemo(
     () => ({ ...project, modules, models, typeAliases }),
     [project, modules, models, typeAliases],
+  )
+  const exportBody = useMemo(
+    () => (siteOptions ? { ...exportProject, siteOptions } : exportProject),
+    [exportProject, siteOptions],
   )
 
   useEffect(() => {
@@ -137,7 +160,7 @@ export function PipelineExportDialog({
           {
             method: "POST",
             headers: JSON_HEADERS,
-            body: JSON.stringify(exportProject),
+            body: JSON.stringify(exportBody),
           },
         )
         const next: ExportFile[] = bundle.map((f) => {
@@ -164,7 +187,7 @@ export function PipelineExportDialog({
     return () => {
       cancelled = true
     }
-  }, [open, exportProject])
+  }, [open, exportBody])
 
   const active = files.find((f) => f.id === tab) ?? files[0]
   const lineCount = active?.content.split("\n").length ?? 0
@@ -205,7 +228,7 @@ export function PipelineExportDialog({
         size="sm"
         className="h-7 gap-1.5 text-[10px]"
         onClick={() => setOpen((o) => !o)}
-        title="View and download pipeline code + setup files"
+        title="View and download pipeline code, hosted app, and setup files"
         spineId="pipeline.export"
       >
         <Code2 className="h-3.5 w-3.5" />
@@ -218,7 +241,7 @@ export function PipelineExportDialog({
             <div>
               <p className="text-sm font-semibold">Pipeline export</p>
               <p className="mt-0.5 text-xs text-muted-foreground">
-                Pipeline code, gRPC connector, inference UI with step trace, sample documents, and setup files. No secrets in generated code — wire env in your runner.
+                Pipeline code, hosted app (HTML/CSS + env placeholders), gRPC connector, inference UI, sample documents, and setup files. No secrets in generated code — wire env in your runner.
               </p>
             </div>
             <Button variant="ghost" size="icon-sm" onClick={() => setOpen(false)}>
@@ -287,7 +310,7 @@ export function PipelineExportDialog({
               <div className="flex flex-wrap items-center justify-between gap-2 border-t border-border px-4 py-3">
                 <p className="flex items-center gap-1.5 font-mono text-[10px] text-muted-foreground">
                   <FileText className="h-3 w-3" />
-                  {files.length} files · start with README.md · documents/ + inference_setup.json · open inference_ui.html against connector
+                  {files.length} files · start with README.md · hosted/ + documents/ · open inference_ui.html against connector
                 </p>
                 <div className="flex flex-wrap items-center gap-2">
                   <Button

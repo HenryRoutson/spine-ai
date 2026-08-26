@@ -314,6 +314,7 @@ describe("MCP Bar A session tools", () => {
         addProjectFromSession,
         addDocFromSession,
         addStepFromSession,
+        getProjectFromSession,
         linkQuotesFromSession,
         moveStepFromSession,
         setDocProjectsFromSession,
@@ -329,7 +330,13 @@ describe("MCP Bar A session tools", () => {
       expect(linked.quote.exact).toBe(true)
       const bound = setDocProjectsFromSession("lease.txt", [project.id], sessionPath)
       expect(bound.projectIds).toEqual([project.id])
+      const other = addProjectFromSession(sessionPath)
+      expect(getProjectFromSession(sessionPath).docs.some((d: { name: string }) => d.name === "lease.txt")).toBe(false)
+      setDocProjectsFromSession("lease.txt", [project.id, other.id], sessionPath)
+      expect(getProjectFromSession(sessionPath).docs.some((d: { name: string }) => d.name === "lease.txt")).toBe(true)
       const added = addStepFromSession("llm", "Extract", sessionPath)
+      const beforeMove = getProjectFromSession(sessionPath)
+      expect(beforeMove.steps.some((s: { id: string }) => s.id === added[0]!.id)).toBe(true)
       const moved = await runSessionAction({
         id: "pipeline.move-step",
         sessionPath,
@@ -337,7 +344,9 @@ describe("MCP Bar A session tools", () => {
         at: 0,
       })
       expect(moved).toBeTruthy()
+      expect(getProjectFromSession(sessionPath).steps[0]!.id).toBe(added[0]!.id)
       moveStepFromSession(added[0]!.id, 1, sessionPath)
+      expect(getProjectFromSession(sessionPath).steps[1]!.id).toBe(added[0]!.id)
     } finally {
       rmSync(dir, { recursive: true, force: true })
     }

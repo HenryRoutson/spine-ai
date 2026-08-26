@@ -10,8 +10,11 @@ export async function POST(req: NextRequest) {
   if (ctx instanceof NextResponse) return ctx;
 
   let project: Project;
+  let siteOptions: unknown;
   try {
-    project = (await req.json()) as Project;
+    const body = (await req.json()) as Project & { siteOptions?: unknown };
+    siteOptions = body.siteOptions;
+    project = body;
   } catch {
     return apiError("Invalid JSON body", HTTP.BAD_REQUEST);
   }
@@ -21,7 +24,7 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    return NextResponse.json(generatePipelineExportBundle(project));
+    return NextResponse.json(generatePipelineExportBundle(project, siteOptions));
   } catch (err) {
     return apiError((err as Error).message, HTTP.BAD_REQUEST);
   }

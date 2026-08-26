@@ -21,6 +21,7 @@ import {
   uploadSharedDoc,
 } from "@/lib/shared-run-client"
 import { sharedLinkPublicPath } from "@/lib/hosted-site"
+import { sharedLinkRequiresSignIn } from "@/lib/shared-link-funding"
 import { cacheUploadFileText, fetchSharedRunDocText } from "@/lib/shared-run-doc-cache"
 import { pipelineFinalOutputSteps } from "@/lib/step-doc"
 import { buildChatbotResult } from "@/lib/chatbot-step"
@@ -38,8 +39,6 @@ export type SharedRunLifecycleEvent =
   | { type: "started" }
   | { type: "finished" }
   | { type: "error"; error: string }
-
-import { sharedLinkRequiresSignIn } from "@/lib/shared-link-funding"
 
 export function useSharedInferenceRun(
   link: SharedLinkPublicView,

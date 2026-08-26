@@ -12,12 +12,11 @@ import { ShareDefaultFiles } from "@/components/share/share-default-files"
 import { ShareFundingPicker } from "@/components/share/share-funding-flow"
 import { parseSharePricing, parseSpendLimitUsd, SharePricingFields } from "@/components/share/share-pricing-fields"
 import { HtmlPreviewFrame } from "@/components/share/html-preview-frame"
-import { ShareViewerDocsFields } from "@/components/share/share-viewer-docs-fields"
+import { ShareViewerDocsFields, useShareViewerMarkdown } from "@/components/share/share-viewer-docs-fields"
 import { SharedLinkPreview } from "@/components/share/shared-link-preview"
 import { API_ROUTES } from "@/lib/api-routes"
 import { apiJson, JSON_HEADERS } from "@/lib/api-client"
 import { shareDefaultDocsByModule } from "@/lib/share-default-docs"
-import { composeViewerMarkdown } from "@/lib/share-viewer-markdown"
 import { SharedLinkFundingMode } from "@/lib/types"
 import { viewerFundsSharedRun } from "@/lib/shared-link-funding"
 import type { EmbedDelivery, EmbedOptions, EmbedTheme, SharedLinkRecord } from "@/lib/shared-link-types"
@@ -85,21 +84,13 @@ export function ShareEmbedForm({
   const [theme, setTheme] = useState<EmbedTheme>(DEFAULT_EMBED_OPTIONS.theme)
   const [hideBranding, setHideBranding] = useState(DEFAULT_EMBED_OPTIONS.hideBranding)
   const [postMessageEvents, setPostMessageEvents] = useState(DEFAULT_EMBED_OPTIONS.postMessageEvents)
-  const [showDocs, setShowDocs] = useState(false)
-  const [instructions, setInstructions] = useState("")
-  const [appendProjectDocs, setAppendProjectDocs] = useState(false)
+  const { viewerMarkdown, fieldsProps } = useShareViewerMarkdown(project.documentation ?? "")
 
   const viewerFunds = viewerFundsSharedRun(fundingMode)
   const defaultDocsByModule = useMemo(
     () => shareDefaultDocsByModule(project, docs, inferenceInputDocIds),
     [project, docs, inferenceInputDocIds],
   )
-  const viewerMarkdown = composeViewerMarkdown({
-    showDocs,
-    instructions,
-    appendProjectDocs,
-    projectDocumentation: project.documentation ?? "",
-  })
 
   async function createEmbed() {
     setBusy(true)
@@ -319,15 +310,7 @@ export function ShareEmbedForm({
 
       <ShareDefaultFiles project={project} docs={docs} defaultDocsByModule={defaultDocsByModule} />
 
-      <ShareViewerDocsFields
-        showDocs={showDocs}
-        onShowDocsChange={setShowDocs}
-        instructions={instructions}
-        onInstructionsChange={setInstructions}
-        appendProjectDocs={appendProjectDocs}
-        onAppendProjectDocsChange={setAppendProjectDocs}
-        projectDocumentation={project.documentation ?? ""}
-      />
+      <ShareViewerDocsFields {...fieldsProps} />
 
       <HtmlPreviewFrame label="Embed preview">
         <SharedLinkPreview

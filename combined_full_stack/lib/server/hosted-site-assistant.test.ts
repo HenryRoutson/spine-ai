@@ -4,7 +4,7 @@ import {
   buildHostedSiteAssistantSystemPrompt,
   buildHostedSiteAssistantUserPrompt,
 } from "@/lib/server/hosted-site-assistant"
-import { DEFAULT_HOSTED_SITE_HTML, HOSTED_SITE_RUN_SLOT } from "@/lib/hosted-site"
+import { DEFAULT_HOSTED_SITE_HTML, HOSTED_SITE_AUTH_SLOT, HOSTED_SITE_RUN_SLOT } from "@/lib/hosted-site"
 import { DEFAULT_HOSTED_SITE_OPTIONS } from "@/lib/shared-link-types"
 import { InputType, ModuleKind, type Project, type ProjectId } from "@/lib/types"
 
@@ -52,6 +52,7 @@ describe("hosted site UI vibe agent prompts", () => {
     const system = buildHostedSiteAssistantSystemPrompt()
     expect(system).toMatch(/ONLY change the public webpage/i)
     expect(system).toMatch(/MUST NOT change the pipeline/)
+    expect(system).toMatch(/signed-in workspace/i)
     expect(system).toContain(HOSTED_SITE_RUN_SLOT)
   })
 
@@ -83,6 +84,9 @@ describe("hosted site UI vibe agent prompts", () => {
       backgroundColor: null,
       textColor: null,
       hideSpineFooter: null,
+      authEnabled: null,
+      authProvider: null,
+      authHtml: null,
     })
     expect(next.customHtml).toContain(HOSTED_SITE_RUN_SLOT)
     expect(next.brand.companyName).toBe("Northwind")
@@ -100,7 +104,30 @@ describe("hosted site UI vibe agent prompts", () => {
       backgroundColor: null,
       textColor: null,
       hideSpineFooter: null,
+      authEnabled: null,
+      authProvider: null,
+      authHtml: null,
     })
     expect(next.brand.primaryColor).toBe("#aabbcc")
+  })
+
+  it("turns on the sign-in page and keeps an {{auth}} slot", () => {
+    const next = applyHostedSiteAssistantPatch(OPTIONS, {
+      message: "ok",
+      customHtml: null,
+      customCss: null,
+      companyName: null,
+      tagline: null,
+      primaryColor: null,
+      accentColor: null,
+      backgroundColor: null,
+      textColor: null,
+      hideSpineFooter: null,
+      authEnabled: true,
+      authProvider: "spine",
+      authHtml: "<section><h1>Welcome</h1></section>",
+    })
+    expect(next.auth.enabled).toBe(true)
+    expect(next.authHtml).toContain(HOSTED_SITE_AUTH_SLOT)
   })
 })

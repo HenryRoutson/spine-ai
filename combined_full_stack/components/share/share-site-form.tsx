@@ -9,11 +9,10 @@ import { ShareDefaultFiles } from "@/components/share/share-default-files"
 import { ShareFundingPicker } from "@/components/share/share-funding-flow"
 import { parseSharePricing, parseSpendLimitUsd, SharePricingFields } from "@/components/share/share-pricing-fields"
 import { HostedSitePageStudio } from "@/components/share/hosted-site-page-studio"
-import { ShareViewerDocsFields } from "@/components/share/share-viewer-docs-fields"
+import { ShareViewerDocsFields, useShareViewerMarkdown } from "@/components/share/share-viewer-docs-fields"
 import { API_ROUTES } from "@/lib/api-routes"
 import { apiJson, JSON_HEADERS } from "@/lib/api-client"
 import { shareDefaultDocsByModule } from "@/lib/share-default-docs"
-import { composeViewerMarkdown } from "@/lib/share-viewer-markdown"
 import { SharedLinkFundingMode } from "@/lib/types"
 import { viewerFundsSharedRun } from "@/lib/shared-link-funding"
 import type { HostedSiteOptions, SharedLinkRecord } from "@/lib/shared-link-types"
@@ -78,27 +77,23 @@ export function ShareSiteForm({
       customHtml: DEFAULT_HOSTED_SITE_HTML,
     }),
   )
-  const [showDocs, setShowDocs] = useState(false)
-  const [instructions, setInstructions] = useState("")
-  const [appendProjectDocs, setAppendProjectDocs] = useState(false)
-
+  const { viewerMarkdown, fieldsProps } = useShareViewerMarkdown(project.documentation ?? "")
   const viewerFunds = viewerFundsSharedRun(fundingMode)
   const defaultDocsByModule = useMemo(
     () => shareDefaultDocsByModule(project, docs, inferenceInputDocIds),
     [project, docs, inferenceInputDocIds],
   )
-  const viewerMarkdown = composeViewerMarkdown({
-    showDocs,
-    instructions,
-    appendProjectDocs,
-    projectDocumentation: project.documentation ?? "",
-  })
+
+  function requireCompanyName(): boolean {
+    if (siteOptions.brand.companyName.trim()) return true
+    setError("Add a company name — it becomes the page title.")
+    return false
+  }
 
   async function createSite() {
     setBusy(true)
     setError(null)
-    if (!siteOptions.brand.companyName.trim()) {
-      setError("Add a company name — it becomes the page title.")
+    if (!requireCompanyName()) {
       setBusy(false)
       return
     }
@@ -146,8 +141,7 @@ export function ShareSiteForm({
     if (!created) return
     setBusy(true)
     setError(null)
-    if (!siteOptions.brand.companyName.trim()) {
-      setError("Add a company name — it becomes the page title.")
+    if (!requireCompanyName()) {
       setBusy(false)
       return
     }
@@ -188,15 +182,7 @@ export function ShareSiteForm({
         viewerMarkdown={viewerMarkdown}
       />
 
-      <ShareViewerDocsFields
-        showDocs={showDocs}
-        onShowDocsChange={setShowDocs}
-        instructions={instructions}
-        onInstructionsChange={setInstructions}
-        appendProjectDocs={appendProjectDocs}
-        onAppendProjectDocsChange={setAppendProjectDocs}
-        projectDocumentation={project.documentation ?? ""}
-      />
+      <ShareViewerDocsFields {...fieldsProps} />
 
       {!created ? (
         <>

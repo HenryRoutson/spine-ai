@@ -41,6 +41,7 @@ import {
 } from "./doc_text_cache";
 import { buildDocRef } from "./doc_ref";
 import { logger } from "./server_logger";
+import { projectsWithDocAvailability } from "@/lib/project-docs";
 
 const origLog = logger("docs:original-bytes");
 
@@ -468,16 +469,11 @@ export function setDocProjectAvailability(
 ): boolean {
   const doc = store.docs().find((d) => d.id === docId);
   if (!doc) return false;
-  const want = new Set(projectIds);
-  for (const p of store.projects()) {
-    const names = p.seedDocNames ?? [];
-    const has = names.includes(doc.name);
-    const should = want.has(p.id);
-    if (has === should) continue;
-    store.saveProject({
-      ...p,
-      seedDocNames: should ? [...names, doc.name] : names.filter((n) => n !== doc.name),
-    });
+  const prev = store.projects();
+  const next = projectsWithDocAvailability(prev, doc.name, projectIds);
+  for (let i = 0; i < next.length; i++) {
+    const row = next[i];
+    if (row && row !== prev[i]) store.saveProject(row);
   }
   return true;
 }
