@@ -1,0 +1,96 @@
+{
+  "app_name": "Spine",
+  "tagline": "Vibe-code websites on typed pipelines",
+  "audience": "Non-technical builders and technical pipeline authors sharing one backend",
+  "tables": [
+    {
+      "name": "Project",
+      "description": "A typed pipeline a website can bind to",
+      "fields": [
+        {
+          "name": "name",
+          "type_name": "text",
+          "optional": false,
+          "description": "Pipeline name"
+        },
+        {
+          "name": "kind",
+          "type_name": "text",
+          "optional": false,
+          "description": "Task kind"
+        }
+      ]
+    },
+    {
+      "name": "StructureModel",
+      "description": "A database table / typed record",
+      "fields": [
+        {
+          "name": "name",
+          "type_name": "text",
+          "optional": false,
+          "description": "Structure name"
+        },
+        {
+          "name": "description",
+          "type_name": "text",
+          "optional": false,
+          "description": "What the row means"
+        }
+      ]
+    },
+    {
+      "name": "WebsitePage",
+      "description": "A hosted HTML page with run and table slots",
+      "fields": [
+        {
+          "name": "path",
+          "type_name": "text",
+          "optional": false,
+          "description": "Page path"
+        },
+        {
+          "name": "headline",
+          "type_name": "text",
+          "optional": false,
+          "description": "Hero headline"
+        }
+      ]
+    }
+  ],
+  "pipelines": [
+    {
+      "name": "Compile app",
+      "input_table": "Project",
+      "output_table": "WebsitePage",
+      "steps": [
+        "Read blueprint",
+        "Compile schema",
+        "Compile website",
+        "Share"
+      ]
+    },
+    {
+      "name": "Run pipeline",
+      "input_table": "StructureModel",
+      "output_table": "WebsitePage",
+      "steps": [
+        "Feed row",
+        "Run steps",
+        "Show output"
+      ]
+    }
+  ],
+  "pages": [
+    {
+      "path": "index",
+      "headline": "Build the front end like Lovable",
+      "body": "Chat a page. Keep {{run}} where the workspace belongs. Share the site in one click."
+    },
+    {
+      "path": "backend",
+      "headline": "Typed backends with state",
+      "body": "Describe tables and functions. Click a compatible type to feed a row into a pipeline."
+    }
+  ]
+}
