@@ -3,7 +3,7 @@
 // AI : Supabase Realtime keeps team shared-pointer rows fresh across browsers/instances.
 import { useEffect, useRef } from "react"
 import type { RealtimeChannel } from "@supabase/supabase-js"
-import { createClient } from "@/utils/supabase/client"
+import { tryCreateClient } from "@/utils/supabase/client"
 import { isDemoMode, isPreviewOnly } from "@/lib/demo-mode"
 import {
   TEAM_REALTIME_CHANNEL,
@@ -42,8 +42,8 @@ export function useTeamRealtime({
 
     void (async () => {
       try {
-        const supabase = await createClient()
-        if (cancelled) return
+        const supabase = await tryCreateClient()
+        if (!supabase || cancelled) return
 
         const bus = createMemoryRealtimePort()
         stop = attachRealtimePort(
@@ -69,8 +69,8 @@ export function useTeamRealtime({
       stop?.()
       const ch = channel
       if (ch) {
-        void createClient().then((supabase) => {
-          void supabase.removeChannel(ch)
+        void tryCreateClient().then((supabase) => {
+          if (supabase) void supabase.removeChannel(ch)
         })
       }
     }

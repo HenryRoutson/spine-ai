@@ -9,7 +9,7 @@ import {
 } from "@/lib/settings-account-snapshot-cache"
 import { readTeamsSnapshot, writeTeamsSnapshot } from "@/lib/teams-snapshot-cache"
 import type { TeamView, TeamsListResponse } from "@/lib/team-types"
-import { createClient } from "@/utils/supabase/client"
+import { tryCreateClient } from "@/utils/supabase/client"
 
 let accountFetchRef: Promise<SettingsAccountSnapshot> | null = null
 let teamsFetchRef: Promise<TeamView[]> | null = null
@@ -21,9 +21,14 @@ export async function fetchSettingsAccount(): Promise<SettingsAccountSnapshot> {
     writeSettingsAccountSnapshot(demo)
     return demo
   }
-  const run = createClient()
-    .then((supabase) => supabase.auth.getUser())
-    .then(({ data }) => {
+  const run = tryCreateClient()
+    .then(async (supabase) => {
+      if (!supabase) {
+        const next = { email: null, marketingOptIn: false }
+        writeSettingsAccountSnapshot(next)
+        return next
+      }
+      const { data } = await supabase.auth.getUser()
       const next = {
         email: data.user?.email ?? null,
         marketingOptIn: data.user?.user_metadata?.marketing_opt_in === true,

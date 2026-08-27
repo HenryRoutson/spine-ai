@@ -2,14 +2,18 @@
 // AI : parity ids — share.site-vibe
 
 import { useCallback, useRef, useState } from "react"
-import { Code2, Plus, Sparkles, X } from "lucide-react"
+import { Code2, FileCode2, Plus, Sparkles, X } from "lucide-react"
 import { AssistantChat } from "@/components/assistant-chat"
 import { MonacoCodeEditor } from "@/components/code-viewer"
 import { HtmlPreviewFrame } from "@/components/share/html-preview-frame"
 import { HostedSiteChrome } from "@/components/share/hosted-site-chrome"
+import { HostedSiteReactPreview } from "@/components/share/hosted-site-react-preview"
 import { HostedSiteSignInCard } from "@/components/share/hosted-site-sign-in"
 import { HostedSiteSlotWidgets } from "@/components/share/hosted-site-slot-widgets"
+import { SharedLinkPreview } from "@/components/share/shared-link-preview"
+import { WebsitePipelineBindings } from "@/components/share/website-pipeline-bindings"
 import { PipelineExportDialog } from "@/components/pipeline-export-dialog"
+import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { ResizableSplit } from "@/components/resizable-split"
@@ -28,6 +32,8 @@ import {
   unwrapVibeCodedHtml,
 } from "@/lib/hosted-site"
 import { HOSTED_SITE_DOCS_SLOT } from "@/lib/hosted-site-slots"
+import { htmlSiteToReactFiles } from "@/lib/hosted-site-react"
+import { resolveWebsitePipelineBindings } from "@/lib/website-pipelines"
 import { patchHostedSiteHtmlText, type HsPreviewInlinePayload, type HsPreviewSelectPayload } from "@/lib/hosted-site-select"
 import type { HostedSiteAuth, HostedSiteBrand, HostedSiteOptions } from "@/lib/shared-link-types"
 import { DEFAULT_HOSTED_SITE_OPTIONS } from "@/lib/shared-link-types"
@@ -40,25 +46,34 @@ type studio_preview_target = { kind: "app" } | { kind: "signin" } | { kind: "pag
 
 const VIBE_WELCOME =
   "Describe the product — nav, hero, workspace. The page is signed in. I'll only change the HTML around the run form, not your pipeline."
+const VIBE_WELCOME_REACT =
+  "Describe the product. I'll edit the React project (App.tsx, CSS, components). Keep <RunPipeline alias=\"…\" /> where pipelines belong."
 
 export function HostedSitePageStudio({
   project,
   value,
   onChange,
   viewerMarkdown,
+  forcedTab,
+  hideSurfaceTabs = false,
 }: {
   project: Project
   value: HostedSiteOptions
   onChange: (next: HostedSiteOptions) => void
   viewerMarkdown: string
+  forcedTab?: PageStudioTab
+  hideSurfaceTabs?: boolean
 }) {
-  const { model } = useStore()
-  const [tab, setTab] = useState<PageStudioTab>("vibe")
+  const { model, projects } = useStore()
+  const [localTab, setLocalTab] = useState<PageStudioTab>("vibe")
+  const tab = forcedTab ?? localTab
   const [chatWidth, setChatWidth] = useState(320)
   const [brandOpen, setBrandOpen] = useState(false)
   const [authOpen, setAuthOpen] = useState(false)
   const [target, setTarget] = useState<studio_preview_target>({ kind: "app" })
   const [selection, setSelection] = useState<{ cssPath: string; snippet: string } | null>(null)
+  const [runtimeConfirm, setRuntimeConfirm] = useState<"html" | "react" | null>(null)
+  const [reactPath, setReactPath] = useState("src/App.tsx")
   const valueRef = useRef(value)
   valueRef.current = value
   const resolvedTarget: studio_preview_target =
@@ -99,6 +114,21 @@ export function HostedSitePageStudio({
     onChange({ ...value, customHtml: html })
   }
 
+  function switchRuntime(next: "html" | "react") {
+    if (next === value.runtime) {
+      setRuntimeConfirm(null)
+      return
+    }
+    if (next === "react") {
+      const reactFiles = value.reactFiles.length > 0 ? value.reactFiles : htmlSiteToReactFiles(value)
+      onChange({ ...value, runtime: "react", reactFiles })
+      setReactPath(reactFiles.find((f) => f.path === "src/App.tsx")?.path ?? reactFiles[0]?.path ?? "src/App.tsx")
+    } else {
+      onChange({ ...value, runtime: "html" })
+    }
+    setRuntimeConfirm(null)
+  }
+
   const hideDocsInRun = activeSourceHtml().includes(HOSTED_SITE_DOCS_SLOT)
   const slotWidgets = HostedSiteSlotWidgets({
     projectName: project.name,
@@ -106,8 +136,29 @@ export function HostedSitePageStudio({
     modules: project.modules,
     hideDocsInRun,
   })
+  const runByAlias = Object.fromEntries(
+    resolveWebsitePipelineBindings(project.id, value.pipelineBindings).map((binding) => {
+      if (binding.alias === "run" || binding.projectId === project.id) {
+        return [binding.alias, slotWidgets.run]
+      }
+      const bound = projects.find((p) => p.id === binding.projectId)
+      return [
+        binding.alias,
+        <SharedLinkPreview
+          key={binding.alias}
+          projectName={bound?.name ?? binding.alias}
+          viewerMarkdown=""
+          modules={bound?.modules ?? []}
+          variant="site"
+        />,
+      ]
+    }),
+  )
 
-  const preview = (
+  const preview =
+    value.runtime === "react" && resolvedTarget.kind !== "signin" ? (
+      <HostedSiteReactPreview options={value} runByAlias={runByAlias} />
+    ) : (
     <HostedSiteChrome
       options={value}
       surface={resolvedTarget.kind === "signin" ? "signin" : "app"}
@@ -123,9 +174,10 @@ export function HostedSitePageStudio({
           />
         ),
       }}
-      editable
+      runByAlias={runByAlias}
+      editable={value.runtime !== "react"}
     />
-  )
+    )
 
   const onPreviewSelect = useCallback((payload: HsPreviewSelectPayload) => {
     setSelection({ cssPath: payload.cssPath, snippet: payload.snippet })
@@ -231,6 +283,7 @@ export function HostedSitePageStudio({
   return (
     <div className="space-y-3">
       <div className="flex items-center gap-2">
+      {hideSurfaceTabs ? null : (
       <div className="flex flex-1 gap-1 rounded-md border border-border bg-muted/30 p-1">
         {(["vibe", "code"] as const).map((id) => {
           const active = tab === id
@@ -242,11 +295,33 @@ export function HostedSitePageStudio({
                 "flex flex-1 items-center justify-center gap-1.5 rounded px-2 py-1.5 text-xs font-medium transition-colors",
                 active ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground",
               )}
-              onClick={() => setTab(id)}
+              onClick={() => setLocalTab(id)}
               {...(id === "vibe" ? spineActionProps("share.site-vibe") : {})}
             >
               {id === "vibe" ? <Sparkles className="h-3.5 w-3.5" /> : <Code2 className="h-3.5 w-3.5" />}
               {id === "vibe" ? "Vibe" : "Code"}
+            </button>
+          )
+        })}
+      </div>
+      )}
+      <div className="flex gap-1 rounded-md border border-border bg-muted/30 p-1" data-spine-id="website.runtime">
+        {(["html", "react"] as const).map((id) => {
+          const active = value.runtime === id
+          return (
+            <button
+              key={id}
+              type="button"
+              className={cn(
+                "flex items-center gap-1 rounded px-2 py-1.5 text-[10px] font-medium transition-colors",
+                active ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground",
+              )}
+              onClick={() => {
+                if (id === value.runtime) return
+                setRuntimeConfirm(id)
+              }}
+            >
+              {id === "html" ? "HTML" : "React"}
             </button>
           )
         })}
@@ -259,6 +334,29 @@ export function HostedSitePageStudio({
         siteOptions={value}
       />
       </div>
+
+      <WebsitePipelineBindings
+        primaryProjectId={project.id}
+        projects={projects}
+        options={value}
+        onChange={onChange}
+      />
+
+      {runtimeConfirm ? (
+        <div className="flex flex-wrap items-center gap-2 rounded-md border border-border bg-muted/20 px-3 py-2 text-[11px]">
+          <span className="text-muted-foreground">
+            {runtimeConfirm === "react"
+              ? "Switch to a React project? HTML is kept as a snapshot you can switch back to."
+              : "Switch back to simple HTML? React files stay saved."}
+          </span>
+          <Button type="button" size="sm" className="h-7" onClick={() => switchRuntime(runtimeConfirm)}>
+            Switch
+          </Button>
+          <Button type="button" size="sm" variant="ghost" className="h-7" onClick={() => setRuntimeConfirm(null)}>
+            Cancel
+          </Button>
+        </div>
+      ) : null}
 
       <div>
         <button
@@ -444,8 +542,8 @@ export function HostedSitePageStudio({
                 ) : null}
                 <AssistantChat
                 title="Page"
-                subtitle="HTML around the run form"
-                initialMessage={VIBE_WELCOME}
+                subtitle={value.runtime === "react" ? "React around the run widgets" : "HTML around the run form"}
+                initialMessage={value.runtime === "react" ? VIBE_WELCOME_REACT : VIBE_WELCOME}
                 placeholder="Make a clean hero, then the workspace…"
                 loadingLabel="Designing page…"
                 simple
@@ -497,6 +595,74 @@ export function HostedSitePageStudio({
               </div>
             }
           />
+        </div>
+      ) : value.runtime === "react" ? (
+        <div className="space-y-3">
+          <p className="text-[10px] text-muted-foreground">
+            Vite + React project. Preview compiles App.tsx and mounts live RunPipeline widgets.
+          </p>
+          <div className="flex flex-wrap gap-1">
+            {value.reactFiles.map((file) => (
+              <button
+                key={file.path}
+                type="button"
+                className={cn(
+                  "inline-flex items-center gap-1 rounded-md border px-2 py-1 font-mono text-[10px]",
+                  reactPath === file.path
+                    ? "border-border bg-background text-foreground"
+                    : "border-transparent text-muted-foreground hover:text-foreground",
+                )}
+                onClick={() => setReactPath(file.path)}
+              >
+                <FileCode2 className="h-3 w-3" />
+                {file.path}
+              </button>
+            ))}
+            <button
+              type="button"
+              className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-[10px] text-muted-foreground hover:text-foreground"
+              onClick={() => {
+                const used = new Set(value.reactFiles.map((f) => f.path))
+                let n = 1
+                let path = "src/Component.tsx"
+                while (used.has(path)) {
+                  n += 1
+                  path = `src/Component${n}.tsx`
+                }
+                onChange({
+                  ...value,
+                  reactFiles: [...value.reactFiles, { path, contents: `export function Component() {\n  return <div />\n}\n` }],
+                })
+                setReactPath(path)
+              }}
+            >
+              <Plus className="h-3 w-3" />
+              File
+            </button>
+          </div>
+          <div className="overflow-hidden rounded-md border border-border">
+            <MonacoCodeEditor
+              value={value.reactFiles.find((f) => f.path === reactPath)?.contents ?? ""}
+              onChange={(next) =>
+                onChange({
+                  ...value,
+                  reactFiles: value.reactFiles.map((f) => (f.path === reactPath ? { ...f, contents: next } : f)),
+                })
+              }
+              language={reactPath.endsWith(".css") ? "css" : "typescript"}
+              compact
+              height="280px"
+              wordWrap="on"
+            />
+          </div>
+          <HtmlPreviewFrame
+            label="Page preview"
+            extraToolbar={previewToolbar}
+            onSelect={onPreviewSelect}
+            onInlineText={onPreviewInline}
+          >
+            {preview}
+          </HtmlPreviewFrame>
         </div>
       ) : (
         <div className="space-y-3">

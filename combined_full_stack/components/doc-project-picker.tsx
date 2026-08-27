@@ -8,6 +8,7 @@ import {
   DropdownMenu,
   DropdownMenuCheckboxItem,
   DropdownMenuContent,
+  DropdownMenuGroup,
   DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
@@ -64,26 +65,28 @@ export function DocProjectPicker({
         <span className="truncate">{label}</span>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-56" onClick={(e) => e.stopPropagation()}>
-        <DropdownMenuLabel className="font-mono text-[10px] uppercase">Available in</DropdownMenuLabel>
-        <DropdownMenuSeparator />
-        {projects.map((p) => {
-          const checked = linkedIds.includes(p.id)
-          const onlyLink = checked && linkedIds.length === 1
-          return (
-            <DropdownMenuCheckboxItem
-              key={p.id}
-              checked={checked}
-              disabled={pending || onlyLink}
-              onCheckedChange={(next) => void toggle(p.id, next === true)}
-              className="font-mono text-xs"
-            >
-              <span className={cn("truncate", p.id === activeProjectId && "font-medium")}>
-                {p.name}
-                {p.id === activeProjectId ? " (current)" : ""}
-              </span>
-            </DropdownMenuCheckboxItem>
-          )
-        })}
+        <DropdownMenuGroup>
+          <DropdownMenuLabel className="font-mono text-[10px] uppercase">Available in</DropdownMenuLabel>
+          <DropdownMenuSeparator />
+          {projects.map((p) => {
+            const checked = linkedIds.includes(p.id)
+            const onlyLink = checked && linkedIds.length === 1
+            return (
+              <DropdownMenuCheckboxItem
+                key={p.id}
+                checked={checked}
+                disabled={pending || onlyLink}
+                onCheckedChange={(next) => void toggle(p.id, next === true)}
+                className="font-mono text-xs"
+              >
+                <span className={cn("truncate", p.id === activeProjectId && "font-medium")}>
+                  {p.name}
+                  {p.id === activeProjectId ? " (current)" : ""}
+                </span>
+              </DropdownMenuCheckboxItem>
+            )
+          })}
+        </DropdownMenuGroup>
       </DropdownMenuContent>
     </DropdownMenu>
   )

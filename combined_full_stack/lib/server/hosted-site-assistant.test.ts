@@ -90,6 +90,7 @@ describe("hosted site UI vibe agent prompts", () => {
       authEnabled: null,
       authProvider: null,
       authHtml: null,
+      reactFilePatches: null,
     })
     expect(next.customHtml).toContain(HOSTED_SITE_RUN_SLOT)
     expect(next.brand.companyName).toBe("Northwind")
@@ -110,6 +111,7 @@ describe("hosted site UI vibe agent prompts", () => {
       authEnabled: null,
       authProvider: null,
       authHtml: null,
+      reactFilePatches: null,
     })
     expect(next.brand.primaryColor).toBe("#aabbcc")
   })
@@ -129,8 +131,45 @@ describe("hosted site UI vibe agent prompts", () => {
       authEnabled: true,
       authProvider: "spine",
       authHtml: "<section><h1>Welcome</h1></section>",
+      reactFilePatches: null,
     })
     expect(next.auth.enabled).toBe(true)
     expect(next.authHtml).toContain(HOSTED_SITE_AUTH_SLOT)
+  })
+
+  it("keeps pipeline bindings and merges react file patches", () => {
+    const current = {
+      ...OPTIONS,
+      runtime: "react" as const,
+      pipelineBindings: [{ alias: "run" as const, projectId: PROJECT.id }],
+      reactFiles: [{ path: "src/App.tsx", contents: "export default function App(){return null}" }],
+    }
+    const next = applyHostedSiteAssistantPatch(current, {
+      message: "ok",
+      customHtml: "<h1>should not apply</h1>",
+      customCss: null,
+      companyName: null,
+      tagline: null,
+      primaryColor: null,
+      accentColor: null,
+      backgroundColor: null,
+      textColor: null,
+      hideSpineFooter: null,
+      authEnabled: null,
+      authProvider: null,
+      authHtml: null,
+      reactFilePatches: [{ path: "src/App.tsx", contents: "export default function App(){return <h1>Hi</h1>}" }],
+    })
+    expect(next.runtime).toBe("react")
+    expect(next.pipelineBindings).toEqual(current.pipelineBindings)
+    expect(next.customHtml).toBe(OPTIONS.customHtml)
+    expect(next.reactFiles.find((f) => f.path === "src/App.tsx")?.contents).toContain("Hi")
+  })
+
+  it("react system prompt asks for file patches, not HTML slots", () => {
+    const system = buildHostedSiteAssistantSystemPrompt("react")
+    expect(system).toMatch(/reactFilePatches/)
+    expect(system).toContain("RunPipeline")
+    expect(system).not.toContain(HOSTED_SITE_RUN_SLOT)
   })
 })

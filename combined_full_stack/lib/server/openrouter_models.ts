@@ -43,6 +43,13 @@ function catalogToOption(entry: ModelCatalogEntry, rates: OpenRouterRates): Mode
   };
 }
 
+const ZERO_RATES: OpenRouterRates = { promptUsdPerToken: 0, completionUsdPerToken: 0 };
+
+// AI : local JsonStore with an empty .env.local must still paint the picker — live rates are optional.
+function catalogFallbackOptions(): ModelOption[] {
+  return MODEL_CATALOG.map((entry) => catalogToOption(entry, ZERO_RATES));
+}
+
 async function fetchOpenRouterRatesBySlug(): Promise<Map<string, OpenRouterRates>> {
   const key = process.env.OPENROUTER_API_KEY?.trim();
   if (!key) throw new Error("OPENROUTER_API_KEY missing — set it in the repo root .env");
@@ -87,12 +94,16 @@ export async function refreshModelOptions(): Promise<ModelOption[]> {
 
 export async function getModelOptions(): Promise<ModelOption[]> {
   if (cachedOptions && Date.now() - cachedAt < CACHE_TTL_MS) return cachedOptions;
+  if (!process.env.OPENROUTER_API_KEY?.trim()) {
+    orModelsLog.debug(`OPENROUTER_API_KEY missing — using catalog without live rates`);
+    return catalogFallbackOptions();
+  }
   if (refreshPromise) return refreshPromise;
   refreshPromise = refreshModelOptions()
     .catch((err) => {
       orModelsLog.error(`refresh failed`, { err: String(err) });
       if (cachedOptions) return cachedOptions;
-      throw err;
+      return catalogFallbackOptions();
     })
     .finally(() => {
       refreshPromise = null;

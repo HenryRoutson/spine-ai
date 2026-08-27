@@ -86,7 +86,7 @@ export const PARITY_ROWS: ParityRow[] = [
   row(
     "nav.build.editors",
     "pipeline",
-    { label: "dev", file: "components/build-surface-nav.tsx", how: "Build visual editors (structure/pipeline/…)" },
+    { label: "Building", file: "components/build-surface-nav.tsx", how: "Build visual editors (structure/pipeline/…)" },
     y(
       `Ink: press ${windowStepHotkey(windowPanelHeader(AppWindowId.Structure).step)}–${windowStepHotkey(windowPanelHeader(AppWindowId.Inference).step)} for structure/pipeline/testing/inference`,
       "tab-structure",
@@ -233,7 +233,7 @@ export const PARITY_ROWS: ParityRow[] = [
   row(
     "project.browse-all",
     "chrome",
-    { label: "All projects…", file: "components/project-selector.tsx" },
+    { label: "All pipelines…", file: "components/project-selector.tsx" },
     y("Ink: ↑↓ in project pane; spine session list", "session list"),
     y("GET /api/projects + GET /api/state", "/api/state"),
     y("get_project after session list", "get_project"),

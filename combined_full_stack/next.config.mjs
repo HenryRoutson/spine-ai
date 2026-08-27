@@ -55,6 +55,8 @@ const nangoCsp = nangoCspOrigins()
 
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  // AI : Cursor in-app browser often uses 127.0.0.1 while `next dev` binds localhost.
+  allowedDevOrigins: ["127.0.0.1", "localhost"],
   turbopack: {
     root: __dirname,
   },

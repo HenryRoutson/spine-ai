@@ -62,7 +62,6 @@ export function AppChromeHeader({
         value={primarySection}
         onChange={onPrimarySectionChange}
         openingSection={openingSection}
-        showBuild={!projectSlot}
       />
 
       {/* AI : TODO (opt-browser-tui-chrome) — Terminal|GUI toggle here, like a theme switch; skip when embed. */}

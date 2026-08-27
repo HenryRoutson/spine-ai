@@ -743,6 +743,52 @@ export const hostedSiteOptionsSchema = z
       )
       .max(8)
       .optional(),
+    pipelineBindings: z
+      .array(
+        z
+          .object({
+            alias: z.string().trim().min(1).max(40),
+            projectId: projectIdSchema,
+          })
+          .strict(),
+      )
+      .max(24)
+      .optional(),
+    runtime: z.enum(["html", "react"]).optional(),
+    reactFiles: z
+      .array(
+        z
+          .object({
+            path: z.string().trim().min(1).max(200),
+            contents: z.string().max(50_000),
+          })
+          .strict(),
+      )
+      .max(32)
+      .optional(),
+  })
+  .strict();
+
+export const hostedSiteCompileBodySchema = z
+  .object({
+    files: z
+      .array(
+        z
+          .object({
+            path: z.string().trim().min(1).max(200),
+            contents: z.string().max(50_000),
+          })
+          .strict(),
+      )
+      .max(32),
+    brand: z
+      .object({
+        companyName: z.string().max(200).optional(),
+        tagline: z.string().max(400).optional(),
+        logoUrl: z.string().max(2000).optional(),
+      })
+      .passthrough()
+      .optional(),
   })
   .strict();
 
@@ -853,6 +899,7 @@ export const sharedLinkRunBodySchema = z
     sessionId: z.string().max(128).optional(),
     // AI : HMAC from /embed/[id] — never trust client-asserted parentOrigin for allowlist auth.
     embedSessionToken: z.string().min(16).max(512).optional(),
+    pipelineAlias: z.string().trim().min(1).max(40).optional(),
   })
   .strict();
 

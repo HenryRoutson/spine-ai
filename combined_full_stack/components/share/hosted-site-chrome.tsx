@@ -31,6 +31,7 @@ export function HostedSiteChrome({
   pageHtml,
   children,
   slots,
+  runByAlias,
   editable = false,
 }: {
   options: HostedSiteOptions
@@ -39,6 +40,7 @@ export function HostedSiteChrome({
   pageHtml?: string
   children?: ReactNode
   slots?: Partial<Record<hosted_site_widget_slot, ReactNode>>
+  runByAlias?: Record<string, ReactNode>
   editable?: boolean
 }) {
   const compiled = useMemo(() => {
@@ -48,9 +50,25 @@ export function HostedSiteChrome({
   }, [options, surface, pageHtml, editable])
   const company = options.brand.companyName.trim() || "Your company"
   const primary = hostedSitePrimarySlot(surface)
-  const hasPrimary = compiled.segments.some((s) => s.kind === "slot" && s.slot === primary)
+  const hasPrimary = compiled.segments.some(
+    (s) =>
+      s.kind === "slot" &&
+      s.slot === primary &&
+      (primary !== "run" || !s.alias || s.alias === "run"),
+  )
 
-  function slotNode(slot: hosted_site_widget_slot): ReactNode {
+  function slotNode(slot: hosted_site_widget_slot, alias?: string): ReactNode {
+    if (slot === "run") {
+      const key = alias || "run"
+      if (runByAlias?.[key]) return runByAlias[key]
+      if (key !== "run") {
+        return (
+          <div className="rounded-md border border-dashed border-border px-3 py-4 text-center text-[11px] text-muted-foreground">
+            Pipeline · {key}
+          </div>
+        )
+      }
+    }
     return slots?.[slot] ?? (slot === primary ? children : null)
   }
 
@@ -117,7 +135,7 @@ export function HostedSiteChrome({
           <div key={`html-${i}`} dangerouslySetInnerHTML={{ __html: seg.html }} />
         ) : (
           <div key={`slot-${seg.slot}-${i}`} className={HOSTED_SITE_SLOT_CLASS[seg.slot]}>
-            {slotNode(seg.slot)}
+            {slotNode(seg.slot, seg.alias)}
           </div>
         ),
       )}

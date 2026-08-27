@@ -3,7 +3,7 @@ import { apiError, requireAuthStore } from "@/lib/server/api_context";
 import { parseRequestJson, parseSharedLinkId, updateDeploymentBodySchema } from "@/lib/server/api_schemas";
 import {
   getSharedLink,
-  publicLinkView,
+  publicLinkViewForAlias,
   revokeSharedLink,
   setSharedLinkEnabled,
   SharedLinkSpendLimitTooLowError,
@@ -14,13 +14,14 @@ import {
 } from "@/lib/server/shared_links";
 import type { SharedLinkRecord } from "@/lib/shared-link-types";
 
-export async function GET(_req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
+export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
   const { id } = await ctx.params;
   const linkId = parseSharedLinkId(id);
   if (!linkId) return apiError("link not found", 404);
   const link = await getSharedLink(linkId);
   if (!link) return apiError("link not found", 404);
-  return NextResponse.json({ link: publicLinkView(link) });
+  const alias = req.nextUrl.searchParams.get("alias") ?? undefined;
+  return NextResponse.json({ link: await publicLinkViewForAlias(link, alias) });
 }
 
 export async function DELETE(_req: NextRequest, ctx: { params: Promise<{ id: string }> }) {

@@ -2,7 +2,8 @@ import { AppWindowId, type AppWindowId as AppWindowIdType } from "@/lib/app-wind
 import { isVibeWindow } from "@/lib/app-nav-config"
 import { APP_PRIMARY_SECTION_NAV, AppPrimarySection } from "@/lib/app-primary-section-labels"
 
-// AI : Build L0 sub-decision — Vibe (agent) vs Build (visual editors); share one project selector.
+// AI : Build L0 sub-decision — Vibe (agent) vs Build (visual editors); share one selector.
+// AI : On a website, Editors is page code (or backend peek when developer tools are hidden), not Structure.
 export enum BuildSurface {
   Vibe = "vibe",
   Editors = "editors",
@@ -21,9 +22,8 @@ export const BUILD_SURFACE_NAV: Record<
   { label: string; title: string }
 > = {
   [BuildSurface.Vibe]: APP_PRIMARY_SECTION_NAV[AppPrimarySection.Vibe],
-  // AI : "dev" not "Build" — L0 header already owns Build; no explanatory tooltip.
   [BuildSurface.Editors]: {
-    label: "dev",
-    title: "dev",
+    label: "Building",
+    title: "Visual editors — structure, pipeline, testing",
   },
 }

@@ -1,5 +1,6 @@
 import { AUTH_SIGN_IN_REQUIRED } from "@/lib/auth-messages";
 import { createClient } from "@/utils/supabase/server";
+import { getSupabasePublicEnv } from "@/utils/supabase/env";
 import { isProductionDeploy, isVercelWithoutSupabase, isLocalDevMode, type user_id_string } from "./require_auth";
 import {
   ensureSeeded,
@@ -102,6 +103,11 @@ async function hydrateUserStore(store: Store): Promise<Store> {
 // AI : Supabase keeps the shared JsonStore; production deploys reject unauthenticated access.
 export async function getStore(): Promise<Store> {
   if (isVercelWithoutSupabase()) throw new Error("Supabase env vars required on Vercel");
+
+  if (!getSupabasePublicEnv()) {
+    storeLog.debug(`using local JsonStore`);
+    return getLocalStore();
+  }
 
   async function userIdFromClient(
     supabase: Awaited<ReturnType<typeof createClient>>,

@@ -26,7 +26,7 @@ export const HOSTED_SITE_IGNORED_SLOT_SELECTOR = Object.values(HOSTED_SITE_SLOT_
   .map((cls) => `.${cls}`)
   .join(", ")
 
-const SLOT_SPLIT_RE = /(\{\{(?:run|auth|output|chatbot|docs)\}\})/g
+const SLOT_SPLIT_RE = /(\{\{(?:run(?::[a-z0-9_-]+)?|auth|output|chatbot|docs)\}\})/g
 
 const TOKEN_TO_SLOT: Record<string, hosted_site_widget_slot> = {
   [HOSTED_SITE_RUN_SLOT]: "run",
@@ -36,15 +36,22 @@ const TOKEN_TO_SLOT: Record<string, hosted_site_widget_slot> = {
   [HOSTED_SITE_DOCS_SLOT]: "docs",
 }
 
+const RUN_ALIAS_RE = /^\{\{run:([a-z0-9_-]+)\}\}$/
+
 export type HostedSiteHtmlSegment =
   | { kind: "html"; html: string }
-  | { kind: "slot"; slot: hosted_site_widget_slot }
+  | { kind: "slot"; slot: hosted_site_widget_slot; alias?: string }
 
 export function splitHostedSiteSlots(html: string): HostedSiteHtmlSegment[] {
   const parts = html.split(SLOT_SPLIT_RE)
   const segments: HostedSiteHtmlSegment[] = []
   for (const part of parts) {
     if (!part) continue
+    const named = part.match(RUN_ALIAS_RE)
+    if (named?.[1]) {
+      segments.push({ kind: "slot", slot: "run", alias: named[1] })
+      continue
+    }
     const slot = TOKEN_TO_SLOT[part]
     segments.push(slot ? { kind: "slot", slot } : { kind: "html", html: part })
   }

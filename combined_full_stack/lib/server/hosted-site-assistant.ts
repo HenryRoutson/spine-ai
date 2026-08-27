@@ -17,8 +17,9 @@ import {
   parseHexColor,
   type hex_color_string,
 } from "@/lib/hosted-site"
-import type { HostedSiteAuthProvider, HostedSiteOptions } from "@/lib/shared-link-types"
+import type { HostedSiteAuthProvider, HostedSiteOptions, HostedSiteReactFile, website_runtime_kind } from "@/lib/shared-link-types"
 import type { ModelId, Project } from "./types"
+import { normalizeHostedSiteReactFiles } from "@/lib/hosted-site-react"
 
 const hostedSiteAssistantResponseSchema = z.object({
   message: z.string(),
@@ -34,6 +35,10 @@ const hostedSiteAssistantResponseSchema = z.object({
   authEnabled: z.boolean().nullable(),
   authProvider: z.enum(["spine", "custom_supabase"]).nullable(),
   authHtml: z.string().nullable(),
+  reactFilePatches: z
+    .array(z.object({ path: z.string(), contents: z.string() }).strict())
+    .max(32)
+    .nullable(),
 })
 
 export type HostedSiteAssistantResult = {
@@ -42,7 +47,25 @@ export type HostedSiteAssistantResult = {
   usageCents: number
 }
 
-export function buildHostedSiteAssistantSystemPrompt(): string {
+export function buildHostedSiteAssistantSystemPrompt(runtime: website_runtime_kind = "html"): string {
+  if (runtime === "react") {
+    return `You are a product-page designer for a hosted Spine app (Lovable-style React around pipeline widgets).
+
+The default page is a signed-in workspace. Do not add a sign-in screen unless the publisher explicitly asks.
+
+You edit the Vite + React project: src/App.tsx, src/index.css, and files under src/. Keep <RunPipeline alias="…" /> for each bound pipeline (default alias "run").
+You MUST NOT change the pipeline, structures, prompts, project Docs, test files, or funding.
+You MUST NOT invent a custom Supabase URL or anon key.
+
+Return a short message for the publisher, then fields:
+- reactFilePatches: [{path, contents}] for every file you change or add, or null to leave the tree unchanged
+- companyName / tagline / colors: new value, or null to leave unchanged
+- hideSpineFooter / authEnabled: true/false, or null to leave unchanged
+- customHtml / customCss / authHtml: always null in React mode (the HTML snapshot stays as-is)
+- authProvider: null unless they asked to change it
+
+Do not remove src/components/RunPipeline.tsx. Do not invent backend routes or npm packages.`
+  }
   return `You are a product-page designer for a hosted Spine app (Lovable-style HTML around a run form).
 
 The default page is a signed-in workspace. Do not add a sign-in screen unless the publisher explicitly asks. Sign-in HTML can exist for later; leave authEnabled false unless they want a gate.
@@ -61,6 +84,7 @@ Return a short message for the publisher, then fields:
 - companyName / tagline / colors: new value, or null to leave unchanged
 - hideSpineFooter / authEnabled: true/false, or null to leave unchanged
 - authProvider: "spine" (default, handled) or "custom_supabase" (placeholder), or null to leave unchanged
+- reactFilePatches: always null in HTML mode
 
 Write complete HTML fragments (nav/hero/features around ${HOSTED_SITE_RUN_SLOT}; sign-in chrome around ${HOSTED_SITE_AUTH_SLOT} only if they asked). A full <!DOCTYPE html> document is ok — the host unwraps body + <style>.
 Keep CSS in customCss or <style> in the HTML. Do not invent backend routes.`
@@ -93,6 +117,11 @@ ${current.authHtml.trim() || DEFAULT_HOSTED_SITE_AUTH_HTML}
 
 Current extra CSS:
 ${current.customCss.trim() || "(none)"}
+${
+  current.runtime === "react"
+    ? `\nReact project files:\n${current.reactFiles.map((f) => `--- ${f.path} ---\n${f.contents}`).join("\n")}\n`
+    : ""
+}
 ${historyBlock}
 Publisher request:
 ${opts.message.trim()}`
@@ -116,13 +145,29 @@ function mergeAuthProvider(next: HostedSiteAuthProvider | null, current: HostedS
   return next ?? current
 }
 
+function mergeReactFilePatches(
+  current: HostedSiteReactFile[],
+  patches: { path: string; contents: string }[] | null,
+): HostedSiteReactFile[] {
+  if (!patches || patches.length === 0) return current
+  const map = new Map(current.map((file) => [file.path, file.contents]))
+  for (const patch of patches) {
+    const path = patch.path.trim().replace(/^\/+/, "")
+    if (!path || path.includes("..")) continue
+    map.set(path, patch.contents)
+  }
+  return normalizeHostedSiteReactFiles([...map.entries()].map(([path, contents]) => ({ path, contents })))
+}
+
 export function applyHostedSiteAssistantPatch(
   current: HostedSiteOptions,
   patch: z.infer<typeof hostedSiteAssistantResponseSchema>,
 ): HostedSiteOptions {
   const base = normalizeHostedSiteOptions(current)
   const authEnabled = patch.authEnabled ?? base.auth.enabled
+  const reactMode = base.runtime === "react"
   return normalizeHostedSiteOptions({
+    ...base,
     brand: {
       companyName: patch.companyName?.trim() || base.brand.companyName,
       tagline: patch.tagline?.trim() || base.brand.tagline,
@@ -132,9 +177,12 @@ export function applyHostedSiteAssistantPatch(
       backgroundColor: mergeHex(patch.backgroundColor, base.brand.backgroundColor),
       textColor: mergeHex(patch.textColor, base.brand.textColor),
     },
-    customHtml:
-      patch.customHtml != null ? ensureRunSlot(patch.customHtml) : base.customHtml || DEFAULT_HOSTED_SITE_HTML,
-    customCss: patch.customCss != null ? patch.customCss : base.customCss,
+    customHtml: reactMode
+      ? base.customHtml
+      : patch.customHtml != null
+        ? ensureRunSlot(patch.customHtml)
+        : base.customHtml || DEFAULT_HOSTED_SITE_HTML,
+    customCss: reactMode ? base.customCss : patch.customCss != null ? patch.customCss : base.customCss,
     hideSpineFooter: patch.hideSpineFooter ?? base.hideSpineFooter,
     auth: {
       ...base.auth,
@@ -146,6 +194,9 @@ export function applyHostedSiteAssistantPatch(
         ? ensureAuthSlot(patch.authHtml)
         : base.authHtml || (authEnabled ? DEFAULT_HOSTED_SITE_AUTH_HTML : ""),
     pages: base.pages,
+    pipelineBindings: base.pipelineBindings,
+    runtime: base.runtime,
+    reactFiles: reactMode ? mergeReactFilePatches(base.reactFiles, patch.reactFilePatches) : base.reactFiles,
   })
 }
 
@@ -165,7 +216,7 @@ export async function proposeHostedSitePage(
       history,
     }),
     hostedSiteAssistantResponseSchema,
-    { model, ledger, system: buildHostedSiteAssistantSystemPrompt() },
+    { model, ledger, system: buildHostedSiteAssistantSystemPrompt(siteOptions.runtime) },
   )
   return {
     message: raw.message.trim() || "Updated the page.",

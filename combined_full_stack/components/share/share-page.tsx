@@ -15,6 +15,7 @@ import { OwnPipelineRunner } from "@/components/share/own-pipeline-runner"
 import { ShareEmbedForm } from "@/components/share/share-embed-form"
 import { ShareLinkForm } from "@/components/share/share-link-form"
 import { ShareSiteForm } from "@/components/share/share-site-form"
+import { PipelineWebsitesPanel } from "@/components/share/pipeline-websites-panel"
 import { SharedLinkRunner } from "@/components/share/shared-link-runner"
 import { SharedWithMePanel } from "@/components/share/shared-with-me-panel"
 import { PipelineObserveEmpty } from "@/components/pipeline-observe-empty"
@@ -51,7 +52,7 @@ export function SharePage({ simple }: { simple?: boolean } = {}) {
   useMarkPrimarySectionReady(AppPrimarySection.Run)
   const builder = useOptionalStore()
   const isConsumer = !builder
-  const { setActiveWindow, activeWindow, activeSharedLinkId, openSharedRun } = useAppShell()
+  const { setActiveWindow, activeWindow, activeSharedLinkId, openSharedRun, editingWebsite } = useAppShell()
   const isVibe = isVibeWindow(activeWindow)
   // AI : vibe/simple — hosted page studio + mint; Link / API / Embed stay on the full Share page.
   const isSimple = simple === true || isVibe
@@ -179,6 +180,17 @@ export function SharePage({ simple }: { simple?: boolean } = {}) {
       <div className="min-h-0 flex-1 overflow-y-auto p-5">
         {visibleSection === ShareSection.Activity ? (
           <DeploymentActivityPage projectId={builder.project.id} initialFilter={activityFilter} />
+        ) : isSimple && editingWebsite ? (
+          <div className="mx-auto flex max-w-7xl flex-col gap-8">
+            <section className="rounded-lg border border-border bg-card p-4">
+              <ShareSiteForm
+                project={builder.project}
+                docs={builder.docs}
+                inferenceInputDocIds={builder.inferenceInputDocIds}
+                onCreated={() => setRefreshToken((n) => n + 1)}
+              />
+            </section>
+          </div>
         ) : pipelineEmpty ? (
           <PipelineObserveEmpty
             copy={isSimple ? "What do you want to build?" : "Build a pipeline first."}
@@ -208,14 +220,18 @@ export function SharePage({ simple }: { simple?: boolean } = {}) {
             </div>
           </div>
         ) : isSimple ? (
-          <div className="mx-auto flex max-w-7xl flex-col gap-8">
+          <div className="mx-auto flex max-w-3xl flex-col gap-8">
             <section className="rounded-lg border border-border bg-card p-4">
-              <ShareSiteForm
+              <ShareLinkForm
                 project={builder.project}
                 docs={builder.docs}
                 inferenceInputDocIds={builder.inferenceInputDocIds}
                 onCreated={() => setRefreshToken((n) => n + 1)}
+                simple
               />
+            </section>
+            <section className="rounded-lg border border-border bg-card p-4">
+              <PipelineWebsitesPanel project={builder.project} projects={builder.projects} />
             </section>
             <section className="rounded-lg border border-border bg-card p-4">
               <DeploymentsList projectId={builder.project.id} refreshToken={refreshToken} simple />

@@ -4,21 +4,32 @@ import { useMemo } from "react"
 import { SharedRunViewer } from "@/components/shared-run-viewer"
 import { HostedSiteAccountBar, HostedSiteSignInCard } from "@/components/share/hosted-site-sign-in"
 import { HostedSiteChrome } from "@/components/share/hosted-site-chrome"
+import { HostedSiteReactPreview } from "@/components/share/hosted-site-react-preview"
 import { HostedSiteSlotWidgets } from "@/components/share/hosted-site-slot-widgets"
 import { DEFAULT_HOSTED_SITE_OPTIONS } from "@/lib/shared-link-types"
 import { compileHostedSiteHtml, normalizeHostedSiteOptions } from "@/lib/hosted-site"
 import type { HostedSiteOptions } from "@/lib/shared-link-types"
+import type { hosted_site_react_bundle } from "@/lib/hosted-site-react"
 import { clearWorkspaceClientSession } from "@/lib/clear-workspace-client-session"
 import { useSupabaseSession } from "@/lib/use-supabase-session"
+import { resolveWebsitePipelineBindings } from "@/lib/website-pipelines"
+import type { ProjectId } from "@/lib/types"
+import type { ReactNode } from "react"
 
 export function HostedSiteViewer({
   linkId,
   siteOptions,
   viewerMarkdown = "",
+  projectId,
+  reactBundle,
+  reactCompileError,
 }: {
   linkId: string
   siteOptions?: HostedSiteOptions | null
   viewerMarkdown?: string
+  projectId: ProjectId
+  reactBundle?: hosted_site_react_bundle | null
+  reactCompileError?: string | null
 }) {
   const options = normalizeHostedSiteOptions(siteOptions ?? DEFAULT_HOSTED_SITE_OPTIONS)
   const { email, isAuthenticated, signOut } = useSupabaseSession()
@@ -34,6 +45,40 @@ export function HostedSiteViewer({
     modules: [],
     hideDocsInRun: hasDocsSlot,
   })
+  const bindings = resolveWebsitePipelineBindings(projectId, options.pipelineBindings)
+  const runByAlias = useMemo(() => {
+    const map: Record<string, ReactNode> = {}
+    for (const binding of bindings) {
+      map[binding.alias] = (
+        <SharedRunViewer
+          key={binding.alias}
+          linkId={linkId}
+          variant="site"
+          hideViewerMarkdown={hasDocsSlot}
+          pipelineAlias={binding.alias}
+        />
+      )
+    }
+    if (!map.run) {
+      map.run = (
+        <SharedRunViewer linkId={linkId} variant="site" hideViewerMarkdown={hasDocsSlot} />
+      )
+    }
+    return map
+  }, [bindings, hasDocsSlot, linkId])
+
+  const accountBar =
+    options.auth.enabled && isAuthenticated && email ? (
+      <HostedSiteAccountBar
+        email={email}
+        onSignOut={() =>
+          void signOut().then(() => {
+            clearWorkspaceClientSession()
+            window.location.href = nextPath
+          })
+        }
+      />
+    ) : null
 
   if (showSignIn) {
     return (
@@ -53,28 +98,35 @@ export function HostedSiteViewer({
     )
   }
 
+  const runSlot = (
+    <>
+      {accountBar}
+      {runByAlias.run}
+    </>
+  )
+
+  if (options.runtime === "react") {
+    return (
+      <div>
+        {accountBar}
+        <HostedSiteReactPreview
+          options={options}
+          runByAlias={{ ...runByAlias, run: runSlot }}
+          bundle={reactBundle}
+          compileError={reactCompileError}
+        />
+      </div>
+    )
+  }
+
   return (
     <HostedSiteChrome
       options={options}
       slots={{
         ...widgets,
-        run: (
-          <>
-            {options.auth.enabled && isAuthenticated && email ? (
-              <HostedSiteAccountBar
-                email={email}
-                onSignOut={() =>
-                  void signOut().then(() => {
-                    clearWorkspaceClientSession()
-                    window.location.href = nextPath
-                  })
-                }
-              />
-            ) : null}
-            <SharedRunViewer linkId={linkId} variant="site" hideViewerMarkdown={hasDocsSlot} />
-          </>
-        ),
+        run: runSlot,
       }}
+      runByAlias={{ ...runByAlias, run: runSlot }}
     />
   )
 }

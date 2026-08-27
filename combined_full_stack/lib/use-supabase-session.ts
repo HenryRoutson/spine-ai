@@ -1,7 +1,7 @@
 "use client"
 
 import { useCallback, useEffect, useState } from "react"
-import { createClient } from "@/utils/supabase/client"
+import { tryCreateClient } from "@/utils/supabase/client"
 
 export function useSupabaseSession() {
   const [email, setEmail] = useState<string | null>(null)
@@ -10,7 +10,11 @@ export function useSupabaseSession() {
   useEffect(() => {
     let unsub: (() => void) | undefined
     let cancelled = false
-    void createClient().then(async (supabase) => {
+    void tryCreateClient().then(async (supabase) => {
+      if (!supabase) {
+        if (!cancelled) setReady(true)
+        return
+      }
       const { data: { session } } = await supabase.auth.getSession()
       if (!cancelled) {
         setEmail(session?.user?.email ?? null)
@@ -28,8 +32,8 @@ export function useSupabaseSession() {
   }, [])
 
   const signOut = useCallback(async () => {
-    const supabase = await createClient()
-    await supabase.auth.signOut()
+    const supabase = await tryCreateClient()
+    if (supabase) await supabase.auth.signOut()
     setEmail(null)
   }, [])
 

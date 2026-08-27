@@ -37,6 +37,7 @@ import type { SharedLinkDefaultDoc, SharedLinkRecord, EmbedOptions, HostedSiteBr
 import { DEFAULT_EMBED_OPTIONS } from "@/lib/shared-link-types";
 import { isEmbedLinkId, normalizeEmbedOrigins } from "@/lib/server/embed_origins";
 import { isSiteLinkId, normalizeHostedSiteOptions } from "@/lib/hosted-site";
+import { DEFAULT_WEBSITE_PIPELINE_ALIAS, resolveWebsitePipelineBindings } from "@/lib/website-pipelines";
 import { normalizeViewerMarkdown } from "@/lib/share-viewer-markdown";
 
 export type { SharedLinkDefaultDoc, SharedLinkRecord };
@@ -854,6 +855,36 @@ export function publicLinkView(link: StoredSharedLink) {
     embedOptions: normalizeEmbedOptions(link.embedOptions),
     siteOptions: normalizeHostedSiteOptions(link.siteOptions),
   };
+}
+
+export async function snapshotForWebsiteAlias(
+  link: StoredSharedLink,
+  alias: string | undefined,
+  sharerStore?: Store,
+): Promise<Project> {
+  const want = (alias ?? "").trim() || DEFAULT_WEBSITE_PIPELINE_ALIAS
+  const bindings = resolveWebsitePipelineBindings(
+    link.projectId,
+    normalizeHostedSiteOptions(link.siteOptions).pipelineBindings,
+  )
+  const bound = bindings.find((b) => b.alias === want) ?? bindings[0]
+  if (!bound || bound.projectId === link.projectId) return link.snapshot
+  const store = sharerStore ?? (await openStoreForUser(link.ownerId))
+  const project = store.project(bound.projectId)
+  return project ? migrateProjectModules(project) : link.snapshot
+}
+
+export async function publicLinkViewForAlias(link: StoredSharedLink, alias?: string) {
+  const snapshot = await snapshotForWebsiteAlias(link, alias)
+  const view = publicLinkView(link)
+  if (snapshot === link.snapshot) return view
+  return {
+    ...view,
+    name: snapshot.name,
+    modules: snapshot.modules.map(sanitizeModuleForPublic),
+    models: snapshot.models,
+    defaultDocs: [] as typeof view.defaultDocs,
+  }
 }
 
 export function sessionTokenHash(sessionId: string, linkId: SharedLinkId): string {

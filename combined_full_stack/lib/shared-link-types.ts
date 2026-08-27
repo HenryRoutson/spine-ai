@@ -65,6 +65,19 @@ export type HostedSitePage = {
   html: string;
 };
 
+export type website_runtime_kind = "html" | "react";
+export type website_pipeline_alias = string & { __brand: "website_pipeline_alias" };
+
+export type WebsitePipelineBinding = {
+  alias: website_pipeline_alias;
+  projectId: Project["id"];
+};
+
+export type HostedSiteReactFile = {
+  path: string;
+  contents: string;
+};
+
 export type HostedSiteOptions = {
   brand: HostedSiteBrand;
   customHtml: string;
@@ -74,6 +87,10 @@ export type HostedSiteOptions = {
   authHtml: string;
   // AI : extra pages beyond index (customHtml) + auth.html — empty keeps today's single-page export.
   pages: HostedSitePage[];
+  // AI : empty = the share link's projectId is the only pipeline (legacy 1:1).
+  pipelineBindings: WebsitePipelineBinding[];
+  runtime: website_runtime_kind;
+  reactFiles: HostedSiteReactFile[];
 };
 
 export const DEFAULT_HOSTED_SITE_OPTIONS: HostedSiteOptions = {
@@ -92,6 +109,9 @@ export const DEFAULT_HOSTED_SITE_OPTIONS: HostedSiteOptions = {
   auth: { ...DEFAULT_HOSTED_SITE_AUTH },
   authHtml: "",
   pages: [],
+  pipelineBindings: [],
+  runtime: "html",
+  reactFiles: [],
 };
 
 export type SharedLinkRecord = {

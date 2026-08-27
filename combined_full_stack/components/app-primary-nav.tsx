@@ -19,17 +19,14 @@ type AppPrimaryNavProps = {
   value: AppPrimarySection
   onChange: (section: AppPrimarySection) => void
   openingSection?: AppPrimarySection | null
-  // AI : hide Build when a project is open — the Project dropdown is the project-level control.
-  showBuild?: boolean
   className?: string
 }
 
-// AI : L0 — Run, Build, Billing, Settings. Build is the door from Run / the picker, not in-project chrome.
+// AI : L0 — Run, Build, Billing, Settings. Build stays visible with a project open so Building cannot vanish.
 export function AppPrimaryNav({
   value,
   onChange,
   openingSection = null,
-  showBuild = true,
   className,
 }: AppPrimaryNavProps) {
   const warmRun = useWarmRun()
@@ -59,17 +56,15 @@ export function AppPrimaryNav({
         spineId="nav.run"
         {...APP_PRIMARY_SECTION_NAV[AppPrimarySection.Run]}
       />
-      {showBuild ? (
-        <PrimaryButton
-          active={value === AppPrimarySection.Build}
-          loading={openingSection === AppPrimarySection.Build}
-          onClick={() => onChange(AppPrimarySection.Build)}
-          onWarm={warmBuild}
-          icon={Hammer}
-          spineId="nav.build"
-          {...APP_PRIMARY_SECTION_NAV[AppPrimarySection.Build]}
-        />
-      ) : null}
+      <PrimaryButton
+        active={value === AppPrimarySection.Build}
+        loading={openingSection === AppPrimarySection.Build}
+        onClick={() => onChange(AppPrimarySection.Build)}
+        onWarm={warmBuild}
+        icon={Hammer}
+        spineId="nav.build"
+        {...APP_PRIMARY_SECTION_NAV[AppPrimarySection.Build]}
+      />
       <PrimaryButton
         active={value === AppPrimarySection.Billing}
         loading={openingSection === AppPrimarySection.Billing}

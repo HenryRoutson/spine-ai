@@ -1,6 +1,7 @@
 import type { NextRequest } from "next/server";
 import { updateSession } from "@/utils/supabase/middleware";
 
+// AI : Next 16 request proxy — session gate lives in updateSession.
 export async function proxy(request: NextRequest) {
   return updateSession(request);
 }

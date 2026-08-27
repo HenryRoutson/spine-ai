@@ -2,7 +2,7 @@
 
 // AI : shell navigation — lets Inference/Logging jump to Documents and focus a stored hash.
 
-import { createContext, useCallback, useContext, useState, type ReactNode } from "react"
+import { createContext, useCallback, useContext, useLayoutEffect, useState, type ReactNode } from "react"
 import {
   BUILDER_AREAS,
   CONSUMER_AREAS,
@@ -14,9 +14,15 @@ import {
 } from "@/lib/app-nav-config"
 import { openLlmProvidersSettings, scrollToSettingsSection } from "@/lib/settings-nav"
 import type { SharedRunDocScope } from "@/lib/shared-run-doc-scope"
+import type { SharedLinkRecord } from "@/lib/shared-link-types"
 import type { DocId, StructureModelId } from "@/lib/types"
 import { AppWindowId as AppWindow } from "@/lib/app-window-id"
 import { readHideDeveloperTools } from "@/lib/developer-tools-settings"
+import {
+  clearEditingWebsiteSession,
+  readEditingWebsiteSession,
+  writeEditingWebsiteSession,
+} from "@/lib/editing-website-session"
 
 export * from "@/lib/app-window-id"
 
@@ -31,6 +37,8 @@ export type LoggingFocus = {
 
 export type { AppArea } from "@/lib/app-nav-config"
 export { windowToArea, isBuildStep } from "@/lib/app-nav-config"
+
+export type website_workspace_surface = "page" | "code" | "backend"
 
 interface AppShellState {
   activeWindow: WindowId
@@ -61,6 +69,12 @@ interface AppShellState {
   focusTestDocName: string | null
   openTesting: (testDocName?: string) => void
   clearFocusTestDoc: () => void
+  editingWebsite: SharedLinkRecord | null
+  openWebsiteEditor: (link: SharedLinkRecord) => void
+  clearWebsiteEditor: () => void
+  // AI : website workspace sub-page — page studio, frontend code, or backend peek. Never pipeline DAG tabs.
+  websiteSurface: website_workspace_surface
+  setWebsiteSurface: (surface: website_workspace_surface) => void
 }
 
 const AppShellContext = createContext<AppShellState | null>(null)
@@ -80,6 +94,17 @@ export function AppShellProvider({ children }: { children: ReactNode }) {
   const [sharedRunDocScope, setSharedRunDocScope] = useState<SharedRunDocScope | null>(null)
   const [pendingLlmProvidersOpen, setPendingLlmProvidersOpen] = useState(false)
   const [focusTestDocName, setFocusTestDocName] = useState<string | null>(null)
+  const [editingWebsite, setEditingWebsite] = useState<SharedLinkRecord | null>(null)
+  const [websiteSurface, setWebsiteSurface] = useState<website_workspace_surface>("page")
+
+  useLayoutEffect(() => {
+    const saved = readEditingWebsiteSession()
+    if (!saved) return
+    setEditingWebsite(saved)
+    setWebsiteSurface("page")
+    setVibeObserveTab(AppWindow.Share)
+    setActiveWindow(AppWindow.Vibe)
+  }, [])
 
   const openSharedRun = useCallback((linkId: string) => {
     setActiveSharedLinkId(linkId)
@@ -139,6 +164,20 @@ export function AppShellProvider({ children }: { children: ReactNode }) {
 
   const clearFocusTestDoc = useCallback(() => setFocusTestDocName(null), [])
 
+  const openWebsiteEditor = useCallback((link: SharedLinkRecord) => {
+    writeEditingWebsiteSession(link)
+    setEditingWebsite(link)
+    setWebsiteSurface("page")
+    setVibeObserveTab(AppWindow.Share)
+    setActiveWindow(AppWindow.Vibe)
+  }, [])
+
+  const clearWebsiteEditor = useCallback(() => {
+    clearEditingWebsiteSession()
+    setEditingWebsite(null)
+    setWebsiteSurface("page")
+  }, [])
+
   const openSecrets = useCallback(() => {
     setActiveWindow(AppWindow.Secrets)
   }, [])
@@ -193,6 +232,11 @@ export function AppShellProvider({ children }: { children: ReactNode }) {
         focusTestDocName,
         openTesting,
         clearFocusTestDoc,
+        editingWebsite,
+        openWebsiteEditor,
+        clearWebsiteEditor,
+        websiteSurface,
+        setWebsiteSurface,
       }}
     >
       {children}

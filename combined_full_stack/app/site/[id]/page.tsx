@@ -3,7 +3,8 @@ import Link from "next/link"
 import { HostedSiteViewer } from "@/components/share/hosted-site-viewer"
 import { parseSharedLinkId } from "@/lib/server/api_schemas"
 import { getSharedLink } from "@/lib/server/shared_links"
-import { isSiteLinkId } from "@/lib/hosted-site"
+import { isSiteLinkId, normalizeHostedSiteOptions } from "@/lib/hosted-site"
+import { compileHostedSiteReactProject } from "@/lib/hosted-site-react-compile"
 
 export async function generateMetadata({
   params,
@@ -31,5 +32,17 @@ export default async function HostedSitePage({ params }: { params: Promise<{ id:
       </div>
     )
   }
-  return <HostedSiteViewer linkId={link.id} siteOptions={link.siteOptions} viewerMarkdown={link.viewerMarkdown ?? ""} />
+  const options = normalizeHostedSiteOptions(link.siteOptions)
+  const compiled =
+    options.runtime === "react" ? compileHostedSiteReactProject(options.reactFiles, options) : null
+  return (
+    <HostedSiteViewer
+      linkId={link.id}
+      siteOptions={link.siteOptions}
+      viewerMarkdown={link.viewerMarkdown ?? ""}
+      projectId={link.projectId}
+      reactBundle={compiled?.ok ? compiled.bundle : null}
+      reactCompileError={compiled && !compiled.ok ? compiled.error : null}
+    />
+  )
 }

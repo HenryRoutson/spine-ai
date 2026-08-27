@@ -12,14 +12,26 @@ import { cn } from "@/lib/utils"
 import { spineActionProps } from "@/lib/core/parity"
 import { useCallback } from "react"
 
+type surface_copy = { label: string; title: string }
+
 type BuildSurfaceNavProps = {
   value: BuildSurface
   onChange: (surface: BuildSurface) => void
   className?: string
+  vibeCopy?: surface_copy
+  editorsCopy?: surface_copy
+  editorsIcon?: React.ComponentType<{ className?: string }>
 }
 
 // AI : L0 Build sub-decision — Vibe vs visual editors (same project selector).
-export function BuildSurfaceNav({ value, onChange, className }: BuildSurfaceNavProps) {
+export function BuildSurfaceNav({
+  value,
+  onChange,
+  className,
+  vibeCopy,
+  editorsCopy,
+  editorsIcon: EditorsIcon = Hammer,
+}: BuildSurfaceNavProps) {
   const warmVibe = useCallback(() => {
     prefetchWorkspacePanel(AppWindowId.Vibe)
     prefetchBuildPanel()
@@ -43,15 +55,15 @@ export function BuildSurfaceNav({ value, onChange, className }: BuildSurfaceNavP
         onWarm={warmVibe}
         icon={Sparkles}
         spineId="nav.build.vibe"
-        {...BUILD_SURFACE_NAV[BuildSurface.Vibe]}
+        {...(vibeCopy ?? BUILD_SURFACE_NAV[BuildSurface.Vibe])}
       />
       <SurfaceButton
         active={value === BuildSurface.Editors}
         onClick={() => onChange(BuildSurface.Editors)}
         onWarm={warmEditors}
-        icon={Hammer}
+        icon={EditorsIcon}
         spineId="nav.build.editors"
-        {...BUILD_SURFACE_NAV[BuildSurface.Editors]}
+        {...(editorsCopy ?? BUILD_SURFACE_NAV[BuildSurface.Editors])}
       />
     </div>
   )

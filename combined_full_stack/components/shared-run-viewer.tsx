@@ -28,24 +28,26 @@ export function SharedRunViewer({
   embedSessionToken,
   onRunEvent,
   hideViewerMarkdown = false,
+  pipelineAlias,
 }: {
   linkId: string
   variant?: "page" | "embed" | "site"
   embedSessionToken?: string
   onRunEvent?: (event: SharedRunLifecycleEvent) => void
   hideViewerMarkdown?: boolean
+  pipelineAlias?: string
 }) {
   const [link, setLink] = useState<SharedLinkPublicView | null>(null)
   const [loadError, setLoadError] = useState<string | null>(null)
 
   useEffect(() => {
-    fetchSharedLink(linkId)
+    fetchSharedLink(linkId, pipelineAlias)
       .then((loaded) => {
         setLink(loaded)
         if (variant === "page") addSharedWithMe(linkId, loaded.name)
       })
       .catch((e) => setLoadError((e as Error).message))
-  }, [linkId, variant])
+  }, [linkId, variant, pipelineAlias])
 
   if (loadError) {
     return (
@@ -78,6 +80,7 @@ export function SharedRunViewer({
       embedSessionToken={embedSessionToken}
       onRunEvent={onRunEvent}
       hideViewerMarkdown={hideViewerMarkdown}
+      pipelineAlias={pipelineAlias}
     />
   )
 }
@@ -89,6 +92,7 @@ function SharedRunContent({
   embedSessionToken,
   onRunEvent,
   hideViewerMarkdown,
+  pipelineAlias,
 }: {
   link: SharedLinkPublicView
   linkId: string
@@ -96,6 +100,7 @@ function SharedRunContent({
   embedSessionToken?: string
   onRunEvent?: (event: SharedRunLifecycleEvent) => void
   hideViewerMarkdown: boolean
+  pipelineAlias?: string
 }) {
   const { email, isAuthenticated, ready, signOut } = useSupabaseSession()
   const isEmbed = variant === "embed"
@@ -230,6 +235,7 @@ function SharedRunContent({
           linkId={linkId}
           isAuthenticated={isAuthenticated}
           embedSessionToken={embedSessionToken}
+          pipelineAlias={pipelineAlias}
           insufficientCredit={insufficientCredit}
           onOpenBilling={() => {
             window.location.href = "/"

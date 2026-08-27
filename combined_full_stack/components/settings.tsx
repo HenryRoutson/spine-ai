@@ -636,9 +636,9 @@ export function Settings() {
               <span className="min-w-0 flex-1">
                 <span className="block text-sm font-medium">Hide developer tools</span>
                 <span className="mt-0.5 block text-xs text-muted-foreground">
-                  When on, Build stays on Vibe and the Build↔Vibe surface toggle is hidden. The agent can still
-                  create and edit structures, pipelines, testing docs, and project docs. Turn off to switch into
-                  the visual editors.
+                  When on, Structure / Pipeline / Testing stay hidden. Pipelines keep Vibe and Building (visual
+                  editors). Websites stay on the page studio — Building edits page code, or Page / Backend when this
+                  is on.
                 </span>
               </span>
             </label>

@@ -4,6 +4,8 @@ import { useCallback, useEffect, useMemo, useState } from "react"
 import {
   Copy,
   FolderKanban,
+  Globe,
+  LayoutTemplate,
   Loader2,
   Pencil,
   RefreshCw,
@@ -16,6 +18,7 @@ import { AppMode, navigateToBuildMode, navigateToRunMode } from "@/lib/app-mode-
 import { AppPrimarySection } from "@/lib/app-primary-section-labels"
 import { handlePrimarySectionChange } from "@/lib/app-primary-section"
 import { useAppShell, AppWindowId } from "@/lib/app-shell"
+import { useAppShellKind, AppShellKind } from "@/lib/app-shell-kind"
 import {
   usePrimarySectionOpening,
   wrapPrimarySectionChange,
@@ -42,6 +45,12 @@ import {
   readQuickProjectDelete,
 } from "@/lib/project-delete-settings"
 import { useBrowserPrefEvent } from "@/lib/use-browser-pref-event"
+import { API_ROUTES } from "@/lib/api-routes"
+import { apiJson, JSON_HEADERS } from "@/lib/api-client"
+import { DEFAULT_HOSTED_SITE_HTML, isSiteLinkId, normalizeHostedSiteOptions } from "@/lib/hosted-site"
+import type { SharedLinkRecord } from "@/lib/shared-link-types"
+import { bindingsFromProjectIds, websiteDisplayName } from "@/lib/website-pipelines"
+import { consumePendingPickerList, readPickerList, pickerHomeHref, type picker_list_tab } from "@/lib/picker-list"
 import type { Project, ProjectId } from "@/lib/types"
 
 export function ProjectPickerPage() {
@@ -63,13 +72,30 @@ export function ProjectPickerPage() {
   const [openingId, setOpeningId] = useState<ProjectId | null>(null)
   const [resyncMsg, setResyncMsg] = useState<string | null>(null)
   const { openingSection, beginOpening, markSectionReady } = usePrimarySectionOpening()
-  const { activeWindow, setActiveWindow, openSharedRun } = useAppShell()
+  const { activeWindow, setActiveWindow, openSharedRun, openWebsiteEditor, clearWebsiteEditor } = useAppShell()
+  const { shellKind } = useAppShellKind()
   const { isDeleting, isExiting, runDelete, mergeWithGhosts } = useAnimatedRemoval<Project>()
   const quickDelete = useBrowserPrefEvent(PROJECT_DELETE_SETTINGS_CHANGED_EVENT, readQuickProjectDelete)
-  // AI : picker is L0 Build — Vibe is chosen after open via Build surface (or hide-dev-tools default).
   const pickerPrimarySection = AppPrimarySection.Build
   const sortedProjects = useMemo(() => sortProjectsForList(projects), [projects])
   const displayProjects = mergeWithGhosts(sortedProjects)
+  const [listTab, setListTab] = useState<picker_list_tab>(readPickerList)
+
+  useEffect(() => {
+    if (shellKind !== AppShellKind.Picker) return
+    setListTab(consumePendingPickerList() ?? readPickerList())
+  }, [shellKind])
+
+  const selectList = useCallback((tab: picker_list_tab) => {
+    setListTab(tab)
+    if (typeof window === "undefined") return
+    window.history.replaceState(null, "", pickerHomeHref(tab))
+  }, [])
+  const [sites, setSites] = useState<SharedLinkRecord[]>([])
+  const [sitesLoading, setSitesLoading] = useState(false)
+  const [newSiteOpen, setNewSiteOpen] = useState(false)
+  const [siteName, setSiteName] = useState("")
+  const [sitePipelineIds, setSitePipelineIds] = useState<ProjectId[]>([])
 
   useEffect(() => {
     warmProjectPrefetches(
@@ -78,12 +104,52 @@ export function ProjectPickerPage() {
     )
   }, [projects, prefetchProject])
 
+  useEffect(() => {
+    let cancelled = false
+    setSitesLoading(true)
+    void apiJson<{ links: SharedLinkRecord[] }>(API_ROUTES.sharedLinks)
+      .then((body) => {
+        if (cancelled) return
+        setSites((body.links ?? []).filter((link) => isSiteLinkId(link.id) && !link.revoked))
+      })
+      .catch(() => {
+        if (!cancelled) setSites([])
+      })
+      .finally(() => {
+        if (!cancelled) setSitesLoading(false)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [projects.length])
+
+  const siteCountByProject = useMemo(() => {
+    const counts = new Map<ProjectId, number>()
+    for (const site of sites) {
+      const ids = site.siteOptions.pipelineBindings?.length
+        ? site.siteOptions.pipelineBindings.map((b) => b.projectId)
+        : [site.projectId]
+      for (const id of ids) counts.set(id, (counts.get(id) ?? 0) + 1)
+    }
+    return counts
+  }, [sites])
+
   const handleOpen = useCallback(
     (id: ProjectId) => {
+      clearWebsiteEditor()
       setOpeningId(id)
       openProject(id)
     },
-    [openProject],
+    [clearWebsiteEditor, openProject],
+  )
+
+  const handleOpenWebsite = useCallback(
+    (link: SharedLinkRecord) => {
+      openWebsiteEditor(link)
+      setOpeningId(link.projectId)
+      openProject(link.projectId)
+    },
+    [openProject, openWebsiteEditor],
   )
 
   const handleRunShared = useCallback(
@@ -133,6 +199,42 @@ export function ProjectPickerPage() {
     try {
       const updated = await resyncExamples()
       setResyncMsg(updated ? `Refreshed bundled example documents.` : "Example documents already up to date.")
+    } catch (e) {
+      setResyncMsg((e as Error).message)
+    } finally {
+      setBusy(null)
+    }
+  }
+
+  async function handleCreateWebsite() {
+    const ids = sitePipelineIds.length ? sitePipelineIds : sortedProjects[0] ? [sortedProjects[0].id] : []
+    if (!ids.length) {
+      setResyncMsg("Create a pipeline first, then attach it to a website.")
+      return
+    }
+    setBusy("website")
+    setResyncMsg(null)
+    try {
+      const primary = ids[0]
+      const name = siteName.trim() || projects.find((p) => p.id === primary)?.name || "Website"
+      const body = await apiJson<{ url: string; link: SharedLinkRecord }>(API_ROUTES.sharedLinks, {
+        method: "POST",
+        headers: JSON_HEADERS,
+        body: JSON.stringify({
+          projectId: primary,
+          kind: "site",
+          siteOptions: normalizeHostedSiteOptions({
+            brand: { companyName: name, tagline: "Run attached pipelines" },
+            customHtml: DEFAULT_HOSTED_SITE_HTML,
+            pipelineBindings: bindingsFromProjectIds(ids, projects),
+          }),
+        }),
+      })
+      setSites((prev) => [body.link, ...prev.filter((s) => s.id !== body.link.id)])
+      setNewSiteOpen(false)
+      setSiteName("")
+      setSitePipelineIds([])
+      handleOpenWebsite(body.link)
     } catch (e) {
       setResyncMsg((e as Error).message)
     } finally {
@@ -200,25 +302,48 @@ export function ProjectPickerPage() {
         <WindowHeader
           actions={
             <div className="flex flex-wrap items-center gap-2">
-              <Button
-                variant="outline"
-                size="sm"
-                className="bg-transparent"
-                onClick={() => void handleResync()}
-                disabled={busy === "resync"}
-                spineId="project.resync-examples"
-              >
-                {busy === "resync" ? (
-                  <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
-                ) : (
-                  <RefreshCw className="mr-1.5 h-3.5 w-3.5" />
-                )}
-                Refresh docs
-              </Button>
-              <BlankProjectButton
-                busy={busy === "blank"}
-                onClick={() => void handleCreateBlank()}
-              />
+              {listTab === "pipelines" ? (
+                <>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="bg-transparent"
+                    onClick={() => void handleResync()}
+                    disabled={busy === "resync"}
+                    spineId="project.resync-examples"
+                  >
+                    {busy === "resync" ? (
+                      <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+                    ) : (
+                      <RefreshCw className="mr-1.5 h-3.5 w-3.5" />
+                    )}
+                    Refresh docs
+                  </Button>
+                  <BlankProjectButton
+                    busy={busy === "blank"}
+                    onClick={() => void handleCreateBlank()}
+                  />
+                </>
+              ) : (
+                <Button
+                  size="sm"
+                  onClick={() => {
+                    setNewSiteOpen((v) => !v)
+                    if (!sitePipelineIds.length && sortedProjects[0]) {
+                      setSitePipelineIds([sortedProjects[0].id])
+                    }
+                  }}
+                  disabled={busy === "website"}
+                  spineId="website.create"
+                >
+                  {busy === "website" ? (
+                    <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+                  ) : (
+                    <LayoutTemplate className="mr-1.5 h-3.5 w-3.5" />
+                  )}
+                  New website
+                </Button>
+              )}
             </div>
           }
         />
@@ -230,10 +355,149 @@ export function ProjectPickerPage() {
             </p>
           )}
 
+          <div className="mb-4 flex gap-1 rounded-md border border-border bg-muted/30 p-1 max-w-md">
+            <button
+              type="button"
+              className={cn(
+                "flex flex-1 items-center justify-center gap-1.5 rounded px-3 py-1.5 text-xs font-medium transition-colors",
+                listTab === "pipelines"
+                  ? "bg-background text-foreground shadow-sm"
+                  : "text-muted-foreground hover:text-foreground",
+              )}
+              onClick={() => selectList("pipelines")}
+              data-spine-id="nav.picker.pipelines"
+            >
+              <FolderKanban className="h-3.5 w-3.5" />
+              Pipelines
+              <span className="font-mono text-[10px] text-muted-foreground">({projects.length})</span>
+            </button>
+            <button
+              type="button"
+              className={cn(
+                "flex flex-1 items-center justify-center gap-1.5 rounded px-3 py-1.5 text-xs font-medium transition-colors",
+                listTab === "websites"
+                  ? "bg-background text-foreground shadow-sm"
+                  : "text-muted-foreground hover:text-foreground",
+              )}
+              onClick={() => selectList("websites")}
+              data-spine-id="nav.picker.websites"
+            >
+              <Globe className="h-3.5 w-3.5" />
+              Websites
+              <span className="font-mono text-[10px] text-muted-foreground">({sites.length})</span>
+            </button>
+          </div>
+
+          {listTab === "websites" ? (
+            <section className="mb-8">
+              {newSiteOpen ? (
+                <div className="mb-4 space-y-3 rounded-lg border border-border bg-card p-4">
+                  <p className="text-sm font-medium">New website</p>
+                  <p className="text-[11px] text-muted-foreground">
+                    Independent of any single pipeline. Attach one or more pipelines this page can run.
+                  </p>
+                  <Input
+                    value={siteName}
+                    onChange={(e) => setSiteName(e.target.value)}
+                    placeholder="Company or page name"
+                    className="h-8 max-w-sm text-sm"
+                  />
+                  <div className="flex flex-wrap gap-2">
+                    {sortedProjects.map((p) => {
+                      const on = sitePipelineIds.includes(p.id)
+                      return (
+                        <button
+                          key={p.id}
+                          type="button"
+                          className={cn(
+                            "rounded-md border px-2 py-1 text-[11px]",
+                            on
+                              ? "border-border bg-secondary text-foreground"
+                              : "border-border text-muted-foreground hover:text-foreground",
+                          )}
+                          onClick={() =>
+                            setSitePipelineIds((prev) =>
+                              on ? prev.filter((id) => id !== p.id) : [...prev, p.id],
+                            )
+                          }
+                        >
+                          {p.name}
+                        </button>
+                      )
+                    })}
+                  </div>
+                  <div className="flex gap-2">
+                    <Button size="sm" onClick={() => void handleCreateWebsite()} disabled={busy === "website"}>
+                      Create website
+                    </Button>
+                    <Button size="sm" variant="ghost" onClick={() => setNewSiteOpen(false)}>
+                      Cancel
+                    </Button>
+                  </div>
+                </div>
+              ) : null}
+              <div className="mb-3 flex items-center gap-2">
+                <Globe className="h-4 w-4 text-primary" />
+                <h3 className="text-sm font-semibold">Your websites</h3>
+                <span className="font-mono text-[10px] text-muted-foreground">({sites.length})</span>
+              </div>
+              <ul className="divide-y divide-border rounded-lg border border-border bg-card">
+                {sitesLoading && sites.length === 0 ? (
+                  <li className="px-4 py-8 text-center text-sm text-muted-foreground">Loading websites…</li>
+                ) : sites.length === 0 ? (
+                  <li className="px-4 py-8 text-center">
+                    <p className="text-sm text-muted-foreground">No websites yet.</p>
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      New website attaches pipelines you already have. You can add more later.
+                    </p>
+                  </li>
+                ) : (
+                  sites.map((site) => {
+                    const bound = site.siteOptions.pipelineBindings?.length
+                      ? site.siteOptions.pipelineBindings
+                      : [{ alias: "run", projectId: site.projectId }]
+                    const names = bound
+                      .map((b) => projects.find((p) => p.id === b.projectId)?.name ?? b.alias)
+                      .join(", ")
+                    return (
+                      <li key={site.id} className="flex flex-wrap items-center gap-3 px-4 py-3">
+                        <div className="min-w-0 flex-1">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span className="text-sm font-medium">
+                              {websiteDisplayName(site)}
+                            </span>
+                            <span className="rounded border border-border px-1.5 py-0.5 font-mono text-[9px] uppercase text-muted-foreground">
+                              {site.siteOptions.runtime === "react" ? "react" : "html"}
+                            </span>
+                          </div>
+                          <p className="mt-0.5 font-mono text-[10px] text-muted-foreground">
+                            {bound.length} pipeline{bound.length === 1 ? "" : "s"} · {names}
+                          </p>
+                        </div>
+                        <Button
+                          size="sm"
+                          className="h-8"
+                          onClick={() => handleOpenWebsite(site)}
+                          disabled={openingId !== null || busy !== null}
+                          spineId="website.open"
+                        >
+                          {openingId === site.projectId ? (
+                            <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+                          ) : null}
+                          Open
+                        </Button>
+                      </li>
+                    )
+                  })
+                )}
+              </ul>
+            </section>
+          ) : (
+          <>
           <section className="mb-8">
             <div className="mb-3 flex items-center gap-2">
               <FolderKanban className="h-4 w-4 text-primary" />
-              <h3 className="text-sm font-semibold">Your projects</h3>
+              <h3 className="text-sm font-semibold">Your pipelines</h3>
               <span className="font-mono text-[10px] text-muted-foreground">({projects.length})</span>
             </div>
             <ul className="divide-y divide-border rounded-lg border border-border bg-card">
@@ -283,6 +547,9 @@ export function ProjectPickerPage() {
                             {p.kind} · {p.modules.length} steps · {p.modules.filter((m) => m.kind === "input").length}{" "}
                             input
                             {p.modules.some((m) => m.inputNameContains) ? " · name rules" : ""}
+                            {(siteCountByProject.get(p.id) ?? 0) > 0
+                              ? ` · ${siteCountByProject.get(p.id)} website${siteCountByProject.get(p.id) === 1 ? "" : "s"}`
+                              : ""}
                             {p.createdAt != null ? (
                               <>
                                 {" · "}
@@ -387,6 +654,8 @@ export function ProjectPickerPage() {
               cloneLabel="Clone"
             />
           </section>
+          </>
+          )}
         </div>
       </div>
     </div>

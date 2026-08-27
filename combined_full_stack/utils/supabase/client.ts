@@ -12,7 +12,7 @@ declare global {
 
 let cachedEnv: SupabasePublicEnv | null = null;
 let cachedClient: SupabaseClient | null = null;
-let envPromise: Promise<SupabasePublicEnv> | null = null;
+let envPromise: Promise<SupabasePublicEnv | null> | null = null;
 
 function envFromWindow(): SupabasePublicEnv | null {
   if (typeof window === "undefined") return null;
@@ -31,33 +31,41 @@ function envFromBuild(): SupabasePublicEnv | null {
   return { url: url as SupabasePublicEnv["url"], key: key as SupabasePublicEnv["key"] };
 }
 
-async function fetchPublicEnv(): Promise<SupabasePublicEnv> {
+const SUPABASE_MISSING =
+  "Supabase is not configured — set NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY on Vercel, then redeploy.";
+
+async function fetchPublicEnv(): Promise<SupabasePublicEnv | null> {
   const res = await fetch(API_ROUTES.supabaseEnv, FETCH_NO_STORE);
-  if (!res.ok) {
-    throw new Error(
-      "Supabase is not configured — set NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY on Vercel, then redeploy.",
-    );
-  }
+  if (!res.ok) return null;
   const env = (await res.json()) as SupabasePublicEnv;
+  if (!env?.url || !env?.key) return null;
   if (typeof window !== "undefined") window.__SUPABASE_PUBLIC__ = env;
   return env;
 }
 
-async function resolvePublicEnv(): Promise<SupabasePublicEnv> {
+async function resolvePublicEnv(): Promise<SupabasePublicEnv | null> {
   if (cachedEnv) return cachedEnv;
   const sync = envFromWindow() ?? envFromBuild();
   if (sync) {
     cachedEnv = sync;
     return sync;
   }
-  if (!envPromise) envPromise = fetchPublicEnv().then((env) => { cachedEnv = env; return env; });
+  if (!envPromise) envPromise = fetchPublicEnv().then((env) => { if (env) cachedEnv = env; return env; });
   return envPromise;
+}
+
+// AI : local JsonStore has no public Supabase env — callers that can run unsigned must use this.
+export async function tryCreateClient(): Promise<SupabaseClient | null> {
+  if (cachedClient) return cachedClient;
+  const env = await resolvePublicEnv();
+  if (!env) return null;
+  cachedClient = createBrowserClient(env.url, env.key);
+  return cachedClient;
 }
 
 // AI : browser-side Supabase — config from injected script, build-time env, or /api/supabase-env.
 export async function createClient(): Promise<SupabaseClient> {
-  if (cachedClient) return cachedClient;
-  const { url, key } = await resolvePublicEnv();
-  cachedClient = createBrowserClient(url, key);
-  return cachedClient;
+  const client = await tryCreateClient();
+  if (!client) throw new Error(SUPABASE_MISSING);
+  return client;
 }

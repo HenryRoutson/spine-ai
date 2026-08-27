@@ -126,10 +126,11 @@ export async function requireAuthStore(
     // AI : cookie JWT alone can fail PostgREST RLS (auth.uid() null → empty SELECTs + INSERT 42501).
     // AI : TODO security (prod) — service-role rebind bypasses RLS; a bug after requireAuth is a full-table write.
     // AI : Prefer fixing JWT → auth.uid() and keep the user-scoped client.
-    const admin = await createAdminClient();
-    const supabase = admin ?? (await createClient());
     const store = await getStore();
-    if (store instanceof SupabaseStore) store.rebindDb(supabase);
+    if (store instanceof SupabaseStore) {
+      const admin = await createAdminClient();
+      store.rebindDb(admin ?? (await createClient()));
+    }
     return { auth, store };
   } catch (err) {
     return storeAuthError(err);

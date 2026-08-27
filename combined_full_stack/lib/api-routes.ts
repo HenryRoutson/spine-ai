@@ -40,6 +40,7 @@ export const API_ROUTES = {
   diagnosisAssistant: "/api/diagnosis-assistant",
   testingAssistant: "/api/testing-assistant",
   hostedSiteAssistant: "/api/hosted-site-assistant",
+  hostedSiteCompile: "/api/hosted-site/compile",
   testingEvaluate: "/api/testing-evaluate",
   docsContent: "/api/docs/content",
   feedback: "/api/feedback",

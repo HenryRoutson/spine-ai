@@ -5,14 +5,14 @@
 // AI :   mount a DOM WorkspaceView; keep this header so the toggle stays reachable. Not Ink-in-browser.
 import dynamic from "next/dynamic"
 import { useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react"
-import { Loader2 } from "lucide-react"
+import { GitBranch, Loader2 } from "lucide-react"
 import { AppChromeHeader } from "@/components/app-chrome-header"
 import { AppWindowNav } from "@/components/app-window-nav"
 import { ProjectSelector } from "@/components/project-selector"
 import { BUILDER_NAV_ITEMS, BUILDER_PANEL_IDS, isAccountWindow, isVibeWindow } from "@/lib/app-nav-config"
 import { handlePrimarySectionChange, resolvePrimarySection } from "@/lib/app-primary-section"
 import { BuildSurfaceNav } from "@/components/build-surface-nav"
-import { resolveBuildSurface, windowForBuildSurface, type BuildSurface } from "@/lib/build-surface"
+import { resolveBuildSurface, windowForBuildSurface, BuildSurface } from "@/lib/build-surface"
 import {
   PrimarySectionOpeningProvider,
   usePrimarySectionOpening,
@@ -22,6 +22,7 @@ import { AppMode, navigateToBuildMode, navigateToRunMode } from "@/lib/app-mode-
 import { CONSUMER_NAV_ITEMS } from "@/lib/app-nav-config"
 import { AppShellKind, useAppShellKind } from "@/lib/app-shell-kind"
 import { readActiveProjectSession } from "@/lib/active-project-session"
+import { peekPendingPickerList } from "@/lib/picker-list"
 import { ProjectPickerContext, useConsumerStore, useOptionalConsumerStore, useOptionalStore, useStore } from "@/lib/store"
 import { computeWorkspaceValidity } from "@/lib/workspace-validity-ui"
 import { useAppShell } from "@/lib/app-shell"
@@ -57,6 +58,7 @@ import { prefetchBillingPanel } from "@/lib/prefetch-billing-panel"
 import { prefetchBuilderWorkspacePanels, prefetchWorkspacePanel } from "@/lib/prefetch-workspace-panel"
 import { BackgroundPrefetchBar } from "@/components/background-prefetch-bar"
 import { cn } from "@/lib/utils"
+import { websiteDisplayName } from "@/lib/website-pipelines"
 
 // AI : code-split heavy tabs — only Structure ships on first paint.
 const StructureBuilder = dynamic(
@@ -308,6 +310,8 @@ function AppShellLayoutInner({ variant = "default" }: { variant?: "default" | "e
     // AI : create/open writes session before the store context exists — wait, don't bounce to picker.
     if (readActiveProjectSession()) return
     if (!consumer && !picker) return
+    // AI : All websites… writes a pending tab then clears the session — don't stomp it back to pipelines.
+    if (peekPendingPickerList()) return
     navigateToProjectPicker()
   }, [shellKind, builder, consumer, picker, navigateToProjectPicker])
 
@@ -349,6 +353,7 @@ function AppShellLayoutInner({ variant = "default" }: { variant?: "default" | "e
 
 function ConsumerShellLayoutInner({ variant = "default" }: { variant?: "default" | "embed" }) {
   const embed = variant === "embed"
+  const { shellKind } = useAppShellKind()
   const { activeWindow, setActiveWindow } = useAppShell()
   const { stateSyncing } = useConsumerStore()
   const consumerWindow = useMemo(() => resolveConsumerWindow(activeWindow), [activeWindow])
@@ -375,13 +380,14 @@ function ConsumerShellLayoutInner({ variant = "default" }: { variant?: "default"
   )
 
   useEffect(() => {
+    if (shellKind !== AppShellKind.Consumer) return
     const params = new URLSearchParams(window.location.search)
     if (params.has("teamInvite")) setActiveWindow(AppWindowId.Settings)
     else if (params.has("session_id") || params.has("canceled") || params.get("window") === AppWindowId.Billing)
       setActiveWindow(AppWindowId.Billing)
     else if (params.get("window") === AppWindowId.Settings) setActiveWindow(AppWindowId.Settings)
     else if (!CONSUMER_WINDOW_IDS.has(activeWindow)) setActiveWindow(AppWindowId.Share)
-  }, [activeWindow, setActiveWindow])
+  }, [activeWindow, setActiveWindow, shellKind])
 
   useEffect(() => {
     prefetchBillingPanel()
@@ -427,8 +433,16 @@ function ConsumerShellLayoutInner({ variant = "default" }: { variant?: "default"
 
 function BuilderShellLayoutInner({ variant = "default" }: { variant?: "default" | "embed" }) {
   const embed = variant === "embed"
-  const { activeWindow, setActiveWindow, activeSharedLinkId, sharedRunDocScope } =
-    useAppShell()
+  const {
+    activeWindow,
+    setActiveWindow,
+    activeSharedLinkId,
+    sharedRunDocScope,
+    editingWebsite,
+    setVibeObserveTab,
+    websiteSurface,
+    setWebsiteSurface,
+  } = useAppShell()
   const sharedRunDocScopeForViewer = useMemo(
     () => sharedRunDocScope ?? (activeSharedLinkId ? { linkId: activeSharedLinkId } : null),
     [sharedRunDocScope, activeSharedLinkId],
@@ -443,17 +457,26 @@ function BuilderShellLayoutInner({ variant = "default" }: { variant?: "default" 
   const primarySection = resolvePrimarySection(AppMode.Build, activeWindow)
   const isVibe = isVibeWindow(activeWindow)
   const isAccount = isAccountWindow(activeWindow)
-  const buildSurface = resolveBuildSurface(activeWindow)
-  // AI : surface toggle shares project chrome; workspace tabs only on editors surface.
-  const showSurfaceToggle = !embed && !hideDeveloperTools && !isAccount
-  const showWorkspaceTabs = !isAccount && !isVibe
+  // AI : website stays on Vibe window — Building is page code / backend peek, never Structure/Pipeline tabs.
+  const buildSurface = editingWebsite
+    ? websiteSurface === "page"
+      ? BuildSurface.Vibe
+      : BuildSurface.Editors
+    : resolveBuildSurface(activeWindow)
+  const showSurfaceToggle = !embed && !isAccount
+  const showWorkspaceTabs = !isAccount && !isVibe && !hideDeveloperTools && !editingWebsite
   const showWorkspaceChrome = showSurfaceToggle || showWorkspaceTabs
+  const websiteSimplified = !!editingWebsite && hideDeveloperTools
   const { openingSection, beginOpening } = usePrimarySectionOpening()
   useSyncPrimarySectionReady(primarySection)
 
   const onPrimarySectionChange = useCallback(
     (section: Parameters<typeof handlePrimarySectionChange>[0]) => {
       wrapPrimarySectionChange(section, primarySection, beginOpening, () => {
+        if (editingWebsite && section === AppPrimarySection.Build && isAccountWindow(activeWindow)) {
+          setActiveWindow(AppWindowId.Vibe)
+          return
+        }
         handlePrimarySectionChange(
           section,
           AppMode.Build,
@@ -464,14 +487,23 @@ function BuilderShellLayoutInner({ variant = "default" }: { variant?: "default" 
         )
       })
     },
-    [activeWindow, beginOpening, primarySection, setActiveWindow],
+    [activeWindow, beginOpening, editingWebsite, primarySection, setActiveWindow],
   )
 
   const onBuildSurfaceChange = useCallback(
     (surface: BuildSurface) => {
+      if (editingWebsite) {
+        setActiveWindow(AppWindowId.Vibe)
+        if (surface === BuildSurface.Vibe) {
+          setWebsiteSurface("page")
+          return
+        }
+        setWebsiteSurface(hideDeveloperTools ? "backend" : "code")
+        return
+      }
       setActiveWindow(windowForBuildSurface(surface))
     },
-    [setActiveWindow],
+    [editingWebsite, hideDeveloperTools, setActiveWindow, setWebsiteSurface],
   )
 
   useEffect(() => {
@@ -480,13 +512,33 @@ function BuilderShellLayoutInner({ variant = "default" }: { variant?: "default" 
     else if (params.has("session_id") || params.has("canceled")) setActiveWindow(AppWindowId.Billing)
   }, [setActiveWindow])
 
-  // AI : hide developer tools → force Vibe; otherwise vibe | dev toggle stays.
+  const restoredWebsiteId = useRef<string | null>(null)
   useEffect(() => {
-    if (!hideDeveloperTools) return
-    if (primarySection !== AppPrimarySection.Build) return
-    if (isVibe) return
+    if (!editingWebsite) {
+      restoredWebsiteId.current = null
+      return
+    }
+    if (restoredWebsiteId.current === editingWebsite.id) return
+    restoredWebsiteId.current = editingWebsite.id
+    setVibeObserveTab(AppWindowId.Share)
     setActiveWindow(AppWindowId.Vibe)
-  }, [hideDeveloperTools, isVibe, primarySection, setActiveWindow])
+  }, [editingWebsite, setActiveWindow, setVibeObserveTab])
+
+  useEffect(() => {
+    if (!editingWebsite) return
+    if (
+      activeWindow === AppWindowId.Structure ||
+      activeWindow === AppWindowId.Pipeline ||
+      activeWindow === AppWindowId.Testing
+    ) {
+      setActiveWindow(AppWindowId.Vibe)
+    }
+  }, [activeWindow, editingWebsite, setActiveWindow])
+
+  useEffect(() => {
+    if (!editingWebsite || !hideDeveloperTools) return
+    if (websiteSurface === "code") setWebsiteSurface("page")
+  }, [editingWebsite, hideDeveloperTools, setWebsiteSurface, websiteSurface])
 
   const warmedAllPanelsRef = useRef(false)
 
@@ -537,7 +589,25 @@ function BuilderShellLayoutInner({ variant = "default" }: { variant?: "default" 
             validity={validity}
             leading={
               showSurfaceToggle ? (
-                <BuildSurfaceNav value={buildSurface} onChange={onBuildSurfaceChange} />
+                <BuildSurfaceNav
+                  value={buildSurface}
+                  onChange={onBuildSurfaceChange}
+                  vibeCopy={
+                    editingWebsite
+                      ? websiteSimplified
+                        ? { label: "Page", title: "Edit the hosted page" }
+                        : { label: "Vibe", title: "Vibe-code the hosted page" }
+                      : undefined
+                  }
+                  editorsCopy={
+                    editingWebsite
+                      ? websiteSimplified
+                        ? { label: "Backend", title: "Pipeline description and a test run" }
+                        : { label: "Building", title: "Edit website HTML / React" }
+                      : undefined
+                  }
+                  editorsIcon={websiteSimplified ? GitBranch : undefined}
+                />
               ) : null
             }
             showItems={showWorkspaceTabs}
@@ -548,7 +618,11 @@ function BuilderShellLayoutInner({ variant = "default" }: { variant?: "default" 
         {/* AI : TODO (vibe) — when leaving Vibe, optionally re-open Build dock if it was open before. */}
         {embed || isVibe ? (
           <main className="relative flex min-h-0 flex-1 flex-col overflow-hidden" id="main-content">
-            {projectLoading && <ProjectSwitchOverlay projectName={project.name} />}
+            {projectLoading && (
+              <ProjectSwitchOverlay
+                projectName={editingWebsite ? websiteDisplayName(editingWebsite) : project.name}
+              />
+            )}
             <div className="flex min-h-0 flex-1 flex-col">
               <CachedShellWindowPanels
                 activeWindow={activeWindow}
@@ -561,7 +635,11 @@ function BuilderShellLayoutInner({ variant = "default" }: { variant?: "default" 
         ) : (
           <ProjectAssistantDockLayout>
             <main className="relative flex min-h-0 flex-1 flex-col overflow-hidden" id="main-content">
-              {projectLoading && <ProjectSwitchOverlay projectName={project.name} />}
+              {projectLoading && (
+                <ProjectSwitchOverlay
+                  projectName={editingWebsite ? websiteDisplayName(editingWebsite) : project.name}
+                />
+              )}
               <div className="flex min-h-0 flex-1 flex-col">
                 <CachedShellWindowPanels
                 activeWindow={activeWindow}

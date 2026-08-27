@@ -49,6 +49,7 @@ import {
   newSessionId,
   openStoreForUser,
   recordSharedLinkSpend,
+  snapshotForWebsiteAlias,
   registerSharedProgressToken,
   reserveSharedLinkSpend,
   revokeSharedLink,
@@ -180,12 +181,14 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
     link.defaultDocs,
   );
 
-  const project = link.snapshot;
+  const boundSnapshot = await snapshotForWebsiteAlias(link, body.pipelineAlias, sharerStore);
+  const runLink = boundSnapshot === link.snapshot ? link : { ...link, snapshot: boundSnapshot, defaultDocs: [] };
+  const project = runLink.snapshot;
   const inputModules = orderedInputModules(project.modules);
   const { assignment, contentByDocId } = await resolveAssignment(
     link.id,
     sessionId,
-    link,
+    runLink,
     body.inputDocsByModule as Partial<Record<ModuleId, DocId[]>> | undefined,
   );
 

@@ -65,6 +65,7 @@ import {
   writeActiveProjectSession,
 } from "@/lib/active-project-session"
 import { navigateToBuildWorkspace, navigateToProjectPicker } from "@/lib/app-mode-nav"
+import { peekPendingPickerList } from "@/lib/picker-list"
 import { registerStoreNavigationBridge } from "@/lib/store-navigation-bridge"
 import { dedupeDocsNewestByName, projectsWithDocAvailability } from "@/lib/project-docs"
 import { readStateSnapshot, seedProjectInStateSnapshot, writeStateSnapshot } from "@/lib/state-snapshot-cache"
@@ -1131,6 +1132,7 @@ export function StoreProvider({
     if (mode !== StoreMode.Workspace || !state || projectLoading || stateSyncing) return
     if (!activeProjectId || project) return
     if (createdProjectsRef.current.has(activeProjectId)) return
+    if (peekPendingPickerList()) return
     setActiveProjectId("")
     clearActiveProjectSession()
     navigateToProjectPicker()

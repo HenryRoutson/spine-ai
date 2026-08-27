@@ -1,7 +1,7 @@
 "use client"
 // AI : parity ids — share.create-site
 
-import { useMemo, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { Copy, ExternalLink, LayoutTemplate, Loader2, Save } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -17,7 +17,8 @@ import { SharedLinkFundingMode } from "@/lib/types"
 import { viewerFundsSharedRun } from "@/lib/shared-link-funding"
 import type { HostedSiteOptions, SharedLinkRecord } from "@/lib/shared-link-types"
 import { DEFAULT_HOSTED_SITE_OPTIONS } from "@/lib/shared-link-types"
-import { DEFAULT_HOSTED_SITE_HTML, normalizeHostedSiteOptions } from "@/lib/hosted-site"
+import { DEFAULT_HOSTED_SITE_HTML, isSiteLinkId, normalizeHostedSiteOptions } from "@/lib/hosted-site"
+import { useOptionalAppShell } from "@/lib/app-shell"
 import type { DocId, DocRef, ModuleId, Project } from "@/lib/types"
 import { COPY_FEEDBACK_MS } from "@/lib/ui-timing"
 import { copyTextToClipboard } from "@/lib/clipboard"
@@ -56,6 +57,9 @@ export function ShareSiteForm({
   inferenceInputDocIds: Partial<Record<ModuleId, DocId | DocId[]>>
   onCreated?: () => void
 }) {
+  const shell = useOptionalAppShell()
+  const editingWebsite = shell?.editingWebsite
+  const websiteSurface = shell?.websiteSurface
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [created, setCreated] = useState<{ url: string; link: SharedLinkRecord } | null>(null)
@@ -79,6 +83,13 @@ export function ShareSiteForm({
   )
   const { viewerMarkdown, fieldsProps } = useShareViewerMarkdown(project.documentation ?? "")
   const viewerFunds = viewerFundsSharedRun(fundingMode)
+
+  useEffect(() => {
+    if (!editingWebsite || !isSiteLinkId(editingWebsite.id)) return
+    const origin = typeof window === "undefined" ? "" : window.location.origin
+    setCreated({ url: `${origin}/site/${editingWebsite.id}`, link: editingWebsite })
+    setSiteOptions(normalizeHostedSiteOptions(editingWebsite.siteOptions))
+  }, [editingWebsite])
   const defaultDocsByModule = useMemo(
     () => shareDefaultDocsByModule(project, docs, inferenceInputDocIds),
     [project, docs, inferenceInputDocIds],
@@ -171,7 +182,7 @@ export function ShareSiteForm({
       <div>
         <h3 className="text-sm font-semibold">Hosted company page</h3>
         <p className="mt-0.5 text-xs text-muted-foreground">
-          Vibe-code a landing page around this pipeline. We host it — no website of your own.
+          Vibe-code a website and attach one or more pipelines. We host it — no site of your own.
         </p>
       </div>
 
@@ -180,6 +191,8 @@ export function ShareSiteForm({
         value={siteOptions}
         onChange={setSiteOptions}
         viewerMarkdown={viewerMarkdown}
+        forcedTab={editingWebsite ? (websiteSurface === "code" ? "code" : "vibe") : undefined}
+        hideSurfaceTabs={!!editingWebsite}
       />
 
       <ShareViewerDocsFields {...fieldsProps} />
@@ -266,7 +279,7 @@ export function ShareSiteForm({
             </Button>
             <Button size="sm" className="h-7 gap-1" onClick={() => void saveSite()} disabled={busy}>
               {busy ? <Loader2 className="h-3 w-3 animate-spin" /> : <Save className="h-3 w-3" />}
-              Save HTML
+              Save page
             </Button>
           </div>
         </div>

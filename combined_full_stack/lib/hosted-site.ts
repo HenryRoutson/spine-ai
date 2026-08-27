@@ -9,6 +9,8 @@ import {
   type hosted_site_widget_slot,
 } from "@/lib/hosted-site-slots"
 import { stampHostedSiteHsIds } from "@/lib/hosted-site-select"
+import { normalizeHostedSiteReactFiles } from "@/lib/hosted-site-react"
+import { normalizeWebsitePipelineBindings } from "@/lib/website-pipelines"
 import type {
   HostedSiteAuth,
   HostedSiteAuthProvider,
@@ -459,6 +461,9 @@ export function normalizeHostedSiteOptions(raw: unknown): HostedSiteOptions {
     auth: normalizeHostedSiteAuth(o.auth ?? DEFAULT_HOSTED_SITE_AUTH),
     authHtml: typeof o.authHtml === "string" ? o.authHtml.slice(0, 50_000) : "",
     pages: normalizeHostedSitePages(o.pages),
+    pipelineBindings: normalizeWebsitePipelineBindings(o.pipelineBindings),
+    runtime: o.runtime === "react" ? "react" : "html",
+    reactFiles: normalizeHostedSiteReactFiles(o.reactFiles),
   }
 }
 
@@ -479,6 +484,16 @@ export function keepConcurrentHostedSiteEdits(
   }
   const samePages = (a: HostedSitePage[], b: HostedSitePage[]): boolean =>
     a.length === b.length && a.every((page, i) => page.path === b[i]?.path && page.html === b[i]?.html)
+  const sameBindings =
+    received.pipelineBindings.length === sent.pipelineBindings.length &&
+    received.pipelineBindings.every(
+      (b, i) => b.alias === sent.pipelineBindings[i]?.alias && b.projectId === sent.pipelineBindings[i]?.projectId,
+    )
+  const sameReact =
+    received.reactFiles.length === sent.reactFiles.length &&
+    received.reactFiles.every(
+      (f, i) => f.path === sent.reactFiles[i]?.path && f.contents === sent.reactFiles[i]?.contents,
+    )
   return {
     brand: pick(received.brand, sent.brand, latest.brand),
     customHtml: keep(received.customHtml, sent.customHtml, latest.customHtml),
@@ -487,5 +502,8 @@ export function keepConcurrentHostedSiteEdits(
     auth: pick(received.auth, sent.auth, latest.auth),
     authHtml: keep(received.authHtml, sent.authHtml, latest.authHtml),
     pages: samePages(received.pages, sent.pages) ? latest.pages : received.pages,
+    pipelineBindings: sameBindings ? latest.pipelineBindings : received.pipelineBindings,
+    runtime: keep(received.runtime, sent.runtime, latest.runtime),
+    reactFiles: sameReact ? latest.reactFiles : received.reactFiles,
   }
 }

@@ -1,11 +1,12 @@
 import { clearActiveProjectSession } from "@/lib/active-project-session"
 import { isDemoRoute } from "@/lib/demo-mode"
+import { peekPendingPickerList, pickerHomeHref, writePendingPickerList, type picker_list_tab } from "@/lib/picker-list"
 import type { ProjectId } from "@/lib/types"
 
 type AppModeNavApi = {
   navigateToRunMode: () => void
   navigateToBuildMode: () => void
-  navigateToProjectPicker: () => void
+  navigateToProjectPicker: (tab?: picker_list_tab) => void
   openBuildWorkspace: (projectId: ProjectId) => void
 }
 
@@ -35,13 +36,15 @@ export function navigateToBuildMode(): void {
   window.location.assign("/projects")
 }
 
-export function navigateToProjectPicker(): void {
+export function navigateToProjectPicker(tab?: picker_list_tab): void {
+  const next = tab ?? peekPendingPickerList() ?? "pipelines"
+  writePendingPickerList(next)
   if (api) {
-    api.navigateToProjectPicker()
+    api.navigateToProjectPicker(next)
     return
   }
   if (isDemoRoute()) return
-  window.location.assign("/projects")
+  window.location.assign(pickerHomeHref(next))
 }
 
 export function navigateToBuildWorkspace(projectId: ProjectId): void {

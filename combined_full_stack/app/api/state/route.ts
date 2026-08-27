@@ -50,8 +50,13 @@ export async function GET(req: NextRequest) {
       try {
         // AI : projects first — client can paint the shell before OpenRouter model pricing resolves.
         push({ type: STATE_STREAM_EVENT.PROJECTS, projects });
-        const modelOptions = toPublicModelOptions(await getModelOptions());
-        push({ type: STATE_STREAM_EVENT.MODEL_OPTIONS, modelOptions });
+        try {
+          const modelOptions = toPublicModelOptions(await getModelOptions());
+          push({ type: STATE_STREAM_EVENT.MODEL_OPTIONS, modelOptions });
+        } catch (err) {
+          apiLog.warn(`model options unavailable`, { error: (err as Error).message });
+          push({ type: STATE_STREAM_EVENT.MODEL_OPTIONS, modelOptions: [] });
+        }
         push({ type: STATE_STREAM_EVENT.DOCS, docs });
         push({ type: STATE_STREAM_EVENT.RUNS, runs });
         push({ type: STATE_STREAM_EVENT.DONE });

@@ -29,7 +29,8 @@ export function isProductionDeploy(): boolean {
 
 // AI : local JsonStore + shared dev identity — never on Vercel or NODE_ENV=production.
 export function isLocalDevMode(): boolean {
-  return process.env.NODE_ENV === "development" && !process.env.VERCEL;
+  if (process.env.VERCEL) return false
+  return process.env.NODE_ENV !== "production"
 }
 
 function emailFromClaims(claims: Record<string, unknown> | undefined): string | undefined {
@@ -105,16 +106,14 @@ export async function requireAuth(): Promise<AuthSession | NextResponse> {
   if (bearer) return bearer;
 
   if (isLocalDevMode()) {
+    if (!getSupabasePublicEnv()) {
+      return { userId: LOCAL_DEV_USER_ID, email: undefined };
+    }
     try {
       const session = await sessionFromClaims();
       if (session) return session;
     } catch {
-      /* local dev without Supabase */
-    }
-    // AI : SECURITY — shared JsonStore identity only for true local-dev without Supabase.
-    // AI : isLocalDevMode() already excludes Vercel; never mint LOCAL_DEV_USER_ID when public env is set.
-    if (!getSupabasePublicEnv()) {
-      return { userId: LOCAL_DEV_USER_ID, email: undefined };
+      /* local dev without a cookie session */
     }
   }
 

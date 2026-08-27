@@ -43,6 +43,7 @@ type SharedRunPanelProps = {
   onOpenBilling?: () => void
   embedSessionToken?: string
   onRunEvent?: (event: SharedRunLifecycleEvent) => void
+  pipelineAlias?: string
 }
 
 export function SharedRunPanel({
@@ -55,6 +56,7 @@ export function SharedRunPanel({
   onOpenBilling,
   embedSessionToken,
   onRunEvent,
+  pipelineAlias,
 }: SharedRunPanelProps) {
   const run = useSharedInferenceRun(
     link,
@@ -63,6 +65,7 @@ export function SharedRunPanel({
     onRunComplete,
     embedSessionToken,
     onRunEvent,
+    pipelineAlias,
   )
   const [downloadBusy, setDownloadBusy] = useState(false)
   const [downloadError, setDownloadError] = useState<string | null>(null)

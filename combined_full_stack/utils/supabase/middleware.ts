@@ -136,10 +136,16 @@ export async function updateSession(request: NextRequest) {
 
   const supabaseEnv = getSupabasePublicEnv();
   if (!supabaseEnv) {
+    // AI : Edge middleware often inlines NODE_ENV=production even in `next dev`. Use Vercel as the deploy signal.
+    if (!process.env.VERCEL) {
+      const bare = NextResponse.next({ request });
+      if (pathname.startsWith("/embed/")) return applyEmbedFrameHeaders(request, bare);
+      return bare;
+    }
     // AI : missing Vercel env vars must not crash proxy — gate pages, block protected APIs.
     if (isApiRoute && !isPublicApiPathLocal(pathname, request.method)) {
       return NextResponse.json(
-        { error: "Supabase env missing — set NEXT_PUBLIC_SUPABASE_URL and key on Vercel" },
+        { error: "Supabase env missing — set NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY on Vercel" },
         { status: 503 },
       );
     }
