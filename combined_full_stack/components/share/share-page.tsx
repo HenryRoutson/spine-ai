@@ -232,7 +232,11 @@ export function SharePage({ simple }: { simple?: boolean } = {}) {
               />
             </section>
             <section className="rounded-lg border border-border bg-card p-4">
-              <PlatformShareHub project={builder.project} />
+              <PlatformShareHub
+                project={builder.project}
+                siteOptions={editingWebsite?.siteOptions}
+                onShared={() => setRefreshToken((n) => n + 1)}
+              />
             </section>
             <section className="rounded-lg border border-border bg-card p-4">
               <PipelineWebsitesPanel project={builder.project} projects={builder.projects} />
@@ -245,7 +249,11 @@ export function SharePage({ simple }: { simple?: boolean } = {}) {
           <>
             <div className="mx-auto mb-5 max-w-6xl">
               <section className="rounded-lg border border-border bg-card p-4">
-                <PlatformShareHub project={builder.project} />
+                <PlatformShareHub
+                  project={builder.project}
+                  siteOptions={editingWebsite?.siteOptions}
+                  onShared={() => setRefreshToken((n) => n + 1)}
+                />
               </section>
             </div>
             <div

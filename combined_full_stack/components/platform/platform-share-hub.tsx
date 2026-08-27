@@ -10,10 +10,8 @@ import { apiJson, JSON_HEADERS } from "@/lib/api-client"
 import { spineActionProps } from "@/lib/core/parity"
 import { COPY_FEEDBACK_MS } from "@/lib/ui-timing"
 import { copyTextToClipboard } from "@/lib/clipboard"
-import { SharedLinkFundingMode } from "@/lib/types"
 import type { HostedSiteOptions, SharedLinkRecord } from "@/lib/shared-link-types"
-import { DEFAULT_HOSTED_SITE_OPTIONS } from "@/lib/shared-link-types"
-import { normalizeHostedSiteOptions } from "@/lib/hosted-site"
+import { absoluteShareUrl, platformShareBodies } from "@/lib/platform-share-bodies"
 import type { Project } from "@/lib/types"
 
 type share_result = {
@@ -38,17 +36,16 @@ export function PlatformShareHub({
   const [copied, setCopied] = useState<string | null>(null)
   const [name, setName] = useState(project.name)
 
-  const normalizedSite = normalizeHostedSiteOptions(
-    siteOptions ?? {
-      ...DEFAULT_HOSTED_SITE_OPTIONS,
-      brand: { ...DEFAULT_HOSTED_SITE_OPTIONS.brand, companyName: project.name },
-    },
-  )
-
   async function shareAll() {
     setBusy(true)
     setError(null)
     const out: share_result = {}
+    const origin = window.location.origin
+    const bodies = platformShareBodies({
+      projectId: project.id,
+      name,
+      siteOptions,
+    })
 
     try {
       const siteRes = await apiJson<{ link: SharedLinkRecord; url: string }>(
@@ -56,42 +53,30 @@ export function PlatformShareHub({
         {
           method: "POST",
           headers: JSON_HEADERS,
-          body: JSON.stringify({
-            projectId: project.id,
-            name: `${name} — Website`,
-            fundingMode: SharedLinkFundingMode.SharerPays,
-            siteOptions: normalizedSite,
-          }),
+          body: JSON.stringify(bodies.site),
         },
       )
-      out.website = { url: siteRes.url, id: siteRes.link.id }
+      out.website = { url: absoluteShareUrl(siteRes.url, origin), id: siteRes.link.id }
 
       const linkRes = await apiJson<{ link: SharedLinkRecord; url: string }>(
         API_ROUTES.sharedLinks,
         {
           method: "POST",
           headers: JSON_HEADERS,
-          body: JSON.stringify({
-            projectId: project.id,
-            name: `${name} — Run link`,
-            fundingMode: SharedLinkFundingMode.SharerPays,
-          }),
+          body: JSON.stringify(bodies.link),
         },
       )
-      out.link = { url: linkRes.url, id: linkRes.link.id }
+      out.link = { url: absoluteShareUrl(linkRes.url, origin), id: linkRes.link.id }
 
       const apiRes = await apiJson<{ id: string; invokeUrl: string }>(
         API_ROUTES.hostedApis,
         {
           method: "POST",
           headers: JSON_HEADERS,
-          body: JSON.stringify({
-            projectId: project.id,
-            name: `${name} — API`,
-          }),
+          body: JSON.stringify(bodies.api),
         },
       )
-      out.api = { url: apiRes.invokeUrl, id: apiRes.id }
+      out.api = { url: absoluteShareUrl(apiRes.invokeUrl, origin), id: apiRes.id }
 
       setResult(out)
       onShared?.(out)
