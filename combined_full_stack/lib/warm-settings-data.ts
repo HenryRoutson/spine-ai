@@ -14,6 +14,10 @@ import { tryCreateClient } from "@/utils/supabase/client"
 let accountFetchRef: Promise<SettingsAccountSnapshot> | null = null
 let teamsFetchRef: Promise<TeamView[]> | null = null
 
+function emptyAccount(): SettingsAccountSnapshot {
+  return { email: null, marketingOptIn: false }
+}
+
 export async function fetchSettingsAccount(): Promise<SettingsAccountSnapshot> {
   if (accountFetchRef) return accountFetchRef
   if (isDemoMode()) {
@@ -24,18 +28,21 @@ export async function fetchSettingsAccount(): Promise<SettingsAccountSnapshot> {
   const run = tryCreateClient()
     .then(async (supabase) => {
       if (!supabase) {
-        const next = { email: null, marketingOptIn: false }
+        const next = emptyAccount()
         writeSettingsAccountSnapshot(next)
         return next
       }
-      const { data } = await supabase.auth.getUser()
+      // AI : getSession is local JWT. getUser() hits Auth; Failed to fetch becomes the Next.js overlay.
+      const { data } = await supabase.auth.getSession()
+      const user = data.session?.user
       const next = {
-        email: data.user?.email ?? null,
-        marketingOptIn: data.user?.user_metadata?.marketing_opt_in === true,
+        email: user?.email ?? null,
+        marketingOptIn: user?.user_metadata?.marketing_opt_in === true,
       }
       writeSettingsAccountSnapshot(next)
       return next
     })
+    .catch(() => readSettingsAccountSnapshot() ?? emptyAccount())
   accountFetchRef = run.finally(() => {
     accountFetchRef = null
   })
@@ -49,10 +56,12 @@ export function warmSettingsAccount(): Promise<void> {
 export async function fetchTeams(): Promise<TeamView[]> {
   if (teamsFetchRef) return teamsFetchRef
   if (isDemoMode()) return readTeamsSnapshot() ?? []
-  const run = apiJson<TeamsListResponse>(API_ROUTES.teams).then((body) => {
-    writeTeamsSnapshot(body.teams)
-    return body.teams
-  })
+  const run = apiJson<TeamsListResponse>(API_ROUTES.teams)
+    .then((body) => {
+      writeTeamsSnapshot(body.teams)
+      return body.teams
+    })
+    .catch(() => readTeamsSnapshot() ?? [])
   teamsFetchRef = run.finally(() => {
     teamsFetchRef = null
   })

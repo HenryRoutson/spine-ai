@@ -969,7 +969,7 @@ export function StoreProvider({
     onMembershipChanged: () => {
       if (!hydratedRef.current) return
       refresh().catch(console.error)
-      warmSettingsTeams().catch(console.error)
+      warmSettingsTeams().catch(() => {})
     },
   })
 
@@ -1003,8 +1003,8 @@ export function StoreProvider({
     if (isInitialHydrate && !instant) {
       refreshBilling().catch(console.error)
       refreshEarnings().catch(console.error)
-      warmSettingsTeams().catch(console.error)
-      warmSettingsAccount().catch(console.error)
+      warmSettingsTeams().catch(() => {})
+      warmSettingsAccount().catch(() => {})
       if (mode !== StoreMode.Demo) warmMarketplaceListings().catch(console.error)
     }
 
