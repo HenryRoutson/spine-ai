@@ -1,5 +1,7 @@
 "use client"
 
+// AI : parity ids — platform.backend-tab.schema platform.backend-tab.ports platform.backend-tab.tables platform.backend-tab.run
+
 import { useMemo, useState } from "react"
 import { Database, GitBranch, Link2, Play, Table2 } from "lucide-react"
 import { Inference } from "@/components/inference"
