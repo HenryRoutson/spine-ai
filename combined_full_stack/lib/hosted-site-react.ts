@@ -40,6 +40,9 @@ export function htmlSiteToReactFiles(options: HostedSiteOptions): HostedSiteReac
     if (seg.kind === "html") return `{ kind: "html", html: ${jsString(seg.html)} }`
     const alias = seg.alias ?? DEFAULT_WEBSITE_PIPELINE_ALIAS
     if (seg.slot === "run") return `{ kind: "run", alias: ${jsString(alias)} }`
+    if (seg.slot === "table") {
+      return `{ kind: "slot", slot: ${jsString(seg.alias ? `table:${seg.alias}` : "table")} }`
+    }
     return `{ kind: "slot", slot: ${jsString(seg.slot)} }`
   })
   return [
