@@ -8,6 +8,7 @@ import {
   CONSUMER_AREAS,
   defaultWindowForArea,
   isBuildStep,
+  isAccountWindow,
   windowToArea,
   type AppArea,
   type VibeObserveTab,
@@ -18,6 +19,8 @@ import type { SharedLinkRecord } from "@/lib/shared-link-types"
 import type { DocId, StructureModelId } from "@/lib/types"
 import { AppWindowId as AppWindow } from "@/lib/app-window-id"
 import { readHideDeveloperTools } from "@/lib/developer-tools-settings"
+import { readBuildSurfacePreference, writeBuildSurfacePreference } from "@/lib/build-surface-persist"
+import { BuildSurface, windowForBuildSurface } from "@/lib/build-surface"
 import {
   clearEditingWebsiteSession,
   readEditingWebsiteSession,
@@ -72,6 +75,7 @@ interface AppShellState {
   editingWebsite: SharedLinkRecord | null
   openWebsiteEditor: (link: SharedLinkRecord) => void
   clearWebsiteEditor: () => void
+  patchEditingWebsite: (link: SharedLinkRecord) => void
   // AI : website workspace sub-page — page studio, frontend code, or backend peek. Never pipeline DAG tabs.
   websiteSurface: website_workspace_surface
   setWebsiteSurface: (surface: website_workspace_surface) => void
@@ -80,11 +84,16 @@ interface AppShellState {
 const AppShellContext = createContext<AppShellState | null>(null)
 
 export function AppShellProvider({ children }: { children: ReactNode }) {
-  // AI : vibe-first — skip Structure when developer tools are hidden.
-  // AI : TODO (vibe) — persist last Build surface (Vibe vs editors) across reloads.
-  const [activeWindow, setActiveWindow] = useState<WindowId>(() =>
-    readHideDeveloperTools() ? AppWindow.Vibe : AppWindow.Structure,
-  )
+  // AI : vibe-first — restore last Build surface; skip Structure when developer tools are hidden.
+  const [activeWindow, setActiveWindowState] = useState<WindowId>(() => {
+    if (readHideDeveloperTools()) return AppWindow.Vibe
+    return windowForBuildSurface(readBuildSurfacePreference())
+  })
+  const setActiveWindow = useCallback((window: WindowId) => {
+    setActiveWindowState(window)
+    if (window === AppWindow.Vibe) writeBuildSurfacePreference(BuildSurface.Vibe)
+    else if (!isAccountWindow(window)) writeBuildSurfacePreference(BuildSurface.Editors)
+  }, [])
   const [focusDocId, setFocusDocId] = useState<DocId | null>(null)
   const [focusRunId, setFocusRunId] = useState<string | null>(null)
   const [focusRunAnchor, setFocusRunAnchor] = useState<LoggingFocusAnchor | null>(null)
@@ -178,6 +187,11 @@ export function AppShellProvider({ children }: { children: ReactNode }) {
     setWebsiteSurface("page")
   }, [])
 
+  const patchEditingWebsite = useCallback((link: SharedLinkRecord) => {
+    writeEditingWebsiteSession(link)
+    setEditingWebsite(link)
+  }, [])
+
   const openSecrets = useCallback(() => {
     setActiveWindow(AppWindow.Secrets)
   }, [])
@@ -235,6 +249,7 @@ export function AppShellProvider({ children }: { children: ReactNode }) {
         editingWebsite,
         openWebsiteEditor,
         clearWebsiteEditor,
+        patchEditingWebsite,
         websiteSurface,
         setWebsiteSurface,
       }}

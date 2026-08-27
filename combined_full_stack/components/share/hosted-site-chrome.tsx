@@ -32,6 +32,7 @@ export function HostedSiteChrome({
   children,
   slots,
   runByAlias,
+  tableByAlias,
   editable = false,
 }: {
   options: HostedSiteOptions
@@ -41,6 +42,7 @@ export function HostedSiteChrome({
   children?: ReactNode
   slots?: Partial<Record<hosted_site_widget_slot, ReactNode>>
   runByAlias?: Record<string, ReactNode>
+  tableByAlias?: Record<string, ReactNode>
   editable?: boolean
 }) {
   const compiled = useMemo(() => {
@@ -68,6 +70,15 @@ export function HostedSiteChrome({
           </div>
         )
       }
+    }
+    if (slot === "table") {
+      const key = alias || ""
+      if (key && tableByAlias?.[key]) return tableByAlias[key]
+      return (
+        <div className="rounded-md border border-dashed border-border px-3 py-4 text-center text-[11px] text-muted-foreground">
+          Table · {key || "structure"}
+        </div>
+      )
     }
     return slots?.[slot] ?? (slot === primary ? children : null)
   }

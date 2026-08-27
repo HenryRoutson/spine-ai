@@ -78,6 +78,10 @@ const Inference = dynamic(() => import("@/components/inference").then((m) => ({ 
 const Schedule = dynamic(() => import("@/components/schedule-page").then((m) => ({ default: m.SchedulePage })), {
   loading: () => <PanelLoading label="loading schedule…" /> },
 )
+const BackendWorkspace = dynamic(
+  () => import("@/components/platform/backend-workspace").then((m) => ({ default: m.BackendWorkspace })),
+  { loading: () => <PanelLoading label="loading backend…" /> },
+)
 const Share = dynamic(() => import("@/components/share/share-page").then((m) => ({ default: m.SharePage })), {
   loading: () => <RunPanelSkeleton /> },
 )
@@ -150,6 +154,8 @@ function renderWindowPanel(windowId: AppWindowId): ReactNode {
       return <Inference />
     case AppWindowId.Schedule:
       return <Schedule />
+    case AppWindowId.Backend:
+      return <BackendWorkspace />
     case AppWindowId.Share:
       return <Share />
     case AppWindowId.Earnings:

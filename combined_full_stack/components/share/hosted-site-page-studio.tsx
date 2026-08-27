@@ -12,6 +12,7 @@ import { HostedSiteSignInCard } from "@/components/share/hosted-site-sign-in"
 import { HostedSiteSlotWidgets } from "@/components/share/hosted-site-slot-widgets"
 import { SharedLinkPreview } from "@/components/share/shared-link-preview"
 import { WebsitePipelineBindings } from "@/components/share/website-pipeline-bindings"
+import { hostedTableSlotsForProject } from "@/components/platform/hosted-table-slot"
 import { PipelineExportDialog } from "@/components/pipeline-export-dialog"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -155,6 +156,7 @@ export function HostedSitePageStudio({
     }),
   )
 
+  const tableByAlias = hostedTableSlotsForProject(project)
   const preview =
     value.runtime === "react" && resolvedTarget.kind !== "signin" ? (
       <HostedSiteReactPreview options={value} runByAlias={runByAlias} />
@@ -175,6 +177,7 @@ export function HostedSitePageStudio({
         ),
       }}
       runByAlias={runByAlias}
+      tableByAlias={tableByAlias}
       editable={value.runtime !== "react"}
     />
     )

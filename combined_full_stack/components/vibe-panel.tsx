@@ -19,6 +19,7 @@ import { vibeChatSplit } from "@/lib/layout-split-settings"
 import { prefetchWorkspacePanel } from "@/lib/prefetch-workspace-panel"
 import { usePersistedLeadingWidth } from "@/lib/use-persisted-leading-width"
 import { cn } from "@/lib/utils"
+import { BackendWorkspace } from "@/components/platform/backend-workspace"
 import { WebsiteBackendPeek } from "@/components/share/website-backend-peek"
 
 const Inference = dynamic(() => import("@/components/inference").then((m) => ({ default: m.Inference })), {
@@ -44,6 +45,8 @@ function renderObservePanel(tab: VibeObserveTab) {
       return <Share simple />
     case AppWindowId.Logging:
       return <Logging listDensity="compact" simple />
+    case AppWindowId.Backend:
+      return <BackendWorkspace />
   }
 }
 

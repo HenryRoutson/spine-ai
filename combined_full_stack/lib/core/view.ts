@@ -279,6 +279,8 @@ export const TUI_TAB_ALIASES: Record<string, TuiTab> = {
   agent: AppWindowId.Vibe,
   tests: AppWindowId.Testing,
   logs: AppWindowId.Logging,
+  supabase: AppWindowId.Backend,
+  schema: AppWindowId.Backend,
 }
 
 export type TuiArea = BuilderAreaId
@@ -293,6 +295,7 @@ const TUI_TAB_HOTKEY_OVERRIDE: Partial<Record<TuiTab, string>> = {
   billing: "b",
   settings: ",",
   vibe: "a",
+  backend: "k",
 }
 
 function tuiHotkey(tab: TuiTab): string {
@@ -333,6 +336,7 @@ const TUI_TAB_EMPTY: Record<TuiTab, string> = {
   billing: "no account — session pull / SPINE_API_URL",
   settings: "default model",
   vibe: "no chat yet — press a to ask vibe",
+  backend: "no tables — add structures, then wire typed ports and feed a row",
 }
 
 const TUI_TAB_DESCRIPTION_OVERRIDE: Partial<Record<TuiTab, string>> = {

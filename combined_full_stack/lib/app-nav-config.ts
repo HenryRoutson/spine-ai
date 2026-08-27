@@ -47,6 +47,7 @@ export const BuildStepId = {
   Testing: AppWindowId.Testing,
   Inference: AppWindowId.Inference,
   Schedule: AppWindowId.Schedule,
+  Backend: AppWindowId.Backend,
 } as const
 
 export type BuildStepId = (typeof BuildStepId)[keyof typeof BuildStepId]
@@ -79,6 +80,7 @@ export const BUILD_STEPS: BuildStepConfig[] = [
   { id: BuildStepId.Testing, label: "Testing", hint: windowNavHint(BuildStepId.Testing), icon: SquareCheck },
   { id: BuildStepId.Inference, label: "Inference", hint: windowNavHint(BuildStepId.Inference), icon: Play },
   { id: BuildStepId.Schedule, label: "Schedule", hint: windowNavHint(BuildStepId.Schedule), icon: Clock },
+  { id: BuildStepId.Backend, label: "Backend", hint: windowNavHint(BuildStepId.Backend), icon: Database },
 ]
 
 export const BUILD_STEP_IDS = new Set<BuildStepId>(BUILD_STEPS.map((s) => s.id))
@@ -145,6 +147,7 @@ export const BUILDER_NAV_ITEMS: AppNavItem[] = [
   { id: AppWindowId.Testing, label: "Testing", hint: windowNavHint(AppWindowId.Testing), icon: SquareCheck },
   { id: AppWindowId.Inference, label: "Inference", hint: windowNavHint(AppWindowId.Inference), icon: Play },
   { id: AppWindowId.Schedule, label: "Schedule", hint: windowNavHint(AppWindowId.Schedule), icon: Clock },
+  { id: AppWindowId.Backend, label: "Backend", hint: windowNavHint(AppWindowId.Backend), icon: Database },
   { id: AppWindowId.Share, label: "Share", hint: windowNavHint(AppWindowId.Share), icon: SquareArrowUp },
   { id: AppWindowId.Earnings, label: "Earnings", hint: windowNavHint(AppWindowId.Earnings), icon: Wallet },
   { id: AppWindowId.Logging, label: "Logging", hint: windowNavHint(AppWindowId.Logging), icon: ScrollText },
@@ -171,6 +174,7 @@ export const BUILDER_PANEL_IDS: AppWindowId[] = Object.values(AppWindowId)
 export const VIBE_OBSERVE_WINDOW_IDS = [
   AppWindowId.Inference,
   AppWindowId.Schedule,
+  AppWindowId.Backend,
   AppWindowId.Share,
   AppWindowId.Logging,
 ] as const

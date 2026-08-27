@@ -16,6 +16,7 @@ import { ShareEmbedForm } from "@/components/share/share-embed-form"
 import { ShareLinkForm } from "@/components/share/share-link-form"
 import { ShareSiteForm } from "@/components/share/share-site-form"
 import { PipelineWebsitesPanel } from "@/components/share/pipeline-websites-panel"
+import { PlatformShareHub } from "@/components/platform/platform-share-hub"
 import { SharedLinkRunner } from "@/components/share/shared-link-runner"
 import { SharedWithMePanel } from "@/components/share/shared-with-me-panel"
 import { PipelineObserveEmpty } from "@/components/pipeline-observe-empty"
@@ -231,6 +232,9 @@ export function SharePage({ simple }: { simple?: boolean } = {}) {
               />
             </section>
             <section className="rounded-lg border border-border bg-card p-4">
+              <PlatformShareHub project={builder.project} />
+            </section>
+            <section className="rounded-lg border border-border bg-card p-4">
               <PipelineWebsitesPanel project={builder.project} projects={builder.projects} />
             </section>
             <section className="rounded-lg border border-border bg-card p-4">
@@ -239,6 +243,11 @@ export function SharePage({ simple }: { simple?: boolean } = {}) {
           </div>
         ) : (
           <>
+            <div className="mx-auto mb-5 max-w-6xl">
+              <section className="rounded-lg border border-border bg-card p-4">
+                <PlatformShareHub project={builder.project} />
+              </section>
+            </div>
             <div
               className={cn(
                 "mx-auto grid gap-5",
