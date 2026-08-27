@@ -73,7 +73,7 @@ function nextHint(error: string): string {
   if (/unknown session_action/i.test(error)) return "session_action id is a GUI catalog id (project.add, pipeline.add-step, structure.add-field). There is no named add_step tool."
   if (/unknown step kind/i.test(error)) return "Use session_action id=pipeline.add-step with kind from: input, llm, llm-batch, fork, if-else, n8n, connect, custom-code, webhook, … — list_pieces for local transforms, list_connect_actions for Slack/Gmail."
   if (/unknown n8n piece|unknown piece/i.test(error)) return "Call list_pieces and use n8nNodeType exactly (piece.set aliases n8n-nodes-base.set)."
-  if (/unknown connect action/i.test(error)) return "Call list_connect_actions and use connectActionId exactly (slack.postMessage, gmail.send, sheets.append, http.request)."
+  if (/unknown connect action/i.test(error)) return "Call list_connect_actions and use connectActionId exactly (slack.postMessage, gmail.send, sheets.append, http.request, or ap.* allowlist ids)."
   if (/allowedOrigins/i.test(error)) return "share.create-embed needs allowedOrigins, e.g. https://example.com,https://app.example.com."
   if (/company name|Hosted page requires/i.test(error)) return "share.create-site needs companyName (or name). Defaults to the project name if you pass none."
   if (/scheduleId required/i.test(error)) return "Pass scheduleId from session_action id=nav.window.schedule."

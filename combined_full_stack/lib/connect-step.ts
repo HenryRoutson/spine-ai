@@ -10,6 +10,18 @@ function exportConnectCallTs(m: PipelineModule): string {
   if (!entry) {
     return `throw new Error(${JSON.stringify(`unknown connect action: ${id}`)});`
   }
+  if (entry.engine === "ap") {
+    return [
+      `const raw = await runConnectAction({`,
+      `  kind: "ap",`,
+      `  actionId: ${JSON.stringify(id)},`,
+      `  pieceName: ${JSON.stringify(entry.apPieceName ?? "")},`,
+      `  actionName: ${JSON.stringify(entry.apActionName ?? "")},`,
+      `  connectionId: process.env.AP_CONNECTION_ID ?? "",`,
+      `  body: { input },`,
+      `});`,
+    ].join("\n")
+  }
   if (entry.auth === "none") {
     return [
       `const raw = await runConnectAction({`,
@@ -61,7 +73,7 @@ export function exportConnectStepBodyTs(m: PipelineModule, outTs: string): strin
     return [`// connect ${JSON.stringify(label)}`, call].join("\n")
   }
   return [
-    `// connect ${JSON.stringify(label)} — live call via Nango; testing pins this step`,
+    `// connect ${JSON.stringify(label)} — live call via ${entry?.engine === "ap" ? "Activepieces" : "Nango"}; testing pins this step`,
     call,
     `return raw as unknown as ${outTs};`,
   ].join("\n")

@@ -1,4 +1,5 @@
 import { getConnectAction, missingConnectParams } from "@/lib/connect-catalog"
+import { apRunAction } from "@/lib/server/ap_client"
 import { nangoProxy } from "@/lib/server/nango_client"
 import { RunSource, type PipelineModule } from "../../types"
 import { materializeHints, modelById, prevModuleFor, materializeStepOutput } from "../helpers"
@@ -18,7 +19,7 @@ export async function execConnectStep(m: PipelineModule, ctx: RunCtx, log: RunLo
   if (missing.length) throw new Error(`${entry.displayName} needs: ${missing.join(", ")}`)
   const input = requireLinearInput(m, ctx)
   const testing = ctx.source === RunSource.Testing
-  log.info(`connect`, { moduleId: m.id, actionId, testing, provider: entry.provider })
+  log.info(`connect`, { moduleId: m.id, actionId, testing, provider: entry.provider, engine: entry.engine })
   let raw: unknown
   if (testing) {
     raw =
@@ -27,6 +28,13 @@ export async function execConnectStep(m: PipelineModule, ctx: RunCtx, log: RunLo
         : { ok: true, mocked: true, actionId, input }
   } else if (entry.auth !== "none" && !m.connectConnectionId?.trim()) {
     throw new Error(`Connect ${entry.displayName} to run this step`)
+  } else if (entry.engine === "ap") {
+    raw = await apRunAction({
+      actionId,
+      connectionId: m.connectConnectionId ?? "",
+      input,
+      parameters: m.connectParameters,
+    })
   } else {
     raw = await nangoProxy({
       actionId,

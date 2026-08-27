@@ -155,6 +155,7 @@ activemq-data/
 .env
 .envrc
 nango/.env
+activepieces/cache/
 .venv
 env/
 venv/

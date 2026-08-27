@@ -1,0 +1,75 @@
+# AI : Activepieces CE sidecar — piece runtime for typed Connect steps. Do not mount AP source.
+# Pin: https://github.com/activepieces/activepieces (MIT CE). One worker for local, not their 5-replica swarm.
+name: spine-activepieces
+
+services:
+  postgres:
+    image: pgvector/pgvector:0.8.0-pg14
+    container_name: spine-ap-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${AP_POSTGRES_DATABASE}
+      POSTGRES_USER: ${AP_POSTGRES_USERNAME}
+      POSTGRES_PASSWORD: ${AP_POSTGRES_PASSWORD}
+    volumes:
+      - spine-ap-postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${AP_POSTGRES_USERNAME} -d ${AP_POSTGRES_DATABASE}"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+    networks:
+      - ap
+
+  redis:
+    image: redis:7.0.7
+    container_name: spine-ap-redis
+    restart: unless-stopped
+    volumes:
+      - spine-ap-redis:/data
+    networks:
+      - ap
+
+  app:
+    image: ghcr.io/activepieces/activepieces:0.88.3
+    container_name: spine-ap-app
+    restart: unless-stopped
+    ports:
+      - "3080:80"
+    env_file:
+      - .env
+    environment:
+      AP_CONTAINER_TYPE: APP
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    volumes:
+      - spine-ap-cache:/usr/src/app/cache
+    networks:
+      - ap
+
+  worker:
+    image: ghcr.io/activepieces/activepieces:0.88.3
+    container_name: spine-ap-worker
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      AP_CONTAINER_TYPE: WORKER
+    depends_on:
+      app:
+        condition: service_started
+    volumes:
+      - spine-ap-cache:/usr/src/app/cache
+    networks:
+      - ap
+
+networks:
+  ap:
+
+volumes:
+  spine-ap-postgres:
+  spine-ap-redis:
+  spine-ap-cache:

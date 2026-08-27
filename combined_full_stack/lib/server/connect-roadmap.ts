@@ -2,7 +2,7 @@
 //
 // Product: n8n-style Slack/Gmail/Sheets from Vibe without a node canvas.
 // Legal: do NOT host n8n, copy n8n-nodes-base, or store vendor OAuth in n8n we run.
-// Engine: self-hosted Nango (or Activepieces CE later). Spine owns DAG + types + tests.
+// Engine: self-hosted Nango (or Activepieces CE — lib/server/ap-roadmap.ts). Spine owns DAG + types + tests.
 // UX: Connect {App} chip in Vibe. Only foreign page is Slack/Google OAuth popup.
 //
 // Shape:
@@ -28,6 +28,8 @@
 // AI : DONE (connect-M-hygiene) — user-facing n8n name gone; local Set/Filter as piece.set aliases
 // AI : DONE (connect-N-reconnect) — expired token → in-Spine Reconnect chip, not nango.dev
 //
-// Do NOT: n8n Cloud sidecar, eval fetch(slack) in piece JS, Activepieces canvas, connect-link emails as default.
+// AI : DONE (connect-O-ap) — AP CE sidecar allowlist (ap.*) shares ModuleKind.Connect; see ap-roadmap.ts
+//
+// Do NOT: n8n Cloud sidecar, eval fetch(slack) in piece JS, AP canvas as source of truth, connect-link emails as default.
 
 export {}

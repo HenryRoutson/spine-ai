@@ -28,7 +28,7 @@ Catalog: n8n-nodes-base.set | filter | sort | limit | removeDuplicates | itemLis
 Each piece has a props schema → the GUI auto-generates the form. n8nCode is n8n Code-node JS: items = [{json}], return items. Prefer a catalog piece over custom-code. import_piece / export_piece share JSON.
 
 LIVE APPS (kind=connect)
-list_connect_actions → session_action id=pipeline.add-step kind=connect → configure_connect_step. Catalog: slack.postMessage, gmail.send, sheets.append, http.request. After Approve, the human taps Connect {App} (vendor OAuth popup only). Golden tests mock connect output — never hit Slack from *_testing.json.
+list_connect_actions → session_action id=pipeline.add-step kind=connect → configure_connect_step. Catalog: slack.postMessage, gmail.send, sheets.append, http.request, plus AP allowlist ap.slack.send_channel_message, ap.gmail.send_email, ap.google-sheets.append_row. Prefer Nango ids for the vendor OAuth chip. Golden tests mock connect output — never hit Slack from *_testing.json.
 
 FORK DAG
 Pipelines are series-parallel. session_action id=pipeline.add-step kind=fork, then session_action with forkId + branchId into a lane. Nest another fork in a lane for a generic DAG (no cycles). Join: product | assemble | merge via session_action pipeline.configure-step forkJoin. get_project.steps[].branches shows the tree.

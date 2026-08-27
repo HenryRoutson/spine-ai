@@ -178,7 +178,7 @@ export function createPipelineModule(
     n8nParameters:
       kind === ModuleKind.N8n
         ? (opts.n8nParameters ??
-          piecePropDefaults(getN8nNode(opts.n8nNodeType ?? "n8n-nodes-base.set") ?? { props: [], id: "", n8nNodeType: "", displayName: "", description: "", category: "", n8nCode: "" }))
+          piecePropDefaults(getN8nNode(opts.n8nNodeType ?? "n8n-nodes-base.set") ?? { props: [] }))
         : undefined,
     n8nCode: kind === ModuleKind.N8n ? opts.n8nCode : undefined,
     n8nTimeoutMs: kind === ModuleKind.N8n ? (opts.n8nTimeoutMs ?? DEFAULT_N8N_TIMEOUT_MS) : undefined,

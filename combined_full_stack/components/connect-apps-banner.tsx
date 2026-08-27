@@ -7,6 +7,8 @@ import { Button } from "@/components/ui/button"
 import { API_ROUTES } from "@/lib/api-routes"
 import { apiJson } from "@/lib/api-client"
 import { collectConnectRequirements } from "@/lib/connect-catalog"
+import { rememberConnectAccount } from "@/lib/connect-accounts"
+import { ConnectActionIcon } from "@/components/connect-action-icon"
 import { flattenPipelineModules, updatePipelineModule } from "@/lib/fork-pipeline"
 import { useAppShell } from "@/lib/app-shell"
 import { AppWindowId } from "@/lib/app-window-id"
@@ -14,8 +16,10 @@ import { useStore } from "@/lib/store"
 import type { ModuleId, PipelineModule } from "@/lib/types"
 
 type SessionRes = {
-  sessionToken: string
-  host: string
+  kind?: "nango" | "ap"
+  sessionToken?: string
+  host?: string
+  frontendUrl?: string
   provider: string
   actionId: string
 }
@@ -38,15 +42,26 @@ export function ConnectAppsBanner({ modules, simple = false }: { modules: Pipeli
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ actionId, projectId: project?.id }),
       })
+      if (session.kind === "ap") {
+        const url = session.frontendUrl?.trim()
+        if (!url) throw new Error("Activepieces URL missing — python3 scripts/setup_local.py ap")
+        window.open(url, "_blank", "noopener,width=980,height=720")
+        setError("Approve the app in the window that opened, then paste the connection id on this step to run.")
+        return
+      }
       const sdk = await import("@nangohq/frontend").catch(() => null)
       const Ctor = sdk?.default
       if (!Ctor) {
         throw new Error("Connect SDK missing — npm install @nangohq/frontend, or set Nango and retry")
       }
+      if (!session.sessionToken || !session.host) {
+        throw new Error("Connect session missing — set Nango and retry")
+      }
       const nango = new Ctor({ connectSessionToken: session.sessionToken, host: session.host })
       const result = (await nango.auth(session.provider)) as { connectionId?: string; connection_id?: string }
       const connectionId = result.connectionId ?? result.connection_id
       if (!connectionId) throw new Error("No connection id from the app")
+      rememberConnectAccount(session.provider, connectionId)
       const step = flattenPipelineModules(modules).find(
         (m) => (moduleId && m.id === moduleId) || m.label === moduleLabel,
       )
@@ -92,7 +107,12 @@ export function ConnectAppsBanner({ modules, simple = false }: { modules: Pipeli
               onClick={() => void connectOne(n.moduleLabel, n.moduleId, n.actionId)}
               spineId="connect.start-session"
             >
-              {busy === n.actionId ? "Connecting…" : n.displayName}
+              {busy === n.actionId ? "Connecting…" : (
+                <span className="inline-flex items-center gap-1.5">
+                  <ConnectActionIcon provider={n.provider} size="sm" />
+                  {n.displayName}
+                </span>
+              )}
             </Button>
           ))}
         </div>
@@ -107,7 +127,12 @@ export function ConnectAppsBanner({ modules, simple = false }: { modules: Pipeli
               onClick={() => void connectOne(n.moduleLabel, n.moduleId, n.actionId)}
               spineId="connect.start-session"
             >
-              {busy === n.actionId ? "Connecting…" : `Reconnect ${n.displayName}`}
+              {busy === n.actionId ? "Connecting…" : (
+                <span className="inline-flex items-center gap-1.5">
+                  <ConnectActionIcon provider={n.provider} size="sm" />
+                  {`Reconnect ${n.displayName}`}
+                </span>
+              )}
             </Button>
           ))}
         </div>

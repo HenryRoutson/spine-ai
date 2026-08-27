@@ -3,6 +3,7 @@ import { HTTP } from "@/lib/server/api-errors"
 import { apiError, requireAuthStore } from "@/lib/server/api_context"
 import { connectSessionBodySchema, parseRequestJson } from "@/lib/server/api_schemas"
 import { getConnectAction, type connect_action_id_string } from "@/lib/connect-catalog"
+import { apConfigured, apFrontendUrl } from "@/lib/server/ap_client"
 import { createNangoConnectSession, nangoConfigured } from "@/lib/server/nango_client"
 import { logger } from "@/lib/server/server_logger"
 
@@ -20,8 +21,21 @@ export async function POST(req: Request) {
   if (entry.auth === "none") {
     return apiError(`${entry.displayName} does not need an account connection`, HTTP.BAD_REQUEST)
   }
-  if (!nangoConfigured()) {
+  if (!nangoConfigured() && entry.engine !== "ap") {
     return apiError("NANGO_SECRET_KEY is not set — self-host Nango next to Spine", HTTP.BAD_REQUEST)
+  }
+
+  if (entry.engine === "ap") {
+    if (!apConfigured()) {
+      return apiError("AP_API_KEY is not set — python3 scripts/setup_local.py ap", HTTP.BAD_REQUEST)
+    }
+    apiLog.info("connect session ap", { provider: entry.provider, actionId: parsed.actionId })
+    return NextResponse.json({
+      kind: "ap",
+      frontendUrl: apFrontendUrl(),
+      provider: entry.provider,
+      actionId: parsed.actionId,
+    })
   }
 
   try {
@@ -31,6 +45,7 @@ export async function POST(req: Request) {
     })
     apiLog.info("connect session", { provider: session.provider, actionId: parsed.actionId })
     return NextResponse.json({
+      kind: "nango",
       sessionToken: session.sessionToken,
       host: session.host,
       provider: session.provider,

@@ -554,7 +554,14 @@ export function PipelineModuleFields({
         <N8nModuleFields selected={selected} edit={!!edit} invalid={invalid} onUpdate={onUpdate} />
       )}
       {selected.kind === ModuleKind.Connect && (
-        <ConnectModuleFields selected={selected} edit={!!edit} invalid={invalid} onUpdate={onUpdate} />
+        <ConnectModuleFields
+          selected={selected}
+          edit={!!edit}
+          invalid={invalid}
+          onUpdate={onUpdate}
+          models={models}
+          modules={modules}
+        />
       )}
       {/* AI : TODO (media-view-B-ui) — View picker on output (and any previewable step). TODO (media-view-C-picker) — custom visualizer. */}
       {/* AI : DONE (media-view-D-job) — poll/ingest live on webhook-fields, not a RemoteJob form. */}

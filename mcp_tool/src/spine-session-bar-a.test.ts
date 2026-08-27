@@ -168,6 +168,34 @@ describe("MCP Bar A session tools", () => {
     }
   })
 
+  it("configure_connect_step accepts AP allowlist ids and rejects unknown ids", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "mcp-ap-connect-"))
+    const sessionPath = join(dir, "session.json")
+    try {
+      const session = createSpineSession({ persist: createFilePersist(sessionPath) })
+      session.addProject({ open: true })
+      const { addStepFromSession, configureConnectStepFromSession } = await import("./spine-session-bar-a.js")
+      const added = addStepFromSession("connect", "Slack AP", sessionPath)
+      const configured = configureConnectStepFromSession({
+        stepId: added[0]!.id,
+        connectActionId: "ap.slack.send_channel_message",
+        parametersJson: JSON.stringify({ channel: "#ops", textField: "text" }),
+        sessionPath,
+      })
+      expect(configured.connectActionId).toBe("ap.slack.send_channel_message")
+      expect(configured.connectParameters?.channel).toBe("#ops")
+      expect(() =>
+        configureConnectStepFromSession({
+          stepId: added[0]!.id,
+          connectActionId: "not-a-real-action",
+          sessionPath,
+        }),
+      ).toThrow(/unknown connect action/)
+    } finally {
+      rmSync(dir, { recursive: true, force: true })
+    }
+  })
+
   it("session_action share.create-site and schedule.create POST the GUI routes", async () => {
     const dir = mkdtempSync(join(tmpdir(), "mcp-share-"))
     const sessionPath = join(dir, "session.json")

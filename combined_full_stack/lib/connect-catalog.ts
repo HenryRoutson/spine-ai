@@ -1,10 +1,18 @@
 // AI : Short typed app-action catalog for Vibe — never dump 400 connectors here.
-// AI : Live Slack/Gmail go through Nango (see nango_client.ts). Local Set/Filter stay in n8n-catalog as piece.*.
+// AI : Live Slack/Gmail go through Nango (nango_client.ts) or AP CE (ap-catalog.ts). Local Set/Filter stay n8n-catalog.
+import { listApAllowlist } from "@/lib/ap-catalog"
+import {
+  GMAIL_CONNECT_PROPS,
+  HTTP_CONNECT_PROPS,
+  SHEETS_NANGO_CONNECT_PROPS,
+  SLACK_CONNECT_PROPS,
+} from "@/lib/connect-props"
 import type { PieceProp } from "@/lib/n8n-catalog"
 
 export type connect_action_id_string = string & { __brand: "connect_action_id" }
 export type nango_provider_config_key_string = string & { __brand: "nango_provider_config_key" }
 export type nango_connection_id_string = string & { __brand: "nango_connection_id" }
+export type ConnectEngine = "nango" | "ap" | "http"
 
 export type ConnectAuthKind = "oauth2" | "api_key" | "none"
 
@@ -18,6 +26,9 @@ export type ConnectAction = {
   description: string
   vibeHint: string
   props: PieceProp[]
+  engine: ConnectEngine
+  apPieceName?: string
+  apActionName?: string
 }
 
 function action(
@@ -41,6 +52,7 @@ function action(
     description,
     vibeHint,
     props,
+    engine: auth === "none" ? "http" : "nango",
   }
 }
 
@@ -55,10 +67,7 @@ const BUNDLED: ConnectAction[] = [
     "oauth2",
     "Post a message to a Slack channel.",
     "I'll send the result to Slack. Connect Slack when you're ready — a Slack window will ask you to approve.",
-    [
-      { name: "channel", displayName: "Channel", type: "string", required: true, default: "#general" },
-      { name: "textField", displayName: "Text field on input", type: "string", required: true, default: "text" },
-    ],
+    SLACK_CONNECT_PROPS,
   ),
   action(
     "gmail.send",
@@ -69,11 +78,7 @@ const BUNDLED: ConnectAction[] = [
     "oauth2",
     "Send an email from the connected Gmail account.",
     "I'll email this. Connect Gmail when you're ready — Google will ask you to approve.",
-    [
-      { name: "toField", displayName: "To field on input", type: "string", required: true, default: "to" },
-      { name: "subjectField", displayName: "Subject field on input", type: "string", required: true, default: "subject" },
-      { name: "bodyField", displayName: "Body field on input", type: "string", required: true, default: "body" },
-    ],
+    GMAIL_CONNECT_PROPS,
   ),
   action(
     "sheets.append",
@@ -84,10 +89,7 @@ const BUNDLED: ConnectAction[] = [
     "oauth2",
     "Append a row to a Google Sheet.",
     "I'll add a row to your sheet. Connect Google Sheets when you're ready.",
-    [
-      { name: "spreadsheetId", displayName: "Spreadsheet id", type: "string", required: true },
-      { name: "range", displayName: "Range", type: "string", required: true, default: "Sheet1!A1" },
-    ],
+    SHEETS_NANGO_CONNECT_PROPS,
   ),
   action(
     "http.request",
@@ -98,26 +100,37 @@ const BUNDLED: ConnectAction[] = [
     "none",
     "POST JSON to a URL you control — no OAuth.",
     "I'll send this to the web address you gave me.",
-    [
-      { name: "url", displayName: "URL", type: "string", required: true },
-      { name: "method", displayName: "Method", type: "select", default: "POST", options: [
-        { value: "POST", label: "POST" },
-        { value: "PUT", label: "PUT" },
-      ] },
-    ],
+    HTTP_CONNECT_PROPS,
   ),
 ]
 
 export const DEFAULT_CONNECT_ACTION_ID = "slack.postMessage" as connect_action_id_string
 
+function apAsConnectAction(): ConnectAction[] {
+  return listApAllowlist().map((p) => ({
+    id: p.id as unknown as connect_action_id_string,
+    displayName: p.displayName,
+    provider: p.provider as nango_provider_config_key_string,
+    nangoEndpoint: "",
+    method: "POST" as const,
+    auth: "oauth2" as const,
+    description: p.description,
+    vibeHint: p.vibeHint,
+    props: p.props,
+    engine: "ap" as const,
+    apPieceName: p.pieceName,
+    apActionName: p.actionName,
+  }))
+}
+
 export function listConnectActions(): ConnectAction[] {
-  return BUNDLED
+  return [...BUNDLED, ...apAsConnectAction()]
 }
 
 export function getConnectAction(id: string | undefined): ConnectAction | undefined {
   if (!id?.trim()) return undefined
   const key = id.trim()
-  return BUNDLED.find((a) => a.id === key || a.displayName === key)
+  return listConnectActions().find((a) => a.id === key || a.displayName === key)
 }
 
 export function missingConnectParams(entry: ConnectAction, params: Record<string, unknown> | undefined): string[] {
@@ -130,6 +143,59 @@ export function missingConnectParams(entry: ConnectAction, params: Record<string
   return missing
 }
 
+export type ConnectActionFamily = "slack" | "gmail" | "sheets" | "http"
+
+export function connectActionFamily(entry: ConnectAction): ConnectActionFamily {
+  const p = entry.provider
+  if (p === "slack") return "slack"
+  if (p === "google-mail" || p === "gmail") return "gmail"
+  if (p === "google-sheet") return "sheets"
+  return "http"
+}
+
+export const CONNECT_FAMILY_LABEL: Record<ConnectActionFamily, string> = {
+  slack: "Slack",
+  gmail: "Gmail",
+  sheets: "Google Sheets",
+  http: "HTTP",
+}
+
+function paramStr(params: Record<string, unknown> | undefined, name: string, fallback: string): string {
+  const v = params?.[name]
+  return v == null || v === "" ? fallback : String(v)
+}
+
+export function summarizeConnectAction(
+  entry: ConnectAction,
+  params: Record<string, unknown> | undefined,
+  connectionId: string | undefined,
+): string {
+  const family = connectActionFamily(entry)
+  const app = CONNECT_FAMILY_LABEL[family]
+  const bits: string[] = []
+  if (family === "slack") {
+    bits.push(`Posts to ${paramStr(params, "channel", "#general")}.`)
+    bits.push(`Message from previous-step field “${paramStr(params, "textField", "text")}”.`)
+  } else if (family === "gmail") {
+    bits.push(`Sends to the “${paramStr(params, "toField", "to")}” email field.`)
+    bits.push(`Subject from “${paramStr(params, "subjectField", "subject")}”.`)
+  } else if (family === "sheets") {
+    const sheet = paramStr(params, "spreadsheetId", "a spreadsheet")
+    const range = params?.range != null && params.range !== "" ? String(params.range) : params?.sheetId != null ? `tab ${String(params.sheetId)}` : "the first tab"
+    bits.push(`Appends a row to ${sheet} (${range}).`)
+  } else {
+    bits.push(`${paramStr(params, "method", "POST")} ${paramStr(params, "url", "a URL you set")}.`)
+  }
+  if (entry.auth !== "none") {
+    bits.push(
+      connectionId?.trim()
+        ? `Sends as the connected ${app} account.`
+        : `No ${app} account connected yet.`,
+    )
+  }
+  return bits.join(" ")
+}
+
 export function connectActionsForMcp(): Array<{
   id: string
   displayName: string
@@ -137,7 +203,7 @@ export function connectActionsForMcp(): Array<{
   auth: ConnectAuthKind
   description: string
 }> {
-  return BUNDLED.map((a) => ({
+  return listConnectActions().map((a) => ({
     id: a.id,
     displayName: a.displayName,
     provider: a.provider,

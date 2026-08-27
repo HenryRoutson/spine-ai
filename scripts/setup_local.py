@@ -25,6 +25,9 @@ SUPABASE_DIR = APP_DIR / "supabase"
 NANGO_DIR = ROOT / "nango"
 NANGO_ENV = NANGO_DIR / ".env"
 NANGO_ENV_EXAMPLE = NANGO_DIR / ".env.example"
+AP_DIR = ROOT / "activepieces"
+AP_ENV = AP_DIR / ".env"
+AP_ENV_EXAMPLE = AP_DIR / ".env.example"
 ENV_FILE = ROOT / ".env"
 ENV_TEMPLATE = ROOT / ".env.template"
 APP_ENV_LOCAL = APP_DIR / ".env.local"
@@ -33,6 +36,7 @@ LOCAL_TEST_PASSWORD = "local-dev-password-3950"
 SEED_USER_ENV = "SEED_USER_ID"
 OPENROUTER_ENV = "OPENROUTER_API_KEY"
 DEFAULT_NANGO_HOST = "http://127.0.0.1:3003"
+DEFAULT_AP_HOST = "http://127.0.0.1:3080"
 
 
 @dataclass(frozen=True)
@@ -50,6 +54,7 @@ SERVICE_URLS = (
     ServiceUrl("Inbucket (email)", "http://127.0.0.1:54324"),
     ServiceUrl("Nango API / dashboard", "http://localhost:3003"),
     ServiceUrl("Nango Connect UI", "http://localhost:3009"),
+    ServiceUrl("Activepieces CE", "http://localhost:3080"),
 )
 
 
@@ -244,6 +249,94 @@ def nango_stop() -> None:
     if not (NANGO_DIR / "docker-compose.yml").exists():
         return
     run([*nango_compose_cmd(), "down"], cwd=NANGO_DIR, check=False)
+
+
+def ap_compose_cmd() -> list[str]:
+    return [
+        "docker",
+        "compose",
+        "-f",
+        str(AP_DIR / "docker-compose.yml"),
+        "--env-file",
+        str(AP_ENV),
+    ]
+
+
+def ensure_ap_env() -> dict[str, str]:
+    # AI : activepieces/.env is container-only; Spine reads AP_API_URL / AP_API_KEY from repo .env.
+    AP_DIR.mkdir(parents=True, exist_ok=True)
+    if not AP_ENV.exists():
+        if AP_ENV_EXAMPLE.exists():
+            shutil.copy(AP_ENV_EXAMPLE, AP_ENV)
+            log("created activepieces/.env from example")
+        else:
+            AP_ENV.write_text("", encoding="utf-8")
+
+    ap = read_env_file(AP_ENV)
+    ap_updates: dict[str, str] = {}
+    if not ap.get("AP_ENCRYPTION_KEY"):
+        ap_updates["AP_ENCRYPTION_KEY"] = random_hex(16)
+    if not ap.get("AP_JWT_SECRET"):
+        ap_updates["AP_JWT_SECRET"] = random_hex(32)
+    if not ap.get("AP_API_KEY"):
+        ap_updates["AP_API_KEY"] = "sk-" + random_hex(24)
+    if not ap.get("AP_POSTGRES_PASSWORD"):
+        ap_updates["AP_POSTGRES_PASSWORD"] = random_hex(12)
+    if not ap.get("AP_POSTGRES_DATABASE"):
+        ap_updates["AP_POSTGRES_DATABASE"] = "activepieces"
+    if not ap.get("AP_POSTGRES_USERNAME"):
+        ap_updates["AP_POSTGRES_USERNAME"] = "postgres"
+    if not ap.get("AP_FRONTEND_URL"):
+        ap_updates["AP_FRONTEND_URL"] = "http://localhost:3080"
+    if not ap.get("AP_TELEMETRY_ENABLED"):
+        ap_updates["AP_TELEMETRY_ENABLED"] = "false"
+    if ap_updates:
+        upsert_env(AP_ENV, ap_updates)
+        ap.update(ap_updates)
+        log("wrote Activepieces secrets to activepieces/.env")
+
+    key = (ap.get("AP_API_KEY") or "").strip()
+    spine = read_env_file(ENV_FILE)
+    spine_updates: dict[str, str] = {}
+    if not spine.get("AP_API_URL"):
+        spine_updates["AP_API_URL"] = DEFAULT_AP_HOST
+    if not spine.get("AP_FRONTEND_URL"):
+        spine_updates["AP_FRONTEND_URL"] = "http://localhost:3080"
+    if key and not spine.get("AP_API_KEY"):
+        spine_updates["AP_API_KEY"] = key
+    if spine_updates:
+        upsert_env(ENV_FILE, spine_updates)
+        log(f"synced Activepieces keys into {ENV_FILE.name}")
+
+    app_ap = {
+        "AP_API_URL": spine.get("AP_API_URL") or spine_updates.get("AP_API_URL") or DEFAULT_AP_HOST,
+        "AP_FRONTEND_URL": spine.get("AP_FRONTEND_URL")
+        or spine_updates.get("AP_FRONTEND_URL")
+        or "http://localhost:3080",
+    }
+    if key:
+        app_ap["AP_API_KEY"] = spine.get("AP_API_KEY") or key
+    upsert_env(APP_ENV_LOCAL, app_ap)
+    return ap
+
+
+def ap_start() -> None:
+    if not docker_ok():
+        raise SetupError(
+            "Docker is not running. Start Docker Desktop / dockerd, then rerun."
+        )
+    if not (AP_DIR / "docker-compose.yml").exists():
+        raise SetupError(f"missing {AP_DIR / 'docker-compose.yml'}")
+    ensure_ap_env()
+    run([*ap_compose_cmd(), "up", "-d"], cwd=AP_DIR)
+    wait_for_url(f"{DEFAULT_AP_HOST}/", timeout_sec=300.0)
+    log("local Activepieces CE is up")
+
+
+def ap_stop() -> None:
+    if not (AP_DIR / "docker-compose.yml").exists():
+        return
+    run([*ap_compose_cmd(), "down"], cwd=AP_DIR, check=False)
 
 
 def upsert_env(path: Path, updates: dict[str, str]) -> None:
@@ -532,6 +625,18 @@ def cmd_nango(_: argparse.Namespace) -> None:
     log("add Slack / Google integrations in the Nango dashboard, then Connect in Spine")
 
 
+def cmd_ap(_: argparse.Namespace) -> None:
+    ensure_env_bootstrap()
+    ap_start()
+    print_service_table(
+        {
+            "Activepieces CE": DEFAULT_AP_HOST,
+            "AP API key": read_env_file(AP_ENV).get("AP_API_KEY", "")[:12] + "…",
+        }
+    )
+    log("sign in at the CE URL, then use ap.* connect actions in Spine (or Nango ids for the vendor popup)")
+
+
 def cmd_supabase(args: argparse.Namespace) -> None:
     ensure_env_bootstrap()
     supabase_start(reset_db=args.reset)
@@ -568,9 +673,10 @@ def cmd_dev(_: argparse.Namespace) -> None:
 
 
 def cmd_stop(_: argparse.Namespace) -> None:
+    ap_stop()
     nango_stop()
     supabase_stop()
-    log("nango + supabase stopped")
+    log("activepieces + nango + supabase stopped")
 
 
 def cmd_reset(_: argparse.Namespace) -> None:
@@ -613,7 +719,7 @@ def cmd_all(args: argparse.Namespace) -> None:
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        description="Host locally with Supabase + Nango — automated setup (Python, minimal steps).",
+        description="Host locally with Supabase + Nango + Activepieces CE — automated setup (Python, minimal steps).",
     )
     sub = parser.add_subparsers(dest="command", required=True)
 
@@ -631,8 +737,9 @@ def build_parser() -> argparse.ArgumentParser:
     sub.add_parser("deps", help="npm install all apps + sync shared code")
     sub.add_parser("seeds", help="create local test user + sync example projects")
     sub.add_parser("nango", help="start self-hosted Nango (auth + proxy on :3003)")
+    sub.add_parser("ap", help="start Activepieces CE sidecar (piece runtime on :3080)")
     sub.add_parser("dev", help="start app + landing + dashboard")
-    sub.add_parser("stop", help="stop local Nango + Supabase")
+    sub.add_parser("stop", help="stop local Activepieces + Nango + Supabase")
     sub.add_parser("reset", help="db reset + re-seed")
 
     all_cmd = sub.add_parser("all", help="full local hosting setup")
@@ -659,6 +766,7 @@ def main() -> int:
         "deps": cmd_deps,
         "seeds": cmd_seeds,
         "nango": cmd_nango,
+        "ap": cmd_ap,
         "dev": cmd_dev,
         "stop": cmd_stop,
         "reset": cmd_reset,

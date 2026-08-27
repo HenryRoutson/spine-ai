@@ -313,11 +313,11 @@ ${buildLlmCallStrategyPromptBlock()}
 - fork: set forkJoin (product | assemble | merge) and forkBranches (2–12, each { label, modules: [...] }). Lanes are linear module arrays. Nest Fork inside a lane when you need a DAG. Product join auto-derives one field per lane. llm-batch is map-over-list, not a fork.
 - if-else: exclusive router. Set ifCondition { kind: "path", path: "bool_field" } or { kind: "equals", path: "route", value: "legal" }. Set forkBranches as Then then Else (Else modules may be []). Out type is Then, or Then | Else when they differ. Do not use Fork for XOR playbooks.
 - n8n: typed local transform (Set, Filter, Sort, Limit, CSV, Hash, HTML, Markdown, DateTime, Item Lists, Code). Set n8nNodeType + n8nParameters. piece.set is an alias for n8n-nodes-base.set. Runs local JavaScript against the typed spine — do NOT call live Slack/Gmail. Prefer n8n over custom-code for field maps/filters. Live apps use kind=connect.
-- connect: live Slack / Gmail / Sheets / HTTP. Set connectActionId from this exact list (never invent ids):
+- connect: live Slack / Gmail / Sheets / HTTP. Set connectActionId from this exact list (never invent ids). Nango ids (slack.postMessage, gmail.send, sheets.append, http.request) use the in-app Connect chip. Activepieces allowlist ids (ap.slack.send_channel_message, ap.gmail.send_email, ap.google-sheets.append_row) run on the CE sidecar — still never invent ids. Full list:
 ${listConnectActions()
   .map((a) => `  - ${a.id} — ${a.description} (params: ${a.props.map((p) => p.name).join(", ")})`)
   .join("\n")}
-  After Approve, the human taps Connect {App} (OAuth popup to Slack/Google only). Do not ask them to paste tokens or open a node canvas. Prefer connect over webhook for those apps. HTTP connect (http.request) is the generic hatch.
+  After Approve, the human taps Connect {App}. Nango ids open a Slack/Google popup. ap.* ids open the CE sidecar — still no node canvas and no pasted tokens from the chat. Prefer connect over webhook for those apps. HTTP connect (http.request) is the generic hatch.
 - llm steps with tuple[text,quote] outputs get a Link Quotes step auto-inserted after them — do NOT emit quote steps yourself.
 - PDF/word/image/web inputs get a locked Convert to text step auto-inserted after the input (parser or OCR). Omit it from modules JSON and seeds — do NOT emit it yourself. A locked Parse to structure LLM step is auto-inserted when structureOut is not Document — do NOT emit that either.
 - transform reshapes upstream data. When a list feeds a single-object output, include a list field on that structure (prefer list[model] ref = input structure) so transform can wrap items automatically, or use custom-code.
@@ -383,8 +383,8 @@ export type AssistantHumanSurface = "vibe" | "build"
 
 export function buildHumanSurfacePromptBlock(surface?: AssistantHumanSurface): string {
   if (surface !== "vibe") return ""
-  return `Human UI surface: Vibe (agent-first, non-technical). Chat is on the left. Inference (pick files, run), Schedule (every morning), Share (publish a link), and Logging (previous runs) are on the right — tell them to use those panes, not to leave Vibe. They do not see Structure/Pipeline/Testing tabs. You still have full Build-equivalent control — propose the project yourself and let them approve. Do not ask them to open developer tools. Write short everyday language. Never mention spine, list[], schemas, type aliases, wiring, n8n, nodes, or Nango. Ask what they want to build.
-If they want Slack, Gmail, or a spreadsheet, add a connect step from the catalog. After they Approve, tell them to tap Connect on the right — a Slack or Google window asks them to approve. For "every morning", tell them to tap Schedule on the right.
+  return `Human UI surface: Vibe (agent-first, non-technical). Chat is on the left. Inference (pick files, run), Schedule (every morning), Share (publish a link), and Logging (previous runs) are on the right — tell them to use those panes, not to leave Vibe. They do not see Structure/Pipeline/Testing tabs. You still have full Build-equivalent control — propose the project yourself and let them approve. Do not ask them to open developer tools. Write short everyday language. Never mention spine, list[], schemas, type aliases, wiring, n8n, nodes, Nango, or Activepieces. Ask what they want to build.
+If they want Slack, Gmail, or a spreadsheet, add a connect step. Prefer slack.postMessage, gmail.send, or sheets.append so Connect is a Slack/Google popup. After they Approve, tell them to tap Connect on the right. For "every morning", tell them to tap Schedule on the right.
 
 `
 }

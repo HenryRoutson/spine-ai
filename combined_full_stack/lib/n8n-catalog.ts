@@ -17,6 +17,7 @@ export type PieceProp = {
   required?: boolean
   default?: unknown
   options?: { value: string; label: string }[]
+  fromInputFields?: boolean
 }
 
 export type ShareablePiece = {
@@ -33,7 +34,7 @@ export type N8nNodeCatalogEntry = ShareablePiece & {
   version: number
 }
 
-export function piecePropDefaults(piece: ShareablePiece): Record<string, unknown> {
+export function piecePropDefaults(piece: { props: PieceProp[] }): Record<string, unknown> {
   const out: Record<string, unknown> = {}
   for (const p of piece.props) {
     if (p.default !== undefined) out[p.name] = p.default
