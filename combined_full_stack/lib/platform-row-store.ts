@@ -26,9 +26,27 @@ export function emptyRowData(model: StructureModel): Record<string, unknown> {
       data[field.name] = parseExample(field.type, example)
       continue
     }
+    // AI : list[model] stored as FieldType.Json still seeds [] so the row editor never shows {}.
+    if (fieldLooksLikeList(field)) {
+      data[field.name] = []
+      continue
+    }
     data[field.name] = defaultForFieldType(field.type, field.optional)
   }
   return data
+}
+
+function fieldLooksLikeList(field: { type: FieldType; typeExpr?: { kind: string } }): boolean {
+  if (
+    field.type === FieldType.ListText ||
+    field.type === FieldType.ListModel ||
+    field.type === FieldType.ListDocument ||
+    field.type === FieldType.ListTupleTextQuote
+  ) {
+    return true
+  }
+  // AI : TypeExprKind.List wire value is "list" — avoid importing type_expr from this client-used store.
+  return field.typeExpr?.kind === "list"
 }
 
 function parseExample(type: FieldType, raw: string): unknown {
