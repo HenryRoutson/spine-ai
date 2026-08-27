@@ -8,8 +8,8 @@ Spine is a meta platform where non-technical users vibe-code websites and apps, 
 ┌─────────────────────────────────────────────────────────────────┐
 │                     Vibe Coding Platform                        │
 ├──────────────┬──────────────┬──────────────┬────────────────────┤
-│   Vibe Chat  │  Page Studio │   Backend    │   One-Click Share  │
-│  (agent)     │  (Lovable)   │  (Supabase)  │  (link/site/API)   │
+│   Vibe Chat  │  Page Studio │  Data tab    │   One-Click Share  │
+│  (agent)     │  (Lovable)   │  (tables)    │  (link/site/API)   │
 ├──────────────┴──────────────┴──────────────┴────────────────────┤
 │                    Typed Port Layer                              │
 │  Structure models ↔ Pipeline inputs/outputs (type-checked)      │
@@ -28,7 +28,7 @@ Spine is a meta platform where non-technical users vibe-code websites and apps, 
 |---------|------|--------------|
 | **Vibe** | Everyone | Chat to build — agent creates structures, pipelines, pages |
 | **Page Studio** | Non-technical | Edit hosted HTML/React, brand, preview live |
-| **Backend tab** | Semi-technical | See Supabase schema, typed ports, test runs |
+| **Data tab** | Semi-technical | Edit tables and rows, connect them to pipeline steps, test a run |
 | **Building** | Technical | Structure, Pipeline, Testing editors |
 | **Share hub** | Everyone | One-click publish website + pipeline + API |
 
@@ -61,7 +61,7 @@ See `combined_full_stack/lib/server/platform-roadmap.ts` for tracked TODOs.
 | P2 | Supabase backend panel (schema + state) | Done |
 | P3 | Auto-generated upload frontend in exports | Done |
 | P4 | Platform share hub (one-click) | Done |
-| P5 | Enhanced backend tab in website workspace | Done |
+| P5 | Data tab in website + pipeline workspace | Done |
 | P6 | Persist build surface preference | Done |
 | P7 | Per-site Supabase provisioning | BYO keys done; isolated alloc later |
 | P8 | `{{pay}}` / `{{table:Model}}` slots | Done |

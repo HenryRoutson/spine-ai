@@ -5,7 +5,7 @@
 // AI :   mount a DOM WorkspaceView; keep this header so the toggle stays reachable. Not Ink-in-browser.
 import dynamic from "next/dynamic"
 import { useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react"
-import { GitBranch, Loader2 } from "lucide-react"
+import { Loader2, Table2 } from "lucide-react"
 import { AppChromeHeader } from "@/components/app-chrome-header"
 import { AppWindowNav } from "@/components/app-window-nav"
 import { ProjectSelector } from "@/components/project-selector"
@@ -80,7 +80,7 @@ const Schedule = dynamic(() => import("@/components/schedule-page").then((m) => 
 )
 const BackendWorkspace = dynamic(
   () => import("@/components/platform/backend-workspace").then((m) => ({ default: m.BackendWorkspace })),
-  { loading: () => <PanelLoading label="loading backend…" /> },
+  { loading: () => <PanelLoading label="loading data…" /> },
 )
 const Share = dynamic(() => import("@/components/share/share-page").then((m) => ({ default: m.SharePage })), {
   loading: () => <RunPanelSkeleton /> },
@@ -608,11 +608,11 @@ function BuilderShellLayoutInner({ variant = "default" }: { variant?: "default" 
                   editorsCopy={
                     editingWebsite
                       ? websiteSimplified
-                        ? { label: "Backend", title: "Pipeline description and a test run" }
+                        ? { label: "Data", title: "Tables, types, and a test run" }
                         : { label: "Building", title: "Edit website HTML / React" }
                       : undefined
                   }
-                  editorsIcon={websiteSimplified ? GitBranch : undefined}
+                  editorsIcon={websiteSimplified ? Table2 : undefined}
                 />
               ) : null
             }

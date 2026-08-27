@@ -42,10 +42,10 @@ export {}
 // AI : DONE (platform-P4-share-wire) — SharePage simple + full Publish include the hub
 
 // ---------------------------------------------------------------------------
-// P5 — Backend tab (pipeline Vibe + website Building)
+// P5 — Data tab (tables & rows; pipeline Vibe + website Building)
 // ---------------------------------------------------------------------------
-// AI : DONE (platform-P5-backend-tab) — AppWindowId.Backend + components/platform/backend-workspace.tsx
-// AI : Schema / Ports / Tables / Run — feed a typed row into a compatible pipeline input
+// AI : DONE (platform-P5-backend-tab) — AppWindowId.Backend labeled Data + components/platform/backend-workspace.tsx
+// AI : Schema / Connections / Rows / Run — send a typed record into a compatible pipeline input
 
 // ---------------------------------------------------------------------------
 // P6 — Persist build surface preference
@@ -56,7 +56,7 @@ export {}
 // ---------------------------------------------------------------------------
 // P7 — Per-site Supabase (BYO, not allocated)
 // ---------------------------------------------------------------------------
-// AI : DONE (platform-P7-supabase-byo) — schema pack + URL/key validation on the Backend Connect tab
+// AI : DONE (platform-P7-supabase-byo) — schema pack + URL/key validation on the Data Schema tab
 // AI : TODO (platform-P7-supabase-alloc) — allocate isolated Supabase project per hosted site
 
 // ---------------------------------------------------------------------------

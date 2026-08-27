@@ -44,9 +44,9 @@ export function TypePortsPanel({ onWire }: { onWire?: () => void } = {}) {
   return (
     <div className="space-y-4">
       <div>
-        <h4 className="text-sm font-semibold">Typed ports</h4>
+        <h4 className="text-sm font-semibold">Connections</h4>
         <p className="mt-0.5 text-xs text-muted-foreground">
-          Connect structure models to pipeline inputs. Only compatible types can be wired.
+          Plug a table into a pipeline step. Only matching types can connect — click Connect when the colors agree.
         </p>
       </div>
 
@@ -79,11 +79,11 @@ export function TypePortsPanel({ onWire }: { onWire?: () => void } = {}) {
                 <div className="mt-2 flex items-center gap-1.5 text-xs text-emerald-600">
                   <CheckCircle2 className="h-3.5 w-3.5" />
                   <span>
-                    Wired to <strong>{wired.name}</strong>
+                    Connected to <strong>{wired.name}</strong>
                   </span>
                 </div>
               ) : (
-                <p className="mt-1.5 text-[10px] text-muted-foreground">Not wired to a structure</p>
+                <p className="mt-1.5 text-[10px] text-muted-foreground">Not connected to a table yet</p>
               )}
 
               {portConnections.length > 0 ? (
@@ -99,7 +99,7 @@ export function TypePortsPanel({ onWire }: { onWire?: () => void } = {}) {
                 </ul>
               ) : (
                 <p className="mt-2 text-[10px] text-muted-foreground">
-                  No compatible structures for this input type.
+                  No table in Structures matches this step&apos;s input type.
                 </p>
               )}
             </div>
@@ -139,7 +139,7 @@ function ConnectionRow({
           onClick={onWire}
           {...spineActionProps("platform.wire-port")}
         >
-          Wire
+          Connect
         </Button>
       ) : (
         <XCircle className="h-3.5 w-3.5 shrink-0 text-destructive" />

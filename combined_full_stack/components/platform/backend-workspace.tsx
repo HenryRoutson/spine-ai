@@ -24,12 +24,12 @@ type backend_tab = "schema" | "ports" | "tables" | "run"
 
 const TABS: { id: backend_tab; label: string; icon: typeof Database }[] = [
   { id: "schema", label: "Schema", icon: Database },
-  { id: "ports", label: "Ports", icon: GitBranch },
-  { id: "tables", label: "Tables", icon: Table2 },
+  { id: "ports", label: "Connections", icon: GitBranch },
+  { id: "tables", label: "Rows", icon: Table2 },
   { id: "run", label: "Run", icon: Play },
 ]
 
-// AI : single backend surface — schema, typed mix-and-match, stateful rows, test run.
+// AI : tables & rows — schema, typed mix-and-match, stateful records, test run. Internal tab ids stay schema/ports/tables/run.
 export function BackendWorkspace({
   siteAuth,
   onSiteAuthChange,
@@ -52,10 +52,10 @@ export function BackendWorkspace({
     <div className="min-h-0 flex-1 overflow-y-auto p-5">
       <div className="mx-auto flex max-w-3xl flex-col gap-5">
         <div>
-          <h3 className="text-sm font-semibold">Backend</h3>
+          <h3 className="text-sm font-semibold">Tables & data</h3>
           <p className="mt-0.5 text-xs text-muted-foreground">
-            Shared typed state for every frontend bound to this pipeline. Wire a structure into a step, store rows,
-            then feed a row because the types match.
+            The database for this project — table shapes, stored records, and which pipeline step can read them.
+            The Pipeline tab is the compute; websites share these rows.
           </p>
         </div>
 
@@ -102,8 +102,8 @@ export function BackendWorkspace({
               <SupabaseConnectFields auth={siteAuth} onChange={onSiteAuthChange} />
             ) : (
               <p className="text-[10px] text-muted-foreground">
-                Bind your own Supabase from a hosted website&apos;s sign-in settings. Schema stays shared across
-                frontends either way.
+                Bind your own Supabase from a hosted website&apos;s sign-in settings. These tables stay shared
+                across every website on this project.
               </p>
             )}
           </div>
@@ -124,7 +124,7 @@ export function BackendWorkspace({
         {tab === "run" ? (
           <div className="space-y-4">
             <section className="rounded-lg border border-border bg-card p-4">
-              <h4 className="text-sm font-semibold">What this backend does</h4>
+              <h4 className="text-sm font-semibold">What the pipeline computes</h4>
               <PipelineSummaryBox />
             </section>
             <section className="min-h-[24rem] overflow-hidden rounded-lg border border-border bg-card">

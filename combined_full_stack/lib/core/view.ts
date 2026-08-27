@@ -281,6 +281,9 @@ export const TUI_TAB_ALIASES: Record<string, TuiTab> = {
   logs: AppWindowId.Logging,
   supabase: AppWindowId.Backend,
   schema: AppWindowId.Backend,
+  data: AppWindowId.Backend,
+  tables: AppWindowId.Backend,
+  database: AppWindowId.Backend,
 }
 
 export type TuiArea = BuilderAreaId
@@ -336,7 +339,7 @@ const TUI_TAB_EMPTY: Record<TuiTab, string> = {
   billing: "no account — session pull / SPINE_API_URL",
   settings: "default model",
   vibe: "no chat yet — press a to ask vibe",
-  backend: "no tables — add structures, then wire typed ports and feed a row",
+  backend: "no records — add structures, then store rows and send one into a matching pipeline step",
 }
 
 const TUI_TAB_DESCRIPTION_OVERRIDE: Partial<Record<TuiTab, string>> = {

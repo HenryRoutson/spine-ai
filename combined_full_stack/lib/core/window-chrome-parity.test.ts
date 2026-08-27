@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest"
 import { AppWindowId } from "@/lib/app-window-id"
 import { BUILDER_AREAS, BUILDER_NAV_ITEMS, BUILDER_WORKSPACE_WINDOW_IDS } from "@/lib/app-nav-config"
-import { BUILDER_AREA_WINDOWS, TUI_AREA_IDS } from "@/lib/app-area-windows"
+import { AppArea, BUILDER_AREA_WINDOWS, TUI_AREA_IDS } from "@/lib/app-area-windows"
 import {
   APP_WINDOW_STEPS,
   AppWindowStep,
@@ -53,6 +53,18 @@ describe("window chrome parity (GUI headers / nav hints / TUI)", () => {
 
   it("prefetch workspace ids match BUILDER_NAV_ITEMS (no account L0)", () => {
     expect(BUILDER_WORKSPACE_WINDOW_IDS).toEqual(BUILDER_NAV_ITEMS.map((item) => item.id))
+  })
+
+  it("Data sits next to Structures in Build, labeled Data not Backend", () => {
+    expect(BUILDER_AREA_WINDOWS[AppArea.Build].slice(0, 3)).toEqual([
+      AppWindowId.Structure,
+      AppWindowId.Backend,
+      AppWindowId.Pipeline,
+    ])
+    expect(BUILDER_NAV_ITEMS.find((item) => item.id === AppWindowId.Backend)?.label).toBe("Data")
+    expect(windowPanelHeader(AppWindowId.Backend).title).toBe("Tables & data")
+    expect(windowPanelHeader(AppWindowId.Backend).step).toBe(AppWindowStepLabel.Backend)
+    expect(AppWindowStepLabel.Backend).toBe("· / Data")
   })
 
   it("AppWindowStep numbers are contiguous and drive Schedule plus later tabs", () => {

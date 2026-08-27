@@ -12,6 +12,9 @@ describe("TUI tab chrome", () => {
     expect(tuiTabFromHotkey(TUI_TAB_HOTKEY.docs)).toBe("docs")
     expect(tuiTabFromHotkey("b")).toBe("billing")
     expect(tuiTabFromHotkey("k")).toBe("backend")
+    expect(resolveTuiTab("data")).toBe("backend")
+    expect(resolveTuiTab("tables")).toBe("backend")
+    expect(resolveTuiTab("database")).toBe("backend")
     expect(resolveTuiTab("logs")).toBe("logging")
     expect(areaForTuiTab("logging")).toBe("observe")
     expect(defaultPaneForTab("logging")).toBe("runs")
@@ -20,6 +23,8 @@ describe("TUI tab chrome", () => {
   it("annotates every tab with the web UI description", () => {
     expect(TUI_TAB_META.logging.description).toMatch(/per-step trace/)
     expect(TUI_TAB_META.testing.empty).toMatch(/testing\.json/)
+    expect(TUI_TAB_META.backend.title).toBe("Tables & data")
+    expect(TUI_TAB_META.backend.empty).toMatch(/records/)
   })
 })
 

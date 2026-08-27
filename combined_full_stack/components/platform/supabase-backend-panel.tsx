@@ -48,7 +48,8 @@ export function SupabaseBackendPanel({
           Supabase schema
         </h4>
         <p className="mt-0.5 text-xs text-muted-foreground">
-          Auto-generated from your structure models. Shared across all pipelines bound to this website.
+          SQL generated from Structures. Every website on this project shares these tables — the pipeline is what
+          processes the rows.
         </p>
       </div>
 

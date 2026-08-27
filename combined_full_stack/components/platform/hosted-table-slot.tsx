@@ -3,6 +3,7 @@
 import type { ReactNode } from "react"
 import { Table2 } from "lucide-react"
 import { readProjectRows, rowsForModel, type project_row_store } from "@/lib/platform-row-store"
+import { friendlyFieldName } from "@/lib/platform-row-fields"
 import type { Project, StructureModel } from "@/lib/types"
 
 // AI : {{table:Model}} — live rows from the project structure store, shared across frontends.
@@ -33,7 +34,7 @@ export function HostedTableSlot({
       </div>
       {rows.length === 0 ? (
         <p className="px-3 py-4 text-center text-xs text-muted-foreground">
-          No rows yet — add them on the Backend → Tables tab, then this page updates.
+          No rows yet — add them on Data → Rows, then this page updates.
         </p>
       ) : (
         <div className="max-h-64 overflow-auto">
@@ -42,7 +43,7 @@ export function HostedTableSlot({
               <tr>
                 {fields.map((f) => (
                   <th key={f.id} className="px-3 py-1.5 font-medium">
-                    {f.name}
+                    {friendlyFieldName(f.name)}
                   </th>
                 ))}
               </tr>
@@ -76,6 +77,8 @@ export function hostedTableSlotsForProject(project: Pick<Project, "id" | "models
 
 function formatCell(value: unknown): string {
   if (value == null) return "—"
+  if (Array.isArray(value) && value.length === 0) return "—"
+  if (typeof value === "object" && !Array.isArray(value) && Object.keys(value as object).length === 0) return "—"
   if (typeof value === "string") return value
   if (typeof value === "number" || typeof value === "boolean") return String(value)
   try {

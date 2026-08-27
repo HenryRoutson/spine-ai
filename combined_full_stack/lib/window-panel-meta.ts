@@ -82,7 +82,7 @@ function numberedStepLabels(): Record<AppWindowStepKey, string> {
 export const AppWindowStepLabel = {
   ...numberedStepLabels(),
   Vibe: "· / Vibe",
-  Backend: "· / Backend",
+  Backend: "· / Data",
   Billing: "· / Billing",
   Settings: "· / Settings",
   Run: `${padAppWindowStep(AppWindowStep.Structure)} / Run`,
@@ -107,7 +107,7 @@ export enum AppWindowTitle {
   ProjectBilling = "Project spend",
   ProjectSettings = "Project settings",
   Vibe = "Vibe",
-  Backend = "Backend",
+  Backend = "Tables & data",
   Billing = "Account billing",
   Settings = "Settings",
   Earnings = "Earnings account",
@@ -244,12 +244,13 @@ const BUILDER_WINDOW_HEADERS: Record<AppWindowId, WindowHeaderCopy> = {
   vibe: {
     step: AppWindowStepLabel.Vibe,
     title: AppWindowTitle.Vibe,
-    description: "Talk to the agent to build the full project — structures, pipeline, docs, and run. Inference, Schedule, Backend, Share, and Logging sit on the right.",
+    description: "Talk to the agent to build the full project — structures, pipeline, docs, and run. Inference, Data, Schedule, Share, and Logging sit on the right.",
   },
   backend: {
     step: AppWindowStepLabel.Backend,
     title: AppWindowTitle.Backend,
-    description: "Supabase schema, typed ports, and stateful rows shared by every frontend bound to this pipeline.",
+    description:
+      "Tables and rows shared by every website on this project. The pipeline is compute — this tab is the data those steps read and write.",
   },
   billing: {
     step: AppWindowStepLabel.Billing,

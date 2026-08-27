@@ -50,5 +50,5 @@ export function supabaseConnectSummary(url: string, anonKey: string): string {
   if (parsedUrl && parsedKey) return `Connected · ${parsedUrl}`
   if (parsedUrl && !parsedKey) return "URL looks valid — paste the anon (publishable) key"
   if (!parsedUrl && parsedKey) return "Key looks valid — paste https://YOUR_PROJECT.supabase.co"
-  return "Paste a Supabase project URL and anon key to bind this backend"
+  return "Paste a Supabase project URL and anon key to store these tables"
 }

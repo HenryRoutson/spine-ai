@@ -203,7 +203,7 @@ describe("Ink TUI", () => {
     expect(pipeline).toContain(`${TUI_TAB_HOTKEY.schedule}:schedule`)
     const backend = renderSpineTuiString(session, "memory", { tab: "backend" }).replace(/\s+/g, " ")
     expect(backend).toContain(`${TUI_TAB_HOTKEY.backend}:backend`)
-    expect(backend).toContain("Backend")
+    expect(backend).toContain("Tables & data")
     expect(pipeline).toContain("Linear Pipeline")
     expect(pipeline).toContain("Each step declares its input and output model")
     expect(pipeline).toContain("annotation:")

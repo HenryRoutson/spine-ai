@@ -637,7 +637,7 @@ export function Settings() {
                 <span className="block text-sm font-medium">Hide developer tools</span>
                 <span className="mt-0.5 block text-xs text-muted-foreground">
                   When on, Structure / Pipeline / Testing stay hidden. Pipelines keep Vibe and Building (visual
-                  editors). Websites stay on the page studio — Building edits page code, or Page / Backend when this
+                  editors). Websites stay on the page studio — Building edits page code, or Page / Data when this
                   is on.
                 </span>
               </span>

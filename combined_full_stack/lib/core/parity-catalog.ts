@@ -143,7 +143,7 @@ export const PARITY_ROWS: ParityRow[] = [
   row(
     "nav.window.backend",
     "backend",
-    { label: "Backend", file: "components/app-window-nav.tsx" },
+    { label: "Data", file: "components/app-window-nav.tsx" },
     y("Ink: press k", "tab-backend"),
     y("GET /api/state?projectId=", "/api/state"),
     p("session_action id=nav.window.backend → get_project", "get_project"),
@@ -1107,7 +1107,7 @@ export const PARITY_ROWS: ParityRow[] = [
   row(
     "platform.wire-port",
     "backend",
-    { label: "Wire", file: "components/platform/type-ports-panel.tsx" },
+    { label: "Connect", file: "components/platform/type-ports-panel.tsx" },
     n("TUI backend lists tables only"),
     y("PUT /api/projects/:id (modules.outStructureId)", "/api/projects"),
     p("session_action + apply_project_changes", "session_action"),
@@ -1152,7 +1152,7 @@ export const PARITY_ROWS: ParityRow[] = [
   row(
     "platform.backend-tab.ports",
     "backend",
-    { label: "Ports", file: "components/platform/backend-workspace.tsx" },
+    { label: "Connections", file: "components/platform/backend-workspace.tsx" },
     y("Ink: press k (backend tab)", "tab-backend"),
     na("local panel"),
     na("local panel"),
@@ -1161,7 +1161,7 @@ export const PARITY_ROWS: ParityRow[] = [
   row(
     "platform.backend-tab.tables",
     "backend",
-    { label: "Tables", file: "components/platform/backend-workspace.tsx" },
+    { label: "Rows", file: "components/platform/backend-workspace.tsx" },
     y("Ink: press k (backend tab)", "tab-backend"),
     na("local panel"),
     na("local panel"),
@@ -1188,7 +1188,7 @@ export const PARITY_ROWS: ParityRow[] = [
   row(
     "platform.table-add-row",
     "backend",
-    { label: "Add row", file: "components/platform/structure-rows-panel.tsx" },
+    { label: "Add record", file: "components/platform/structure-rows-panel.tsx" },
     n("TUI backend lists tables only"),
     na("localStorage row store"),
     na("localStorage row store"),
@@ -1197,7 +1197,7 @@ export const PARITY_ROWS: ParityRow[] = [
   row(
     "platform.feed-row",
     "backend",
-    { label: "Feed row", file: "components/platform/structure-rows-panel.tsx" },
+    { label: "Send to", file: "components/platform/structure-rows-panel.tsx" },
     n("TUI has no Feed → input yet"),
     y("POST /api/docs then POST /api/runs", "/api/docs"),
     p("session_action id=inference.assign-input", "session_action"),
