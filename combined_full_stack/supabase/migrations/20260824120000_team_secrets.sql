@@ -1,6 +1,6 @@
 -- AI : team-scoped secrets — members resolve at runtime; values never returned to non-admins via API.
 create table if not exists public.team_secrets (
-  team_id uuid not null references public.teams (id) on delete cascade,
+  team_id text not null references public.teams (id) on delete cascade,
   name text not null,
   value text not null,
   hint text not null default '',

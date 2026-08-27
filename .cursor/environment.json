@@ -1,0 +1,20 @@
+{
+  "name": "antler_vc_hackathon (Spine)",
+  "user": "ubuntu",
+  "install": "bash .cursor/install.sh",
+  "start": "bash .cursor/start.sh",
+  "terminals": [
+    {
+      "name": "dev:all",
+      "command": "python3 scripts/setup_local.py dev"
+    }
+  ],
+  "ports": [
+    { "name": "app", "port": 3000 },
+    { "name": "landing", "port": 4000 },
+    { "name": "dashboard", "port": 5050 },
+    { "name": "supabase-api", "port": 54321 },
+    { "name": "supabase-studio", "port": 54323 },
+    { "name": "inbucket-email", "port": 54324 }
+  ]
+}

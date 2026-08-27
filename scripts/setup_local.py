@@ -151,11 +151,13 @@ def write_env_file(path: Path, values: dict[str, str]) -> None:
                 del values[key]
             else:
                 lines.append(line)
+    elif path == ENV_FILE and ENV_TEMPLATE.exists():
+        # AI : only the repo-root .env bootstraps from the template. Seeding .env.local from the
+        # AI : template would inject empty SUPABASE_*/OPENROUTER keys that shadow root .env (dotenv
+        # AI : loads .env.local first and does not override), breaking Supabase auth locally.
+        lines = ENV_TEMPLATE.read_text(encoding="utf-8").splitlines()
     else:
-        if ENV_TEMPLATE.exists():
-            lines = ENV_TEMPLATE.read_text(encoding="utf-8").splitlines()
-        else:
-            lines = []
+        lines = []
     for key in sorted(values):
         lines.append(f'{key}="{values[key]}"')
     path.write_text("\n".join(lines).rstrip() + "\n", encoding="utf-8")
@@ -473,6 +475,7 @@ def install_deps() -> None:
     run(["npm", "install"], cwd=APP_DIR)
     run(["npm", "install"], cwd=ROOT / "landing_page")
     run(["npm", "install"], cwd=ROOT / "dashboard")
+    run(["npm", "install"], cwd=ROOT / "mcp_tool")
     run(["npm", "run", "sync:shared"], cwd=ROOT)
     log("npm dependencies installed")
 
