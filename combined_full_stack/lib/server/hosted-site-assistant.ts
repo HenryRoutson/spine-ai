@@ -12,7 +12,9 @@ import {
   HOSTED_SITE_CHATBOT_SLOT,
   HOSTED_SITE_DOCS_SLOT,
   HOSTED_SITE_OUTPUT_SLOT,
+  HOSTED_SITE_PAY_SLOT,
   HOSTED_SITE_RUN_SLOT,
+  HOSTED_SITE_TABLE_SLOT,
   normalizeHostedSiteOptions,
   parseHexColor,
   type hex_color_string,
@@ -53,7 +55,7 @@ export function buildHostedSiteAssistantSystemPrompt(runtime: website_runtime_ki
 
 The default page is a signed-in workspace. Do not add a sign-in screen unless the publisher explicitly asks.
 
-You edit the Vite + React project: src/App.tsx, src/index.css, and files under src/. Keep <RunPipeline alias="…" /> for each bound pipeline (default alias "run").
+You edit the Vite + React project: src/App.tsx, src/index.css, and files under src/. Keep <RunPipeline alias="…" /> for each bound pipeline (default alias "run"). Keep <HostedSlot slot="…" /> for pay / table / output widgets.
 You MUST NOT change the pipeline, structures, prompts, project Docs, test files, or funding.
 You MUST NOT invent a custom Supabase URL or anon key.
 
@@ -64,7 +66,7 @@ Return a short message for the publisher, then fields:
 - customHtml / customCss / authHtml: always null in React mode (the HTML snapshot stays as-is)
 - authProvider: null unless they asked to change it
 
-Do not remove src/components/RunPipeline.tsx. Do not invent backend routes or npm packages.`
+Do not remove src/components/RunPipeline.tsx or src/components/HostedSlot.tsx. Do not invent backend routes or npm packages.`
   }
   return `You are a product-page designer for a hosted Spine app (Lovable-style HTML around a run form).
 
@@ -76,7 +78,7 @@ You MUST NOT invent a custom Supabase URL or anon key — that stays a publisher
 
 The run form is injected where you place ${HOSTED_SITE_RUN_SLOT}. Always keep exactly one ${HOSTED_SITE_RUN_SLOT} on the app page.
 The sign-in form is injected where you place ${HOSTED_SITE_AUTH_SLOT}. If authEnabled is true, keep exactly one ${HOSTED_SITE_AUTH_SLOT} on the sign-in page.
-Optional widgets (existing runtimes, not new backends): ${HOSTED_SITE_OUTPUT_SLOT} (result viewer), ${HOSTED_SITE_CHATBOT_SLOT} (chat), ${HOSTED_SITE_DOCS_SLOT} (viewer markdown). Do not invent {{pay}} or {{table}} slots.
+Optional widgets (existing runtimes, not new backends): ${HOSTED_SITE_OUTPUT_SLOT} (result viewer), ${HOSTED_SITE_CHATBOT_SLOT} (chat), ${HOSTED_SITE_DOCS_SLOT} (viewer markdown), ${HOSTED_SITE_PAY_SLOT} (checkout), ${HOSTED_SITE_TABLE_SLOT} / {{table:ModelName}} (live structure table). Keep those tokens if they are already on the page.
 Tokens: {{company}}, {{tagline}}, {{logo}}, {{email}} fill from brand fields. Default nav shows {{email}} as the signed-in account. Scripts, iframes, and event handlers are stripped.
 
 Return a short message for the publisher, then fields:

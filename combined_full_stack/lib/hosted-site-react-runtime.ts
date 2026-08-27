@@ -3,11 +3,17 @@ import type { ComponentType } from "react"
 import type { hosted_site_react_bundle } from "@/lib/hosted-site-react"
 
 export type hosted_site_run_pipeline = ComponentType<{ alias: string }>
+export type hosted_site_hosted_slot = ComponentType<{ slot: string }>
+
+function DefaultHostedSlot({ slot }: { slot: string }) {
+  return React.createElement("div", { "data-spine-slot": slot })
+}
 
 // AI : SECURITY — owner-authored React, same trust as custom-code steps. Do not run untrusted third-party sites here.
 export function instantiateHostedSiteReactApp(
   bundle: hosted_site_react_bundle,
   RunPipeline: hosted_site_run_pipeline,
+  HostedSlot: hosted_site_hosted_slot = DefaultHostedSlot,
 ): ComponentType {
   const cache: Record<string, unknown> = Object.create(null) as Record<string, unknown>
   const req = (id: string): unknown => {
@@ -18,6 +24,7 @@ export function instantiateHostedSiteReactApp(
     if (id === "react-dom" || id === "react-dom/client") return {}
     if (id === "__hs_css") return {}
     if (id === "__hs_run") return { RunPipeline }
+    if (id === "__hs_slot") return { HostedSlot }
     const source = bundle.modules[id]
     if (typeof source !== "string") throw new Error(`Cannot find module ${id}`)
     if (cache[id] === undefined) {

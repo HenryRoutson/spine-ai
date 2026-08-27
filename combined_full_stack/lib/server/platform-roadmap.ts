@@ -38,6 +38,7 @@ export {}
 // ---------------------------------------------------------------------------
 // AI : DONE (platform-P4-share-hub) — components/platform/platform-share-hub.tsx
 // AI : mint site + link + API from one panel; copy all URLs at once
+// AI : DONE (platform-P4-share-bodies) — lib/platform-share-bodies.ts matches .strict() create schemas (no name key)
 // AI : DONE (platform-P4-share-wire) — SharePage simple + full Publish include the hub
 
 // ---------------------------------------------------------------------------
@@ -63,6 +64,7 @@ export {}
 // ---------------------------------------------------------------------------
 // AI : DONE (platform-P8-pay-slot) — {{pay}} mounts HostedPaySlot on hosted pages
 // AI : DONE (platform-P8-table-slot) — {{table:Model}} mounts live rows from the structure row store
+// AI : DONE (platform-P8-table-viewer) — HostedSiteViewer + React HostedSlot mount table/pay widgets on published pages
 
 // ---------------------------------------------------------------------------
 // P9 — IDE/repo bridge (future)

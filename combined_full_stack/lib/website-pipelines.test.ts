@@ -67,6 +67,7 @@ describe("html to react conversion", () => {
     expect(app).toContain("RunPipeline")
     expect(app).toContain("invoice")
     expect(files.some((f) => f.path === "src/components/RunPipeline.tsx")).toBe(true)
+    expect(files.some((f) => f.path === "src/components/HostedSlot.tsx")).toBe(true)
     expect(files.some((f) => f.path === "package.json")).toBe(true)
     expect(files.some((f) => f.path === "vite.config.ts")).toBe(true)
     const tree = parseReactPreviewTree(files)

@@ -49,6 +49,7 @@ export function htmlSiteToReactFiles(options: HostedSiteOptions): HostedSiteReac
     {
       path: "src/App.tsx",
       contents: `import { RunPipeline } from "./components/RunPipeline"
+import { HostedSlot } from "./components/HostedSlot"
 
 const parts = [
   ${parts.join(",\n  ")}
@@ -62,7 +63,7 @@ export default function App() {
           return <div key={i} dangerouslySetInnerHTML={{ __html: part.html }} />
         }
         if (part.kind === "run") return <RunPipeline key={i} alias={part.alias} />
-        return <div key={i} data-spine-slot={part.slot} />
+        return <HostedSlot key={i} slot={part.slot} />
       })}
     </div>
   )
@@ -95,6 +96,13 @@ createRoot(document.getElementById("root")!).render(
       Pipeline: {alias}
     </div>
   )
+}
+`,
+    },
+    {
+      path: "src/components/HostedSlot.tsx",
+      contents: `export function HostedSlot({ slot }: { slot: string }) {
+  return <div data-spine-slot={slot} />
 }
 `,
     },

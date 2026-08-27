@@ -170,6 +170,7 @@ describe("hosted site UI vibe agent prompts", () => {
     const system = buildHostedSiteAssistantSystemPrompt("react")
     expect(system).toMatch(/reactFilePatches/)
     expect(system).toContain("RunPipeline")
+    expect(system).toContain("HostedSlot")
     expect(system).not.toContain(HOSTED_SITE_RUN_SLOT)
   })
 })

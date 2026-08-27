@@ -159,7 +159,12 @@ export function HostedSitePageStudio({
   const tableByAlias = hostedTableSlotsForProject(project)
   const preview =
     value.runtime === "react" && resolvedTarget.kind !== "signin" ? (
-      <HostedSiteReactPreview options={value} runByAlias={runByAlias} />
+      <HostedSiteReactPreview
+        options={value}
+        runByAlias={runByAlias}
+        tableByAlias={tableByAlias}
+        slots={slotWidgets}
+      />
     ) : (
     <HostedSiteChrome
       options={value}
