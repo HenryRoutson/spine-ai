@@ -11,6 +11,7 @@ describe("TUI tab chrome", () => {
     expect(tuiTabFromHotkey(TUI_TAB_HOTKEY.logging)).toBe("logging")
     expect(tuiTabFromHotkey(TUI_TAB_HOTKEY.docs)).toBe("docs")
     expect(tuiTabFromHotkey("b")).toBe("billing")
+    expect(tuiTabFromHotkey("k")).toBe("backend")
     expect(resolveTuiTab("logs")).toBe("logging")
     expect(areaForTuiTab("logging")).toBe("observe")
     expect(defaultPaneForTab("logging")).toBe("runs")

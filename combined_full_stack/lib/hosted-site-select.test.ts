@@ -39,4 +39,13 @@ describe("hosted site extra slots", () => {
       "chatbot",
     ])
   })
+
+  it("splits {{pay}} and named {{table:Model}} slots", () => {
+    const html = `<section>{{pay}}</section>{{table:Lead}}`
+    const segments = splitHostedSiteSlots(html)
+    expect(segments.filter((s) => s.kind === "slot")).toEqual([
+      { kind: "slot", slot: "pay" },
+      { kind: "slot", slot: "table", alias: "Lead" },
+    ])
+  })
 })

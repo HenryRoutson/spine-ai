@@ -34,6 +34,8 @@ describe("hosted site export files", () => {
     expect(app).toContain("you@company.com")
     expect(app).toContain("Northwind")
     expect(app).toContain("hs-run-slot")
+    expect(app).toContain("hs-upload-form")
+    expect(app).toContain("hs-progress")
     expect(app).not.toMatch(/href="#signin"/)
     expect(app).not.toMatch(/sk-[A-Za-z0-9]{20,}/)
 
