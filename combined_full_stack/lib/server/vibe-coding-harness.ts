@@ -147,6 +147,8 @@ ${args.lastResults || "(none yet — read AGENTS.md, project.json, pipeline.json
 }
 
 export function vibeHarnessEnabled(): boolean {
+  // AI : =1 forces the file loop (A/B generator + OpenRouter repair). =0 disables. Seed skips unless =1.
+  if (process.env.SPINE_VIBE_HARNESS === "1") return true
   if (process.env.SPINE_VIBE_HARNESS === "0") return false
   if (process.env.LLM_PROVIDER === "seed") return false
   return true

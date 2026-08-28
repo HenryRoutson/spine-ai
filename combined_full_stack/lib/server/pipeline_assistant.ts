@@ -763,9 +763,9 @@ function buildThinkingSystemPrompt(hasValidationErrors: boolean): string {
   return `You are the Agent for "Spine" — structures, pipeline steps, and inference test documents.
 
 ${hasValidationErrors
-    ? "The live project has pipeline validation errors — diagnose each listed mismatch (structure name vs list[structure] cardinality). Plan exact structureOut/list[...] file edits per step. Do not propose a greenfield architecture."
-    : "Reason thoroughly: (1) structures needed, (2) series-parallel spine with single vs list at each hop, (3) many same-kind files → list[Document] + llm-batch (NOT one llm), (4) two different doc kinds: process first on spine, then either combine (raw side upload immediately before combine) OR assemble after both are parsed — never a third upload, (5) independent mixed-kind sub-pipelines that share one input → Fork (lanes + join), not Parallel (LLM-only) and not serialize, (6) which files to write (structures/*.json, pipeline.json, tests/*), (7) synthetic test docs. Flag where validation would fail if list-ness is wrong."}
-You will next edit a file workspace like a coding agent (write files, run_tests). Budget real reasoning — do not rush. Plain text only — no JSON, no markdown headings.`;
+    ? "The live project has pipeline validation errors — diagnose each listed mismatch (structure name vs list[structure] cardinality). Plan exact structureOut/list[...] fixes per step. Do not propose a greenfield architecture."
+    : "Reason thoroughly: (1) structures needed, (2) series-parallel spine with single vs list at each hop, (3) many same-kind files → list[Document] + llm-batch (NOT one llm), (4) two different doc kinds: process first on spine, then either combine (raw side upload immediately before combine) OR assemble after both are parsed — never a third upload, (5) independent mixed-kind sub-pipelines that share one input → Fork (lanes + join), not Parallel (LLM-only) and not serialize, (6) synthetic test docs. Flag where validation would fail if list-ness is wrong."}
+Budget real reasoning — do not rush. Plain text only — no JSON, no markdown headings.`;
 }
 
 function buildThinkingUserPrompt(
@@ -1102,6 +1102,46 @@ function runVibeWorkspaceChecks(
   return lines.join("\n");
 }
 
+function vibeHarnessFirst(): boolean {
+  return process.env.SPINE_VIBE_HARNESS === "1";
+}
+
+async function tryVibeFileHarness(args: {
+  project: Project;
+  task: string;
+  thinking: string;
+  extraPrompt: string;
+  globalModel: ModelId;
+  ledger: UsageLedger;
+  testDocsCatalog: AssistantTestDocCatalogEntry[];
+  onTurn?: (label: string, response: unknown) => void;
+  onStructuredFailure?: (detail: { attempt: number; failureKind: string; error: string }) => void;
+}): Promise<{
+  raw: z.infer<typeof assistantResponseSchema>;
+  proposal: PipelineAssistantProposal;
+  turns: number;
+} | null> {
+  const harness = await runVibeCodingHarness({
+    project: args.project,
+    task: args.task,
+    thinking: args.thinking,
+    extraPrompt: args.extraPrompt,
+    globalModel: args.globalModel,
+    ledger: args.ledger,
+    testDocsCatalog: args.testDocsCatalog,
+    runChecks: (draft) =>
+      runVibeWorkspaceChecks(draft, args.project, args.globalModel, args.testDocsCatalog),
+    onTurn: args.onTurn,
+    onStructuredFailure: args.onStructuredFailure,
+  });
+  const harnessRaw = draftToAssistantRaw(harness.draft);
+  if (!harnessRaw) return null;
+  const proposal = materializeProposal(harnessRaw, args.project, args.globalModel, args.testDocsCatalog);
+  // AI : empty / Q&A file loops must not replace the JSON few-shot path.
+  if (!proposal) return null;
+  return { raw: harnessRaw, proposal, turns: harness.turns };
+}
+
 export async function proposePipelineChange(
   project: Project,
   message: string,
@@ -1208,51 +1248,51 @@ export async function proposePipelineChange(
     let raw: z.infer<typeof assistantResponseSchema> | undefined;
     let proposal: PipelineAssistantProposal | null = null;
     let harnessUsed = false;
+    const catalog = opts?.testDocsCatalog ?? [];
+    const extraHarnessPrompt = [
+      buildHumanSurfacePromptBlock(opts?.humanSurface),
+      buildUiContextPromptBlock(uiContext),
+      formatValidationBlock(
+        liveValidation,
+        "Current pipeline validation errors (fix when changing the pipeline):",
+      ),
+      observeToolResults?.trim() ?? "",
+    ]
+      .filter((b) => b.trim())
+      .join("\n");
 
-    if (!fixErrors && vibeHarnessEnabled()) {
+    // AI : SPINE_VIBE_HARNESS=1 isolates the file loop for A/B — no few-shot JSON fill-in.
+    if (!fixErrors && vibeHarnessFirst()) {
       opts?.onPhase?.("coding");
       try {
-        const harness = await runVibeCodingHarness({
+        const hit = await tryVibeFileHarness({
           project,
           task: effectiveMessage,
           thinking,
-          extraPrompt: [
-            buildHumanSurfacePromptBlock(opts?.humanSurface),
-            buildUiContextPromptBlock(uiContext),
-            formatValidationBlock(
-              liveValidation,
-              "Current pipeline validation errors (fix when changing the pipeline):",
-            ),
-            observeToolResults?.trim() ?? "",
-          ]
-            .filter((b) => b.trim())
-            .join("\n"),
+          extraPrompt: extraHarnessPrompt,
           globalModel,
           ledger,
-          testDocsCatalog: opts?.testDocsCatalog,
-          runChecks: (draft) =>
-            runVibeWorkspaceChecks(draft, project, globalModel, opts?.testDocsCatalog ?? []),
+          testDocsCatalog: catalog,
           onTurn: (label, response) => opts?.onLlmResponse?.(label, response),
           onStructuredFailure: (detail) => {
             llmAttempt += 1;
             opts?.onStructuredFailure?.(detail);
           },
         });
-        llmAttempt += harness.turns;
-        opts?.onLlmResponse?.("harness-done", { turns: harness.turns, done: harness.done });
-        const harnessRaw = draftToAssistantRaw(harness.draft);
-        if (harnessRaw) {
+        if (hit) {
           harnessUsed = true;
-          raw = harnessRaw;
-          proposal = materializeProposal(raw, project, globalModel, opts?.testDocsCatalog ?? []);
+          raw = hit.raw;
+          proposal = hit.proposal;
+          llmAttempt += hit.turns;
+          opts?.onLlmResponse?.("harness-done", { turns: hit.turns });
           if (raw.message && opts?.onMessageDelta) opts.onMessageDelta(raw.message);
         }
       } catch {
-        // AI : file harness is best-effort — fall back to one-shot structured JSON.
+        // AI : isolated harness miss — A/B records failure rather than masking with JSON.
       }
     }
 
-    if (!harnessUsed) {
+    if (!harnessUsed && !vibeHarnessFirst()) {
       opts?.onPhase?.("structuring");
       const msgExtractor = opts?.onMessageDelta
         ? makeMessageExtractor(opts.onMessageDelta)
@@ -1286,7 +1326,7 @@ export async function proposePipelineChange(
       );
       llmAttempt += 1;
       opts?.onLlmResponse?.(fixErrors ? `retry-${fixAttempt}` : "initial", raw);
-      proposal = materializeProposal(raw, project, globalModel, opts?.testDocsCatalog ?? []);
+      proposal = materializeProposal(raw, project, globalModel, catalog);
     }
 
     if (!raw) {
@@ -1295,61 +1335,112 @@ export async function proposePipelineChange(
 
     let retryCount = 0;
 
-    for (let retry = 0; retry < MAX_VALIDATION_RETRIES && proposal; retry++) {
-      const validationErrors = formatPipelineValidationErrors(
-        proposal.modules,
-        proposal.models,
-        proposal.typeAliases ?? [],
-      );
-      if (!validationErrors) break;
+    // AI : A/B harness-first skips JSON retries so capability scores isolate the file loop.
+    if (!vibeHarnessFirst()) {
+      for (let retry = 0; retry < MAX_VALIDATION_RETRIES && proposal; retry++) {
+        const validationErrors = formatPipelineValidationErrors(
+          proposal.modules,
+          proposal.models,
+          proposal.typeAliases ?? [],
+        );
+        if (!validationErrors) break;
 
-      retryCount += 1;
-      fixAttempt = retryCount;
-      fixErrors = validationErrors;
-      opts?.onValidationFailed?.(retryCount, validationErrors);
-      opts?.onPhase?.("retrying");
-      // AI : retry must show the failed proposal in context — blank landing projects stay empty otherwise.
-      const retryProject: Project = {
-        ...project,
-        modules: proposal.modules,
-        models: proposal.models,
-        typeAliases: proposal.typeAliases ?? [],
-        documentation: proposal.documentation,
-      };
-      raw = await llmStructured(
-        buildUserPrompt(
-          retryProject,
-          effectiveMessage,
-          history,
-          globalModel,
+        retryCount += 1;
+        fixAttempt = retryCount;
+        fixErrors = validationErrors;
+        opts?.onValidationFailed?.(retryCount, validationErrors);
+        opts?.onPhase?.("retrying");
+        // AI : retry must show the failed proposal in context — blank landing projects stay empty otherwise.
+        const retryProject: Project = {
+          ...project,
+          modules: proposal.modules,
+          models: proposal.models,
+          typeAliases: proposal.typeAliases ?? [],
+          documentation: proposal.documentation,
+        };
+        raw = await llmStructured(
+          buildUserPrompt(
+            retryProject,
+            effectiveMessage,
+            history,
+            globalModel,
+            {
+              ...promptOpts,
+              fixValidationErrors: fixErrors,
+              fixAttempt,
+              uiContext,
+            },
+            thinking,
+            liveValidation,
+            forceFix,
+          ),
+          assistantResponseSchema,
           {
-            ...promptOpts,
-            fixValidationErrors: fixErrors,
-            fixAttempt,
-            uiContext,
+            model: globalModel,
+            ledger,
+            system: buildSystemPrompt(globalModel, project.name),
+            onStructuredFailure: (detail) => {
+              llmAttempt += 1;
+              opts?.onStructuredFailure?.({
+                attempt: llmAttempt,
+                failureKind: detail.kind,
+                error: detail.error,
+              });
+            },
           },
-          thinking,
-          liveValidation,
-          forceFix,
-        ),
-        assistantResponseSchema,
-        {
-          model: globalModel,
-          ledger,
-          system: buildSystemPrompt(globalModel, project.name),
-          onStructuredFailure: (detail) => {
-            llmAttempt += 1;
-            opts?.onStructuredFailure?.({
-              attempt: llmAttempt,
-              failureKind: detail.kind,
-              error: detail.error,
-            });
-          },
-        },
-      );
-      llmAttempt += 1;
-      opts?.onLlmResponse?.(`retry-${retryCount}`, raw);
-      proposal = materializeProposal(raw, retryProject, globalModel, opts?.testDocsCatalog ?? []);
+        );
+        llmAttempt += 1;
+        opts?.onLlmResponse?.(`retry-${retryCount}`, raw);
+        proposal = materializeProposal(raw, retryProject, globalModel, catalog);
+      }
+
+      const postJsonInvalid = proposal
+        ? formatPipelineValidationErrors(
+            proposal.modules,
+            proposal.models,
+            proposal.typeAliases ?? [],
+          )
+        : null;
+      if (proposal && postJsonInvalid && vibeHarnessEnabled()) {
+        opts?.onPhase?.("coding");
+        try {
+          const hit = await tryVibeFileHarness({
+            project: {
+              ...project,
+              modules: proposal.modules,
+              models: proposal.models,
+              typeAliases: proposal.typeAliases ?? [],
+              documentation: proposal.documentation,
+            },
+            task: effectiveMessage,
+            thinking,
+            extraPrompt: [
+              extraHarnessPrompt,
+              formatValidationBlock(postJsonInvalid, "The JSON proposal is still invalid — edit files to fix:"),
+            ]
+              .filter((b) => b.trim())
+              .join("\n"),
+            globalModel,
+            ledger,
+            testDocsCatalog: catalog,
+            onTurn: (label, response) => opts?.onLlmResponse?.(label, response),
+            onStructuredFailure: (detail) => {
+              llmAttempt += 1;
+              opts?.onStructuredFailure?.(detail);
+            },
+          });
+          if (hit) {
+            raw = hit.raw;
+            proposal = hit.proposal;
+            llmAttempt += hit.turns;
+            retryCount += 1;
+            opts?.onLlmResponse?.("harness-repair", { turns: hit.turns });
+            if (raw.message && opts?.onMessageDelta) opts.onMessageDelta(raw.message);
+          }
+        } catch {
+          // AI : repair miss keeps the JSON proposal.
+        }
+      }
     }
 
     const invalidCount = proposal
