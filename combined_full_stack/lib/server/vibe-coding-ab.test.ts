@@ -1,11 +1,16 @@
 // AI : A/B the old one-shot JSON Vibe path vs the file harness on the same greenfield tasks.
 import { afterAll, beforeAll, describe, expect, it } from "vitest"
 import { mkdirSync, writeFileSync } from "node:fs"
+import { resolve } from "node:path"
+import { config as loadEnv } from "dotenv"
 import { createSpineSession } from "@/lib/core/session"
 import { proposePipelineChange } from "@/lib/server/pipeline_assistant"
 import { clearLlmProviderCache } from "@/lib/server/llm/registry"
 import { flattenPipelineModules } from "@/lib/fork-pipeline"
 import { ModuleKind } from "@/lib/types"
+
+loadEnv({ path: resolve(import.meta.dirname, "../../.env.local") })
+loadEnv({ path: resolve(import.meta.dirname, "../../../.env") })
 
 const TASKS = [
   {
@@ -37,6 +42,7 @@ type VibeAbScore = {
   promptTokens: number
   completionTokens: number
   capability: number
+  usageCents?: number
   generator?: "harness" | "json"
   error?: string
 }
@@ -80,6 +86,7 @@ function scoreTask(task: string, mode: Mode, result: Awaited<ReturnType<typeof p
     promptTokens: result.promptTokens,
     completionTokens: result.completionTokens,
     capability,
+    usageCents: result.usageCents,
   }
 }
 
@@ -121,6 +128,33 @@ async function runMode(mode: Mode, taskId: string, prompt: string): Promise<Vibe
   }
 }
 
+function hasLiveOpenRouterKey(): boolean {
+  const key = process.env.OPENROUTER_API_KEY?.trim() ?? ""
+  return key.startsWith("sk-or-v1-") && !/placeholder|local-dev/i.test(key)
+}
+
+function writeAbArtifacts(name: string, title: string, note: string, rows: VibeAbScore[]): void {
+  mkdirSync("/opt/cursor/artifacts", { recursive: true })
+  writeFileSync(
+    `/opt/cursor/artifacts/${name}.json`,
+    `${JSON.stringify({ generated: new Date().toISOString(), rows }, null, 2)}\n`,
+  )
+  const lines = [
+    `# ${title}`,
+    "",
+    note,
+    "",
+    "| task | mode | generator | capability | valid | proposal | steps | kinds | promptTok | cents | note |",
+    "| --- | --- | --- | ---: | --- | --- | ---: | --- | ---: | ---: | --- |",
+    ...rows.map(
+      (r) =>
+        `| ${r.task} | ${r.mode} | ${r.generator ?? "?"} | ${r.capability} | ${r.valid} | ${r.hasProposal} | ${r.stepCount} | ${r.kinds.join("+") || "—"} | ${r.promptTokens} | ${r.usageCents ?? ""} | ${r.error ?? ""} |`,
+    ),
+    "",
+  ]
+  writeFileSync(`/opt/cursor/artifacts/${name}.md`, `${lines.join("\n")}\n`)
+}
+
 describe("vibe json vs file-harness A/B (seed LLM)", () => {
   const prevProvider = process.env.LLM_PROVIDER
   const prevHarness = process.env.SPINE_VIBE_HARNESS
@@ -137,22 +171,12 @@ describe("vibe json vs file-harness A/B (seed LLM)", () => {
     if (prevHarness === undefined) delete process.env.SPINE_VIBE_HARNESS
     else process.env.SPINE_VIBE_HARNESS = prevHarness
     clearLlmProviderCache()
-    mkdirSync("/opt/cursor/artifacts", { recursive: true })
-    const payload = { generated: new Date().toISOString(), rows }
-    writeFileSync("/opt/cursor/artifacts/vibe-ab-seed.json", `${JSON.stringify(payload, null, 2)}\n`)
-    const lines = [
-      "# Vibe JSON vs file-harness A/B (seed LLM)",
-      "",
+    writeAbArtifacts(
+      "vibe-ab-seed",
+      "Vibe JSON vs file-harness A/B (seed LLM)",
       "Zero was seed fillSchema using enum[0]=list_dir (never wrote pipeline.json). Seed now writes the same notes pipeline via write_file. Flag: SPINE_VIBE_HARNESS=1 on, else off.",
-      "",
-      "| task | mode | generator | capability | valid | proposal | steps | kinds | promptTok | note |",
-      "| --- | --- | --- | ---: | --- | --- | ---: | --- | ---: | --- |",
-      ...rows.map((r) =>
-        `| ${r.task} | ${r.mode} | ${r.generator ?? "?"} | ${r.capability} | ${r.valid} | ${r.hasProposal} | ${r.stepCount} | ${r.kinds.join("+") || "—"} | ${r.promptTokens} | ${r.error ?? ""} |`,
-      ),
-      "",
-    ]
-    writeFileSync("/opt/cursor/artifacts/vibe-ab-seed.md", `${lines.join("\n")}\n`)
+      rows,
+    )
   })
 
   for (const task of TASKS) {
@@ -178,5 +202,58 @@ describe("vibe json vs file-harness A/B (seed LLM)", () => {
         `${task.id} harness capability ${harness.capability} vs json ${json!.capability} kinds=${harness.kinds.join(",")} err=${harness.error}`,
       ).toBeLessThanOrEqual(json!.capability)
     })
+  }
+})
+
+describe.skipIf(!hasLiveOpenRouterKey())("vibe json vs file-harness A/B (OpenRouter)", () => {
+  const prevProvider = process.env.LLM_PROVIDER
+  const prevHarness = process.env.SPINE_VIBE_HARNESS
+  const rows: VibeAbScore[] = []
+
+  beforeAll(() => {
+    delete process.env.LLM_PROVIDER
+    clearLlmProviderCache()
+  })
+
+  afterAll(() => {
+    if (prevProvider === undefined) delete process.env.LLM_PROVIDER
+    else process.env.LLM_PROVIDER = prevProvider
+    if (prevHarness === undefined) delete process.env.SPINE_VIBE_HARNESS
+    else process.env.SPINE_VIBE_HARNESS = prevHarness
+    clearLlmProviderCache()
+    writeAbArtifacts(
+      "vibe-ab-openrouter",
+      "Vibe JSON vs file-harness A/B (OpenRouter)",
+      "Live DEFAULT_MODEL (openrouter:deepseek-v4). SPINE_VIBE_HARNESS=1 is the file loop. Scores are capability, not a claim that either path is task-perfect.",
+      rows,
+    )
+  })
+
+  for (const task of TASKS) {
+    it(
+      `${task.id}: json path proposes a pipeline`,
+      { timeout: 300_000 },
+      async () => {
+        const json = await runMode("json", task.id, task.prompt)
+        rows.push(json)
+        expect(json.hasProposal, `${task.id} json proposal err=${json.error}`).toBe(true)
+        expect(json.hasLlm, `${task.id} json has llm kinds=${json.kinds.join(",")}`).toBe(true)
+      },
+    )
+
+    it(
+      `${task.id}: file harness proposes a pipeline`,
+      { timeout: 300_000 },
+      async () => {
+        const json = rows.find((r) => r.task === task.id && r.mode === "json")
+        const harness = await runMode("harness", task.id, task.prompt)
+        rows.push(harness)
+        expect(json).toBeTruthy()
+        expect(harness.hasProposal, `${task.id} harness proposal err=${harness.error}`).toBe(true)
+        expect(harness.generator, `${task.id} generator=${harness.generator} err=${harness.error}`).toBe(
+          "harness",
+        )
+      },
+    )
   }
 })
