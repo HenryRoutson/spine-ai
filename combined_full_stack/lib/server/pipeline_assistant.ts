@@ -1102,10 +1102,6 @@ function runVibeWorkspaceChecks(
   return lines.join("\n");
 }
 
-function vibeHarnessFirst(): boolean {
-  return process.env.SPINE_VIBE_HARNESS === "1";
-}
-
 async function tryVibeFileHarness(args: {
   project: Project;
   task: string;
@@ -1261,8 +1257,8 @@ export async function proposePipelineChange(
       .filter((b) => b.trim())
       .join("\n");
 
-    // AI : SPINE_VIBE_HARNESS=1 isolates the file loop for A/B — no few-shot JSON fill-in.
-    if (!fixErrors && vibeHarnessFirst()) {
+    // AI : SPINE_VIBE_HARNESS=1 turns the file loop on; miss falls back to few-shot JSON.
+    if (!fixErrors && vibeHarnessEnabled()) {
       opts?.onPhase?.("coding");
       try {
         const hit = await tryVibeFileHarness({
@@ -1288,11 +1284,11 @@ export async function proposePipelineChange(
           if (raw.message && opts?.onMessageDelta) opts.onMessageDelta(raw.message);
         }
       } catch {
-        // AI : isolated harness miss — A/B records failure rather than masking with JSON.
+        // AI : harness miss — few-shot JSON still runs so the flag cannot ship an empty reply.
       }
     }
 
-    if (!harnessUsed && !vibeHarnessFirst()) {
+    if (!harnessUsed) {
       opts?.onPhase?.("structuring");
       const msgExtractor = opts?.onMessageDelta
         ? makeMessageExtractor(opts.onMessageDelta)
@@ -1335,112 +1331,61 @@ export async function proposePipelineChange(
 
     let retryCount = 0;
 
-    // AI : A/B harness-first skips JSON retries so capability scores isolate the file loop.
-    if (!vibeHarnessFirst()) {
-      for (let retry = 0; retry < MAX_VALIDATION_RETRIES && proposal; retry++) {
-        const validationErrors = formatPipelineValidationErrors(
-          proposal.modules,
-          proposal.models,
-          proposal.typeAliases ?? [],
-        );
-        if (!validationErrors) break;
+    for (let retry = 0; retry < MAX_VALIDATION_RETRIES && proposal; retry++) {
+      const validationErrors = formatPipelineValidationErrors(
+        proposal.modules,
+        proposal.models,
+        proposal.typeAliases ?? [],
+      );
+      if (!validationErrors) break;
 
-        retryCount += 1;
-        fixAttempt = retryCount;
-        fixErrors = validationErrors;
-        opts?.onValidationFailed?.(retryCount, validationErrors);
-        opts?.onPhase?.("retrying");
-        // AI : retry must show the failed proposal in context — blank landing projects stay empty otherwise.
-        const retryProject: Project = {
-          ...project,
-          modules: proposal.modules,
-          models: proposal.models,
-          typeAliases: proposal.typeAliases ?? [],
-          documentation: proposal.documentation,
-        };
-        raw = await llmStructured(
-          buildUserPrompt(
-            retryProject,
-            effectiveMessage,
-            history,
-            globalModel,
-            {
-              ...promptOpts,
-              fixValidationErrors: fixErrors,
-              fixAttempt,
-              uiContext,
-            },
-            thinking,
-            liveValidation,
-            forceFix,
-          ),
-          assistantResponseSchema,
+      retryCount += 1;
+      fixAttempt = retryCount;
+      fixErrors = validationErrors;
+      opts?.onValidationFailed?.(retryCount, validationErrors);
+      opts?.onPhase?.("retrying");
+      // AI : retry must show the failed proposal in context — blank landing projects stay empty otherwise.
+      const retryProject: Project = {
+        ...project,
+        modules: proposal.modules,
+        models: proposal.models,
+        typeAliases: proposal.typeAliases ?? [],
+        documentation: proposal.documentation,
+      };
+      raw = await llmStructured(
+        buildUserPrompt(
+          retryProject,
+          effectiveMessage,
+          history,
+          globalModel,
           {
-            model: globalModel,
-            ledger,
-            system: buildSystemPrompt(globalModel, project.name),
-            onStructuredFailure: (detail) => {
-              llmAttempt += 1;
-              opts?.onStructuredFailure?.({
-                attempt: llmAttempt,
-                failureKind: detail.kind,
-                error: detail.error,
-              });
-            },
+            ...promptOpts,
+            fixValidationErrors: fixErrors,
+            fixAttempt,
+            uiContext,
           },
-        );
-        llmAttempt += 1;
-        opts?.onLlmResponse?.(`retry-${retryCount}`, raw);
-        proposal = materializeProposal(raw, retryProject, globalModel, catalog);
-      }
-
-      const postJsonInvalid = proposal
-        ? formatPipelineValidationErrors(
-            proposal.modules,
-            proposal.models,
-            proposal.typeAliases ?? [],
-          )
-        : null;
-      if (proposal && postJsonInvalid && vibeHarnessEnabled()) {
-        opts?.onPhase?.("coding");
-        try {
-          const hit = await tryVibeFileHarness({
-            project: {
-              ...project,
-              modules: proposal.modules,
-              models: proposal.models,
-              typeAliases: proposal.typeAliases ?? [],
-              documentation: proposal.documentation,
-            },
-            task: effectiveMessage,
-            thinking,
-            extraPrompt: [
-              extraHarnessPrompt,
-              formatValidationBlock(postJsonInvalid, "The JSON proposal is still invalid — edit files to fix:"),
-            ]
-              .filter((b) => b.trim())
-              .join("\n"),
-            globalModel,
-            ledger,
-            testDocsCatalog: catalog,
-            onTurn: (label, response) => opts?.onLlmResponse?.(label, response),
-            onStructuredFailure: (detail) => {
-              llmAttempt += 1;
-              opts?.onStructuredFailure?.(detail);
-            },
-          });
-          if (hit) {
-            raw = hit.raw;
-            proposal = hit.proposal;
-            llmAttempt += hit.turns;
-            retryCount += 1;
-            opts?.onLlmResponse?.("harness-repair", { turns: hit.turns });
-            if (raw.message && opts?.onMessageDelta) opts.onMessageDelta(raw.message);
-          }
-        } catch {
-          // AI : repair miss keeps the JSON proposal.
-        }
-      }
+          thinking,
+          liveValidation,
+          forceFix,
+        ),
+        assistantResponseSchema,
+        {
+          model: globalModel,
+          ledger,
+          system: buildSystemPrompt(globalModel, project.name),
+          onStructuredFailure: (detail) => {
+            llmAttempt += 1;
+            opts?.onStructuredFailure?.({
+              attempt: llmAttempt,
+              failureKind: detail.kind,
+              error: detail.error,
+            });
+          },
+        },
+      );
+      llmAttempt += 1;
+      opts?.onLlmResponse?.(`retry-${retryCount}`, raw);
+      proposal = materializeProposal(raw, retryProject, globalModel, catalog);
     }
 
     const invalidCount = proposal

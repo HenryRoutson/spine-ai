@@ -25,8 +25,10 @@ import {
 
 export const VIBE_THINKING_MAX_TOKENS = 4096
 export const VIBE_HARNESS_MAX_TURNS = 8
+export const VIBE_HARNESS_MAX_TOKENS = 8192
 export const VIBE_HARNESS_MAX_FILE_CHARS = 48_000
 export const VIBE_HARNESS_MAX_FILES = 48
+export const VIBE_HARNESS_MAX_TOOLS_PER_TURN = 8
 
 const READONLY_PATHS = new Set(["AGENTS.md", "examples/few-shot.md"])
 

@@ -88,4 +88,35 @@ User request: Keep Main. Also add a second function named Hello Notes that greet
     expect(reply.modules.length).toBe(3);
     expect(reply.modulePatch).toBeNull();
   });
+
+  it("fills generic enum fields with the first value (this is why list_dir scored 0)", () => {
+    const reply = JSON.parse(
+      seedLlmReply(
+        `Respond with ONLY a JSON value that validates against this JSON Schema:
+{"type":"object","properties":{"tool":{"type":"string","enum":["list_dir","write_file"]}},"required":["tool"]}`,
+        true,
+      ),
+    ) as { tool: string };
+    expect(reply.tool).toBe("list_dir");
+  });
+
+  it("vibe harness schema writes pipeline.json instead of only list_dir", () => {
+    const schema = `Respond with ONLY a JSON value that validates against this JSON Schema:
+{"type":"object","properties":{"tools":{"type":"array","items":{"type":"object","properties":{"tool":{"enum":["write_file","read_file","run_tests","list_dir","delete_file","done"]}}}}}}`
+
+    const first = JSON.parse(
+      seedLlmReply(`${schema}\n\nTurn 1/8\nTask: Convert receipts to Excel\nWorkspace (already loaded):\npipeline.json\n[]\n`, true),
+    ) as { tools: { tool: string; path?: string }[] };
+    expect(first.tools.some((t) => t.tool === "write_file" && t.path === "pipeline.json")).toBe(true);
+
+    const afterWrite = JSON.parse(
+      seedLlmReply(`${schema}\n\nTurn 2/8\nTask: Convert receipts to Excel\nLast tool results:\n$ write_file pipeline.json\nwrote pipeline.json (120 chars)\n`, true),
+    ) as { tools: { tool: string }[] };
+    expect(afterWrite.tools.map((t) => t.tool)).toEqual(["run_tests"]);
+
+    const afterTests = JSON.parse(
+      seedLlmReply(`${schema}\n\nTurn 3/8\nTask: Convert receipts to Excel\nLast tool results:\n$ run_tests\nPASS\n`, true),
+    ) as { tools: { tool: string }[] };
+    expect(afterTests.tools.map((t) => t.tool)).toEqual(["done"]);
+  });
 });

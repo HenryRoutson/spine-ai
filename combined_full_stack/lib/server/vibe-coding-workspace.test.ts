@@ -8,6 +8,7 @@ import { materializeProposal } from "@/lib/server/pipeline_assistant"
 import { formatPipelineValidationErrors } from "@/lib/server/validity"
 import { SEEDS_DIR } from "@/lib/server/seed"
 import {
+  VIBE_HARNESS_MAX_TOKENS,
   VIBE_THINKING_MAX_TOKENS,
   isReadonlyVibePath,
   isWritableVibePath,
@@ -53,6 +54,7 @@ function receiptModules(): AssistantRaw["modules"] {
 describe("vibe coding workspace", () => {
   it("gives thinking enough budget for a real plan", () => {
     expect(VIBE_THINKING_MAX_TOKENS).toBeGreaterThanOrEqual(4096)
+    expect(VIBE_HARNESS_MAX_TOKENS).toBeGreaterThanOrEqual(4096)
   })
 
   it("rejects path traversal and keeps AGENTS.md read-only", () => {
@@ -132,12 +134,20 @@ describe("vibe coding workspace", () => {
 })
 
 describe("vibe coding harness tools", () => {
-  it("skips the file loop for the deterministic seed provider", () => {
-    const prev = process.env.LLM_PROVIDER
+  it("skips the file loop for the deterministic seed provider unless the flag is on", () => {
+    const prevProvider = process.env.LLM_PROVIDER
+    const prevHarness = process.env.SPINE_VIBE_HARNESS
     process.env.LLM_PROVIDER = "seed"
+    delete process.env.SPINE_VIBE_HARNESS
     expect(vibeHarnessEnabled()).toBe(false)
-    if (prev === undefined) delete process.env.LLM_PROVIDER
-    else process.env.LLM_PROVIDER = prev
+    process.env.SPINE_VIBE_HARNESS = "0"
+    expect(vibeHarnessEnabled()).toBe(false)
+    process.env.SPINE_VIBE_HARNESS = "1"
+    expect(vibeHarnessEnabled()).toBe(true)
+    if (prevProvider === undefined) delete process.env.LLM_PROVIDER
+    else process.env.LLM_PROVIDER = prevProvider
+    if (prevHarness === undefined) delete process.env.SPINE_VIBE_HARNESS
+    else process.env.SPINE_VIBE_HARNESS = prevHarness
   })
 
   it("write_file refuses escapes and run_tests writes VALIDATION.md", () => {

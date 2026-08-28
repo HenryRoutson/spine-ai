@@ -214,6 +214,8 @@ function fillFromContextOnly(context: JsonValue | null): JsonValue {
 }
 
 function extractUserRequest(prompt: string): string {
+  const task = prompt.match(/Turn \d+\/\d+\s*\nTask:\s*([^\n]+)/);
+  if (task?.[1]?.trim()) return task[1].trim();
   const marker = "User request:";
   const idx = prompt.lastIndexOf(marker);
   if (idx < 0) return prompt;
@@ -259,6 +261,35 @@ function notesSummarizerModules(title: string) {
   ];
 }
 
+function seedNotesModel() {
+  return {
+    name: "NoteSummary",
+    description: "A short summary of one note.",
+    fields: [{ name: "summary", type: "text", optional: false, description: "Summary" }],
+  };
+}
+
+function seedNotesProposalPayload(title: string, named: string | null, unnamed: boolean) {
+  return {
+    message: named
+      ? `I'll add a ${named} function that summarizes notes, and keep the existing one.`
+      : "I'll add a notes summarizer pipeline.",
+    modules: notesSummarizerModules(title),
+    modulePatch: null,
+    models: [seedNotesModel()],
+    typeAliases: null,
+    docs: [{ name: "sample_note.txt", type: "text", content: "Buy milk. Call Alex about Friday." }],
+    documentationUpdate: `# ${title}\n\nSummarizes pasted notes.`,
+    projectNameUpdate: !named && unnamed ? "Notes" : null,
+    targetFunctionName: named,
+    proposedActions: null,
+  };
+}
+
+function prettyJson(value: unknown): string {
+  return `${JSON.stringify(value, null, 2)}\n`;
+}
+
 function isProjectAssistantSchemaPrompt(prompt: string): boolean {
   return prompt.includes('"targetFunctionName"') && prompt.includes('"modulePatch"') && prompt.includes('"proposedActions"');
 }
@@ -270,31 +301,49 @@ function seedProjectAssistantReply(prompt: string): string | null {
   const named = seedNamedFunctionFromPrompt(userRequest);
   const title = named || "Notes";
   const unnamed = /\bUntitled Pipeline\b/.test(prompt);
-  return JSON.stringify({
-    message: named
-      ? `I'll add a ${named} function that summarizes notes, and keep the existing one.`
-      : "I'll add a notes summarizer pipeline.",
-    modules: notesSummarizerModules(title),
-    modulePatch: null,
-    models: [
-      {
-        name: "NoteSummary",
-        description: "A short summary of one note.",
-        fields: [{ name: "summary", type: "text", optional: false, description: "Summary" }],
-      },
-    ],
-    typeAliases: null,
-    docs: [{ name: "sample_note.txt", type: "text", content: "Buy milk. Call Alex about Friday." }],
-    documentationUpdate: `# ${title}\n\nSummarizes pasted notes.`,
-    projectNameUpdate: !named && unnamed ? "Notes" : null,
-    targetFunctionName: named,
-    proposedActions: null,
-  });
+  return JSON.stringify(seedNotesProposalPayload(title, named, unnamed));
 }
 
 function seedObservePlanReply(prompt: string): string | null {
   if (!/Plan READ-ONLY observe tool calls/i.test(prompt)) return null;
   return JSON.stringify({ tools: [], reason: "seed" });
+}
+
+// AI : generic fillSchema picks enum[0] (list_dir) — that is why harness-first scored 0. Write files instead.
+function isVibeHarnessSchemaPrompt(prompt: string): boolean {
+  return (
+    prompt.includes('"write_file"') &&
+    prompt.includes('"run_tests"') &&
+    prompt.includes('"list_dir"') &&
+    prompt.includes('"done"')
+  );
+}
+
+function seedVibeHarnessReply(prompt: string): string | null {
+  if (!isVibeHarnessSchemaPrompt(prompt)) return null;
+  const userRequest = extractUserRequest(prompt);
+  const named = seedNamedFunctionFromPrompt(userRequest);
+  const title = named || "Notes";
+  const unnamed = /\bUntitled Pipeline\b/.test(prompt);
+  const payload = seedNotesProposalPayload(title, named, unnamed);
+  const wrotePipeline = /wrote pipeline\.json/i.test(prompt);
+  const ranTests = /\$ run_tests\b/i.test(prompt);
+  if (!wrotePipeline) {
+    return JSON.stringify({
+      tools: [
+        { tool: "write_file", path: "structures/NoteSummary.json", content: prettyJson(payload.models[0]) },
+        { tool: "write_file", path: "pipeline.json", content: prettyJson(payload.modules) },
+        { tool: "write_file", path: "tests/sample_note.txt", content: payload.docs[0]!.content },
+        { tool: "write_file", path: "docs.md", content: payload.documentationUpdate },
+        { tool: "write_file", path: "message.md", content: payload.message },
+      ],
+      note: "seed writes the same notes pipeline the JSON path uses",
+    });
+  }
+  if (!ranTests) {
+    return JSON.stringify({ tools: [{ tool: "run_tests" }] });
+  }
+  return JSON.stringify({ tools: [{ tool: "done", message: payload.message }] });
 }
 
 /** Deterministic chat completion body for a single prompt. */
@@ -303,6 +352,8 @@ export function seedLlmReply(prompt: string, jsonMode = true): string {
   if (assistant) return assistant;
   const observe = seedObservePlanReply(prompt);
   if (observe) return observe;
+  const harness = seedVibeHarnessReply(prompt);
+  if (harness) return harness;
   const schema = extractJsonSchemaFromPrompt(prompt);
   const context = extractContextFromPrompt(prompt);
   if (schema && !schemaIsEmpty(schema)) {

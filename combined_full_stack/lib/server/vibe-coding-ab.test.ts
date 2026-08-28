@@ -37,6 +37,7 @@ type VibeAbScore = {
   promptTokens: number
   completionTokens: number
   capability: number
+  generator?: "harness" | "json"
   error?: string
 }
 
@@ -87,10 +88,16 @@ async function runMode(mode: Mode, taskId: string, prompt: string): Promise<Vibe
   const session = createSpineSession()
   session.addProject({ open: true })
   const t0 = Date.now()
+  const labels: string[] = []
   try {
-    const result = await proposePipelineChange(session.project!, prompt, [])
+    const result = await proposePipelineChange(session.project!, prompt, [], undefined, {
+      onLlmResponse: (label) => {
+        labels.push(label)
+      },
+    })
     const scored = scoreTask(taskId, mode, result)
-    return { ...scored, error: `${Date.now() - t0}ms` }
+    const generator = labels.includes("harness-done") ? "harness" : "json"
+    return { ...scored, generator, error: `${Date.now() - t0}ms` }
   } catch (err) {
     return {
       mode,
@@ -108,6 +115,7 @@ async function runMode(mode: Mode, taskId: string, prompt: string): Promise<Vibe
       promptTokens: 0,
       completionTokens: 0,
       capability: 0,
+      generator: mode,
       error: (err as Error).message,
     }
   }
@@ -135,12 +143,12 @@ describe("vibe json vs file-harness A/B (seed LLM)", () => {
     const lines = [
       "# Vibe JSON vs file-harness A/B (seed LLM)",
       "",
-      "Seed fills the assistant JSON schema, not the tools schema. No live OpenRouter key in this env.",
+      "Zero was seed fillSchema using enum[0]=list_dir (never wrote pipeline.json). Seed now writes the same notes pipeline via write_file. Flag: SPINE_VIBE_HARNESS=1 on, else off.",
       "",
-      "| task | mode | capability | valid | proposal | steps | kinds | promptTok | note |",
-      "| --- | --- | ---: | --- | --- | ---: | --- | ---: | --- |",
+      "| task | mode | generator | capability | valid | proposal | steps | kinds | promptTok | note |",
+      "| --- | --- | --- | ---: | --- | --- | ---: | --- | ---: | --- |",
       ...rows.map((r) =>
-        `| ${r.task} | ${r.mode} | ${r.capability} | ${r.valid} | ${r.hasProposal} | ${r.stepCount} | ${r.kinds.join("+") || "—"} | ${r.promptTokens} | ${r.error ?? ""} |`,
+        `| ${r.task} | ${r.mode} | ${r.generator ?? "?"} | ${r.capability} | ${r.valid} | ${r.hasProposal} | ${r.stepCount} | ${r.kinds.join("+") || "—"} | ${r.promptTokens} | ${r.error ?? ""} |`,
       ),
       "",
     ]
@@ -156,11 +164,15 @@ describe("vibe json vs file-harness A/B (seed LLM)", () => {
       expect(json.hasLlm, `${task.id} json has llm`).toBe(true)
     })
 
-    it(`${task.id}: file harness is not more capable than json on seed`, async () => {
+    it(`${task.id}: file harness is flagged and no longer scores zero`, async () => {
       const json = rows.find((r) => r.task === task.id && r.mode === "json")
       const harness = await runMode("harness", task.id, task.prompt)
       rows.push(harness)
       expect(json).toBeTruthy()
+      expect(harness.hasProposal, `${task.id} harness proposal err=${harness.error}`).toBe(true)
+      expect(harness.generator, `${task.id} must use the file loop, not JSON fallback`).toBe("harness")
+      expect(harness.valid, `${task.id} harness valid kinds=${harness.kinds.join(",")}`).toBe(true)
+      expect(harness.capability, `${task.id} harness capability`).toBeGreaterThan(0)
       expect(
         harness.capability,
         `${task.id} harness capability ${harness.capability} vs json ${json!.capability} kinds=${harness.kinds.join(",")} err=${harness.error}`,
