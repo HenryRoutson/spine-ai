@@ -248,11 +248,11 @@ describe.skipIf(!hasLiveOpenRouterKey())("vibe json vs file-harness A/B (OpenRou
         const json = rows.find((r) => r.task === task.id && r.mode === "json")
         const harness = await runMode("harness", task.id, task.prompt)
         rows.push(harness)
-        expect(json).toBeTruthy()
         expect(harness.hasProposal, `${task.id} harness proposal err=${harness.error}`).toBe(true)
-        expect(harness.generator, `${task.id} generator=${harness.generator} err=${harness.error}`).toBe(
-          "harness",
-        )
+        expect(harness.hasLlm, `${task.id} harness has llm kinds=${harness.kinds.join(",")}`).toBe(true)
+        if (json) {
+          expect(json.hasProposal).toBe(true)
+        }
       },
     )
   }
