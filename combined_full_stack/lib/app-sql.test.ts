@@ -3,7 +3,7 @@ import { resolve } from "node:path"
 import { evalSqlExpr, parseAppSql, sqlWhereMatches, tableNameForModel } from "@/lib/app-sql"
 import { execAppSql, resetAppSqlForTests } from "@/lib/server/app_sql"
 import { loadProjectSeed, SEEDS_DIR } from "@/lib/server/seed"
-import { computeInvalid, migrateProjectModules } from "@/lib/server/validity"
+import { shouldCheckInputDescription } from "@/lib/server/input_description_check"
 import { ModuleKind } from "@/lib/types"
 import { compileHostedSiteLooksOk, normalizeHostedSiteOptions } from "@/lib/hosted-site"
 
@@ -85,6 +85,7 @@ describe("double shared number seed", () => {
     const sql = project.modules.find((m) => m.kind === ModuleKind.Sql)
     expect(sql?.sql).toContain("value * 2")
     expect(sql?.cached).toBe(false)
+    expect(shouldCheckInputDescription(sql!)).toBe(false)
     const number = project.models.find((m) => m.name === "SharedNumber")
     expect(number).toBeTruthy()
     expect(tableNameForModel(number!)).toBe("shared_number")
