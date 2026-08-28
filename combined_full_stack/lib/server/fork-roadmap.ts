@@ -75,6 +75,7 @@ export {}
 // AI : TODO (allow-pipeline-non-linear-fork) — later: sinks join, PipelineRef, React Flow.
 // AI : DONE (allow-pipeline-if-else) — ModuleKind.IfElse exclusive Then/Else + typed ifCondition (bool path, equals/not-equals, numeric, exists/empty/contains/in/truthy).
 // AI : DONE (pipeline-dag-d3) — pipelineToDag IR + d3-dag sugiyama layout (Lanes | DAG canvas). Loops stay in custom-code / llm-batch.
+// AI : DONE (pipeline-dag-triggers) — Start accepts typed trigger sources (manual/schedule/share/hosted/inbound-webhook). Not graph steps.
 // AI : DONE (allow-pipeline-non-linear-fork) — nested fork UI: canvas recurses fork boxes; max 12 lanes.
 
 // ---------------------------------------------------------------------------

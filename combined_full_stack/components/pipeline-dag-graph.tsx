@@ -23,7 +23,7 @@ type PipelineDagGraphProps = {
 
 function edgeStroke(kind: PipelineDagEdgeKind): string {
   if (kind === "then" || kind === "else" || kind === "lane") return "color-mix(in oklab, var(--chart-4) 55%, var(--border))"
-  if (kind === "side-input") return "var(--muted-foreground)"
+  if (kind === "side-input" || kind === "trigger") return "var(--muted-foreground)"
   return "var(--border)"
 }
 
@@ -80,7 +80,7 @@ export function PipelineDagGraph({
           )
         })}
         {laid.nodes.map((n) => {
-          if (n.kind === "start" || n.kind === "end") {
+          if (n.kind === "start" || n.kind === "end" || n.kind === "trigger") {
             return (
               <div
                 key={n.id}

@@ -41,16 +41,19 @@ export type LaidOutPipelineDag = {
 
 export const DAG_STEP_SIZE = { width: 240, height: 72 } as const
 export const DAG_END_SIZE = { width: 88, height: 28 } as const
+export const DAG_TRIGGER_SIZE = { width: 120, height: 28 } as const
 export const DAG_GAP = { x: 48, y: 56 } as const
 export const DAG_PAD = 24
 export const DAG_CORNER_RADIUS = 10
 
 export function dagNodeSizeOf(n: Pick<PipelineDagNode, "kind">): { width: number; height: number } {
-  return n.kind === "start" || n.kind === "end" ? DAG_END_SIZE : DAG_STEP_SIZE
+  if (n.kind === "start" || n.kind === "end") return DAG_END_SIZE
+  if (n.kind === "trigger") return DAG_TRIGGER_SIZE
+  return DAG_STEP_SIZE
 }
 
 export function dagEdgeIsDashed(kind: PipelineDagEdgeKind): boolean {
-  return kind === "side-input"
+  return kind === "side-input" || kind === "trigger"
 }
 
 function dist(a: DagPoint, b: DagPoint): number {

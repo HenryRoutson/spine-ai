@@ -1,5 +1,6 @@
 // AI : canonical DAG IR for the series-parallel pipeline (forks, typed ifs, combine side-feeds).
 // AI : authoring stays insert-slot lanes; this graph is layout, mermaid, validation, and export topology.
+// AI : triggers attach to Start (Run / Schedule / Share / hosted API). They are not graph steps or loops.
 import { combineGroupAt } from "@/lib/pipeline-layout"
 import {
   flattenPipelineModules,
@@ -13,15 +14,76 @@ import type { PipelineModule } from "@/lib/types"
 export const DAG_START_ID = "__start"
 export const DAG_END_ID = "__end"
 
-export type PipelineDagEdgeKind = "spine" | "then" | "else" | "lane" | "side-input"
+export enum PipelineTriggerKind {
+  Manual = "manual",
+  Schedule = "schedule",
+  ShareLink = "share-link",
+  HostedApi = "hosted-api",
+  Assistant = "assistant",
+  Testing = "testing",
+  InboundWebhook = "inbound-webhook",
+}
 
-export type PipelineDagNodeKind = "start" | "end" | "step"
+export const PIPELINE_TRIGGER_KIND_META: Record<PipelineTriggerKind, { label: string; hint: string }> = {
+  [PipelineTriggerKind.Manual]: { label: "Run", hint: "Start from the app" },
+  [PipelineTriggerKind.Schedule]: { label: "Schedule", hint: "Cron — Vibe Schedule tab, not a graph node" },
+  [PipelineTriggerKind.ShareLink]: { label: "Share link", hint: "Inbound shared-link run" },
+  [PipelineTriggerKind.HostedApi]: { label: "Hosted API", hint: "HTTP invoke" },
+  [PipelineTriggerKind.Assistant]: { label: "Assistant", hint: "Agent-started run" },
+  [PipelineTriggerKind.Testing]: { label: "Testing", hint: "Testing tab run" },
+  [PipelineTriggerKind.InboundWebhook]: {
+    label: "Inbound webhook",
+    hint: "Reserved — Share link / hosted API cover inbound today; not an n8n trigger node",
+  },
+}
+
+export type PipelineTrigger = {
+  id: string
+  kind: PipelineTriggerKind
+  label: string
+}
+
+export type PipelineDagOpts = {
+  triggers?: PipelineTrigger[]
+}
+
+export type PipelineDagEdgeKind = "spine" | "then" | "else" | "lane" | "side-input" | "trigger"
+
+export type PipelineDagNodeKind = "start" | "end" | "step" | "trigger"
 
 export type PipelineDagNode = {
   id: string
   kind: PipelineDagNodeKind
   label: string
   module?: PipelineModule
+  triggerKind?: PipelineTriggerKind
+}
+
+export function pipelineTriggerId(kind: PipelineTriggerKind): string {
+  return `__trigger_${kind}`
+}
+
+export function defaultPipelineTriggers(): PipelineTrigger[] {
+  return [
+    {
+      id: pipelineTriggerId(PipelineTriggerKind.Manual),
+      kind: PipelineTriggerKind.Manual,
+      label: PIPELINE_TRIGGER_KIND_META[PipelineTriggerKind.Manual].label,
+    },
+  ]
+}
+
+export function resolvePipelineTriggers(extra?: PipelineTrigger[]): PipelineTrigger[] {
+  const byKind = new Map<PipelineTriggerKind, PipelineTrigger>()
+  for (const t of defaultPipelineTriggers()) byKind.set(t.kind, t)
+  for (const t of extra ?? []) {
+    byKind.set(t.kind, {
+      id: t.id || pipelineTriggerId(t.kind),
+      kind: t.kind,
+      label: t.label.trim() || PIPELINE_TRIGGER_KIND_META[t.kind].label,
+    })
+  }
+  return [...byKind.values()]
 }
 
 export type PipelineDagEdge = {
@@ -158,23 +220,34 @@ function degreeMaps(edges: PipelineDagEdge[]): {
   return { indeg, outdeg }
 }
 
-export function pipelineToDag(modules: PipelineModule[]): PipelineDag {
+export function pipelineToDag(modules: PipelineModule[], opts?: PipelineDagOpts): PipelineDag {
   const nodes = new Map<string, PipelineDagNode>()
   const edges = new Map<EdgeKey, PipelineDagEdge>()
+  const triggers = resolvePipelineTriggers(opts?.triggers)
+  for (const t of triggers) {
+    nodes.set(t.id, { id: t.id, kind: "trigger", label: t.label, triggerKind: t.kind })
+  }
   nodes.set(DAG_START_ID, { id: DAG_START_ID, kind: "start", label: "Start" })
   nodes.set(DAG_END_ID, { id: DAG_END_ID, kind: "end", label: "End" })
+  for (const t of triggers) {
+    pushEdge(edges, { source: t.id, target: DAG_START_ID, kind: "trigger" })
+  }
 
   walkLinear(modules, DAG_START_ID, nodes, edges)
 
   const { indeg } = degreeMaps([...edges.values()])
   for (const id of nodes.keys()) {
-    if (id !== DAG_START_ID && (indeg.get(id) ?? 0) === 0) {
+    const n = nodes.get(id)
+    if (!n || n.kind === "start" || n.kind === "trigger") continue
+    if ((indeg.get(id) ?? 0) === 0) {
       pushEdge(edges, { source: DAG_START_ID, target: id, kind: "spine" })
     }
   }
   const afterIn = degreeMaps([...edges.values()])
   for (const id of nodes.keys()) {
-    if (id !== DAG_END_ID && (afterIn.outdeg.get(id) ?? 0) === 0) {
+    const n = nodes.get(id)
+    if (!n || n.kind === "end" || n.kind === "trigger") continue
+    if ((afterIn.outdeg.get(id) ?? 0) === 0) {
       pushEdge(edges, { source: id, target: DAG_END_ID, kind: "spine" })
     }
   }

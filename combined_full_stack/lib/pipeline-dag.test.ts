@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { pipelineDagIsAcyclic, pipelineToDag, DAG_END_ID, DAG_START_ID } from "@/lib/pipeline-dag"
+import { pipelineDagIsAcyclic, pipelineToDag, DAG_END_ID, DAG_START_ID, PipelineTriggerKind, pipelineTriggerId } from "@/lib/pipeline-dag"
 import {
   DAG_STEP_SIZE,
   layoutPipelineDag,
@@ -28,7 +28,7 @@ describe("pipeline DAG IR", () => {
     ]
     const dag = pipelineToDag(modules)
     expect(pipelineDagIsAcyclic(dag)).toBe(true)
-    expect(dag.nodes.map((n) => n.id)).toEqual([DAG_START_ID, DAG_END_ID, "in", "llm", "out"])
+    expect(dag.nodes.map((n) => n.id)).toEqual(expect.arrayContaining([DAG_START_ID, DAG_END_ID, "in", "llm", "out"]))
     expect(dag.edges).toEqual(
       expect.arrayContaining([
         expect.objectContaining({ source: DAG_START_ID, target: "in" }),
@@ -94,6 +94,47 @@ describe("pipeline DAG IR", () => {
         expect.objectContaining({ source: "t1", target: "ife", kind: "then" }),
       ]),
     )
+  })
+})
+
+describe("pipeline DAG triggers", () => {
+  it("always hangs a Manual trigger off Start without creating a cycle", () => {
+    const modules = [step({ id: "in", kind: ModuleKind.Input, label: "In" })]
+    const dag = pipelineToDag(modules)
+    const manualId = pipelineTriggerId(PipelineTriggerKind.Manual)
+    expect(pipelineDagIsAcyclic(dag)).toBe(true)
+    expect(dag.nodes).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ id: manualId, kind: "trigger", triggerKind: PipelineTriggerKind.Manual }),
+      ]),
+    )
+    expect(dag.edges).toEqual(
+      expect.arrayContaining([expect.objectContaining({ source: manualId, target: DAG_START_ID, kind: "trigger" })]),
+    )
+    expect(dag.edges.some((e) => e.source === DAG_START_ID && e.target === manualId)).toBe(false)
+  })
+
+  it("accepts Schedule / Share / inbound-webhook as extra Start entries", () => {
+    const modules = [step({ id: "in", kind: ModuleKind.Input, label: "In" })]
+    const dag = pipelineToDag(modules, {
+      triggers: [
+        { id: "", kind: PipelineTriggerKind.Schedule, label: "Weekdays 9am" },
+        { id: "", kind: PipelineTriggerKind.ShareLink, label: "Share link" },
+        { id: "", kind: PipelineTriggerKind.InboundWebhook, label: "Inbound webhook" },
+      ],
+    })
+    expect(pipelineDagIsAcyclic(dag)).toBe(true)
+    expect(dag.nodes.filter((n) => n.kind === "trigger").map((n) => n.triggerKind).sort()).toEqual([
+      PipelineTriggerKind.InboundWebhook,
+      PipelineTriggerKind.Manual,
+      PipelineTriggerKind.Schedule,
+      PipelineTriggerKind.ShareLink,
+    ].sort())
+    const laid = layoutPipelineDag(dag)
+    expect(laid.edges.filter((e) => e.kind === "trigger").every((e) => e.dashed && e.path.length > 0)).toBe(true)
+    const chart = derivePipelineMermaid(modules, [])
+    expect(chart).toContain("trig_manual")
+    expect(chart).toContain("-.->")
   })
 })
 

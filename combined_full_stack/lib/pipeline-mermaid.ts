@@ -13,6 +13,7 @@ function mermaidEscape(text: string): string {
 function nodeId(modules: PipelineModule[], moduleId: string): string {
   if (moduleId === DAG_START_ID) return "start"
   if (moduleId === DAG_END_ID) return "end"
+  if (moduleId.startsWith("__trigger_")) return `trig_${moduleId.slice("__trigger_".length).replace(/\W/g, "_")}`
   const i = flattenPipelineModules(modules).findIndex((m) => m.id === moduleId)
   return i >= 0 ? `n${i}` : `n_${moduleId.replace(/\W/g, "_")}`
 }
@@ -108,6 +109,10 @@ export function derivePipelineMermaid(
       nodeDefs.push('  end["End"]:::terminal')
       continue
     }
+    if (n.kind === "trigger") {
+      nodeDefs.push(`  ${nodeId(modules, n.id)}["${mermaidEscape(n.label)}"]:::terminal`)
+      continue
+    }
     const m = n.module
     if (!m) continue
     const stepNum = flat.findIndex((x) => x.id === m.id) + 1
@@ -121,6 +126,10 @@ export function derivePipelineMermaid(
     const dst = nodeId(modules, e.target)
     if (e.kind === "side-input") {
       edges.push(`  ${src} -. "side input" .-> ${dst}`)
+      continue
+    }
+    if (e.kind === "trigger") {
+      edges.push(`  ${src} -.-> ${dst}`)
       continue
     }
     if (e.label) {
