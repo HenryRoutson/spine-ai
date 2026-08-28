@@ -7,6 +7,7 @@ import {
   BUILDER_AREAS,
   CONSUMER_AREAS,
   defaultWindowForArea,
+  guiDefaultWorkspaceWindow,
   isBuildStep,
   isAccountWindow,
   windowToArea,
@@ -19,8 +20,8 @@ import type { SharedLinkRecord } from "@/lib/shared-link-types"
 import type { DocId, ModuleId, StructureModelId } from "@/lib/types"
 import { AppWindowId as AppWindow } from "@/lib/app-window-id"
 import { readHideDeveloperTools } from "@/lib/developer-tools-settings"
-import { readBuildSurfacePreference, writeBuildSurfacePreference } from "@/lib/build-surface-persist"
-import { BuildSurface, windowForBuildSurface } from "@/lib/build-surface"
+import { writeBuildSurfacePreference } from "@/lib/build-surface-persist"
+import { BuildSurface } from "@/lib/build-surface"
 import {
   clearEditingWebsiteSession,
   readEditingWebsiteSession,
@@ -87,17 +88,15 @@ interface AppShellState {
 const AppShellContext = createContext<AppShellState | null>(null)
 
 export function AppShellProvider({ children }: { children: ReactNode }) {
-  // AI : vibe-first — restore last Build surface; skip Structure when developer tools are hidden.
+  // AI : Simplified lands on Inference; full lands on Structure. GUI never opens the Vibe window.
   const [activeWindow, setActiveWindowState] = useState<WindowId>(() => {
-    if (readHideDeveloperTools()) return AppWindow.Vibe
-    return windowForBuildSurface(readBuildSurfacePreference())
+    return guiDefaultWorkspaceWindow(readHideDeveloperTools(), false)
   })
   const setActiveWindow = useCallback((window: WindowId) => {
     // AI : GUI has no Data tab — Backend is TUI/deep-link only; Structures owns SQL + rows.
     const next = window === AppWindow.Backend ? AppWindow.Structure : window
     setActiveWindowState(next)
-    if (next === AppWindow.Vibe) writeBuildSurfacePreference(BuildSurface.Vibe)
-    else if (!isAccountWindow(next)) writeBuildSurfacePreference(BuildSurface.Editors)
+    if (!isAccountWindow(next) && next !== AppWindow.Vibe) writeBuildSurfacePreference(BuildSurface.Editors)
   }, [])
   const [focusDocId, setFocusDocId] = useState<DocId | null>(null)
   const [focusRunId, setFocusRunId] = useState<string | null>(null)
@@ -118,19 +117,13 @@ export function AppShellProvider({ children }: { children: ReactNode }) {
     setEditingWebsite(saved)
     setWebsiteSurface("page")
     setVibeObserveTab(AppWindow.Share)
-    setActiveWindow(AppWindow.Vibe)
+    setActiveWindow(AppWindow.Share)
   }, [])
 
   const openSharedRun = useCallback((linkId: string) => {
     setActiveSharedLinkId(linkId)
-    // AI : Vibe hosts Share — stay on the surface (vibe-first also bounces editors away).
-    if (activeWindow === AppWindow.Vibe || readHideDeveloperTools()) {
-      setVibeObserveTab(AppWindow.Share)
-      if (activeWindow !== AppWindow.Vibe) setActiveWindow(AppWindow.Vibe)
-      return
-    }
     setActiveWindow(AppWindow.Share)
-  }, [activeWindow])
+  }, [])
 
   const clearSharedRun = useCallback(() => setActiveSharedLinkId(null), [])
 
@@ -149,10 +142,12 @@ export function AppShellProvider({ children }: { children: ReactNode }) {
       setFocusRunId(focus.runId ?? null)
       setFocusRunAnchor(focus.anchor ?? null)
     }
-    // AI : Vibe already hosts Logging — don't leave the surface (vibe-first also bounces editors away).
-    if (activeWindow === AppWindow.Vibe || readHideDeveloperTools()) {
+    if (readHideDeveloperTools()) {
+      setActiveWindow(AppWindow.Inference)
+      return
+    }
+    if (activeWindow === AppWindow.Vibe) {
       setVibeObserveTab(AppWindow.Logging)
-      if (activeWindow !== AppWindow.Vibe) setActiveWindow(AppWindow.Vibe)
       return
     }
     setActiveWindow(AppWindow.Logging)
@@ -181,7 +176,7 @@ export function AppShellProvider({ children }: { children: ReactNode }) {
 
   const openTesting = useCallback((testDocName?: string) => {
     setFocusTestDocName(testDocName ?? null)
-    setActiveWindow(AppWindow.Testing)
+    setActiveWindow(readHideDeveloperTools() ? AppWindow.Pipeline : AppWindow.Testing)
   }, [])
 
   const clearFocusTestDoc = useCallback(() => setFocusTestDocName(null), [])
@@ -191,7 +186,7 @@ export function AppShellProvider({ children }: { children: ReactNode }) {
     setEditingWebsite(link)
     setWebsiteSurface("page")
     setVibeObserveTab(AppWindow.Share)
-    setActiveWindow(AppWindow.Vibe)
+    setActiveWindow(AppWindow.Share)
   }, [])
 
   const clearWebsiteEditor = useCallback(() => {

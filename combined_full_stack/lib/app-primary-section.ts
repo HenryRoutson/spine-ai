@@ -32,7 +32,7 @@ export function handlePrimarySectionChange(
     if (mode === AppMode.Build) {
       // AI : L0 Build covers Vibe + editors — leaving account returns to the active build surface.
       if (isAccountWindow(activeWindow)) {
-        setActiveWindow(readHideDeveloperTools() ? AppWindowId.Vibe : AppWindowId.Structure)
+        setActiveWindow(readHideDeveloperTools() ? AppWindowId.Inference : AppWindowId.Structure)
       }
       // AI : already on Build (vibe or editors) — sub-toggle switches surface, not L0.
     } else {

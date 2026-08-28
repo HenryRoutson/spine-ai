@@ -1,6 +1,6 @@
 "use client"
 
-import { useCallback, type ReactNode } from "react"
+import { useCallback, useEffect, type ReactNode } from "react"
 import { ResizableSplit } from "@/components/resizable-split"
 import { ProjectAssistantDockPanel } from "@/components/project-assistant-dock"
 import { assistantDockSplit } from "@/lib/layout-split-settings"
@@ -12,11 +12,15 @@ type pixel_width = number
 
 type ProjectAssistantDockLayoutProps = {
   children: ReactNode
+  forceOpen?: boolean
 }
 
-// AI : agent slides in from the right — pushes page content, does not overlay it.
-export function ProjectAssistantDockLayout({ children }: ProjectAssistantDockLayoutProps) {
-  const { open: assistantOpen } = useProjectAssistant()
+// AI : agent stays on the left — people treat the left pane as the primary control.
+export function ProjectAssistantDockLayout({ children, forceOpen = false }: ProjectAssistantDockLayoutProps) {
+  const { open: assistantOpen, setOpen } = useProjectAssistant()
+  useEffect(() => {
+    if (forceOpen) setOpen(true)
+  }, [forceOpen, setOpen])
   const {
     width: assistantWidth,
     setWidth: setAssistantWidth,
@@ -40,7 +44,7 @@ export function ProjectAssistantDockLayout({ children }: ProjectAssistantDockLay
   return (
     <ResizableSplit
       className="min-h-0 flex-1"
-      fixedSide="trailing"
+      fixedSide="leading"
       leadingWidth={width}
       onLeadingWidthChange={handleWidthChange}
       onLeadingWidthCommit={commitAssistantWidth}
@@ -49,8 +53,8 @@ export function ProjectAssistantDockLayout({ children }: ProjectAssistantDockLay
       animateWidth
       widthTransitionMs={durationMs}
       onFixedPaneTransitionEnd={onPaneTransitionEnd}
-      leading={children}
-      trailing={<ProjectAssistantDockPanel />}
+      leading={<ProjectAssistantDockPanel embedded={forceOpen} />}
+      trailing={children}
     />
   )
 }

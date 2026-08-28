@@ -570,8 +570,8 @@ Grep an id (example): `rg 'project.add' combined_full_stack docs mcp_tool`.
 | `nav.build` | Build | Ink: press 2 (pipeline) | GET /api/state?projectId= | get_project | session.openProject(id) |
 | `nav.billing` | Billing | Ink: press b | GET /api/billing | session_action id=nav.billing → refreshBilling [P] | session.refreshBilling() |
 | `nav.settings` | Settings | Ink: press , | GET /api/account | session_action id=nav.settings → settings snapshot [P] | session.getSnapshot() + setModel |
-| `nav.build.vibe` | Vibe | Ink: press a (ask vibe) or tab-vibe | POST /api/pipeline-assistant | session_action id=nav.build.vibe → get_project | session.getSnapshot() / setActiveWindow vibe |
-| `nav.build.editors` | dev | Ink: press 1–4 for structure/pipeline/testing/inference | PUT /api/projects/:id | session_action id=nav.build.editors → get_project | session.getSnapshot() / setActiveWindow editors |
+| `nav.build.vibe` | Simplified | Ink: press a (ask vibe) or tab-vibe | POST /api/pipeline-assistant | session_action id=nav.build.vibe → get_project | session.getSnapshot() / setActiveWindow vibe |
+| `nav.build.editors` | Full | Ink: press 1–4 for structure/pipeline/testing/inference | PUT /api/projects/:id | session_action id=nav.build.editors → get_project | session.getSnapshot() / setActiveWindow editors |
 | `nav.window.structure` | Structures | Ink: press 1 | PUT /api/projects/:id (models) | validate_project + describe_pipeline_steps | session.setModels / addNamedModel |
 | `nav.window.pipeline` | Pipeline | Ink: press 2 | PUT /api/projects/:id (modules) | describe_pipeline_steps | session.setModules / addPipelineStep |
 | `nav.window.testing` | Testing | Ink: press 3 | POST /api/runs (testing) + POST /api/testing-evaluate | run_test / validate_test | session.runTest(testDocName) |

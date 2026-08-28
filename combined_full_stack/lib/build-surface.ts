@@ -14,7 +14,8 @@ export function resolveBuildSurface(activeWindow: AppWindowIdType): BuildSurface
 }
 
 export function windowForBuildSurface(surface: BuildSurface): AppWindowIdType {
-  return surface === BuildSurface.Vibe ? AppWindowId.Vibe : AppWindowId.Structure
+  // AI : GUI no longer lands on Vibe — Simplified keeps the agent dock; Inference is the default run surface.
+  return surface === BuildSurface.Vibe ? AppWindowId.Inference : AppWindowId.Structure
 }
 
 export const BUILD_SURFACE_NAV: Record<

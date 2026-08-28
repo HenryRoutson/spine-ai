@@ -34,7 +34,7 @@ import {
 } from "@/lib/hosted-site"
 import { HOSTED_SITE_DOCS_SLOT } from "@/lib/hosted-site-slots"
 import { htmlSiteToReactFiles } from "@/lib/hosted-site-react"
-import { resolveWebsitePipelineBindings } from "@/lib/website-pipelines"
+import { listedWebsitePipelineBindings } from "@/lib/website-pipelines"
 import { patchHostedSiteHtmlText, type HsPreviewInlinePayload, type HsPreviewSelectPayload } from "@/lib/hosted-site-select"
 import type { HostedSiteAuth, HostedSiteBrand, HostedSiteOptions } from "@/lib/shared-link-types"
 import { DEFAULT_HOSTED_SITE_OPTIONS } from "@/lib/shared-link-types"
@@ -46,7 +46,9 @@ type PageStudioTab = "vibe" | "code"
 type studio_preview_target = { kind: "app" } | { kind: "signin" } | { kind: "page"; index: number }
 
 const VIBE_WELCOME =
-  "Describe the product — nav, hero, workspace. The page is signed in. I'll only change the HTML around the run form, not your pipeline."
+  "Describe the product — nav, hero, workspace. I'll change the HTML. Attach a pipeline when you need a run form."
+const VIBE_WELCOME_PAGE =
+  "Describe the product — nav, hero, copy. No pipeline is attached yet. I'll only change the page."
 const VIBE_WELCOME_REACT =
   "Describe the product. I'll edit the React project (App.tsx, CSS, components). Keep <RunPipeline alias=\"…\" /> where pipelines belong."
 
@@ -57,6 +59,7 @@ export function HostedSitePageStudio({
   viewerMarkdown,
   forcedTab,
   hideSurfaceTabs = false,
+  fillHeight = false,
 }: {
   project: Project
   value: HostedSiteOptions
@@ -64,6 +67,7 @@ export function HostedSitePageStudio({
   viewerMarkdown: string
   forcedTab?: PageStudioTab
   hideSurfaceTabs?: boolean
+  fillHeight?: boolean
 }) {
   const { model, projects } = useStore()
   const [localTab, setLocalTab] = useState<PageStudioTab>("vibe")
@@ -137,8 +141,10 @@ export function HostedSitePageStudio({
     modules: project.modules,
     hideDocsInRun,
   })
+  const listedBindings = listedWebsitePipelineBindings(value.pipelineBindings)
+  const hasPipelines = listedBindings.length > 0
   const runByAlias = Object.fromEntries(
-    resolveWebsitePipelineBindings(project.id, value.pipelineBindings).map((binding) => {
+    listedBindings.map((binding) => {
       if (binding.alias === "run" || binding.projectId === project.id) {
         return [binding.alias, slotWidgets.run]
       }
@@ -289,9 +295,9 @@ export function HostedSitePageStudio({
   )
 
   return (
-    <div className="space-y-3">
-      <div className="flex items-center gap-2">
+    <div className={cn(fillHeight ? "flex min-h-0 flex-1 flex-col gap-3 p-4" : "space-y-3")}>
       {hideSurfaceTabs ? null : (
+      <div className="flex items-center gap-2">
       <div className="flex flex-1 gap-1 rounded-md border border-border bg-muted/30 p-1">
         {(["vibe", "code"] as const).map((id) => {
           const active = tab === id
@@ -312,7 +318,6 @@ export function HostedSitePageStudio({
           )
         })}
       </div>
-      )}
       <div className="flex gap-1 rounded-md border border-border bg-muted/30 p-1" data-spine-id="website.runtime">
         {(["html", "react"] as const).map((id) => {
           const active = value.runtime === id
@@ -342,6 +347,7 @@ export function HostedSitePageStudio({
         siteOptions={value}
       />
       </div>
+      )}
 
       <WebsitePipelineBindings
         primaryProjectId={project.id}
@@ -525,7 +531,7 @@ export function HostedSitePageStudio({
       </div>
 
       {tab === "vibe" ? (
-        <div className="h-[28rem] overflow-hidden rounded-md border border-border">
+        <div className={cn("overflow-hidden rounded-md border border-border", fillHeight ? "min-h-0 flex-1" : "h-[28rem]")}>
           <ResizableSplit
             className="h-full"
             leadingWidth={chatWidth}
@@ -550,8 +556,20 @@ export function HostedSitePageStudio({
                 ) : null}
                 <AssistantChat
                 title="Page"
-                subtitle={value.runtime === "react" ? "React around the run widgets" : "HTML around the run form"}
-                initialMessage={value.runtime === "react" ? VIBE_WELCOME_REACT : VIBE_WELCOME}
+                subtitle={
+                  hasPipelines
+                    ? value.runtime === "react"
+                      ? "React around the run widgets"
+                      : "HTML around the run form"
+                    : "Page first — attach a pipeline when you need a run"
+                }
+                initialMessage={
+                  value.runtime === "react"
+                    ? VIBE_WELCOME_REACT
+                    : hasPipelines
+                      ? VIBE_WELCOME
+                      : VIBE_WELCOME_PAGE
+                }
                 placeholder="Make a clean hero, then the workspace…"
                 loadingLabel="Designing page…"
                 simple

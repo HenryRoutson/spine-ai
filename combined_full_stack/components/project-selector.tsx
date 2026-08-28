@@ -35,7 +35,7 @@ import type { SharedLinkRecord } from "@/lib/shared-link-types"
 import type { Project } from "@/lib/types"
 import { spineActionProps } from "@/lib/core/parity"
 import { cn } from "@/lib/utils"
-import { resolveWebsitePipelineBindings, websiteDisplayName } from "@/lib/website-pipelines"
+import { listedWebsitePipelineBindings, websiteDisplayName } from "@/lib/website-pipelines"
 
 function ProjectRenameInput({
   initialName,
@@ -100,7 +100,7 @@ function WebsiteWorkspaceSelector({ embed, site }: { embed: boolean; site: Share
   const hideDeveloperTools = useHideDeveloperTools()
   const [sites, setSites] = useState<SharedLinkRecord[]>([])
   const listedSites = sites.some((row) => row.id === site.id) ? sites : [site, ...sites]
-  const bindings = resolveWebsitePipelineBindings(site.projectId, site.siteOptions.pipelineBindings ?? [])
+  const bindings = listedWebsitePipelineBindings(site.siteOptions.pipelineBindings ?? [])
 
   useEffect(() => {
     let cancelled = false
@@ -120,7 +120,7 @@ function WebsiteWorkspaceSelector({ embed, site }: { embed: boolean; site: Share
   function openPipeline(projectId: typeof project.id) {
     clearWebsiteEditor()
     if (projectId !== project.id) setActiveProjectId(projectId)
-    setActiveWindow(hideDeveloperTools ? AppWindowId.Vibe : AppWindowId.Structure)
+    setActiveWindow(hideDeveloperTools ? AppWindowId.Inference : AppWindowId.Structure)
   }
 
   return (
@@ -165,7 +165,12 @@ function WebsiteWorkspaceSelector({ embed, site }: { embed: boolean; site: Share
             </DropdownMenuLabel>
           </DropdownMenuGroup>
           <DropdownMenuGroup>
-            {bindings.map((binding) => {
+            {bindings.length === 0 ? (
+              <DropdownMenuItem disabled className="text-xs text-muted-foreground">
+                No pipelines yet
+              </DropdownMenuItem>
+            ) : (
+              bindings.map((binding) => {
               const name = projects.find((p) => p.id === binding.projectId)?.name ?? binding.alias
               return (
                 <DropdownMenuItem
@@ -179,7 +184,8 @@ function WebsiteWorkspaceSelector({ embed, site }: { embed: boolean; site: Share
                   <span className="font-mono text-[10px] text-muted-foreground">{binding.alias}</span>
                 </DropdownMenuItem>
               )
-            })}
+            })
+            )}
           </DropdownMenuGroup>
         </DropdownMenuContent>
       </DropdownMenu>
@@ -290,7 +296,7 @@ function PipelineWorkspaceSelector({ embed = false }: { embed?: boolean }) {
                     // AI : Pipeline dropdown is L0 for the open pipeline — leave Billing/Settings back into it.
                     if (isAccountWindow(activeWindow)) {
                       setActiveWindow(
-                        readHideDeveloperTools() ? AppWindowId.Vibe : AppWindowId.Structure,
+                        readHideDeveloperTools() ? AppWindowId.Inference : AppWindowId.Structure,
                       )
                     }
                   }}

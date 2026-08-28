@@ -77,7 +77,7 @@ export const PARITY_ROWS: ParityRow[] = [
   row(
     "nav.build.vibe",
     "vibe",
-    { label: "Vibe", file: "components/build-surface-nav.tsx" },
+    { label: "Simplified", file: "components/build-surface-nav.tsx", how: "Simplified workspace — agent left, hide Testing" },
     y("Ink: press a (ask vibe) or tab-vibe", "tab-vibe"),
     y("POST /api/pipeline-assistant", "/api/pipeline-assistant"),
     y("session_action id=nav.build.vibe → get_project", "get_project"),
@@ -86,7 +86,7 @@ export const PARITY_ROWS: ParityRow[] = [
   row(
     "nav.build.editors",
     "pipeline",
-    { label: "Building", file: "components/build-surface-nav.tsx", how: "Build visual editors (structure/pipeline/…)" },
+    { label: "Full", file: "components/build-surface-nav.tsx", how: "Full workspace — Testing and every editor tab" },
     y(
       `Ink: press ${windowStepHotkey(windowPanelHeader(AppWindowId.Structure).step)}–${windowStepHotkey(windowPanelHeader(AppWindowId.Inference).step)} for structure/pipeline/testing/inference`,
       "tab-structure",

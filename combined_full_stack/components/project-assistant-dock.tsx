@@ -108,7 +108,7 @@ export function ProjectAssistantDockPanel({ embedded = false }: ProjectAssistant
     <div
       className={cn(
         "flex h-full min-h-0 flex-col bg-background",
-        !embedded && "border-l border-border shadow-xl",
+        !embedded && "border-r border-border",
       )}
       {...{ [UI_CONTEXT_ATTR.ignore]: "" }}
     >

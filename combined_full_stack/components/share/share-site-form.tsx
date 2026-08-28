@@ -19,9 +19,11 @@ import type { HostedSiteOptions, SharedLinkRecord } from "@/lib/shared-link-type
 import { DEFAULT_HOSTED_SITE_OPTIONS } from "@/lib/shared-link-types"
 import { DEFAULT_HOSTED_SITE_HTML, isSiteLinkId, normalizeHostedSiteOptions } from "@/lib/hosted-site"
 import { useOptionalAppShell } from "@/lib/app-shell"
+import { useHideDeveloperTools } from "@/lib/developer-tools-settings"
 import type { DocId, DocRef, ModuleId, Project } from "@/lib/types"
 import { COPY_FEEDBACK_MS } from "@/lib/ui-timing"
 import { copyTextToClipboard } from "@/lib/clipboard"
+import { cn } from "@/lib/utils"
 
 const SITE_FUNDING_OPTIONS = [
   {
@@ -59,7 +61,7 @@ export function ShareSiteForm({
 }) {
   const shell = useOptionalAppShell()
   const editingWebsite = shell?.editingWebsite
-  const websiteSurface = shell?.websiteSurface
+  const hideDeveloperTools = useHideDeveloperTools()
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [created, setCreated] = useState<{ url: string; link: SharedLinkRecord } | null>(null)
@@ -178,24 +180,27 @@ export function ShareSiteForm({
   }
 
   return (
-    <div className="space-y-4">
+    <div className={cn(editingWebsite ? "flex h-full min-h-0 flex-col" : "space-y-4")}>
+      {editingWebsite ? null : (
       <div>
         <h3 className="text-sm font-semibold">Hosted company page</h3>
         <p className="mt-0.5 text-xs text-muted-foreground">
           Vibe-code a website and attach one or more pipelines. We host it — no site of your own.
         </p>
       </div>
+      )}
 
       <HostedSitePageStudio
         project={project}
         value={siteOptions}
         onChange={setSiteOptions}
         viewerMarkdown={viewerMarkdown}
-        forcedTab={editingWebsite ? (websiteSurface === "code" ? "code" : "vibe") : undefined}
-        hideSurfaceTabs={!!editingWebsite}
+        forcedTab={hideDeveloperTools ? "vibe" : undefined}
+        hideSurfaceTabs={hideDeveloperTools}
+        fillHeight={!!editingWebsite}
       />
 
-      <ShareViewerDocsFields {...fieldsProps} />
+      {editingWebsite || hideDeveloperTools ? null : <ShareViewerDocsFields {...fieldsProps} />}
 
       {!created ? (
         <>
@@ -260,7 +265,7 @@ export function ShareSiteForm({
       {error && <p className="text-xs text-destructive">{error}</p>}
 
       {created ? (
-        <div className="space-y-3 rounded-md border border-border bg-muted/20 p-3">
+        <div className="shrink-0 space-y-3 rounded-md border border-border bg-muted/20 p-3">
           <p className="text-[11px] text-muted-foreground">Live page URL — send this, no hosting required:</p>
           <code className="block truncate font-mono text-[10px]">{created.url}</code>
           <div className="flex flex-wrap gap-2">

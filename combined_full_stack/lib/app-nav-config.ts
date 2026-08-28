@@ -180,6 +180,38 @@ export const BUILDER_WORKSPACE_NAV_ITEMS: AppNavItem[] = BUILDER_NAV_ITEMS.filte
 
 export const BUILDER_WORKSPACE_WINDOW_IDS: AppWindowId[] = BUILDER_WORKSPACE_NAV_ITEMS.map((item) => item.id)
 
+// AI : Simplified chrome — hide Testing and library/observe developer pages; keep build + run surfaces.
+export const SIMPLIFIED_WORKSPACE_WINDOW_IDS: AppWindowId[] = [
+  AppWindowId.Structure,
+  AppWindowId.Pipeline,
+  AppWindowId.Inference,
+  AppWindowId.Schedule,
+  AppWindowId.Share,
+]
+
+export const SIMPLIFIED_WORKSPACE_NAV_ITEMS: AppNavItem[] = BUILDER_WORKSPACE_NAV_ITEMS.filter((item) =>
+  SIMPLIFIED_WORKSPACE_WINDOW_IDS.includes(item.id),
+)
+
+export function isSimplifiedHiddenWindow(window: AppWindowId): boolean {
+  return BUILDER_WORKSPACE_WINDOW_IDS.includes(window) && !SIMPLIFIED_WORKSPACE_WINDOW_IDS.includes(window)
+}
+
+export function guiDefaultWorkspaceWindow(simplified: boolean, editingWebsite: boolean): AppWindowId {
+  if (editingWebsite) return AppWindowId.Share
+  return simplified ? AppWindowId.Inference : AppWindowId.Structure
+}
+
+export function guiWindowAfterSimplified(
+  window: AppWindowId,
+  simplified: boolean,
+  editingWebsite: boolean,
+): AppWindowId {
+  if (window === AppWindowId.Vibe) return guiDefaultWorkspaceWindow(true, editingWebsite)
+  if (simplified && isSimplifiedHiddenWindow(window)) return guiDefaultWorkspaceWindow(true, editingWebsite)
+  return window
+}
+
 export const BUILDER_PANEL_IDS: AppWindowId[] = Object.values(AppWindowId)
 
 // AI : Vibe right pane — observe-only (run / share / logs); chat owns project edits.
