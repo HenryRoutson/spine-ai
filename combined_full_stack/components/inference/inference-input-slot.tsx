@@ -38,6 +38,7 @@ type UploadSlotProps = {
   uploading?: boolean
   onUpload: (file: File) => void
   onRemoveDoc: (docId: DocId) => void
+  onClearSlot?: () => void
 }
 
 type JsonStructMode = "file" | JsonStructFormKind
@@ -79,10 +80,10 @@ export function InferenceInputSlot(props: {
 
   // AI : exclusive modes — never stack file chip + form (that looked like in-place file edit).
   const jsonModes =
-    !!jsonStruct && !!onJsonStructAssigned && !upload && !multi && !!storeProps
+    !!jsonStruct && !!onJsonStructAssigned && !multi && (upload ? !!jsonStructSource : !!storeProps)
   const [mode, setMode] = useState<JsonStructMode>("file")
   const [branchSeed, setBranchSeed] = useState<DocRef | null>(null)
-  const clearSlot = storeProps?.onClearSlot
+  const clearSlot = uploadProps?.onClearSlot ?? storeProps?.onClearSlot
   const openPicker = storeProps?.onOpenPicker
 
   useEffect(() => {
@@ -120,9 +121,11 @@ export function InferenceInputSlot(props: {
 
   const rawDescription = moduleInputDescription(inputModule)
   const description = simple ? simpleStepDescription(rawDescription, inputModule.kind) : rawDescription
-  const jsonModeTabs = simple
-    ? ([["file", "Choose file"], ["empty", "Fill in a form"]] as const)
-    : ([["file", "From file"], ["branch", "Branch off"], ["empty", "Create empty"]] as const)
+  const jsonModeTabs = upload
+    ? ([["file", "Upload JSON"], ["empty", "Fill in a form"]] as const)
+    : simple
+      ? ([["file", "Choose file"], ["empty", "Fill in a form"]] as const)
+      : ([["file", "From file"], ["branch", "Branch off"], ["empty", "Create empty"]] as const)
   // AI : empty file picker — in simple mode sit square beside the label, not a full-width bar.
   const emptyFileSlot = docs.length === 0 && (!jsonModes || mode === "file")
   const emptyPickerLabel = upload

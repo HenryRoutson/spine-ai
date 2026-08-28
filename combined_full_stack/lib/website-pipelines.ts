@@ -66,6 +66,19 @@ export function resolveWebsitePipelineBindings(
   ]
 }
 
+export function remapHostedSitePipelineBindings(
+  seedProjectId: ProjectId,
+  clonedProjectId: ProjectId,
+  bindings: WebsitePipelineBinding[],
+  clonedBoundBySeedId: Partial<Record<string, ProjectId>> = {},
+): WebsitePipelineBinding[] {
+  return resolveWebsitePipelineBindings(seedProjectId, bindings).map((binding) => {
+    if (binding.projectId === seedProjectId) return { ...binding, projectId: clonedProjectId }
+    const remapped = clonedBoundBySeedId[binding.projectId]
+    return remapped ? { ...binding, projectId: remapped } : binding
+  })
+}
+
 export function websiteBoundProjectIds(
   primaryProjectId: ProjectId,
   bindings: WebsitePipelineBinding[],

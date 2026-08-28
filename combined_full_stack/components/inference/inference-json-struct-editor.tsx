@@ -14,6 +14,7 @@ import { docsForProject } from "@/lib/project-docs"
 import { tryParseJson } from "@/lib/json-utils"
 import { defaultFromSchema, jsonSchemaToFormRoot, validateFormData } from "@/lib/schema-form"
 import { useOptionalStore } from "@/lib/store"
+import { useSharedRunDocScope } from "@/lib/shared-run-doc-scope"
 import { cn } from "@/lib/utils"
 import { DocLabel, InputType, type DocId, type DocRef, type Project } from "@/lib/types"
 
@@ -57,6 +58,7 @@ export function InferenceJsonStructEditor({
   plain = false,
 }: InferenceJsonStructEditorProps) {
   const store = useOptionalStore()
+  const shareScope = useSharedRunDocScope()
   const addDocContent = source?.addDocContent ?? store?.addDocContent
   const project = source?.project ?? store?.project ?? null
   const docs = source?.docs ?? store?.docs ?? []
@@ -93,7 +95,11 @@ export function InferenceJsonStructEditor({
     }
 
     setLoading(true)
-    fetchDocText(seedDoc.id as DocId, "parser")
+    fetchDocText(
+      seedDoc.id as DocId,
+      "parser",
+      shareScope ? { linkId: shareScope.linkId, sessionId: shareScope.sessionId } : undefined,
+    )
       .then((res) => {
         if (cancelled) return
         const content = docTextContent(res)
@@ -115,7 +121,7 @@ export function InferenceJsonStructEditor({
     return () => {
       cancelled = true
     }
-  }, [kind, seedDoc?.id, formRoot])
+  }, [kind, seedDoc?.id, formRoot, shareScope?.linkId, shareScope?.sessionId])
 
   const fieldErrors = formRoot ? validateFormData(safeParse(text), formRoot) : {}
   const formBlocked = Object.keys(fieldErrors).length > 0 || !!loadError

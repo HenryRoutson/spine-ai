@@ -132,6 +132,24 @@ async function dbUpsert(scope: string, table: string, rowId: string, data: sql_r
   return true
 }
 
+async function dbDeleteTable(scope: string, table: string): Promise<boolean> {
+  if (testMode) return false
+  const db = await createAdminClient()
+  if (!db) return false
+  const { error } = await db.from("app_sql_rows").delete().eq("scope", scope).eq("table_name", table)
+  if (error) {
+    if (!isMissingSchemaError(error)) log.warn(`delete table failed`, { error: error.message })
+    return false
+  }
+  return true
+}
+
+export async function deleteAppSqlTable(scope: app_sql_scope | string, table: string): Promise<void> {
+  memTable(scope, table).clear()
+  const ok = await dbDeleteTable(scope, table)
+  if (!ok) persistFile()
+}
+
 export async function listAppSqlRows(scope: app_sql_scope | string, table: string): Promise<sql_row[]> {
   const fromDb = await dbList(scope, table)
   if (fromDb) {
@@ -183,13 +201,26 @@ function applySelect(stmt: Extract<ParsedAppSql, { kind: "select" }>, rows: sql_
 export async function execAppSql(
   scope: app_sql_scope | string,
   sql: string,
-  opts?: { seedRows?: sql_row[]; pkField?: string },
+  opts?: { seedRows?: sql_row[]; pkField?: string; inputRows?: sql_row[] },
 ): Promise<sql_row[]> {
   const stmt = parseAppSql(sql)
   const pkField = opts?.pkField ?? "id"
+  const inputRows = opts?.inputRows ?? []
+  if (stmt.kind === "select_count_input") return [{ count: inputRows.length }]
+  if (stmt.kind === "replace_from_input") {
+    await deleteAppSqlTable(scope, stmt.table)
+    const out: sql_row[] = []
+    for (const row of inputRows) out.push(await upsertAppSqlRow(scope, stmt.table, { ...row }, pkField))
+    return out
+  }
   if (stmt.kind === "select") {
     await ensureAppSqlSeed(scope, stmt.table, opts?.seedRows ?? [], pkField)
     return applySelect(stmt, await listAppSqlRows(scope, stmt.table))
+  }
+  if (stmt.kind === "select_count") {
+    await ensureAppSqlSeed(scope, stmt.table, opts?.seedRows ?? [], pkField)
+    const rows = (await listAppSqlRows(scope, stmt.table)).filter((row) => sqlWhereMatches(row, stmt.where))
+    return [{ count: rows.length }]
   }
   if (stmt.kind === "insert") {
     const row: sql_row = {}
@@ -210,5 +241,5 @@ export async function execAppSql(
     for (const assignment of stmt.set) next[assignment.field] = evalSqlExpr(assignment.expr, next)
     updated.push(await upsertAppSqlRow(scope, stmt.table, next, pkField))
   }
-  return stmt.returning ? updated : updated
+  return updated
 }

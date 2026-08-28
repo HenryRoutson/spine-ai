@@ -883,7 +883,7 @@ export async function publicLinkViewForAlias(link: StoredSharedLink, alias?: str
     name: snapshot.name,
     modules: snapshot.modules.map(sanitizeModuleForPublic),
     models: snapshot.models,
-    defaultDocs: [] as typeof view.defaultDocs,
+    defaultDocs: view.defaultDocs.filter((d) => snapshot.modules.some((m) => m.id === d.moduleId)),
   }
 }
 

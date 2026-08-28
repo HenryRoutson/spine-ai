@@ -128,6 +128,16 @@ export function defaultHostedSiteCss(): string {
 .hs-auth-card { padding: 1.25rem; border-radius: 1.1rem; border: 1px solid color-mix(in srgb, var(--hs-fg) 10%, transparent); background: #fff; box-shadow: 0 18px 50px color-mix(in srgb, var(--hs-fg) 10%, transparent); }
 .hs-auth-note { margin: 0 0 0.9rem; padding: 0.7rem 0.8rem; border-radius: 0.7rem; font-size: 0.75rem; line-height: 1.45; background: color-mix(in srgb, var(--hs-accent) 10%, #fff); color: var(--hs-fg); }
 .hs-account { display: flex; justify-content: flex-end; align-items: center; gap: 0.6rem; padding: 0.65rem 0.85rem; font-size: 0.72rem; border-bottom: 1px solid color-mix(in srgb, var(--hs-fg) 8%, transparent); color: color-mix(in srgb, var(--hs-fg) 62%, transparent); }
+.hs-split { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1.25rem; max-width: 72rem; margin: 0 auto; padding: 0 1.25rem 3rem; }
+.hs-split .hs-run-slot { max-width: none; margin: 0; }
+.hs-sql-table-wrap { overflow-x: auto; text-align: left; }
+.hs-sql-table { width: 100%; border-collapse: collapse; font-size: 0.88rem; }
+.hs-sql-table th, .hs-sql-table td { padding: 0.55rem 0.7rem; border-bottom: 1px solid color-mix(in srgb, var(--hs-fg) 10%, transparent); }
+.hs-sql-table th { font-size: 0.68rem; letter-spacing: 0.08em; text-transform: uppercase; color: color-mix(in srgb, var(--hs-fg) 55%, transparent); font-weight: 650; }
+.hs-sql-caption { margin-top: 0.65rem; font-size: 0.85rem; color: color-mix(in srgb, var(--hs-fg) 58%, transparent); }
+@media (max-width: 860px) {
+  .hs-split { grid-template-columns: 1fr; }
+}
 @media (max-width: 720px) {
   .hs-features { grid-template-columns: 1fr; }
   .hs-hero { padding: 2.6rem 1.15rem 1.6rem; }

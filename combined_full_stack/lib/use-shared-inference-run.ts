@@ -81,10 +81,10 @@ export function useSharedInferenceRun(
   const allInputsReady = inputModules.every(moduleReady)
 
   const handleUpload = useCallback(
-    async (moduleId: ModuleId, file: File) => {
+    async (moduleId: ModuleId, file: File): Promise<DocRef | null> => {
       setUploadingModule(moduleId)
       try {
-        const doc = await uploadSharedDoc(linkId, moduleId, file)
+        const doc = await uploadSharedDoc(linkId, moduleId, file, embedSessionToken)
         void cacheUploadFileText(linkId, doc.id, file)
         void fetchSharedRunDocText(linkId, doc.id).catch(() => {})
         setInputDocs((prev) => {
@@ -93,14 +93,25 @@ export function useSharedInferenceRun(
           const next = mod && isMultiDocInputModule(mod) ? [...cur, doc] : [doc]
           return { ...prev, [moduleId]: next }
         })
+        return doc
       } catch (e) {
         setError((e as Error).message)
+        return null
       } finally {
         setUploadingModule(null)
       }
     },
-    [linkId, inputModules],
+    [linkId, inputModules, embedSessionToken],
   )
+
+  const setInputDocForModule = useCallback((moduleId: ModuleId, doc: DocRef) => {
+    setInputDocs((prev) => {
+      const mod = inputModules.find((m) => m.id === moduleId)
+      const cur = docsForInputModule(prev, moduleId)
+      const next = mod && isMultiDocInputModule(mod) ? [...cur.filter((d) => d.id !== doc.id), doc] : [doc]
+      return { ...prev, [moduleId]: next }
+    })
+  }, [inputModules])
 
   const removeInputDocForModule = useCallback((moduleId: ModuleId, docId: DocId) => {
     setInputDocs((prev) => {
@@ -238,6 +249,7 @@ export function useSharedInferenceRun(
     setViewerName,
     defaultForModule,
     handleUpload,
+    setInputDocForModule,
     removeInputDocForModule,
     allInputsReady,
     phase,

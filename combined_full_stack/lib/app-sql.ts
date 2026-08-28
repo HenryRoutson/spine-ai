@@ -1,4 +1,4 @@
-// AI : tiny SQL dialect for hosted-app tables — SELECT / UPDATE / INSERT only, no JOIN.
+// AI : tiny SQL dialect for hosted-app tables — SELECT / UPDATE / INSERT / REPLACE FROM INPUT, no JOIN.
 
 import { sqlTableName } from "@/lib/sql-id-types"
 import type { StructureModel } from "@/lib/types"
@@ -18,8 +18,12 @@ export type SqlExpr =
 
 export type SqlWhere = { field: string; value: SqlLit }
 
+export type sql_input_row = Record<string, unknown>
+
 export type ParsedAppSql =
   | { kind: "select"; table: string; columns: "*" | string[]; where?: SqlWhere }
+  | { kind: "select_count"; table: string; where?: SqlWhere }
+  | { kind: "select_count_input" }
   | {
       kind: "update"
       table: string
@@ -28,6 +32,7 @@ export type ParsedAppSql =
       returning: boolean
     }
   | { kind: "insert"; table: string; columns: string[]; values: SqlLit[] }
+  | { kind: "replace_from_input"; table: string }
 
 export const APP_SQL_CHANGED_EVENT = "spine-app-sql-changed"
 
@@ -53,6 +58,7 @@ const KEYWORDS = new Set([
   "select",
   "update",
   "insert",
+  "replace",
   "into",
   "from",
   "set",
@@ -60,6 +66,8 @@ const KEYWORDS = new Set([
   "returning",
   "values",
   "and",
+  "count",
+  "input",
   "true",
   "false",
   "null",
@@ -234,11 +242,29 @@ class Parser {
     if (this.identKeyword("select")) return this.parseSelect()
     if (this.identKeyword("update")) return this.parseUpdate()
     if (this.identKeyword("insert")) return this.parseInsert()
-    throw new Error("SQL must be SELECT, UPDATE, or INSERT")
+    if (this.identKeyword("replace")) return this.parseReplaceFromInput()
+    throw new Error("SQL must be SELECT, UPDATE, INSERT, or REPLACE")
   }
 
   private parseSelect(): ParsedAppSql {
     this.eatKeyword("select")
+    if (this.identKeyword("count")) {
+      this.eatKeyword("count")
+      this.eatPunct("(")
+      if (this.peek()?.kind === "punct" && this.peek()?.value === "*") this.take()
+      else throw new Error("COUNT only supports COUNT(*)")
+      this.eatPunct(")")
+      this.eatKeyword("from")
+      if (this.identKeyword("input")) {
+        this.take()
+        if (this.peek()) throw new Error("unexpected tokens after SELECT COUNT(*) FROM INPUT")
+        return { kind: "select_count_input" }
+      }
+      const table = this.eatIdent()
+      const where = this.parseWhere()
+      if (this.peek()) throw new Error("unexpected tokens after SELECT COUNT(*)")
+      return { kind: "select_count", table, where }
+    }
     let columns: "*" | string[]
     if (this.peek()?.kind === "punct" && this.peek()?.value === "*") {
       this.take()
@@ -255,6 +281,17 @@ class Parser {
     const where = this.parseWhere()
     if (this.peek()) throw new Error("unexpected tokens after SELECT")
     return { kind: "select", table, columns, where }
+  }
+
+  private parseReplaceFromInput(): ParsedAppSql {
+    this.eatKeyword("replace")
+    this.eatKeyword("into")
+    const table = this.eatIdent()
+    this.eatKeyword("from")
+    if (!this.identKeyword("input")) throw new Error("REPLACE INTO requires FROM INPUT")
+    this.take()
+    if (this.peek()) throw new Error("unexpected tokens after REPLACE")
+    return { kind: "replace_from_input", table }
   }
 
   private parseUpdate(): ParsedAppSql {
@@ -360,4 +397,12 @@ export function rowIdOf(row: Record<string, unknown>, pkField = "id"): app_sql_r
 export function sqlSeedRowsOf(m: { sqlSeedRows?: unknown }): Record<string, unknown>[] {
   if (!Array.isArray(m.sqlSeedRows)) return []
   return m.sqlSeedRows.filter((row): row is Record<string, unknown> => !!row && typeof row === "object" && !Array.isArray(row))
+}
+
+export function sqlInputRowsOf(value: unknown): sql_input_row[] {
+  if (Array.isArray(value)) {
+    return value.filter((row): row is sql_input_row => !!row && typeof row === "object" && !Array.isArray(row))
+  }
+  if (value && typeof value === "object") return [value as sql_input_row]
+  return []
 }

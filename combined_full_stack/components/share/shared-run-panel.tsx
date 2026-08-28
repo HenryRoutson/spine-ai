@@ -17,6 +17,7 @@ import { RunInputsNeededHint } from "@/components/run-with-stop-button"
 import { Input } from "@/components/ui/input"
 import { docsForInputModule } from "@/lib/inference-input"
 import { InferenceInputSlot } from "@/components/inference/inference-input-slot"
+import { inputModuleJsonStructSchema } from "@/lib/inference-json-struct-edit"
 import { InferenceRunOutputs } from "@/components/inference/inference-outputs"
 import {
   ErrorBanner,
@@ -129,8 +130,26 @@ export function SharedRunPanel({
             defaultFilename={run.defaultForModule(m.id)}
             docs={docsForInputModule(run.inputDocs, m.id)}
             uploading={run.uploadingModule === m.id}
-            onUpload={(file) => run.handleUpload(m.id, file)}
+            onUpload={(file) => void run.handleUpload(m.id, file)}
             onRemoveDoc={(docId) => run.removeInputDocForModule(m.id, docId)}
+            onClearSlot={() => {
+              for (const d of docsForInputModule(run.inputDocs, m.id)) {
+                run.removeInputDocForModule(m.id, d.id)
+              }
+            }}
+            jsonStruct={inputModuleJsonStructSchema(m, link.models, [])}
+            jsonStructDisabled={run.phase === "running"}
+            jsonStructSource={{
+              docs: run.inputModules.flatMap((mod) => docsForInputModule(run.inputDocs, mod.id)),
+              project: null,
+              addDocContent: async (name, _type, content) => {
+                const file = new File([content], name, { type: "application/json" })
+                const doc = await run.handleUpload(m.id, file)
+                if (!doc) throw new Error("Could not save JSON")
+                return doc
+              },
+            }}
+            onJsonStructAssigned={(doc) => run.setInputDocForModule(m.id, doc)}
           />
         ))}
       </div>

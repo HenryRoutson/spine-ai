@@ -6,6 +6,7 @@ import {
   bindingsFromProjectIds,
   insertWebsitePipelineInCode,
   normalizeWebsitePipelineBindings,
+  remapHostedSitePipelineBindings,
   resolveWebsitePipelineBindings,
   stripWebsitePipelineFromCode,
   websiteBoundProjectIds,
@@ -40,6 +41,24 @@ describe("website pipeline bindings", () => {
       { id: P2, name: "Invoice OCR" },
     ])
     expect(next.map((b) => b.alias)).toEqual(["run", "invoice-ocr"])
+  })
+
+  it("remaps cloned seed ids onto the published site bindings", () => {
+    const cloned = "p_cloned_save" as ProjectId
+    const clonedCount = "p_cloned_count" as ProjectId
+    const next = remapHostedSitePipelineBindings(
+      "p_save_employees" as ProjectId,
+      cloned,
+      [
+        { alias: "run" as const, projectId: "p_save_employees" as ProjectId },
+        { alias: "count" as const, projectId: "p_count_employees" as ProjectId },
+      ],
+      { p_count_employees: clonedCount },
+    )
+    expect(next).toEqual([
+      { alias: "run", projectId: cloned },
+      { alias: "count", projectId: clonedCount },
+    ])
   })
 })
 
