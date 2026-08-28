@@ -18,6 +18,9 @@
 // AI :   for local mutations. React keeps hydration, debounce save, billing caches (parity.md §8.5).
 // AI : TODO (arch-gui-viewmodels) — React pipeline/docs panels should consume toPipelineView /
 // AI :   toDocsView so CLI and GUI cannot drift (parity.md §8.5).
+// AI : TODO (spine-in-spine-bootstrap) — guest UI on host engine; do not merge useStore into the guest.
+// AI :   Steps: lib/server/spine-in-spine-bootstrap-roadmap.ts (grep TODO (spine-in-spine-bootstrap).
+// AI :   Simple vs full vs OSS LoC: lib/server/spine-in-spine-dogfood-roadmap.ts
 // AI : DONE (allow-pipeline-non-linear-fork) — series-parallel Fork step (nested linear lanes + join).
 // AI :   Not React Flow. See lib/server/fork-roadmap.ts. Linear spine + Parallel/Combine/Assemble stay.
 // AI : TODO (arch-module-union) — PipelineModule is a god object; discriminated union per ModuleKind.

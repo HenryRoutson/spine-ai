@@ -1,5 +1,13 @@
 // AI : Spine-in-Spine compiler — AppBlueprint JSON → SQL + hosted HTML + typed ports + share copy.
 // Seed custom-code must stay byte-equal to the *CompileTs strings below.
+// AI : TODO (spine-in-spine-bootstrap) — this file is the P11 dogfood compiler (toy 3 tables + 1 mega page).
+// AI :   Rebuild the *product UI* as guest pages on the host engine — steps S1–S10 in
+// AI :   lib/server/spine-in-spine-bootstrap-roadmap.ts. Grep TODO (spine-in-spine-bootstrap.
+// AI : TODO (spine-in-spine-simple) — SPINE_PLATFORM_BLUEPRINT becomes the 4-page simple guest;
+// AI :   seed seeds/spine_in_spine_simple.json. Do not overload P11's toy seed.
+// AI : TODO (spine-in-spine-full) — add SPINE_PLATFORM_BLUEPRINT_FULL: one page per AppWindowId,
+// AI :   {{slot:structure|pipeline|…}} + spine-full CSS. Seed spine_in_spine_full.json.
+// AI :   Pixel goldens: lib/spine-in-spine-dogfood.ts SPINE_FULL_PIXEL_SCENES.
 
 export type field_def = {
   name: string
@@ -25,6 +33,9 @@ export type page_def = {
   path: string
   headline: string
   body: string
+  // AI : TODO (spine-in-spine-bootstrap-S2-pages) — add html?: string (or compile from headline/body +
+  // AI :   a slot layout enum) so each page is a hosted HTML document, not a <section> concatenated
+  // AI :   into one mega page. Paths: / | /structures | /functions | /account.
 }
 
 export type app_blueprint = {
@@ -88,6 +99,9 @@ export const SPINE_SCHEMA_COMPILE_TS = `(input) => {
   };
 }`
 
+// AI : TODO (spine-in-spine-bootstrap-S7-compile) — emit per-page HTML (S2), plus {{auth}} {{chatbot}}
+// AI :   {{docs}} {{run:active-user-project}} {{slot:pipeline-dag}} / {{slot:type-expr}}. Keep this
+// AI :   string byte-equal to the seed custom-code; regen via scripts/write_spine_in_spine_seed.ts.
 export const SPINE_WEBSITE_COMPILE_TS = `(pack) => {
   const schema = pack && typeof pack === "object" ? pack : {};
   const appName = String(schema.app_name || "Untitled app");
@@ -150,6 +164,11 @@ export function compileSpineApp(blueprint: app_blueprint): spine_app {
   return compileWebsitePack(compileSchemaPack(blueprint))
 }
 
+// AI : TODO (spine-in-spine-bootstrap-S1-schema) — replace these 3 marketing tables with the product
+// AI :   schema (Project, StructureModel, ModelField, PipelineFunction, PipelineStep, Document,
+// AI :   PipelineRun, SharedLink, WebsitePage). Fields a {{table}} can CRUD only — see roadmap S1.
+// AI : TODO (spine-in-spine-bootstrap-S2-pages) — four builder pages (/, /structures, /functions,
+// AI :   /account) instead of two feature blurbs. Slot layout is in the roadmap React→guest map.
 export const SPINE_PLATFORM_BLUEPRINT: app_blueprint = {
   app_name: "Spine",
   tagline: "Vibe-code websites on typed pipelines",

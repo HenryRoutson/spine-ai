@@ -1,6 +1,8 @@
 // AI : (snapshot) -> ViewModel — React and CLI render; they do not derive.
 // AI : TODO (opt-browser-tui-snapshot) — optional GUI terminal mode renders these same to*View models;
 // AI :   map useStore → SessionSnapshot (also arch-gui-viewmodels).
+// AI : TODO (spine-in-spine-bootstrap-S4-dag) — custom guest slots consume toPipelineView / toStructureView
+// AI :   / toInferenceView / toTestingView / toLogsView — same contract as the TUI. Never useStore.
 
 import { computeInvalid, invalidIssuesForModule } from "@/lib/validity"
 import { computeStructureIssues, structureIssueMessage } from "@/lib/structure-validity"

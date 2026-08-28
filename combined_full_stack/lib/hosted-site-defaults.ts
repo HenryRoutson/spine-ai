@@ -1,6 +1,9 @@
 import { HOSTED_SITE_AUTH_SLOT, HOSTED_SITE_RUN_SLOT } from "@/lib/hosted-site-slots"
 
 // AI : default public page — product chrome around {{run}}, good enough to vibe-code Spine-in-Spine from.
+// AI : TODO (spine-in-spine-full-F2-css) — add a "spine-full" token theme that matches AppShell
+// AI :   (globals.css + app-chrome-header). Simple track keeps these marketing hs-* styles.
+// AI :   Pixel chrome-only screenshots first (nav + window header) before full-page diffs.
 // AI : Lovable-style page with no run widget — attach a pipeline later to insert {{run}}.
 export const DEFAULT_HOSTED_SITE_LANDING_HTML = `<nav class="hs-nav">
   <div class="hs-nav-brand">
