@@ -1,5 +1,5 @@
 import { invariant } from "@/lib/assert";
-import { isLlmKind, usesPassthroughStructure } from "@/lib/module-kinds";
+import { isLlmKind, stepNeverCaches, usesPassthroughStructure } from "@/lib/module-kinds";
 import { compactPreview } from "@/lib/text-preview";
 import { labelAsStateKey } from "../pipeline_state";
 import { forkBranchesOf, isIfElseKind } from "@/lib/fork-pipeline";
@@ -86,7 +86,7 @@ export async function runLinearStepsFrom(
 
         const key = stepCacheKey(cacheOwnerId, projectId, m, m.model ?? model, fingerprintInputDocIds, project);
         log.debug(`cache lookup`, { key, cachedFlag: !!m.cached });
-        const cached = m.cached ? readStepCache(key) : undefined;
+        const cached = m.cached && !stepNeverCaches(m.kind) ? readStepCache(key) : undefined;
 
         let descriptionCheckCostCents = 0;
         let descriptionCheckLlmCalls: LlmCallRecord[] | undefined;
@@ -219,7 +219,7 @@ export async function runLinearStepsFrom(
               const itemCount = isList && Array.isArray(result.value) ? result.value.length : 1;
               log.debug(`validation ok`, { moduleId: m.id, structure: out.name, itemCount });
             }
-            if (m.cached) {
+            if (m.cached && !stepNeverCaches(m.kind)) {
               const stepCost = +(ledger.totalCents() - beforeCents).toFixed(4);
               writeStepCache(
                 key,

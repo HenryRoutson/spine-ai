@@ -9,7 +9,7 @@ import {
   type HostedSiteHtmlParts,
   type hosted_site_surface,
 } from "@/lib/hosted-site"
-import { HOSTED_SITE_SLOT_CLASS, type hosted_site_widget_slot } from "@/lib/hosted-site-slots"
+import { HOSTED_SITE_SLOT_CLASS, hostedSiteHasPrimarySlot, type hosted_site_widget_slot } from "@/lib/hosted-site-slots"
 import type { HostedSiteOptions } from "@/lib/shared-link-types"
 import { escapeHtml } from "@/lib/standalone-html"
 import type { Project } from "@/lib/types"
@@ -47,11 +47,13 @@ function slotExportComment(slot: hosted_site_widget_slot): string {
   if (slot === "run") return "<!-- pipeline run form / inference_ui.html mounts here -->"
   if (slot === "output") return "<!-- DataViewPanel / run output mounts here -->"
   if (slot === "chatbot") return "<!-- ChatbotPanel mounts here -->"
+  if (slot === "sql") return "<!-- live SQL rows from the hosted app store mount here -->"
+  if (slot === "action") return "<!-- pipeline action button mounts here -->"
   return "<!-- viewer markdown mounts here -->"
 }
 
 function hostedSiteBodyFromParts(parts: HostedSiteHtmlParts, primary: hosted_site_widget_slot): string {
-  const hasPrimary = parts.segments.some((s) => s.kind === "slot" && s.slot === primary)
+  const hasPrimary = hostedSiteHasPrimarySlot(parts.segments, primary === "auth" ? "signin" : "app")
   const body = parts.segments
     .map((s) => {
       if (s.kind === "html") return s.html

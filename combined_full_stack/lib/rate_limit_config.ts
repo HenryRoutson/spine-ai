@@ -80,6 +80,7 @@ export function publicApiTier(pathname: string): RateLimitTier | null {
   if (/\/progress$/.test(pathname)) return "poll";
   // AI : SECURITY — resume is as expensive as a run; share the shared_run bucket.
   if (/\/client-step$/.test(pathname)) return "shared_run";
+  if (/\/sql$/.test(pathname)) return "read";
   if (/\/docs$/.test(pathname)) return "shared_upload";
   if (/\/docs\/[^/]+\/(text|file)$/.test(pathname)) return "read";
   return "public";

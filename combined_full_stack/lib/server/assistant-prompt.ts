@@ -318,6 +318,7 @@ ${listConnectActions()
   .map((a) => `  - ${a.id} — ${a.description} (params: ${a.props.map((p) => p.name).join(", ")})`)
   .join("\n")}
   After Approve, the human taps Connect {App}. Nango ids open a Slack/Google popup. ap.* ids open the CE sidecar — still no node canvas and no pasted tokens from the chat. Prefer connect over webhook for those apps. HTTP connect (http.request) is the generic hatch.
+- sql: hosted-app table statement (SELECT / UPDATE / INSERT, no JOIN). Tables come from structures (SharedNumber → shared_number). Set sql + sqlSeedRows. cached is always false — mutations are not idempotent. Host the page with {{sql:table}} + {{action}} so visitors run this step.
 - llm steps with tuple[text,quote] outputs get a Link Quotes step auto-inserted after them — do NOT emit quote steps yourself.
 - PDF/word/image/web inputs get a locked Convert to text step auto-inserted after the input (parser or OCR). Omit it from modules JSON and seeds — do NOT emit it yourself. A locked Parse to structure LLM step is auto-inserted when structureOut is not Document — do NOT emit that either.
 - transform reshapes upstream data. When a list feeds a single-object output, include a list field on that structure (prefer list[model] ref = input structure) so transform can wrap items automatically, or use custom-code.
@@ -1057,6 +1058,8 @@ export function buildProjectContextBlock(
       code: customCodeEntriesForModule(m)[0]?.code ?? m.code,
       model: m.model,
       inputMinCount: m.inputMinCount,
+      sql: m.sql,
+      sqlSeedRows: m.sqlSeedRows,
     })),
     null,
     2,

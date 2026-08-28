@@ -77,6 +77,8 @@ export function simpleKindBlurb(kind?: string): string | undefined {
       return "Waits for someone to review"
     case "webhook":
       return "Sends the result somewhere else"
+    case "sql":
+      return "Reads or writes the shared SQL table"
     case "n8n":
       return "Rearranges the previous step"
     case "connect":

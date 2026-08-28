@@ -276,7 +276,7 @@ function renderLookBody(parts: HostedSiteHtmlParts, slotClass: string): string {
   const body = parts.segments
     .map((s) => (s.kind === "html" ? s.html : `<div class="${HOSTED_SITE_SLOT_CLASS[s.slot]}"></div>`))
     .join("")
-  if (body.includes(`class="${slotClass}"`)) return body
+  if (body.includes(`class="${slotClass}"`) || body.includes("hs-action-slot") || body.includes("hs-sql-slot")) return body
   return `${body}<div class="${slotClass}"></div>`
 }
 
@@ -297,6 +297,10 @@ function collectHostedSiteLookIssues(
   const markup = `${parts.before}${parts.after}`
   const unwrapped = unwrapVibeCodedHtml(hostedSiteSourceHtml(options, surface))
   const slotCount = sanitizeHostedSiteHtml(unwrapped.html).split(slot).length - 1
+  const actionCount =
+    surface === "signin"
+      ? 0
+      : sanitizeHostedSiteHtml(unwrapped.html).split("{{action").length - 1
   const prefix = surface === "signin" ? "sign-in: " : ""
 
   if (!markup.trim()) {
@@ -311,7 +315,7 @@ function collectHostedSiteLookIssues(
   if (parts.before.includes(slot) || parts.after.includes(slot)) {
     issues.push({ level: "error", code: "run-slot-leftover", message: `${prefix}${slot} leftover after split` })
   }
-  if (slotCount === 0) {
+  if (slotCount === 0 && actionCount === 0) {
     issues.push({
       level: "warn",
       code: surface === "signin" ? "auth-slot-missing" : "run-slot-missing",
@@ -328,7 +332,14 @@ function collectHostedSiteLookIssues(
   if (leftoverTokens.length) {
     issues.push({ level: "error", code: "token-leftover", message: `${prefix}unreplaced tokens: ${leftoverTokens.join(", ")}` })
   }
-  if (!pageHtml.includes(slotClass) || !parts.css.includes(".hs-root") || !parts.css.includes(`.${slotClass}`)) {
+  const hasWorkspaceSlot =
+    pageHtml.includes(slotClass) ||
+    (surface !== "signin" && (pageHtml.includes("hs-action-slot") || pageHtml.includes("hs-sql-slot")))
+  const hasChromeCss =
+    parts.css.includes(".hs-root") &&
+    (parts.css.includes(`.${slotClass}`) ||
+      (surface !== "signin" && (parts.css.includes(".hs-action-slot") || parts.css.includes(".hs-sql-slot"))))
+  if (!hasWorkspaceSlot || !hasChromeCss) {
     issues.push({ level: "error", code: "chrome-missing", message: `${prefix}hosted chrome CSS or slot missing` })
   }
   if (!pageHtml.includes("--hs-bg") || !pageHtml.includes(options.brand.backgroundColor)) {

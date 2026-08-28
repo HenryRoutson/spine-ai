@@ -8,6 +8,8 @@ import { HostedSiteReactPreview } from "@/components/share/hosted-site-react-pre
 import { HostedSiteSlotWidgets } from "@/components/share/hosted-site-slot-widgets"
 import { DEFAULT_HOSTED_SITE_OPTIONS } from "@/lib/shared-link-types"
 import { compileHostedSiteHtml, normalizeHostedSiteOptions } from "@/lib/hosted-site"
+import { HostedSiteActionButton } from "@/components/share/hosted-site-action-button"
+import { HostedSiteSqlWidget } from "@/components/share/hosted-site-sql-widget"
 import type { HostedSiteOptions } from "@/lib/shared-link-types"
 import type { hosted_site_react_bundle } from "@/lib/hosted-site-react"
 import { clearWorkspaceClientSession } from "@/lib/clear-workspace-client-session"
@@ -46,6 +48,34 @@ export function HostedSiteViewer({
     hideDocsInRun: hasDocsSlot,
   })
   const bindings = resolveWebsitePipelineBindings(projectId, options.pipelineBindings)
+  const compiled = useMemo(() => compileHostedSiteHtml(options), [options])
+  const sqlByTable = useMemo(() => {
+    const map: Record<string, ReactNode> = {}
+    for (const seg of compiled.segments) {
+      if (seg.kind === "slot" && seg.slot === "sql" && seg.alias && !map[seg.alias]) {
+        map[seg.alias] = <HostedSiteSqlWidget key={seg.alias} linkId={linkId} table={seg.alias} />
+      }
+    }
+    return map
+  }, [compiled.segments, linkId])
+  const actionByAlias = useMemo(() => {
+    const map: Record<string, ReactNode> = {}
+    for (const seg of compiled.segments) {
+      if (seg.kind !== "slot" || seg.slot !== "action") continue
+      const alias = seg.alias || "run"
+      if (map[alias]) continue
+      const binding = bindings.find((b) => b.alias === alias)
+      map[alias] = (
+        <HostedSiteActionButton
+          key={alias}
+          linkId={linkId}
+          alias={alias === "run" ? undefined : alias}
+          label={binding ? "Double it" : "Run"}
+        />
+      )
+    }
+    return map
+  }, [bindings, compiled.segments, linkId])
   const runByAlias = useMemo(() => {
     const map: Record<string, ReactNode> = {}
     for (const binding of bindings) {
@@ -127,6 +157,8 @@ export function HostedSiteViewer({
         run: runSlot,
       }}
       runByAlias={{ ...runByAlias, run: runSlot }}
+      sqlByTable={sqlByTable}
+      actionByAlias={actionByAlias}
     />
   )
 }

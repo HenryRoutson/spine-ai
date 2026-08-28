@@ -19,6 +19,7 @@ import {
   execTransformStep,
 } from "./steps/misc";
 import { execWebhookStep } from "./steps/webhook";
+import { execSqlStep } from "./steps/sql";
 import { execN8nStep } from "./steps/n8n";
 import { execConnectStep } from "./steps/connect";
 import { execChatbotStep } from "./steps/chatbot";
@@ -65,6 +66,8 @@ export async function execModule(m: PipelineModule, ctx: RunCtx, log: RunLogger)
       return execHumanReviewStep(m, ctx, log);
     case ModuleKind.Webhook:
       return execWebhookStep(m, ctx, log);
+    case ModuleKind.Sql:
+      return execSqlStep(m, ctx, log);
     case ModuleKind.N8n:
       return execN8nStep(m, ctx, log);
     case ModuleKind.Connect:

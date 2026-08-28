@@ -53,6 +53,14 @@ describe("named run slots", () => {
       { kind: "slot", slot: "run", alias: "invoice" },
     ])
   })
+
+  it("parses {{sql:shared_number}} and {{action}}", () => {
+    const segs = splitHostedSiteSlots("{{sql:shared_number}}{{action}}")
+    expect(segs).toEqual([
+      { kind: "slot", slot: "sql", alias: "shared_number" },
+      { kind: "slot", slot: "action" },
+    ])
+  })
 })
 
 describe("html to react conversion", () => {
@@ -73,6 +81,21 @@ describe("html to react conversion", () => {
     expect(tree.css).toContain("h1{color:red}")
     expect(tree.nodes.some((n) => n.kind === "run" && n.alias === "run")).toBe(true)
     expect(tree.nodes.some((n) => n.kind === "run" && n.alias === "invoice")).toBe(true)
+  })
+
+  it("emits sql and action parts from HTML slots", () => {
+    const files = htmlSiteToReactFiles(
+      normalizeHostedSiteOptions({
+        customHtml: "{{sql:shared_number}}{{action}}",
+      }),
+    )
+    const app = files.find((f) => f.path === "src/App.tsx")?.contents ?? ""
+    expect(app).toContain('kind: "sql"')
+    expect(app).toContain("shared_number")
+    expect(app).toContain('kind: "action"')
+    const tree = parseReactPreviewTree(files)
+    expect(tree.nodes.some((n) => n.kind === "sql" && n.table === "shared_number")).toBe(true)
+    expect(tree.nodes.some((n) => n.kind === "action")).toBe(true)
   })
 })
 

@@ -39,6 +39,7 @@ import {
   exportStepLlmSchemaJson,
   exportStringLiteral,
   fallbacksFirstComment,
+  sqlStepComment,
   generateAssembleStepBodyGo,
   generateAssembleStepBodyPy,
   generateAssembleStepBodyRust,
@@ -843,6 +844,27 @@ export const STEP_BODY: Record<ModuleKind, Record<ExportLang, StepBodyEmitter>> 
     py: (ctx) => exportConnectStepBodyPy(ctx.m, ctx.outType),
     go: (ctx) => exportConnectStepBodyGo(ctx.m, goZeroValue(ctx.outType)),
     rs: (ctx) => exportConnectStepBodyRust(ctx.m),
+  },
+  [ModuleKind.Sql]: {
+    ts: (ctx) =>
+      [
+        exportComment(TS, sqlStepComment()),
+        `throw new Error(${exportStringLiteral(`SQL step requires Spine hosted SQL: ${ctx.m.sql ?? ""}`)});`,
+      ].join("\n"),
+    py: (ctx) =>
+      [
+        exportComment(PY, sqlStepComment()),
+        `raise RuntimeError(${exportStringLiteral(`SQL step requires Spine hosted SQL: ${ctx.m.sql ?? ""}`)})`,
+      ].join("\n"),
+    go: (ctx) => {
+      const zero = goZeroValue(ctx.outType);
+      return [
+        exportComment(C, sqlStepComment()),
+        `return ${zero}, fmt.Errorf(${exportStringLiteral("SQL step requires Spine hosted SQL")})`,
+      ].join("\n");
+    },
+    rs: () =>
+      [exportComment(C, sqlStepComment()), 'return Err("SQL step requires Spine hosted SQL".into());'].join("\n"),
   },
   [ModuleKind.Output]: {
     ts: (ctx) => {

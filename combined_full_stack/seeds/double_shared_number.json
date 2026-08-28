@@ -1,0 +1,117 @@
+{
+  "id": "p_double_shared_number",
+  "name": "Double Shared Number",
+  "kind": "double-number-demo",
+  "documentation": "Simplest hosted-app backend. SQL table shared_number starts at 1. The Double step runs UPDATE shared_number SET value = value * 2 WHERE id = 'global' RETURNING *. A website shows the number and a button that runs this pipeline.",
+  "models": [
+    {
+      "id": "m_trigger",
+      "name": "Trigger",
+      "description": "Dummy JSON so the button can run without a file picker.",
+      "fields": [
+        {
+          "id": "f_ping",
+          "name": "ping",
+          "type": "text",
+          "optional": false,
+          "description": "Ignored — the SQL step reads the shared table, not this payload",
+          "examples": ["double"]
+        }
+      ]
+    },
+    {
+      "id": "m_number",
+      "name": "SharedNumber",
+      "description": "The one row everyone on the hosted page sees.",
+      "fields": [
+        {
+          "id": "f_id",
+          "name": "id",
+          "type": "text",
+          "optional": false,
+          "description": "Row id — always global for this demo",
+          "relation": { "kind": "pk" },
+          "examples": ["global"]
+        },
+        {
+          "id": "f_value",
+          "name": "value",
+          "type": "int",
+          "optional": false,
+          "description": "Shared integer, starts at 1, doubled on each run",
+          "examples": ["1"]
+        }
+      ]
+    }
+  ],
+  "modules": [
+    {
+      "id": "mod_in",
+      "kind": "input",
+      "label": "Trigger",
+      "note": "JSON ping so the hosted button can run with a default file",
+      "inputType": "json",
+      "inputDescription": "Tiny JSON ping to start the run",
+      "inputNameContains": "trigger",
+      "outStructureId": "m_trigger",
+      "cached": true,
+      "avgMs": 1,
+      "avgCostCents": 0
+    },
+    {
+      "id": "mod_sql",
+      "kind": "sql",
+      "label": "Double",
+      "note": "Read the shared SQL row and double it",
+      "inputDescription": "JSON ping that starts the double — ignored by the SQL statement",
+      "inStructureId": "m_trigger",
+      "outStructureId": "m_number",
+      "sql": "UPDATE shared_number SET value = value * 2 WHERE id = 'global' RETURNING *",
+      "sqlSeedRows": [{ "id": "global", "value": 1 }],
+      "cached": false,
+      "avgMs": 5,
+      "avgCostCents": 0
+    },
+    {
+      "id": "mod_out",
+      "kind": "output",
+      "label": "Number",
+      "note": "The shared number after doubling",
+      "inputDescription": "SharedNumber row with id and value after the SQL update",
+      "inStructureId": "m_number",
+      "outStructureId": "m_number",
+      "cached": true,
+      "avgMs": 1,
+      "avgCostCents": 0
+    }
+  ],
+  "strategies": [
+    {
+      "id": "s_single",
+      "kind": "single-llm",
+      "name": "Single LLM Call",
+      "enabled": true,
+      "model": "deepseek-v4",
+      "accuracy": 99,
+      "latencyMs": 50,
+      "costCents": 0,
+      "passRate": 99
+    }
+  ],
+  "docs": [
+    {
+      "name": "trigger.json",
+      "type": "json",
+      "label": "inference",
+      "file": "double_shared_number/trigger.json"
+    }
+  ],
+  "hostedSite": {
+    "brand": {
+      "companyName": "Shared Number",
+      "tagline": "Everyone doubles the same number"
+    },
+    "customHtml": "<nav class=\"hs-nav\">\n  <div class=\"hs-nav-brand\">\n    {{logo}}\n    <span class=\"hs-nav-name\">{{company}}</span>\n  </div>\n</nav>\n<header class=\"hs-hero\">\n  <p class=\"hs-kicker\">Shared counter</p>\n  <h1 class=\"hs-title\">{{tagline}}</h1>\n  <p class=\"hs-lede\">This number lives in SQL. Anyone on this page can double it.</p>\n</header>\n<section class=\"hs-counter\" id=\"run\">\n  {{sql:shared_number}}\n  {{action}}\n</section>\n",
+    "customCss": ".hs-counter { max-width: 28rem; margin: 0 auto; padding: 2.5rem 1.25rem 4rem; text-align: center; }\n.hs-sql-widget { margin: 0 0 1.25rem; }\n.hs-sql-value { font-size: 4.5rem; font-weight: 750; letter-spacing: -0.07em; line-height: 1; }\n.hs-sql-caption { margin-top: 0.65rem; font-size: 0.85rem; color: color-mix(in srgb, var(--hs-fg) 58%, transparent); }\n.hs-action-btn { min-width: 10rem; height: 2.6rem; border: 0; border-radius: 999px; background: var(--hs-accent); color: #fff; font-weight: 600; font-size: 0.95rem; cursor: pointer; }\n.hs-action-btn:disabled { opacity: 0.6; cursor: wait; }\n"
+  }
+}

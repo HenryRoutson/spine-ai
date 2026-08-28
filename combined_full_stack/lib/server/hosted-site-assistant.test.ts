@@ -96,6 +96,27 @@ describe("hosted site UI vibe agent prompts", () => {
     expect(next.brand.companyName).toBe("Northwind")
   })
 
+  it("does not append {{run}} when the page already has {{action}}", () => {
+    const next = applyHostedSiteAssistantPatch(OPTIONS, {
+      message: "ok",
+      customHtml: "<section>{{sql:shared_number}}{{action}}</section>",
+      customCss: null,
+      companyName: null,
+      tagline: null,
+      primaryColor: null,
+      accentColor: null,
+      backgroundColor: null,
+      textColor: null,
+      hideSpineFooter: null,
+      authEnabled: null,
+      authProvider: null,
+      authHtml: null,
+      reactFilePatches: null,
+    })
+    expect(next.customHtml).toContain("{{action}}")
+    expect(next.customHtml).not.toContain(HOSTED_SITE_RUN_SLOT)
+  })
+
   it("expands 3-digit assistant colors to #rrggbb", () => {
     const next = applyHostedSiteAssistantPatch(OPTIONS, {
       message: "ok",

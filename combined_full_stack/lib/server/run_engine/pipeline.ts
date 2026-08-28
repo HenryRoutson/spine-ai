@@ -1,6 +1,6 @@
 import { join } from "node:path";
 import { invariant } from "@/lib/assert";
-import { usesPassthroughStructure } from "@/lib/module-kinds";
+import { stepNeverCaches, usesPassthroughStructure } from "@/lib/module-kinds";
 import { uid } from "../../id";
 import { finalizeRunMetrics } from "../../run-metrics";
 import {
@@ -145,6 +145,9 @@ export async function runPipeline(
     sourceText: "",
     sourceDocId: inputDocId,
     source: opts.runMeta?.source ?? RunSource.App,
+    appSqlScope: opts.runMeta?.sharedLinkId
+      ? `site:${opts.runMeta.sharedLinkId}`
+      : `project:${projectId}`,
   };
 
   const steps: RunStep[] = [];
@@ -279,6 +282,10 @@ export async function resumeRunPipeline(
   const cacheOwnerId = opts.cacheOwnerId ?? checkpoint.cacheOwnerId ?? "local";
   ctx.webhookEnv = await loadWebhookSecretEnv(cacheOwnerId);
   ctx.source = opts.runMeta?.source ?? ctx.source;
+  ctx.appSqlScope =
+    opts.runMeta?.sharedLinkId
+      ? `site:${opts.runMeta.sharedLinkId}`
+      : ctx.appSqlScope ?? `project:${checkpoint.projectId}`;
   const steps: RunStep[] = [...checkpoint.steps];
   const artifacts: { moduleId: ModuleId; structure?: StructureModel; value: unknown }[] = steps
     .filter((s) => s.status !== "error")
@@ -375,7 +382,7 @@ export async function resumeRunPipeline(
 
   const ms = Date.now() - t0;
   const costCents = ledger.totalCents() - beforeCents;
-  if (status !== "error" && m.cached && result) {
+  if (status !== "error" && m.cached && !stepNeverCaches(m.kind) && result) {
     const key = stepCacheKey(cacheOwnerId, checkpoint.projectId, m, m.model ?? model, fingerprintInputDocIds, project);
     writeStepCache(
       key,

@@ -90,6 +90,9 @@ export function invalidStepMessage(
   if (issue.kind === InvalidKind.MissingWebhookUrl) {
     return "set a webhook URL (HTTPS or env:VAR)";
   }
+  if (issue.kind === InvalidKind.MissingSql) {
+    return "set SQL (SELECT / UPDATE / INSERT on a hosted app table)";
+  }
   if (issue.kind === InvalidKind.MissingN8nNodeType) {
     return "pick a transform piece (Set, Filter, CSV, …)";
   }

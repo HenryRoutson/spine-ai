@@ -1,0 +1,102 @@
+import { describe, expect, it, beforeEach } from "vitest"
+import { resolve } from "node:path"
+import { evalSqlExpr, parseAppSql, sqlWhereMatches, tableNameForModel } from "@/lib/app-sql"
+import { execAppSql, resetAppSqlForTests } from "@/lib/server/app_sql"
+import { loadProjectSeed, SEEDS_DIR } from "@/lib/server/seed"
+import { computeInvalid, migrateProjectModules } from "@/lib/server/validity"
+import { ModuleKind } from "@/lib/types"
+import { compileHostedSiteLooksOk, normalizeHostedSiteOptions } from "@/lib/hosted-site"
+
+describe("parseAppSql", () => {
+  it("parses the double-number update", () => {
+    const stmt = parseAppSql("UPDATE shared_number SET value = value * 2 WHERE id = 'global' RETURNING *")
+    expect(stmt).toEqual({
+      kind: "update",
+      table: "shared_number",
+      set: [{ field: "value", expr: { kind: "binary", op: "*", left: { kind: "col", name: "value" }, right: { kind: "lit", value: 2 } } }],
+      where: { field: "id", value: "global" },
+      returning: true,
+    })
+  })
+
+  it("parses select star", () => {
+    expect(parseAppSql("SELECT * FROM shared_number")).toEqual({
+      kind: "select",
+      table: "shared_number",
+      columns: "*",
+      where: undefined,
+    })
+  })
+
+  it("parses insert", () => {
+    expect(parseAppSql("INSERT INTO shared_number (id, value) VALUES ('global', 1)")).toEqual({
+      kind: "insert",
+      table: "shared_number",
+      columns: ["id", "value"],
+      values: ["global", 1],
+    })
+  })
+
+  it("rejects join", () => {
+    expect(() => parseAppSql("SELECT * FROM a JOIN b ON a.id = b.id")).toThrow()
+  })
+})
+
+describe("evalSqlExpr", () => {
+  it("doubles a column", () => {
+    const stmt = parseAppSql("UPDATE shared_number SET value = value * 2 WHERE id = 'global' RETURNING *")
+    if (stmt.kind !== "update") throw new Error("expected update")
+    expect(evalSqlExpr(stmt.set[0]!.expr, { id: "global", value: 1 })).toBe(2)
+    expect(evalSqlExpr(stmt.set[0]!.expr, { id: "global", value: 2 })).toBe(4)
+  })
+
+  it("matches where on string ids", () => {
+    expect(sqlWhereMatches({ id: "global", value: 1 }, { field: "id", value: "global" })).toBe(true)
+    expect(sqlWhereMatches({ id: "other", value: 1 }, { field: "id", value: "global" })).toBe(false)
+  })
+})
+
+describe("execAppSql", () => {
+  beforeEach(() => {
+    resetAppSqlForTests()
+  })
+
+  it("seeds at 1 then doubles twice to 4", async () => {
+    const scope = "project:p_demo"
+    const seed = [{ id: "global", value: 1 }]
+    const first = await execAppSql(scope, "UPDATE shared_number SET value = value * 2 WHERE id = 'global' RETURNING *", {
+      seedRows: seed,
+    })
+    expect(first).toEqual([{ id: "global", value: 2 }])
+    const second = await execAppSql(scope, "UPDATE shared_number SET value = value * 2 WHERE id = 'global' RETURNING *", {
+      seedRows: seed,
+    })
+    expect(second).toEqual([{ id: "global", value: 4 }])
+    const listed = await execAppSql(scope, "SELECT * FROM shared_number")
+    expect(listed).toEqual([{ id: "global", value: 4 }])
+  })
+})
+
+describe("double shared number seed", () => {
+  it("loads a sql step, shared_number table, and action-only hosted page", () => {
+    const seed = loadProjectSeed(resolve(SEEDS_DIR, "double_shared_number.json"))
+    const project = migrateProjectModules(seed.project)
+    expect([...computeInvalid(project.modules, project.models).keys()]).toEqual([])
+    const sql = project.modules.find((m) => m.kind === ModuleKind.Sql)
+    expect(sql?.sql).toContain("value * 2")
+    expect(sql?.cached).toBe(false)
+    const number = project.models.find((m) => m.name === "SharedNumber")
+    expect(number).toBeTruthy()
+    expect(tableNameForModel(number!)).toBe("shared_number")
+    const html = (seed.hostedSite as { customHtml?: string } | undefined)?.customHtml ?? ""
+    expect(html).toContain("{{sql:shared_number}}")
+    expect(html).toContain("{{action}}")
+    const report = compileHostedSiteLooksOk(
+      normalizeHostedSiteOptions(seed.hostedSite as Parameters<typeof normalizeHostedSiteOptions>[0]),
+    )
+    expect(report.ok, report.issues.map((i) => `${i.level}:${i.code} ${i.message}`).join("\n")).toBe(true)
+    expect(report.pageHtml).toContain("hs-sql-slot")
+    expect(report.pageHtml).toContain("hs-action-slot")
+    expect(report.pageHtml).not.toContain('class="hs-run-slot"')
+  })
+})

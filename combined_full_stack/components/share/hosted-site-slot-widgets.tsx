@@ -4,6 +4,8 @@ import { MessagesSquare } from "lucide-react"
 import { DataViewPanel } from "@/components/data-view-panel"
 import { MarkdownView } from "@/components/highlight"
 import { SharedLinkPreview } from "@/components/share/shared-link-preview"
+import { HostedSiteActionPreview } from "@/components/share/hosted-site-action-button"
+import { HostedSiteSqlPreview } from "@/components/share/hosted-site-sql-widget"
 import { Chat, ChatBubble, ChatBubbleAvatar, ChatBubbleContent, ChatInput, ChatList, ChatMessage } from "@/components/ui/chat"
 import type { hosted_site_widget_slot } from "@/lib/hosted-site-slots"
 import type { PipelineModule } from "@/lib/types"
@@ -40,6 +42,8 @@ export function HostedSiteSlotWidgets({
     ) : (
       <p className="px-4 py-3 text-xs text-muted-foreground">Viewer docs appear here</p>
     ),
+    sql: <HostedSiteSqlPreview table="shared_number" />,
+    action: <HostedSiteActionPreview />,
   }
 }
 
