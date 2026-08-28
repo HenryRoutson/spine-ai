@@ -115,7 +115,10 @@ User request: Keep Main. Also add a second function named Hello Notes that greet
     expect(afterWrite.tools.map((t) => t.tool)).toEqual(["run_tests"]);
 
     const afterTests = JSON.parse(
-      seedLlmReply(`${schema}\n\nTurn 3/8\nTask: Convert receipts to Excel\nLast tool results:\n$ run_tests\nPASS\n`, true),
+      seedLlmReply(
+        `${schema}\n\nTurn 3/8\nTask: Convert receipts to Excel\nLast tool results:\n$ write_file pipeline.json\nwrote pipeline.json (120 chars)\n\n$ run_tests\nPASS\n`,
+        true,
+      ),
     ) as { tools: { tool: string }[] };
     expect(afterTests.tools.map((t) => t.tool)).toEqual(["done"]);
   });

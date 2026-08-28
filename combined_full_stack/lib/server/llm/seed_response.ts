@@ -326,10 +326,11 @@ function seedVibeHarnessReply(prompt: string): string | null {
   const title = named || "Notes";
   const unnamed = /\bUntitled Pipeline\b/.test(prompt);
   const payload = seedNotesProposalPayload(title, named, unnamed);
-  const wrotePipeline = /wrote pipeline\.json/i.test(prompt) || /"kind":\s*"input"/i.test(prompt);
+  // AI : do not treat the default Input step in pipeline.json as "already wrote".
+  const wrotePipeline = /wrote pipeline\.json/i.test(prompt);
   const ranTests = /\$ run_tests\b/i.test(prompt);
   const passed = /^PASS\b/m.test(prompt);
-  if (passed || (wrotePipeline && ranTests)) {
+  if (wrotePipeline && (passed || ranTests)) {
     return JSON.stringify({ tools: [{ tool: "done", message: payload.message }] });
   }
   if (wrotePipeline) {
