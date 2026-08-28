@@ -62,6 +62,13 @@ export type HostedSiteHtmlSegment =
   | { kind: "html"; html: string }
   | { kind: "slot"; slot: hosted_site_widget_slot; alias?: string }
 
+export type HostedSiteActionRowSegment = {
+  kind: "action-row"
+  slots: Array<Extract<HostedSiteHtmlSegment, { kind: "slot" }>>
+}
+
+export type HostedSiteRenderSegment = HostedSiteHtmlSegment | HostedSiteActionRowSegment
+
 export function splitHostedSiteSlots(html: string): HostedSiteHtmlSegment[] {
   const parts = html.split(SLOT_SPLIT_RE)
   const segments: HostedSiteHtmlSegment[] = []
@@ -86,6 +93,38 @@ export function splitHostedSiteSlots(html: string): HostedSiteHtmlSegment[] {
     segments.push(slot ? { kind: "slot", slot } : { kind: "html", html: part })
   }
   return segments.length > 0 ? segments : [{ kind: "html", html }]
+}
+
+// AI : {{action}} tokens split the HTML tree, so adjacent buttons must be regrouped in React.
+export function groupHostedActionSlots(segments: HostedSiteHtmlSegment[]): HostedSiteRenderSegment[] {
+  const out: HostedSiteRenderSegment[] = []
+  let i = 0
+  while (i < segments.length) {
+    const seg = segments[i]!
+    if (seg.kind === "slot" && seg.slot === "action") {
+      const slots: Array<Extract<HostedSiteHtmlSegment, { kind: "slot" }>> = [seg]
+      let j = i + 1
+      while (j < segments.length) {
+        const next = segments[j]!
+        if (next.kind === "slot" && next.slot === "action") {
+          slots.push(next)
+          j += 1
+          continue
+        }
+        if (next.kind === "html" && next.html.trim() === "") {
+          j += 1
+          continue
+        }
+        break
+      }
+      out.push(slots.length > 1 ? { kind: "action-row", slots } : slots[0]!)
+      i = j
+      continue
+    }
+    out.push(seg)
+    i += 1
+  }
+  return out
 }
 
 export function hostedSitePrimarySlot(surface: "app" | "signin"): hosted_site_widget_slot {

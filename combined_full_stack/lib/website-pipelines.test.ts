@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest"
 import { htmlSiteToReactFiles, parseReactPreviewTree } from "@/lib/hosted-site-react"
-import { splitHostedSiteSlots } from "@/lib/hosted-site-slots"
+import { groupHostedActionSlots, splitHostedSiteSlots } from "@/lib/hosted-site-slots"
 import { normalizeHostedSiteOptions } from "@/lib/hosted-site"
 import {
   bindingsFromProjectIds,
@@ -67,6 +67,21 @@ describe("named run slots", () => {
     expect(segs).toEqual([
       { kind: "slot", slot: "action" },
       { kind: "slot", slot: "action", alias: "collatz" },
+    ])
+  })
+
+  it("groups adjacent action slots into a centered row", () => {
+    const segs = splitHostedSiteSlots("<div class=\"hs-action-row\">{{action}}\n    {{action:collatz}}</div>")
+    expect(groupHostedActionSlots(segs)).toEqual([
+      { kind: "html", html: "<div class=\"hs-action-row\">" },
+      {
+        kind: "action-row",
+        slots: [
+          { kind: "slot", slot: "action" },
+          { kind: "slot", slot: "action", alias: "collatz" },
+        ],
+      },
+      { kind: "html", html: "</div>" },
     ])
   })
 })
