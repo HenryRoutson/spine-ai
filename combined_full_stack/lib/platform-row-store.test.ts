@@ -6,6 +6,7 @@ import {
   emptyRowData,
   removeStructureRow,
   rowsForModel,
+  rowsStoreForProject,
   updateStructureRow,
 } from "@/lib/platform-row-store"
 import { feedRowJson } from "@/lib/platform-feed"
@@ -36,6 +37,14 @@ describe("structure row store", () => {
     expect(rowsForModel(patched, model.id)[0]?.data.name).toBe("Grace")
     const removed = removeStructureRow(patched, model.id, added.row.id)
     expect(rowsForModel(removed, model.id)).toHaveLength(0)
+  })
+
+  it("prefers project.structureRows over an empty local cache", () => {
+    const store = rowsStoreForProject({
+      id: "p_1" as import("@/lib/types").ProjectId,
+      structureRows: { [model.id]: [] },
+    })
+    expect(store[model.id]).toEqual([])
   })
 })
 

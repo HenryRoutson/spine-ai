@@ -577,7 +577,7 @@ Grep an id (example): `rg 'project.add' combined_full_stack docs mcp_tool`.
 | `nav.window.testing` | Testing | Ink: press 3 | POST /api/runs (testing) + POST /api/testing-evaluate | run_test / validate_test | session.runTest(testDocName) |
 | `nav.window.inference` | Inference | Ink: press 4 | POST /api/runs | start_run | session.startRun() |
 | `nav.window.schedule` | Schedule | Ink: press 5 | POST /api/schedules | session_action id=nav.window.schedule lists; schedule.create mints | HTTP /api/schedules via session.createSchedule |
-| `nav.window.backend` | Data | Ink: press k | GET /api/state?projectId= | session_action id=nav.window.backend → get_project [P] | session.getSnapshot() / setActiveWindow backend |
+| `nav.window.backend` | Functions | Ink: press k | GET /api/state?projectId= | session_action id=nav.window.backend → get_project [P] | session.getSnapshot() / setActiveWindow backend |
 | `nav.window.share` | Share | Ink: press 6 | POST /api/shared-links | session_action id=nav.window.share lists; share.create-* mints | session.createShareLink / listShareLinks |
 | `nav.window.earnings` | Earnings | Ink: press 7 | GET /api/earnings | session_action id=earnings.refresh [P] | session.refreshEarnings() |
 | `nav.window.logging` | Logging | Ink: press 8 | GET /api/runs | session_logs | toLogsView(session.getSnapshot()) |
@@ -692,7 +692,11 @@ Grep an id (example): `rg 'project.add' combined_full_stack docs mcp_tool`.
 | `platform.backend-tab.ports` | Connections | Ink: press k (backend tab) | local panel [n/a] | local panel [n/a] | setActiveWindow('backend') |
 | `platform.backend-tab.tables` | Rows | Ink: press k (backend tab) | local panel [n/a] | local panel [n/a] | setActiveWindow('backend') |
 | `platform.backend-tab.run` | Run | Ink: press k then i for inference | POST /api/runs | start_run | session.startRun() |
-| `platform.table-select` | Select table | TUI backend lists tables only [N] | localStorage row store [n/a] | localStorage row store [n/a] | readProjectRows / writeProjectRows |
-| `platform.table-add-row` | Add record | TUI backend lists tables only [N] | localStorage row store [n/a] | localStorage row store [n/a] | addStructureRow |
+| `platform.table-select` | Select table | TUI backend lists tables only [N] | PUT /api/projects/:id structureRows | rows persist on the project [n/a] | patchProject({ structureRows }) / rowsStoreForProject |
+| `platform.table-add-row` | Add record | TUI backend lists tables only [N] | PUT /api/projects/:id structureRows | rows persist on the project [n/a] | addStructureRow |
 | `platform.feed-row` | Send to | TUI has no Feed → input yet [N] | POST /api/docs then POST /api/runs | session_action id=inference.assign-input [P] | session.addDocContent + setInferenceInputDocIds |
+| `pipeline.function-select` | Function | TUI edits project.modules as the active function [N] | PUT /api/projects/:id functions + modules | session_action + patch_project [P] | session.setActiveFunction(id) |
+| `pipeline.function-add` | Function | TUI has no add-function command yet [N] | PUT /api/projects/:id functions + modules | session_action + patch_project [P] | session.addPipelineFunction(name) |
+| `structure.open-function` | Used by | TUI lists structures only [N] | local navigation [n/a] | local navigation [n/a] | openPipeline(moduleId) / setActiveFunction |
+| `structure.view-sql` | View SQL | TUI backend lists tables only [N] | local schema preview [n/a] | local schema preview [n/a] | setView('code') + allModelsToSql |
 | `platform.pay-slot` | Continue to pay | hosted HTML only [N] | share funding mode [n/a] | share funding mode [n/a] | HostedPaySlot on {{pay}} [host] |

@@ -42,10 +42,10 @@ export {}
 // AI : DONE (platform-P4-share-wire) — SharePage simple + full Publish include the hub
 
 // ---------------------------------------------------------------------------
-// P5 — Data tab (tables & rows; pipeline Vibe + website Building)
+// P5 — Data tab (removed)
 // ---------------------------------------------------------------------------
-// AI : DONE (platform-P5-backend-tab) — AppWindowId.Backend labeled Data + components/platform/backend-workspace.tsx
-// AI : Schema / Connections / Rows / Run — send a typed record into a compatible pipeline input
+// AI : DONE (platform-P5-no-data-tab) — GUI nav has no Data tab; SQL + rows + function links live on Structures
+// AI : AppWindowId.Backend remains TUI/deep-link (k); GUI remaps to Structures
 
 // ---------------------------------------------------------------------------
 // P6 — Persist build surface preference
@@ -56,7 +56,7 @@ export {}
 // ---------------------------------------------------------------------------
 // P7 — Per-site Supabase (BYO, not allocated)
 // ---------------------------------------------------------------------------
-// AI : DONE (platform-P7-supabase-byo) — schema pack + URL/key validation on the Data Schema tab
+// AI : DONE (platform-P7-supabase-byo) — schema pack + URL/key validation (Structures SQL / TUI backend)
 // AI : TODO (platform-P7-supabase-alloc) — allocate isolated Supabase project per hosted site
 
 // ---------------------------------------------------------------------------
@@ -82,3 +82,15 @@ export {}
 // ---------------------------------------------------------------------------
 // AI : DONE (platform-P11-compiler) — lib/spine-in-spine.ts compiles an AppBlueprint → schema + website + share copy
 // AI : DONE (platform-P11-seed) — seeds/spine_in_spine.json is Spine described as a typed app
+
+// ---------------------------------------------------------------------------
+// P12 — Multiple functions per project
+// ---------------------------------------------------------------------------
+// AI : DONE (platform-P12-functions) — Project.functions + activeFunctionId; PipelineFunctionSelect
+// AI : DONE (platform-P12-vibe-select) — Vibe observe chrome selects which function to run
+
+// ---------------------------------------------------------------------------
+// P13 — Rows on projects.data
+// ---------------------------------------------------------------------------
+// AI : DONE (platform-P13-structure-rows) — Project.structureRows persisted via PUT /api/projects
+// AI : localStorage backend-rows:* migrates once into projects.data jsonb

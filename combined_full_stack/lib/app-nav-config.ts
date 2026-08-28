@@ -18,7 +18,6 @@ import {
   Settings2,
   Clock,
   KeyRound,
-  PanelLeft,
 } from "lucide-react"
 import { SpineNavIcon } from "@/components/spine-mark"
 import { AppWindowId } from "@/lib/app-window-id"
@@ -77,7 +76,6 @@ export type BuildStepConfig = {
 
 export const BUILD_STEPS: BuildStepConfig[] = [
   { id: BuildStepId.Structure, label: "Structure", hint: windowNavHint(BuildStepId.Structure), icon: Boxes },
-  { id: BuildStepId.Backend, label: "Data", hint: windowNavHint(BuildStepId.Backend), icon: PanelLeft },
   { id: BuildStepId.Pipeline, label: "Pipeline", hint: windowNavHint(BuildStepId.Pipeline), icon: SpineNavIcon },
   { id: BuildStepId.Testing, label: "Testing", hint: windowNavHint(BuildStepId.Testing), icon: SquareCheck },
   { id: BuildStepId.Inference, label: "Inference", hint: windowNavHint(BuildStepId.Inference), icon: Play },
@@ -85,6 +83,18 @@ export const BUILD_STEPS: BuildStepConfig[] = [
 ]
 
 export const BUILD_STEP_IDS = new Set<BuildStepId>(BUILD_STEPS.map((s) => s.id))
+
+export const PIPELINE_FUNCTION_WINDOWS: AppWindowId[] = [
+  AppWindowId.Structure,
+  AppWindowId.Pipeline,
+  AppWindowId.Testing,
+  AppWindowId.Inference,
+  AppWindowId.Schedule,
+]
+
+export function showsPipelineFunctionSelect(window: AppWindowId): boolean {
+  return PIPELINE_FUNCTION_WINDOWS.includes(window)
+}
 
 const BUILDER_AREA_ICONS: Record<BuilderAreaId, NavIcon> = {
   [AppArea.Build]: Hammer,
@@ -144,7 +154,6 @@ export const AREA_SUB_NAV: Partial<Record<AppArea, AppNavItem[]>> = {
 // AI : legacy flat list — kept for validity helpers and deep links
 export const BUILDER_NAV_ITEMS: AppNavItem[] = [
   { id: AppWindowId.Structure, label: "Structures", hint: windowNavHint(AppWindowId.Structure), icon: Boxes },
-  { id: AppWindowId.Backend, label: "Data", hint: windowNavHint(AppWindowId.Backend), icon: PanelLeft },
   { id: AppWindowId.Pipeline, label: "Pipeline", hint: windowNavHint(AppWindowId.Pipeline), icon: SpineNavIcon },
   { id: AppWindowId.Testing, label: "Testing", hint: windowNavHint(AppWindowId.Testing), icon: SquareCheck },
   { id: AppWindowId.Inference, label: "Inference", hint: windowNavHint(AppWindowId.Inference), icon: Play },
@@ -174,7 +183,6 @@ export const BUILDER_PANEL_IDS: AppWindowId[] = Object.values(AppWindowId)
 // AI : Vibe right pane — observe-only (run / share / logs); chat owns project edits.
 export const VIBE_OBSERVE_WINDOW_IDS = [
   AppWindowId.Inference,
-  AppWindowId.Backend,
   AppWindowId.Schedule,
   AppWindowId.Share,
   AppWindowId.Logging,

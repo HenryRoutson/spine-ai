@@ -54,8 +54,7 @@ export function BackendWorkspace({
         <div>
           <h3 className="text-sm font-semibold">Tables & data</h3>
           <p className="mt-0.5 text-xs text-muted-foreground">
-            The database for this project — table shapes, stored records, and which pipeline step can read them.
-            The Pipeline tab is the compute; websites share these rows.
+          The database for this project. GUI users: Structures owns SQL and rows; Pipeline owns functions.
           </p>
         </div>
 

@@ -1,23 +1,12 @@
 "use client"
 
-import { BackendWorkspace } from "@/components/platform/backend-workspace"
-import { useAppShell } from "@/lib/app-shell"
+import { Inference } from "@/components/inference"
 
-// AI : website Building → Data — same tables/rows workspace as the pipeline Data tab.
+// AI : website Building → run a bound function (not a duplicate schema studio).
 export function WebsiteBackendPeek() {
-  const { editingWebsite, patchEditingWebsite } = useAppShell()
   return (
-    <BackendWorkspace
-      siteAuth={editingWebsite?.siteOptions.auth}
-      onSiteAuthChange={
-        editingWebsite
-          ? (auth) =>
-              patchEditingWebsite({
-                ...editingWebsite,
-                siteOptions: { ...editingWebsite.siteOptions, auth },
-              })
-          : undefined
-      }
-    />
+    <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+      <Inference simple />
+    </div>
   )
 }

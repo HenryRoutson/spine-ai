@@ -14,7 +14,7 @@ import { clearWorkspaceClientSession } from "@/lib/clear-workspace-client-sessio
 import { useSupabaseSession } from "@/lib/use-supabase-session"
 import { resolveWebsitePipelineBindings } from "@/lib/website-pipelines"
 import { hostedTableSlotsForProject } from "@/components/platform/hosted-table-slot"
-import type { ProjectId, StructureModel } from "@/lib/types"
+import type { Project, ProjectId, StructureModel } from "@/lib/types"
 import type { ReactNode } from "react"
 
 export function HostedSiteViewer({
@@ -25,6 +25,7 @@ export function HostedSiteViewer({
   reactBundle,
   reactCompileError,
   models = [],
+  structureRows,
 }: {
   linkId: string
   siteOptions?: HostedSiteOptions | null
@@ -33,6 +34,7 @@ export function HostedSiteViewer({
   reactBundle?: hosted_site_react_bundle | null
   reactCompileError?: string | null
   models?: StructureModel[]
+  structureRows?: Project["structureRows"]
 }) {
   const options = normalizeHostedSiteOptions(siteOptions ?? DEFAULT_HOSTED_SITE_OPTIONS)
   const { email, isAuthenticated, signOut } = useSupabaseSession()
@@ -70,8 +72,8 @@ export function HostedSiteViewer({
     return map
   }, [bindings, hasDocsSlot, linkId])
   const tableByAlias = useMemo(
-    () => hostedTableSlotsForProject({ id: projectId, models }),
-    [projectId, models],
+    () => hostedTableSlotsForProject({ id: projectId, models, structureRows }),
+    [projectId, models, structureRows],
   )
 
   const accountBar =

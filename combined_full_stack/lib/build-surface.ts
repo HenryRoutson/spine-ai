@@ -3,7 +3,7 @@ import { isVibeWindow } from "@/lib/app-nav-config"
 import { APP_PRIMARY_SECTION_NAV, AppPrimarySection } from "@/lib/app-primary-section-labels"
 
 // AI : Build L0 sub-decision — Vibe (agent) vs Build (visual editors); share one selector.
-// AI : On a website, Editors is page code (or the Data tab when developer tools are hidden), not Structure.
+// AI : On a website, Editors is page code (or Run when developer tools are hidden), not Structure.
 export enum BuildSurface {
   Vibe = "vibe",
   Editors = "editors",

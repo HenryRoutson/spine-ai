@@ -56,6 +56,7 @@ import {
 import { API_ROUTES } from "@/lib/api-routes"
 import { migrateProjectModules } from "@/lib/quote-steps"
 import { authoredPipelineModules, syncManagedPipelineSteps } from "@/lib/structure-parse-steps"
+import { functionsOnProject } from "@/lib/pipeline-functions"
 import { stripSharedModels, stripBuiltinTypeAliases, withBuiltinTypeAliases, withSharedModels } from "@/lib/structure"
 import { mergeInferredStructuresForDoc, modelsChanged } from "@/lib/sync-doc-structures"
 import { docTextContent, fetchDocText, invalidateDocText } from "@/lib/doc-text-cache"
@@ -184,6 +185,15 @@ function serializeProjectPutBody(p: Project): string {
     llmProviders: p.llmProviders,
     documentation: p.documentation,
     langfuseExport: p.langfuseExport,
+    functions: p.functions?.length
+      ? functionsOnProject(p).map((fn) => ({
+          id: fn.id,
+          name: fn.name,
+          modules: authoredPipelineModules(fn.modules),
+        }))
+      : undefined,
+    activeFunctionId: p.activeFunctionId,
+    structureRows: p.structureRows,
   })
 }
 
@@ -274,6 +284,8 @@ interface StoreState {
   setTypeAliases: (t: TypeAlias[] | ((prev: TypeAlias[]) => TypeAlias[])) => void
   modules: PipelineModule[]
   setModules: (m: PipelineModule[]) => void
+  setActiveFunction: (id: import("@/lib/types").pipeline_function_id) => void
+  addPipelineFunction: (name?: string) => void
   // AI : atomic models+modules patch — avoids stale closure when assistant changes both at once
   applyProjectChanges: (changes: {
     models?: StructureModel[]
@@ -1598,6 +1610,14 @@ export function StoreProvider({
     spineSessionRef.current?.setModules(m)
   }, [])
 
+  const setActiveFunction = useCallback((id: import("@/lib/types").pipeline_function_id) => {
+    spineSessionRef.current?.setActiveFunction(id)
+  }, [])
+
+  const addPipelineFunction = useCallback((name?: string) => {
+    spineSessionRef.current?.addPipelineFunction(name)
+  }, [])
+
   const applyProjectChanges = useCallback(
     (changes: {
       models?: StructureModel[]
@@ -1650,6 +1670,8 @@ export function StoreProvider({
       setTypeAliases,
       modules,
       setModules,
+      setActiveFunction,
+      addPipelineFunction,
       applyProjectChanges,
       strategies: project.strategies,
       setStrategies,
@@ -1694,6 +1716,8 @@ export function StoreProvider({
     setModels,
     setTypeAliases,
     setModules,
+    setActiveFunction,
+    addPipelineFunction,
     applyProjectChanges,
     setStrategies,
     setDocumentation,

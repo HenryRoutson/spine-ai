@@ -12,14 +12,13 @@ export enum AppArea {
 export type BuilderAreaId = Exclude<AppArea, AppArea.Run>
 
 export const BUILDER_AREA_WINDOWS: Record<BuilderAreaId, readonly AppWindowId[]> = {
-  // AI : Data (id backend) sits next to Structures — tables/rows, not the pipeline compute.
   [AppArea.Build]: [
     AppWindowId.Structure,
-    AppWindowId.Backend,
     AppWindowId.Pipeline,
     AppWindowId.Testing,
     AppWindowId.Inference,
     AppWindowId.Schedule,
+    AppWindowId.Backend,
     AppWindowId.Vibe,
   ],
   [AppArea.Deploy]: [AppWindowId.Share, AppWindowId.Earnings],

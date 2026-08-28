@@ -339,7 +339,7 @@ const TUI_TAB_EMPTY: Record<TuiTab, string> = {
   billing: "no account — session pull / SPINE_API_URL",
   settings: "default model",
   vibe: "no chat yet — press a to ask vibe",
-  backend: "no records — add structures, then store rows and send one into a matching pipeline step",
+  backend: "no records — types and rows live on Structures; functions live on Pipeline",
 }
 
 const TUI_TAB_DESCRIPTION_OVERRIDE: Partial<Record<TuiTab, string>> = {

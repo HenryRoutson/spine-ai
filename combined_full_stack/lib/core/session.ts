@@ -11,6 +11,7 @@ import type {
   DocId,
   DocRef,
   ModuleId,
+  PipelineFunction,
   PipelineModule,
   PipelineRun,
   Project,
@@ -19,7 +20,9 @@ import type {
   Strategy,
   StructureModel,
   TypeAlias,
+  pipeline_function_id,
 } from "@/lib/types"
+import { addPipelineFunction, switchActiveFunction } from "@/lib/pipeline-functions"
 import {
   attachRealtimePort,
   overlayOptimisticProjects,
@@ -420,6 +423,18 @@ export class SpineSession {
   setModules(m: PipelineModule[]): void {
     const project = this.requireProject()
     this.patchProject(modulesPatchWithSync(project, m, this.snap.model))
+  }
+
+  setActiveFunction(id: pipeline_function_id): void {
+    const project = this.requireProject()
+    this.patchProject(switchActiveFunction(project, id))
+  }
+
+  addPipelineFunction(name?: string): PipelineFunction {
+    const project = this.requireProject()
+    const patch = addPipelineFunction(project, name)
+    this.patchProject(patch)
+    return patch.functions![patch.functions!.length - 1]!
   }
 
   applyProjectChanges(changes: ProjectPatch): void {

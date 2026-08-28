@@ -2,7 +2,7 @@
 
 import type { ReactNode } from "react"
 import { Table2 } from "lucide-react"
-import { readProjectRows, rowsForModel, type project_row_store } from "@/lib/platform-row-store"
+import { rowsForModel, rowsStoreForProject, type project_row_store } from "@/lib/platform-row-store"
 import { friendlyFieldName } from "@/lib/platform-row-fields"
 import type { Project, StructureModel } from "@/lib/types"
 
@@ -34,7 +34,7 @@ export function HostedTableSlot({
       </div>
       {rows.length === 0 ? (
         <p className="px-3 py-4 text-center text-xs text-muted-foreground">
-          No rows yet — add them on Data → Rows, then this page updates.
+          No rows yet — add them on this structure in Structures.
         </p>
       ) : (
         <div className="max-h-64 overflow-auto">
@@ -66,8 +66,10 @@ export function HostedTableSlot({
   )
 }
 
-export function hostedTableSlotsForProject(project: Pick<Project, "id" | "models">): Record<string, ReactNode> {
-  const store = readProjectRows(project.id)
+export function hostedTableSlotsForProject(
+  project: Pick<Project, "id" | "models" | "structureRows">,
+): Record<string, ReactNode> {
+  const store = rowsStoreForProject(project)
   const out: Record<string, ReactNode> = {}
   for (const model of project.models.filter((m) => !m.auto)) {
     out[model.name] = <HostedTableSlot key={model.id} model={model} store={store} />

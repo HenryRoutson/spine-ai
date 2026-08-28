@@ -16,7 +16,7 @@ import {
 import { openLlmProvidersSettings, scrollToSettingsSection } from "@/lib/settings-nav"
 import type { SharedRunDocScope } from "@/lib/shared-run-doc-scope"
 import type { SharedLinkRecord } from "@/lib/shared-link-types"
-import type { DocId, StructureModelId } from "@/lib/types"
+import type { DocId, ModuleId, StructureModelId } from "@/lib/types"
 import { AppWindowId as AppWindow } from "@/lib/app-window-id"
 import { readHideDeveloperTools } from "@/lib/developer-tools-settings"
 import { readBuildSurfacePreference, writeBuildSurfacePreference } from "@/lib/build-surface-persist"
@@ -60,6 +60,9 @@ interface AppShellState {
   focusStructureId: StructureModelId | null
   openStructure: (structureId?: StructureModelId) => void
   clearFocusStructure: () => void
+  focusModuleId: ModuleId | null
+  openPipeline: (moduleId?: ModuleId) => void
+  clearFocusModule: () => void
   activeSharedLinkId: string | null
   openSharedRun: (linkId: string) => void
   clearSharedRun: () => void
@@ -90,15 +93,18 @@ export function AppShellProvider({ children }: { children: ReactNode }) {
     return windowForBuildSurface(readBuildSurfacePreference())
   })
   const setActiveWindow = useCallback((window: WindowId) => {
-    setActiveWindowState(window)
-    if (window === AppWindow.Vibe) writeBuildSurfacePreference(BuildSurface.Vibe)
-    else if (!isAccountWindow(window)) writeBuildSurfacePreference(BuildSurface.Editors)
+    // AI : GUI has no Data tab — Backend is TUI/deep-link only; Structures owns SQL + rows.
+    const next = window === AppWindow.Backend ? AppWindow.Structure : window
+    setActiveWindowState(next)
+    if (next === AppWindow.Vibe) writeBuildSurfacePreference(BuildSurface.Vibe)
+    else if (!isAccountWindow(next)) writeBuildSurfacePreference(BuildSurface.Editors)
   }, [])
   const [focusDocId, setFocusDocId] = useState<DocId | null>(null)
   const [focusRunId, setFocusRunId] = useState<string | null>(null)
   const [focusRunAnchor, setFocusRunAnchor] = useState<LoggingFocusAnchor | null>(null)
   const [vibeObserveTab, setVibeObserveTab] = useState<VibeObserveTab>(AppWindow.Inference)
   const [focusStructureId, setFocusStructureId] = useState<StructureModelId | null>(null)
+  const [focusModuleId, setFocusModuleId] = useState<ModuleId | null>(null)
   const [activeSharedLinkId, setActiveSharedLinkId] = useState<string | null>(null)
   const [sharedRunDocScope, setSharedRunDocScope] = useState<SharedRunDocScope | null>(null)
   const [pendingLlmProvidersOpen, setPendingLlmProvidersOpen] = useState(false)
@@ -163,6 +169,13 @@ export function AppShellProvider({ children }: { children: ReactNode }) {
   }, [])
 
   const clearFocusStructure = useCallback(() => setFocusStructureId(null), [])
+
+  const openPipeline = useCallback((moduleId?: ModuleId) => {
+    setFocusModuleId(moduleId ?? null)
+    setActiveWindow(AppWindow.Pipeline)
+  }, [])
+
+  const clearFocusModule = useCallback(() => setFocusModuleId(null), [])
 
   const clearPendingLlmProvidersOpen = useCallback(() => setPendingLlmProvidersOpen(false), [])
 
@@ -234,6 +247,9 @@ export function AppShellProvider({ children }: { children: ReactNode }) {
         focusStructureId,
         openStructure,
         clearFocusStructure,
+        focusModuleId,
+        openPipeline,
+        clearFocusModule,
         activeSharedLinkId,
         openSharedRun,
         clearSharedRun,

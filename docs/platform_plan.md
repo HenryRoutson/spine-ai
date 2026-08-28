@@ -1,76 +1,76 @@
 # Unified Vibe Coding Platform
 
-Spine is a meta platform where non-technical users vibe-code websites and apps, while technical users describe typed databases, pipelines, and APIs — then mix and match them with type-checked connections.
+Spine is a meta platform where non-technical users vibe-code websites, while technical users describe typed storage and functions — then mix and match them. Types are not a second schema: a Structure is both the pydantic model and the SQL table.
 
-## Architecture
+## What a development group is
+
+A **project** is a group of **functions** (pipelines) that share one set of **structures** (types = SQL) and one **row store**. Websites bind to those functions many-to-many.
 
 ```
-┌─────────────────────────────────────────────────────────────────┐
-│                     Vibe Coding Platform                        │
-├──────────────┬──────────────┬──────────────┬────────────────────┤
-│   Vibe Chat  │  Page Studio │  Data tab    │   One-Click Share  │
-│  (agent)     │  (Lovable)   │  (tables)    │  (link/site/API)   │
-├──────────────┴──────────────┴──────────────┴────────────────────┤
-│                    Typed Port Layer                              │
-│  Structure models ↔ Pipeline inputs/outputs (type-checked)      │
-├─────────────────────────────────────────────────────────────────┤
-│                    SpineSession (shared core)                    │
-│  Project + PipelineModule + TypeExpr + run_engine               │
-├─────────────────────────────────────────────────────────────────┤
-│                    Supabase (persistence)                        │
-│  projects, docs, runs, shared_links, billing                    │
-└─────────────────────────────────────────────────────────────────┘
+Project (shared types + storage)
+├── Structures     type = CREATE TABLE. No pydantic↔SQL linking.
+├── Functions[]    each function is a pipeline spine (the backend you build)
+├── Rows           JSON in projects.data today; dedicated SQL tables later
+└── Websites *──n  hosted pages bind any functions from any project
 ```
 
-## Surfaces
+Do **not** add a Data tab that duplicates Structures. SQL preview and stored rows live on Structures. The Pipeline tab is where you build a function. Vibe runs a selected function.
 
-| Surface | User | What they do |
-|---------|------|--------------|
-| **Vibe** | Everyone | Chat to build — agent creates structures, pipelines, pages |
-| **Page Studio** | Non-technical | Edit hosted HTML/React, brand, preview live |
-| **Data tab** | Semi-technical | Edit tables and rows, connect them to pipeline steps, test a run |
-| **Building** | Technical | Structure, Pipeline, Testing editors |
-| **Share hub** | Everyone | One-click publish website + pipeline + API |
+## Surfaces (now)
 
-## Key concepts
+| Surface | Role |
+|---------|------|
+| **Vibe** | Chat to build. Pick which function to run (inference). |
+| **Structures** | Author types. View SQL. See which functions use a type. Edit stored rows. |
+| **Pipeline** | Build the selected function (steps). This is the backend editor. |
+| **Testing / Inference / Schedule** | Operate the selected function. |
+| **Page studio** | Hosted websites. Bind many functions. |
+| **Share** | Mine / shared with me / marketplace — pipelines today; websites already; storage later. |
 
-### Typed ports
+## Mix and match
 
-Every pipeline step has typed inputs and outputs (`TypeExpr`). Structure models are typed data shapes. The platform checks whether a structure can feed a pipeline input before you connect them — click a compatible port and it wires automatically.
+- **Structures ↔ functions:** a structure is attached when a step’s `inStructureId` / `outStructureId` / type expr names it. Click the chip → open that step. No manual “wire pydantic to SQL”.
+- **Functions ↔ websites:** `HostedSiteOptions.pipelineBindings` (already many projects per site).
+- **Functions ↔ storage:** rows keyed by structure, shared by every function in the project.
+- **Type drift across groups:** keep groups small. Unifying two projects’ types (diff, rename, merge) is later — grouping development is the way we avoid that.
 
-### Auto-generated upload UI
+## Storage plan
 
-Pipeline input modules (PDF, Excel, JSON, etc.) auto-generate file upload forms. These embed into hosted website run slots so the Lovable-style frontend has working upload UI without manual coding.
+**Now:** persist rows on `Project.structureRows` (Postgres `projects.data` jsonb). Same SQL store as the pipeline. Hosted `{{table:Model}}` reads that blob.
 
-### Shared backend logic
+**Next:** `public.structure_rows` with RLS, queryable per model, not bloating project JSON.
 
-Multiple frontends (websites) can bind to the same pipeline backend. Database schema (`schema.sql`) is derived from structure models and shared across all bound pipelines.
+**Later:** isolated Supabase per hosted site; marketplace listings for a storage pack; live SQL instead of JSON maps at run time (`allModelsToSql` is still an annotation until the run engine reads tables).
 
-### One-click share
+## Share / marketplace (later)
 
-Publish everything at once: hosted website (`/site/{id}`), run link (`/run/{id}`), and hosted API — from a single hub.
+Three catalogs with the same chrome (mine / shared with me / marketplace):
+
+1. **Functions** — today’s pipeline share links + hosted APIs
+2. **Websites** — hosted sites
+3. **Storage** — a project’s structures + rows as a bindable backend
 
 ## Implementation phases
 
-See `combined_full_stack/lib/server/platform-roadmap.ts` for tracked TODOs.
+See `combined_full_stack/lib/server/platform-roadmap.ts`.
 
 | Phase | Scope | Status |
 |-------|-------|--------|
-| P0 | Platform plan + roadmap TODOs | Done |
-| P1 | Type-checked ports library + UI | Done |
-| P2 | Supabase backend panel (schema + state) | Done |
-| P3 | Auto-generated upload frontend in exports | Done |
-| P4 | Platform share hub (one-click) | Done |
-| P5 | Data tab in website + pipeline workspace | Done |
-| P6 | Persist build surface preference | Done |
-| P7 | Per-site Supabase provisioning | BYO keys done; isolated alloc later |
-| P8 | `{{pay}}` / `{{table:Model}}` slots | Done |
-| P9 | IDE/repo bridge (CLI sync + embed routes) | Planned |
-| P10 | Async Store for serverless | Planned |
+| P0–P4, P6, P8, P11 | Share hub, upload UI, slots, Spine-in-Spine | Done |
+| P5 | Data tab — **removed**. SQL + rows + function links live on Structures | This revision |
+| P12 | Multiple functions per project + selector + Vibe inference picker | This revision |
+| P13 | Rows on `projects.data` jsonb | This revision |
+| P7 | Isolated Supabase alloc | Later |
+| P9 | IDE/repo sync | Later |
+| P10 | Async Store | Later |
+| P14 | `structure_rows` table + RLS | Later |
+| P15 | Share chrome for storage packs | Later |
+| P16 | Unify/merge types across projects | Later |
 
 ## Principles
 
 - **Extend, don't rebuild** — Vibe panel, ShareSiteForm, PipelineExportDialog, SpineSession
-- **Website ≠ Project** — websites are `site_` shared links with pipeline bindings
-- **Types are the contract** — `TypeExpr` IR is the single source of truth
-- **Non-technical default** — Vibe surface first; Building editors behind developer tools toggle
+- **One type system** — StructureModel is the SQL table and the pydantic class
+- **Pipeline tab = backend** — functions, not a separate schema studio
+- **Project = group of functions** sharing types; website = mix of functions
+- **Non-technical default** — Vibe first; Building editors behind developer tools

@@ -82,7 +82,7 @@ function numberedStepLabels(): Record<AppWindowStepKey, string> {
 export const AppWindowStepLabel = {
   ...numberedStepLabels(),
   Vibe: "· / Vibe",
-  Backend: "· / Data",
+  Backend: "· / Function",
   Billing: "· / Billing",
   Settings: "· / Settings",
   Run: `${padAppWindowStep(AppWindowStep.Structure)} / Run`,
@@ -107,7 +107,7 @@ export enum AppWindowTitle {
   ProjectBilling = "Project spend",
   ProjectSettings = "Project settings",
   Vibe = "Vibe",
-  Backend = "Tables & data",
+  Backend = "Functions (TUI)",
   Billing = "Account billing",
   Settings = "Settings",
   Earnings = "Earnings account",
@@ -173,12 +173,12 @@ const BUILDER_WINDOW_HEADERS: Record<AppWindowId, WindowHeaderCopy> = {
   structure: {
     step: AppWindowStepLabel.Structure,
     title: AppWindowTitle.Structure,
-    description: "Define the pydantic models your LLM must output to. Schema validation is implicit on every step's I/O.",
+    description: "Shared types for this project — each structure is a SQL table. View SQL, stored rows, and which functions use the type.",
   },
   pipeline: {
     step: AppWindowStepLabel.Pipeline,
     title: AppWindowTitle.Pipeline,
-    description: "Each step declares its input and output model. Mismatched I/O is flagged — there is no explicit validation step.",
+    description: "Build the selected function. Every function in the project shares these structures; mismatched I/O is flagged on the step.",
   },
   testing: {
     step: AppWindowStepLabel.Testing,
@@ -244,13 +244,13 @@ const BUILDER_WINDOW_HEADERS: Record<AppWindowId, WindowHeaderCopy> = {
   vibe: {
     step: AppWindowStepLabel.Vibe,
     title: AppWindowTitle.Vibe,
-    description: "Talk to the agent to build the full project — structures, pipeline, docs, and run. Inference, Data, Schedule, Share, and Logging sit on the right.",
+    description: "Talk to the agent to build the project — shared structures, functions, docs, and run. Pick which function to infer on the right.",
   },
   backend: {
     step: AppWindowStepLabel.Backend,
     title: AppWindowTitle.Backend,
     description:
-      "Tables and rows shared by every website on this project. The pipeline is compute — this tab is the data those steps read and write.",
+      "TUI list of structures in this project. In the GUI, types, SQL, and rows live on Structures; functions live on Pipeline.",
   },
   billing: {
     step: AppWindowStepLabel.Billing,

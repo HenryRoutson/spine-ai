@@ -55,16 +55,16 @@ describe("window chrome parity (GUI headers / nav hints / TUI)", () => {
     expect(BUILDER_WORKSPACE_WINDOW_IDS).toEqual(BUILDER_NAV_ITEMS.map((item) => item.id))
   })
 
-  it("Data sits next to Structures in Build, labeled Data not Backend", () => {
-    expect(BUILDER_AREA_WINDOWS[AppArea.Build].slice(0, 3)).toEqual([
+  it("Build GUI nav is Structures then Pipeline — no Data tab", () => {
+    expect(BUILDER_NAV_ITEMS.slice(0, 2).map((item) => item.id)).toEqual([
       AppWindowId.Structure,
-      AppWindowId.Backend,
       AppWindowId.Pipeline,
     ])
-    expect(BUILDER_NAV_ITEMS.find((item) => item.id === AppWindowId.Backend)?.label).toBe("Data")
-    expect(windowPanelHeader(AppWindowId.Backend).title).toBe("Tables & data")
-    expect(windowPanelHeader(AppWindowId.Backend).step).toBe(AppWindowStepLabel.Backend)
-    expect(AppWindowStepLabel.Backend).toBe("· / Data")
+    expect(BUILDER_NAV_ITEMS.find((item) => item.id === AppWindowId.Backend)).toBeUndefined()
+    expect(BUILDER_AREA_WINDOWS[AppArea.Build].slice(0, 2)).toEqual([
+      AppWindowId.Structure,
+      AppWindowId.Pipeline,
+    ])
   })
 
   it("AppWindowStep numbers are contiguous and drive Schedule plus later tabs", () => {

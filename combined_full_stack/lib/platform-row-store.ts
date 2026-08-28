@@ -1,18 +1,9 @@
 // AI : per-project structure rows — the stateful backend until a site has its own Supabase.
 import { appStorageKey } from "@/lib/storage-keys"
 import { uid } from "@/lib/id"
-import { FieldType, type ProjectId, type StructureModel, type StructureModelId } from "@/lib/types"
+import { FieldType, type ProjectId, type StructureModel, type StructureModelId, type project_row_store, type structure_row, type structure_row_id } from "@/lib/types"
 
-export type structure_row_id = string & { __brand: "structure_row_id" }
-
-export type structure_row = {
-  id: structure_row_id
-  modelId: StructureModelId
-  data: Record<string, unknown>
-  createdAt: number
-}
-
-export type project_row_store = Record<string, structure_row[]>
+export type { project_row_store, structure_row, structure_row_id }
 
 function storageKey(projectId: ProjectId): string {
   return appStorageKey(`backend-rows:${projectId}`)
@@ -109,6 +100,23 @@ export function writeProjectRows(projectId: ProjectId, store: project_row_store)
 
 export function rowsForModel(store: project_row_store, modelId: StructureModelId): structure_row[] {
   return store[modelId] ?? []
+}
+
+export function rowsStoreForProject(project: {
+  id: ProjectId
+  structureRows?: project_row_store
+}): project_row_store {
+  if (project.structureRows) return project.structureRows
+  return readProjectRows(project.id)
+}
+
+export function migrateLocalRowsIfNeeded(project: {
+  id: ProjectId
+  structureRows?: project_row_store
+}): project_row_store | null {
+  if (project.structureRows !== undefined) return null
+  const local = readProjectRows(project.id)
+  return Object.keys(local).length > 0 ? local : null
 }
 
 export function addStructureRow(

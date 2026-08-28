@@ -491,6 +491,23 @@ export const createProjectBodySchema = z
   })
   .strict();
 
+const pipelineFunctionPatchSchema = z
+  .object({
+    id: z.string().max(128),
+    name: z.string().max(200),
+    modules: z.array(pipelineModulePatchSchema).max(200),
+  })
+  .strict();
+
+const structureRowPatchSchema = z
+  .object({
+    id: z.string().max(128),
+    modelId: z.string().max(128),
+    data: z.record(z.string().max(200), jsonSizeBounded(20_000)),
+    createdAt: z.number(),
+  })
+  .strict();
+
 export const projectPatchSchema = z
   .object({
     name: z.string().max(200).optional(),
@@ -498,6 +515,9 @@ export const projectPatchSchema = z
     models: z.array(structureModelPatchSchema).max(200).optional(),
     typeAliases: z.array(jsonSizeBounded(10_000)).max(100).optional(),
     modules: z.array(pipelineModulePatchSchema).max(200).optional(),
+    functions: z.array(pipelineFunctionPatchSchema).max(50).optional(),
+    activeFunctionId: z.string().max(128).optional(),
+    structureRows: z.record(z.string().max(128), z.array(structureRowPatchSchema).max(500)).optional(),
     strategies: z.array(strategyPatchSchema).max(50).optional(),
     seedDocNames: z.array(z.string().max(256)).max(200).optional(),
     seedSecretNames: z.array(secretNameSchema).max(200).optional(),

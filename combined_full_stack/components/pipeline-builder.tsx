@@ -83,6 +83,7 @@ import { FETCH_CREDENTIALS } from "@/lib/api-client"
 import { PipelineExportDialog } from "@/components/pipeline-export-dialog"
 import { ResizableSplit } from "@/components/resizable-split"
 import { InspectorCollapsibleSection } from "@/components/inspector-collapsible-section"
+import { useAppShell } from "@/lib/app-shell"
 import {
   PIPELINE_INSPECTOR_MAX,
   PIPELINE_INSPECTOR_MIN,
@@ -107,10 +108,23 @@ export function PipelineBuilder() {
   } = useStore()
   const [selectedId, setSelectedId] = useState<string>(modules[0]?.id ?? "")
   const [copied, setCopied] = useState(false)
+  const { focusModuleId, clearFocusModule } = useAppShell()
   useRerenderOnEvent(LOGGING_SETTINGS_CHANGED_EVENT)
   const savedInspectorWidth = usePipelineInspectorWidth()
   const [inspectorWidth, setInspectorWidth] = useState(readPipelineInspectorWidth)
   useEffect(() => setInspectorWidth(savedInspectorWidth), [savedInspectorWidth])
+
+  useEffect(() => {
+    if (!focusModuleId) return
+    if (!findPipelineModule(modules, focusModuleId)) return
+    setSelectedId(focusModuleId)
+    clearFocusModule()
+  }, [focusModuleId, modules, clearFocusModule])
+
+  useEffect(() => {
+    if (findPipelineModule(modules, selectedId)) return
+    setSelectedId(modules[0]?.id ?? "")
+  }, [modules, selectedId])
 
   // AI : same ViewModels as CLI/TUI — invalid badges must not drift from toPipelineView / toValidationView.
   const snap = useMemo(

@@ -5,11 +5,11 @@
 // AI :   mount a DOM WorkspaceView; keep this header so the toggle stays reachable. Not Ink-in-browser.
 import dynamic from "next/dynamic"
 import { useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react"
-import { Loader2, Table2 } from "lucide-react"
+import { Loader2, Play } from "lucide-react"
 import { AppChromeHeader } from "@/components/app-chrome-header"
 import { AppWindowNav } from "@/components/app-window-nav"
 import { ProjectSelector } from "@/components/project-selector"
-import { BUILDER_NAV_ITEMS, BUILDER_PANEL_IDS, isAccountWindow, isVibeWindow } from "@/lib/app-nav-config"
+import { BUILDER_NAV_ITEMS, BUILDER_PANEL_IDS, isAccountWindow, isVibeWindow, showsPipelineFunctionSelect } from "@/lib/app-nav-config"
 import { handlePrimarySectionChange, resolvePrimarySection } from "@/lib/app-primary-section"
 import { BuildSurfaceNav } from "@/components/build-surface-nav"
 import { resolveBuildSurface, windowForBuildSurface, BuildSurface } from "@/lib/build-surface"
@@ -44,6 +44,7 @@ import { Earnings } from "@/components/earnings"
 import { FeedbackButton } from "@/components/feedback-button"
 import { ProjectAssistantDockLayout } from "@/components/project-assistant-dock-layout"
 import { ProjectAssistantDockToggle } from "@/components/project-assistant-dock"
+import { PipelineFunctionSelect } from "@/components/pipeline-function-select"
 import { DiagnosisAgentHub } from "@/components/diagnosis-agents/diagnosis-agent-hub"
 import { uiContextTargetProps } from "@/lib/ui-context-dom"
 import { RunningJobsHub } from "@/components/running-jobs-hub"
@@ -80,7 +81,7 @@ const Schedule = dynamic(() => import("@/components/schedule-page").then((m) => 
 )
 const BackendWorkspace = dynamic(
   () => import("@/components/platform/backend-workspace").then((m) => ({ default: m.BackendWorkspace })),
-  { loading: () => <PanelLoading label="loading data…" /> },
+  { loading: () => <PanelLoading label="loading functions…" /> },
 )
 const Share = dynamic(() => import("@/components/share/share-page").then((m) => ({ default: m.SharePage })), {
   loading: () => <RunPanelSkeleton /> },
@@ -608,16 +609,23 @@ function BuilderShellLayoutInner({ variant = "default" }: { variant?: "default" 
                   editorsCopy={
                     editingWebsite
                       ? websiteSimplified
-                        ? { label: "Data", title: "Tables, types, and a test run" }
+                        ? { label: "Run", title: "Run a bound function" }
                         : { label: "Building", title: "Edit website HTML / React" }
                       : undefined
                   }
-                  editorsIcon={websiteSimplified ? Table2 : undefined}
+                  editorsIcon={websiteSimplified ? Play : undefined}
                 />
               ) : null
             }
             showItems={showWorkspaceTabs}
-            trailing={!embed && showWorkspaceTabs ? <ProjectAssistantDockToggle /> : null}
+            trailing={
+              !embed && showWorkspaceTabs ? (
+                <>
+                  {showsPipelineFunctionSelect(activeWindow) ? <PipelineFunctionSelect /> : null}
+                  <ProjectAssistantDockToggle />
+                </>
+              ) : null
+            }
           />
         ) : null}
 

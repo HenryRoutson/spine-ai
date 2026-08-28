@@ -23,7 +23,7 @@ describe("TUI tab chrome", () => {
   it("annotates every tab with the web UI description", () => {
     expect(TUI_TAB_META.logging.description).toMatch(/per-step trace/)
     expect(TUI_TAB_META.testing.empty).toMatch(/testing\.json/)
-    expect(TUI_TAB_META.backend.title).toBe("Tables & data")
+    expect(TUI_TAB_META.backend.title).toBe("Functions (TUI)")
     expect(TUI_TAB_META.backend.empty).toMatch(/records/)
   })
 })

@@ -1,6 +1,6 @@
 "use client"
 
-import { useMemo, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { Plus, Trash2, Zap } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -9,13 +9,14 @@ import { useAppShell } from "@/lib/app-shell"
 import { AppWindowId } from "@/lib/app-window-id"
 import { isVibeWindow } from "@/lib/app-nav-config"
 import { useStore } from "@/lib/store"
-import { DocLabel, FieldType, InputType, type ModelField, type StructureModel } from "@/lib/types"
+import { DocLabel, FieldType, InputType, type ModelField, type StructureModel, type StructureModelId } from "@/lib/types"
 import {
   addStructureRow,
   emptyRowData,
-  readProjectRows,
+  migrateLocalRowsIfNeeded,
   removeStructureRow,
   rowsForModel,
+  rowsStoreForProject,
   updateStructureRow,
   writeProjectRows,
   type project_row_store,
@@ -46,28 +47,40 @@ const NEST_DEPTH_MAX = 3
 // AI : typed table rows + one-click send into a compatible pipeline input.
 export function StructureRowsPanel({
   models,
+  lockModelId,
   onStoreChange,
 }: {
   models: StructureModel[]
+  lockModelId?: StructureModelId
   onStoreChange?: (store: project_row_store) => void
 }) {
-  const { project, modules, typeAliases, addDocContent, inferenceInputDocIds, setInferenceInputDocIds } = useStore()
+  const { project, modules, typeAliases, addDocContent, inferenceInputDocIds, setInferenceInputDocIds, patchProject } =
+    useStore()
   const { activeWindow, setActiveWindow, setVibeObserveTab } = useAppShell()
   const userModels = useMemo(() => models.filter((m) => !m.auto), [models])
-  const [store, setStore] = useState<project_row_store>(() => readProjectRows(project.id))
-  const [selectedId, setSelectedId] = useState<string | null>(userModels[0]?.id ?? null)
+  const [selectedId, setSelectedId] = useState<string | null>(lockModelId ?? userModels[0]?.id ?? null)
+
+  useEffect(() => {
+    const migrated = migrateLocalRowsIfNeeded(project)
+    if (!migrated) return
+    patchProject({ structureRows: migrated })
+  }, [project.id, project.structureRows, patchProject])
+
+  const store = rowsStoreForProject(project)
   const [busyId, setBusyId] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
 
-  const selected = userModels.find((m) => m.id === selectedId) ?? userModels[0]
+  const selected = lockModelId
+    ? models.find((m) => m.id === lockModelId) ?? userModels[0]
+    : userModels.find((m) => m.id === selectedId) ?? userModels[0]
   const rows = selected ? rowsForModel(store, selected.id) : []
   const feedable = selected
     ? feedableInputsForModel(modules, models, typeAliases, selected.id)
     : []
 
   function persist(next: project_row_store) {
-    setStore(next)
     writeProjectRows(project.id, next)
+    patchProject({ structureRows: next })
     onStoreChange?.(next)
   }
 
@@ -114,6 +127,7 @@ export function StructureRowsPanel({
 
   return (
     <div className="space-y-3">
+      {!lockModelId ? (
       <div className="flex flex-wrap gap-1">
         {userModels.map((model) => (
           <button
@@ -132,6 +146,7 @@ export function StructureRowsPanel({
           </button>
         ))}
       </div>
+      ) : null}
 
       <div className="flex items-center justify-between gap-2">
         <p className="text-xs text-muted-foreground">
@@ -192,7 +207,7 @@ export function StructureRowsPanel({
               ))}
               {feedable.length === 0 ? (
                 <span className="text-[10px] text-muted-foreground">
-                  No pipeline input matches this table yet — wire it on Connections.
+                  No function input uses this type yet — pick it as a step on Pipeline.
                 </span>
               ) : null}
               <Button
