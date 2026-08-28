@@ -105,18 +105,19 @@ User request: Keep Main. Also add a second function named Hello Notes that greet
 {"type":"object","properties":{"tools":{"type":"array","items":{"type":"object","properties":{"tool":{"enum":["write_file","read_file","run_tests","list_dir","delete_file","done"]}}}}}}`
 
     const first = JSON.parse(
-      seedLlmReply(`${schema}\n\nTurn 1/8\nTask: Convert receipts to Excel\nWorkspace (already loaded):\npipeline.json\n[]\n`, true),
+      seedLlmReply(`${schema}\n\nTurn 1/8\nTask: Convert hundreds of unstructured receipts into a single Excel file\nWorkspace (already loaded):\npipeline.json\n[]\n`, true),
     ) as { tools: { tool: string; path?: string }[] };
     expect(first.tools.some((t) => t.tool === "write_file" && t.path === "pipeline.json")).toBe(true);
+    expect(first.tools.some((t) => t.tool === "write_file" && t.path?.includes("ReceiptRow"))).toBe(true);
 
     const afterWrite = JSON.parse(
-      seedLlmReply(`${schema}\n\nTurn 2/8\nTask: Convert receipts to Excel\nLast tool results:\n$ write_file pipeline.json\nwrote pipeline.json (120 chars)\n`, true),
+      seedLlmReply(`${schema}\n\nTurn 2/8\nTask: Convert hundreds of unstructured receipts into a single Excel file\nLast tool results:\n$ write_file pipeline.json\nwrote pipeline.json (120 chars)\n`, true),
     ) as { tools: { tool: string }[] };
     expect(afterWrite.tools.map((t) => t.tool)).toEqual(["run_tests"]);
 
     const afterTests = JSON.parse(
       seedLlmReply(
-        `${schema}\n\nTurn 3/8\nTask: Convert receipts to Excel\nLast tool results:\n$ write_file pipeline.json\nwrote pipeline.json (120 chars)\n\n$ run_tests\nPASS\n`,
+        `${schema}\n\nTurn 3/8\nTask: Convert hundreds of unstructured receipts into a single Excel file\nLast tool results:\n$ write_file pipeline.json\nwrote pipeline.json (120 chars)\n\n$ run_tests\nPASS\n`,
         true,
       ),
     ) as { tools: { tool: string }[] };

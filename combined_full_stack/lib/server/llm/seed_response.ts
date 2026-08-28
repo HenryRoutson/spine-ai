@@ -1,5 +1,6 @@
 // AI : deterministic seed LLM replies — shared by server provider + OpenAI-compatible mock HTTP.
 // AI : Schema-aware fill from prompt context so UI (schema-first) and exports (schema-last) match.
+import { matchVibeExample, seedHarnessWriteTools } from "../vibe-coding-examples";
 
 export type JsonSchemaNode = {
   type?: string | string[];
@@ -286,10 +287,6 @@ function seedNotesProposalPayload(title: string, named: string | null, unnamed: 
   };
 }
 
-function prettyJson(value: unknown): string {
-  return `${JSON.stringify(value, null, 2)}\n`;
-}
-
 function isProjectAssistantSchemaPrompt(prompt: string): boolean {
   return prompt.includes('"targetFunctionName"') && prompt.includes('"modulePatch"') && prompt.includes('"proposedActions"');
 }
@@ -299,9 +296,14 @@ function seedProjectAssistantReply(prompt: string): string | null {
   if (!isProjectAssistantSchemaPrompt(prompt)) return null;
   const userRequest = extractUserRequest(prompt);
   const named = seedNamedFunctionFromPrompt(userRequest);
-  const title = named || "Notes";
+  if (named) {
+    const unnamed = /\bUntitled Pipeline\b/.test(prompt);
+    return JSON.stringify(seedNotesProposalPayload(named, named, unnamed));
+  }
+  const example = matchVibeExample(userRequest) ?? matchVibeExample(prompt);
+  if (example) return JSON.stringify(example.payload);
   const unnamed = /\bUntitled Pipeline\b/.test(prompt);
-  return JSON.stringify(seedNotesProposalPayload(title, named, unnamed));
+  return JSON.stringify(seedNotesProposalPayload("Notes", null, unnamed));
 }
 
 function seedObservePlanReply(prompt: string): string | null {
@@ -323,10 +325,10 @@ function seedVibeHarnessReply(prompt: string): string | null {
   if (!isVibeHarnessSchemaPrompt(prompt)) return null;
   const userRequest = extractUserRequest(prompt);
   const named = seedNamedFunctionFromPrompt(userRequest);
-  const title = named || "Notes";
-  const unnamed = /\bUntitled Pipeline\b/.test(prompt);
-  const payload = seedNotesProposalPayload(title, named, unnamed);
-  // AI : do not treat the default Input step in pipeline.json as "already wrote".
+  const example = named ? null : matchVibeExample(userRequest) ?? matchVibeExample(prompt);
+  const payload = example
+    ? example.payload
+    : seedNotesProposalPayload(named || "Notes", named, /\bUntitled Pipeline\b/.test(prompt));
   const wrotePipeline = /wrote pipeline\.json/i.test(prompt);
   const ranTests = /\$ run_tests\b/i.test(prompt);
   const passed = /^PASS\b/m.test(prompt);
@@ -337,14 +339,8 @@ function seedVibeHarnessReply(prompt: string): string | null {
     return JSON.stringify({ tools: [{ tool: "run_tests" }] });
   }
   return JSON.stringify({
-    tools: [
-      { tool: "write_file", path: "structures/NoteSummary.json", content: prettyJson(payload.models[0]) },
-      { tool: "write_file", path: "pipeline.json", content: prettyJson(payload.modules) },
-      { tool: "write_file", path: "tests/sample_note.txt", content: payload.docs[0]!.content },
-      { tool: "write_file", path: "docs.md", content: payload.documentationUpdate },
-      { tool: "write_file", path: "message.md", content: payload.message },
-    ],
-    note: "seed writes the same notes pipeline the JSON path uses",
+    tools: seedHarnessWriteTools(payload),
+    note: example ? `seed writes few-shot ${example.id}` : "seed writes the notes pipeline",
   });
 }
 

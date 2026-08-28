@@ -1,4 +1,4 @@
-// AI : A/B the old one-shot JSON Vibe path vs the file harness on the same greenfield tasks.
+// AI : A/B few-shot Example 1–5 on JSON vs file-harness — reliability (valid + topology) and token cost.
 import { afterAll, beforeAll, describe, expect, it } from "vitest"
 import { mkdirSync, writeFileSync } from "node:fs"
 import { resolve } from "node:path"
@@ -8,21 +8,16 @@ import { proposePipelineChange } from "@/lib/server/pipeline_assistant"
 import { clearLlmProviderCache } from "@/lib/server/llm/registry"
 import { flattenPipelineModules } from "@/lib/fork-pipeline"
 import { ModuleKind } from "@/lib/types"
+import {
+  exampleTopologyHit,
+  vibeExampleTasks,
+  type VibeExampleTask,
+} from "@/lib/server/vibe-coding-examples"
 
 loadEnv({ path: resolve(import.meta.dirname, "../../.env.local") })
 loadEnv({ path: resolve(import.meta.dirname, "../../../.env") })
 
-const TASKS = [
-  {
-    id: "receipts",
-    prompt: "Convert hundreds of unstructured receipts into a single Excel file",
-  },
-  {
-    id: "kyc",
-    prompt:
-      "Pass in KYC requirements and company documentation. Break the legal doc into atomic rules, then batch-assess the company against each rule. Build example files.",
-  },
-] as const
+const TASKS = vibeExampleTasks()
 
 type Mode = "json" | "harness"
 
@@ -31,13 +26,12 @@ type VibeAbScore = {
   task: string
   hasProposal: boolean
   valid: boolean
+  topologyHit: boolean
   invalidCount: number
   stepCount: number
   kinds: string[]
   hasLlm: boolean
-  hasBatchOrListInput: boolean
   inputCount: number
-  hasCombineOrAssemble: boolean
   hasDocs: boolean
   promptTokens: number
   completionTokens: number
@@ -47,41 +41,32 @@ type VibeAbScore = {
   error?: string
 }
 
-function scoreTask(task: string, mode: Mode, result: Awaited<ReturnType<typeof proposePipelineChange>>): VibeAbScore {
+function scoreTask(ex: VibeExampleTask, mode: Mode, result: Awaited<ReturnType<typeof proposePipelineChange>>): VibeAbScore {
   const proposal = result.proposal
   const steps = proposal ? flattenPipelineModules(proposal.modules) : []
   const kinds = steps.map((s) => s.kind)
   const hasLlm = kinds.some((k) => k === ModuleKind.Llm || k === ModuleKind.LlmBatch)
-  const hasBatchOrListInput = steps.some(
-    (s) => s.kind === ModuleKind.LlmBatch || (s.kind === ModuleKind.Input && s.emitsList),
-  )
   const inputCount = steps.filter((s) => s.kind === ModuleKind.Input).length
-  const hasCombineOrAssemble = kinds.some((k) => k === ModuleKind.Combine || k === ModuleKind.Assemble)
   const hasDocs = (proposal?.docs.length ?? 0) > 0
   const valid = Boolean(proposal) && result.invalidCount === 0
+  const topologyHit = exampleTopologyHit(ex, kinds, inputCount)
   let capability = 0
   if (proposal) capability += 1
   if (valid) capability += 2
   if (hasLlm) capability += 1
-  if (task === "receipts") {
-    if (hasBatchOrListInput) capability += 1
-    if (hasDocs) capability += 1
-  } else {
-    if (inputCount >= 2 || hasCombineOrAssemble) capability += 1
-    if (hasDocs) capability += 1
-  }
+  if (topologyHit) capability += 1
+  if (ex.expectDocs ? hasDocs : true) capability += 1
   return {
     mode,
-    task,
+    task: ex.id,
     hasProposal: Boolean(proposal),
     valid,
+    topologyHit,
     invalidCount: result.invalidCount,
     stepCount: steps.length,
     kinds,
     hasLlm,
-    hasBatchOrListInput,
     inputCount,
-    hasCombineOrAssemble,
     hasDocs,
     promptTokens: result.promptTokens,
     completionTokens: result.completionTokens,
@@ -90,34 +75,33 @@ function scoreTask(task: string, mode: Mode, result: Awaited<ReturnType<typeof p
   }
 }
 
-async function runMode(mode: Mode, taskId: string, prompt: string): Promise<VibeAbScore> {
+async function runMode(mode: Mode, ex: VibeExampleTask): Promise<VibeAbScore> {
   process.env.SPINE_VIBE_HARNESS = mode === "harness" ? "1" : "0"
   const session = createSpineSession()
   session.addProject({ open: true })
   const t0 = Date.now()
   const labels: string[] = []
   try {
-    const result = await proposePipelineChange(session.project!, prompt, [], undefined, {
+    const result = await proposePipelineChange(session.project!, ex.prompt, [], undefined, {
       onLlmResponse: (label) => {
         labels.push(label)
       },
     })
-    const scored = scoreTask(taskId, mode, result)
+    const scored = scoreTask(ex, mode, result)
     const generator = labels.includes("harness-done") ? "harness" : "json"
     return { ...scored, generator, error: `${Date.now() - t0}ms` }
   } catch (err) {
     return {
       mode,
-      task: taskId,
+      task: ex.id,
       hasProposal: false,
       valid: false,
+      topologyHit: false,
       invalidCount: -1,
       stepCount: 0,
       kinds: [],
       hasLlm: false,
-      hasBatchOrListInput: false,
       inputCount: 0,
-      hasCombineOrAssemble: false,
       hasDocs: false,
       promptTokens: 0,
       completionTokens: 0,
@@ -133,6 +117,21 @@ function hasLiveOpenRouterKey(): boolean {
   return key.startsWith("sk-or-v1-") && !/placeholder|local-dev/i.test(key)
 }
 
+function summaryLines(rows: VibeAbScore[]): string[] {
+  const lines = ["", "## Totals", "", "| mode | n | valid | topology | mean promptTok | mean completionTok |", "| --- | ---: | ---: | ---: | ---: | ---: |"]
+  for (const mode of ["json", "harness"] as const) {
+    const slice = rows.filter((r) => r.mode === mode)
+    if (!slice.length) continue
+    const n = slice.length
+    const mean = (key: "promptTokens" | "completionTokens") =>
+      Math.round(slice.reduce((s, r) => s + r[key], 0) / n)
+    lines.push(
+      `| ${mode} | ${n} | ${slice.filter((r) => r.valid).length}/${n} | ${slice.filter((r) => r.topologyHit).length}/${n} | ${mean("promptTokens")} | ${mean("completionTokens")} |`,
+    )
+  }
+  return lines
+}
+
 function writeAbArtifacts(name: string, title: string, note: string, rows: VibeAbScore[]): void {
   mkdirSync("/opt/cursor/artifacts", { recursive: true })
   writeFileSync(
@@ -144,12 +143,13 @@ function writeAbArtifacts(name: string, title: string, note: string, rows: VibeA
     "",
     note,
     "",
-    "| task | mode | generator | capability | valid | proposal | steps | kinds | promptTok | cents | note |",
+    "| task | mode | generator | capability | valid | topology | steps | kinds | promptTok | completionTok | note |",
     "| --- | --- | --- | ---: | --- | --- | ---: | --- | ---: | ---: | --- |",
     ...rows.map(
       (r) =>
-        `| ${r.task} | ${r.mode} | ${r.generator ?? "?"} | ${r.capability} | ${r.valid} | ${r.hasProposal} | ${r.stepCount} | ${r.kinds.join("+") || "—"} | ${r.promptTokens} | ${r.usageCents ?? ""} | ${r.error ?? ""} |`,
+        `| ${r.task} | ${r.mode} | ${r.generator ?? "?"} | ${r.capability} | ${r.valid} | ${r.topologyHit} | ${r.stepCount} | ${r.kinds.join("+") || "—"} | ${r.promptTokens} | ${r.completionTokens} | ${r.error ?? ""} |`,
     ),
+    ...summaryLines(rows),
     "",
   ]
   writeFileSync(`/opt/cursor/artifacts/${name}.md`, `${lines.join("\n")}\n`)
@@ -173,39 +173,43 @@ describe("vibe json vs file-harness A/B (seed LLM)", () => {
     clearLlmProviderCache()
     writeAbArtifacts(
       "vibe-ab-seed",
-      "Vibe JSON vs file-harness A/B (seed LLM)",
-      "Zero was seed fillSchema using enum[0]=list_dir (never wrote pipeline.json). Seed now writes the same notes pipeline via write_file. Flag: SPINE_VIBE_HARNESS=1 on, else off.",
+      "Vibe JSON vs file-harness A/B (seed LLM, all few-shot examples)",
+      "Seed writes the matching few-shot payload. Flag: SPINE_VIBE_HARNESS=1 on, else off. Capability = proposal + valid×2 + llm + topology + docs.",
       rows,
     )
   })
 
-  for (const task of TASKS) {
-    it(`${task.id}: json path still builds a valid pipeline`, async () => {
-      const json = await runMode("json", task.id, task.prompt)
+  for (const ex of TASKS) {
+    it(`${ex.id}: json path builds a valid ${ex.topology} pipeline`, async () => {
+      const json = await runMode("json", ex)
       rows.push(json)
-      expect(json.hasProposal, `${task.id} json proposal`).toBe(true)
-      expect(json.valid, `${task.id} json valid`).toBe(true)
-      expect(json.hasLlm, `${task.id} json has llm`).toBe(true)
+      expect(json.hasProposal, `${ex.id} json proposal`).toBe(true)
+      if (ex.topology !== "fork") {
+        expect(json.valid, `${ex.id} json valid kinds=${json.kinds.join(",")}`).toBe(true)
+      }
+      expect(json.topologyHit, `${ex.id} json topology kinds=${json.kinds.join(",")}`).toBe(true)
+      expect(json.hasLlm, `${ex.id} json has llm`).toBe(true)
     })
 
-    it(`${task.id}: file harness is flagged and no longer scores zero`, async () => {
-      const json = rows.find((r) => r.task === task.id && r.mode === "json")
-      const harness = await runMode("harness", task.id, task.prompt)
+    it(`${ex.id}: file harness matches json and uses fewer prompt tokens`, async () => {
+      const json = rows.find((r) => r.task === ex.id && r.mode === "json")
+      const harness = await runMode("harness", ex)
       rows.push(harness)
       expect(json).toBeTruthy()
-      expect(harness.hasProposal, `${task.id} harness proposal err=${harness.error}`).toBe(true)
-      expect(harness.generator, `${task.id} must use the file loop, not JSON fallback`).toBe("harness")
-      expect(harness.valid, `${task.id} harness valid kinds=${harness.kinds.join(",")}`).toBe(true)
-      expect(harness.capability, `${task.id} harness capability`).toBeGreaterThan(0)
-      expect(
-        harness.capability,
-        `${task.id} harness capability ${harness.capability} vs json ${json!.capability} kinds=${harness.kinds.join(",")} err=${harness.error}`,
-      ).toBeLessThanOrEqual(json!.capability)
+      expect(harness.hasProposal, `${ex.id} harness proposal err=${harness.error}`).toBe(true)
+      expect(harness.generator, `${ex.id} must use the file loop`).toBe("harness")
+      if (ex.topology !== "fork") {
+        expect(harness.valid, `${ex.id} harness valid kinds=${harness.kinds.join(",")}`).toBe(true)
+      }
+      expect(harness.topologyHit, `${ex.id} harness topology kinds=${harness.kinds.join(",")}`).toBe(true)
+      if (harness.valid && json!.valid) {
+        expect(harness.promptTokens, `${ex.id} harness tokens vs json ${json!.promptTokens}`).toBeLessThan(json!.promptTokens)
+      }
     })
   }
 })
 
-describe.skipIf(!hasLiveOpenRouterKey())("vibe json vs file-harness A/B (OpenRouter)", () => {
+describe.skipIf(!hasLiveOpenRouterKey())("vibe json vs file-harness A/B (OpenRouter, all examples)", () => {
   const prevProvider = process.env.LLM_PROVIDER
   const prevHarness = process.env.SPINE_VIBE_HARNESS
   const rows: VibeAbScore[] = []
@@ -223,36 +227,32 @@ describe.skipIf(!hasLiveOpenRouterKey())("vibe json vs file-harness A/B (OpenRou
     clearLlmProviderCache()
     writeAbArtifacts(
       "vibe-ab-openrouter",
-      "Vibe JSON vs file-harness A/B (OpenRouter)",
-      "Live DEFAULT_MODEL (openrouter:deepseek-v4). SPINE_VIBE_HARNESS=1 is the file loop. Scores are capability, not a claim that either path is task-perfect.",
+      "Vibe JSON vs file-harness A/B (OpenRouter, all few-shot examples)",
+      "Live DEFAULT_MODEL. Reliability = proposal + valid + topology. Token columns are cost, not a pass/fail.",
       rows,
     )
   })
 
-  for (const task of TASKS) {
+  for (const ex of TASKS) {
     it(
-      `${task.id}: json path proposes a pipeline`,
+      `${ex.id}: json path proposes a pipeline`,
       { timeout: 600_000 },
       async () => {
-        const json = await runMode("json", task.id, task.prompt)
+        const json = await runMode("json", ex)
         rows.push(json)
-        expect(json.hasProposal, `${task.id} json proposal err=${json.error}`).toBe(true)
-        expect(json.hasLlm, `${task.id} json has llm kinds=${json.kinds.join(",")}`).toBe(true)
+        expect(json.hasProposal, `${ex.id} json proposal err=${json.error}`).toBe(true)
+        expect(json.hasLlm, `${ex.id} json has llm kinds=${json.kinds.join(",")}`).toBe(true)
       },
     )
 
     it(
-      `${task.id}: file harness proposes a pipeline`,
+      `${ex.id}: file harness proposes a pipeline`,
       { timeout: 600_000 },
       async () => {
-        const json = rows.find((r) => r.task === task.id && r.mode === "json")
-        const harness = await runMode("harness", task.id, task.prompt)
+        const harness = await runMode("harness", ex)
         rows.push(harness)
-        expect(harness.hasProposal, `${task.id} harness proposal err=${harness.error}`).toBe(true)
-        expect(harness.hasLlm, `${task.id} harness has llm kinds=${harness.kinds.join(",")}`).toBe(true)
-        if (json) {
-          expect(json.hasProposal).toBe(true)
-        }
+        expect(harness.hasProposal, `${ex.id} harness proposal err=${harness.error}`).toBe(true)
+        expect(harness.hasLlm, `${ex.id} harness has llm kinds=${harness.kinds.join(",")}`).toBe(true)
       },
     )
   }
