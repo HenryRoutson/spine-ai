@@ -103,7 +103,8 @@ export function splitHostedSiteSlots(html: string): HostedSiteHtmlSegment[] {
 // AI : {{action}} / {{run:alias}} tokens split the HTML tree, so adjacent widgets must be regrouped in React.
 const ACTION_ROW_OPEN_RE = /<div\s+class=["']hs-action-row["']\s*>/gi
 const COUNTER_OPEN_RE = /<section\b[^>]*\bhs-counter\b[^>]*>/gi
-const SPLIT_OPEN_RE = /<section\b[^>]*\bhs-split\b[^>]*>/gi
+// AI : do not treat hs-split-heads as the run-row wrapper (word-boundary hits the hs-split prefix).
+const SPLIT_OPEN_RE = /<section\b[^>]*\bhs-split(?![\w-])[^>]*>/gi
 
 export function groupHostedActionSlots(segments: HostedSiteHtmlSegment[]): HostedSiteRenderSegment[] {
   const out: HostedSiteRenderSegment[] = []

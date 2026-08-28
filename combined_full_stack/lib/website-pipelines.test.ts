@@ -150,6 +150,20 @@ describe("named run slots", () => {
       },
     ])
   })
+
+  it("keeps hs-split-heads when grouping adjacent run slots", () => {
+    const grouped = groupHostedActionSlots(
+      splitHostedSiteSlots(
+        '<section class="hs-split-heads"><div class="hs-split-head">Add</div><div class="hs-split-head">Count</div></section>\n{{run}}\n{{run:count}}',
+      ),
+    )
+    const heads = grouped.find((s) => s.kind === "html")
+    expect(heads).toMatchObject({
+      kind: "html",
+      html: '<section class="hs-split-heads"><div class="hs-split-head">Add</div><div class="hs-split-head">Count</div></section>\n',
+    })
+    expect(grouped.some((s) => s.kind === "run-row")).toBe(true)
+  })
 })
 
 describe("html to react conversion", () => {
