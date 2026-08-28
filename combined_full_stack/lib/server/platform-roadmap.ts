@@ -82,6 +82,7 @@ export {}
 // ---------------------------------------------------------------------------
 // AI : DONE (platform-P11-compiler) — lib/spine-in-spine.ts compiles an AppBlueprint → schema + website + share copy
 // AI : DONE (platform-P11-seed) — seeds/spine_in_spine.json is Spine described as a typed app
+// AI : TODO (spine-in-spine-bootstrap) — guest UI on host engine; grep spine-in-spine-bootstrap-roadmap.ts
 
 // ---------------------------------------------------------------------------
 // P12 — Multiple functions per project
@@ -96,3 +97,10 @@ export {}
 // ---------------------------------------------------------------------------
 // AI : DONE (platform-P13-structure-rows) — Project.structureRows persisted via PUT /api/projects
 // AI : localStorage backend-rows:* migrates once into projects.data jsonb
+
+// ---------------------------------------------------------------------------
+// P17 — Spine-in-Spine bootstrap (guest UI on host engine)
+// ---------------------------------------------------------------------------
+// AI : TODO (spine-in-spine-bootstrap) — v1 rebuilds the product chrome as hosted pages + slots +
+// AI :   SESSION_ACTIONS. Host keeps run_engine / SpineSession / slot renderer. Steps S0–S12:
+// AI :   lib/server/spine-in-spine-bootstrap-roadmap.ts

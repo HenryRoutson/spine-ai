@@ -1,5 +1,12 @@
 "use client"
 
+// AI : TODO (spine-in-spine-bootstrap-S3-actions) — capture data-spine-id clicks on hosted HTML and
+// AI :   dispatch SESSION_ACTIONS (zod parse of nearest form). Same ids as GUI/TUI/MCP.
+// AI : TODO (spine-in-spine-bootstrap-S4-dag) — mount {{slot:pipeline-dag}} / type-expr / step-trace /
+// AI :   code as HostedSlot widgets wrapping existing components (see roadmap S4).
+// AI : TODO (spine-in-spine-bootstrap-S8-site) — spine_in_spine seed HostedSiteOptions.pages[] render
+// AI :   here; nav links are hosted pages, not AppWindowId.
+
 import { useMemo } from "react"
 import { SharedRunViewer } from "@/components/shared-run-viewer"
 import { HostedSiteAccountBar, HostedSiteSignInCard } from "@/components/share/hosted-site-sign-in"

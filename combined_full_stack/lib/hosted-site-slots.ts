@@ -6,6 +6,10 @@ export const HOSTED_SITE_DOCS_SLOT = "{{docs}}"
 export const HOSTED_SITE_PAY_SLOT = "{{pay}}"
 export const HOSTED_SITE_TABLE_SLOT = "{{table}}"
 
+// AI : TODO (spine-in-spine-bootstrap-S4-dag) — parse {{slot:<widget>}} like {{table:Model}}
+// AI :   (pipeline-dag | type-expr | step-trace | code). Do not add a second slot tokenizer.
+// AI : TODO (spine-in-spine-bootstrap-S3-actions) — no new token required: hosted buttons use
+// AI :   data-spine-id (SPINE_ACTION_ATTR) and dispatch SESSION_ACTIONS. Wire the click in the viewer.
 export type hosted_site_widget_slot = "run" | "auth" | "output" | "chatbot" | "docs" | "pay" | "table"
 
 export const HOSTED_SITE_SLOT_CLASS: Record<hosted_site_widget_slot, string> = {

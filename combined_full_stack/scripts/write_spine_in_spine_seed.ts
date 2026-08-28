@@ -1,4 +1,8 @@
 // AI : regenerate seeds/spine_in_spine.json + documents/spine_in_spine/* from the compiler source.
+// AI : TODO (spine-in-spine-bootstrap-S1-schema) — models[] must match SPINE_PLATFORM_BLUEPRINT tables
+// AI :   when S1 expands the product schema. Keep custom-code byte-equal to *CompileTs.
+// AI : TODO (spine-in-spine-bootstrap-S8-site) — emit HostedSiteOptions.pages[] from compileSpineApp
+// AI :   so the seed's Share → Site is the guest builder (four pages), not the marketing mega-page.
 import { mkdirSync, writeFileSync } from "node:fs"
 import { dirname, join } from "node:path"
 import { fileURLToPath } from "node:url"

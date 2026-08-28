@@ -56,7 +56,7 @@ See `combined_full_stack/lib/server/platform-roadmap.ts`.
 
 | Phase | Scope | Status |
 |-------|-------|--------|
-| P0–P4, P6, P8, P11 | Share hub, upload UI, slots, Spine-in-Spine | Done |
+| P0–P4, P6, P8, P11 | Share hub, upload UI, slots, Spine-in-Spine compiler seed | Done |
 | P5 | Data tab — **removed**. SQL + rows + function links live on Structures | This revision |
 | P12 | Multiple functions per project + selector + Vibe inference picker | This revision |
 | P13 | Rows on `projects.data` jsonb | This revision |
@@ -66,6 +66,7 @@ See `combined_full_stack/lib/server/platform-roadmap.ts`.
 | P14 | `structure_rows` table + RLS | Later |
 | P15 | Share chrome for storage packs | Later |
 | P16 | Unify/merge types across projects | Later |
+| P17 | Spine-in-Spine **bootstrap** (guest UI on host engine) | `lib/server/spine-in-spine-bootstrap-roadmap.ts` — grep `TODO (spine-in-spine-bootstrap` |
 
 ## Principles
 

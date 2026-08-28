@@ -13,6 +13,9 @@ export function websiteDisplayName(site: Pick<SharedLinkRecord, "name" | "siteOp
 
 export const DEFAULT_WEBSITE_PIPELINE_ALIAS = "run" as website_pipeline_alias
 
+// AI : TODO (spine-in-spine-bootstrap-S5-user-run) — reserved alias "active-user-project" resolves to
+// AI :   session.snapshot.activeProjectId (host engine), not a binding on the meta Spine-in-Spine project.
+
 const ALIAS_RE = /^[a-z][a-z0-9_-]{0,39}$/
 
 export function isWebsitePipelineAlias(raw: string): raw is website_pipeline_alias {

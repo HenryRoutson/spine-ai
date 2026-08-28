@@ -1,5 +1,9 @@
 "use client"
 
+// AI : TODO (spine-in-spine-bootstrap-S10-flag) — guest replacement for this shell is hosted page /
+// AI :   ({{chatbot}} + {{run:active-user-project}}). Do not port this split; compose slots.
+// AI :   Cut over from AppShellLayout when SPINE_IN_SPINE_UI is on. See bootstrap roadmap S10.
+
 import { useEffect, useState } from "react"
 import dynamic from "next/dynamic"
 import { AppWindowNav } from "@/components/app-window-nav"
