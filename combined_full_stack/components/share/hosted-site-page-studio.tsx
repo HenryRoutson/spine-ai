@@ -9,6 +9,7 @@ import { HtmlPreviewFrame } from "@/components/share/html-preview-frame"
 import { HostedSiteChrome } from "@/components/share/hosted-site-chrome"
 import { HostedSiteReactPreview } from "@/components/share/hosted-site-react-preview"
 import { HostedSiteSignInCard } from "@/components/share/hosted-site-sign-in"
+import { HostedSiteActionPreview } from "@/components/share/hosted-site-action-button"
 import { HostedSiteSlotWidgets } from "@/components/share/hosted-site-slot-widgets"
 import { SharedLinkPreview } from "@/components/share/shared-link-preview"
 import { WebsitePipelineBindings } from "@/components/share/website-pipeline-bindings"
@@ -175,6 +176,10 @@ export function HostedSitePageStudio({
         ),
       }}
       runByAlias={runByAlias}
+      actionByAlias={{
+        run: <HostedSiteActionPreview label="Double it" />,
+        collatz: <HostedSiteActionPreview label="3n + 1" />,
+      }}
       editable={value.runtime !== "react"}
     />
     )

@@ -9,10 +9,12 @@ export type app_sql_row_id = string & { __brand: "app_sql_row_id" }
 
 export type SqlLit = string | number | boolean | null
 
+export type sql_binary_op = "*" | "/" | "+" | "-" | "%"
+
 export type SqlExpr =
   | { kind: "lit"; value: SqlLit }
   | { kind: "col"; name: string }
-  | { kind: "binary"; op: "*" | "/" | "+" | "-"; left: SqlExpr; right: SqlExpr }
+  | { kind: "binary"; op: sql_binary_op; left: SqlExpr; right: SqlExpr }
 
 export type SqlWhere = { field: string; value: SqlLit }
 
@@ -123,7 +125,7 @@ function tokenize(sql: string): Tok[] {
       i += m[0].length
       continue
     }
-    if ("=*,/+-(),".includes(ch)) {
+    if ("=*,/+-%(),".includes(ch)) {
       tokens.push({ kind: "punct", value: ch })
       i += 1
       continue
@@ -203,8 +205,11 @@ class Parser {
 
   private parseMul(): SqlExpr {
     let left = this.parseFactor()
-    while (this.peek()?.kind === "punct" && (this.peek()!.value === "*" || this.peek()!.value === "/")) {
-      const op = this.take().value as "*" | "/"
+    while (
+      this.peek()?.kind === "punct" &&
+      (this.peek()!.value === "*" || this.peek()!.value === "/" || this.peek()!.value === "%")
+    ) {
+      const op = this.take().value as "*" | "/" | "%"
       left = { kind: "binary", op, left, right: this.parseFactor() }
     }
     return left
@@ -320,7 +325,8 @@ export function evalSqlExpr(expr: SqlExpr, row: Record<string, unknown>): unknow
   if (expr.op === "+") return left + right
   if (expr.op === "-") return left - right
   if (expr.op === "*") return left * right
-  if (right === 0) throw new Error("division by zero")
+  if (right === 0) throw new Error(expr.op === "%" ? "modulo by zero" : "division by zero")
+  if (expr.op === "%") return left % right
   return left / right
 }
 

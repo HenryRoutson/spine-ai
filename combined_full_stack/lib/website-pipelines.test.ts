@@ -61,6 +61,14 @@ describe("named run slots", () => {
       { kind: "slot", slot: "action" },
     ])
   })
+
+  it("parses {{action:collatz}} as a named action slot", () => {
+    const segs = splitHostedSiteSlots("{{action}}{{action:collatz}}")
+    expect(segs).toEqual([
+      { kind: "slot", slot: "action" },
+      { kind: "slot", slot: "action", alias: "collatz" },
+    ])
+  })
 })
 
 describe("html to react conversion", () => {

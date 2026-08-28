@@ -5,6 +5,17 @@ export const HOSTED_SITE_CHATBOT_SLOT = "{{chatbot}}"
 export const HOSTED_SITE_DOCS_SLOT = "{{docs}}"
 export const HOSTED_SITE_ACTION_SLOT = "{{action}}"
 
+export type hosted_action_alias = string
+export type hosted_action_trigger = "double" | "collatz"
+
+export function hostedActionButtonLabel(alias?: hosted_action_alias): string {
+  return alias === "collatz" ? "3n + 1" : "Double it"
+}
+
+export function hostedActionTrigger(alias?: hosted_action_alias): hosted_action_trigger {
+  return alias === "collatz" ? "collatz" : "double"
+}
+
 export type hosted_site_widget_slot = "run" | "auth" | "output" | "chatbot" | "docs" | "sql" | "action"
 
 export const HOSTED_SITE_SLOT_CLASS: Record<hosted_site_widget_slot, string> = {

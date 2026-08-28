@@ -14,6 +14,7 @@ import type { HostedSiteOptions } from "@/lib/shared-link-types"
 import type { hosted_site_react_bundle } from "@/lib/hosted-site-react"
 import { clearWorkspaceClientSession } from "@/lib/clear-workspace-client-session"
 import { useSupabaseSession } from "@/lib/use-supabase-session"
+import { hostedActionButtonLabel } from "@/lib/hosted-site-slots"
 import { resolveWebsitePipelineBindings } from "@/lib/website-pipelines"
 import type { ProjectId } from "@/lib/types"
 import type { ReactNode } from "react"
@@ -64,18 +65,17 @@ export function HostedSiteViewer({
       if (seg.kind !== "slot" || seg.slot !== "action") continue
       const alias = seg.alias || "run"
       if (map[alias]) continue
-      const binding = bindings.find((b) => b.alias === alias)
       map[alias] = (
         <HostedSiteActionButton
           key={alias}
           linkId={linkId}
           alias={alias === "run" ? undefined : alias}
-          label={binding ? "Double it" : "Run"}
+          label={hostedActionButtonLabel(alias === "run" ? undefined : alias)}
         />
       )
     }
     return map
-  }, [bindings, compiled.segments, linkId])
+  }, [compiled.segments, linkId])
   const runByAlias = useMemo(() => {
     const map: Record<string, ReactNode> = {}
     for (const binding of bindings) {
