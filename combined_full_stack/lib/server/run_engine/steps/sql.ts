@@ -8,7 +8,7 @@ import { stepEmitsList } from "../../type_expr"
 import type { ExecResult, RunCtx, RunLogger } from "../engine_types"
 
 async function pauseForHostedAnimation(m: PipelineModule): Promise<void> {
-  // AI : avgMs on demo SQL steps is a visible pause so hosted simple-view traces can tick per step.
+  // AI : pause after the write so the hosted live number can tick per JSON SQL step.
   if (process.env.VITEST) return
   const ms = Math.min(Math.max(m.avgMs ?? 0, 0), 1600)
   if (ms < 200) return
@@ -20,12 +20,12 @@ export async function execSqlStep(m: PipelineModule, ctx: RunCtx, log: RunLogger
   if (!sql) throw new Error(`sql step "${m.label}" has no SQL`)
   const scope = ctx.appSqlScope
   if (!scope) throw new Error(`sql step "${m.label}" has no app SQL scope`)
-  await pauseForHostedAnimation(m)
   const out = modelById(ctx.project.models, m.outStructureId)
   const pkField = out ? pkFieldOf(out)?.name ?? "id" : "id"
   const table = out ? tableNameForModel(out) : undefined
   log.info(`sql step`, { moduleId: m.id, scope, table, sql })
   const rows = await execAppSql(scope, sql, { seedRows: sqlSeedRowsOf(m), pkField })
+  await pauseForHostedAnimation(m)
   const raw = stepEmitsList(m) ? rows : (rows[0] ?? {})
   const prev = prevModuleFor(ctx.project.modules, ctx.prevModuleId)
   const value = out

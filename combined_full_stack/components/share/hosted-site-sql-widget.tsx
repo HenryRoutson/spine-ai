@@ -30,7 +30,7 @@ export function useHostedSqlRows(linkId: string, table: string): { rows: sql_row
     window.addEventListener(APP_SQL_CHANGED_EVENT, onChange)
     const tick = window.setInterval(() => {
       void load()
-    }, 2500)
+    }, 250)
     return () => {
       window.removeEventListener(APP_SQL_CHANGED_EVENT, onChange)
       window.clearInterval(tick)
