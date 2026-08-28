@@ -96,6 +96,9 @@ export function splitHostedSiteSlots(html: string): HostedSiteHtmlSegment[] {
 }
 
 // AI : {{action}} tokens split the HTML tree, so adjacent buttons must be regrouped in React.
+const ACTION_ROW_OPEN_RE = /<div\s+class=["']hs-action-row["']\s*>/gi
+const COUNTER_OPEN_RE = /<section\b[^>]*\bhs-counter\b[^>]*>/gi
+
 export function groupHostedActionSlots(segments: HostedSiteHtmlSegment[]): HostedSiteRenderSegment[] {
   const out: HostedSiteRenderSegment[] = []
   let i = 0
@@ -124,7 +127,23 @@ export function groupHostedActionSlots(segments: HostedSiteHtmlSegment[]): Hoste
     out.push(seg)
     i += 1
   }
-  return out
+  return dropEmptyHtml(stripHostedActionRowMarkup(out))
+}
+
+// AI : leftover open/close hs-action-row tags hydrate as invalid HTML against the React row.
+function stripHostedActionRowMarkup(segments: HostedSiteRenderSegment[]): HostedSiteRenderSegment[] {
+  return segments.map((seg, i, arr) => {
+    if (seg.kind !== "html") return seg
+    let html = seg.html.replace(ACTION_ROW_OPEN_RE, "").replace(COUNTER_OPEN_RE, "")
+    if (arr[i - 1]?.kind === "action-row") {
+      html = html.replace(/^\s*<\/div>/, "").replace(/^\s*<\/section>/, "")
+    }
+    return { kind: "html", html }
+  })
+}
+
+function dropEmptyHtml(segments: HostedSiteRenderSegment[]): HostedSiteRenderSegment[] {
+  return segments.filter((seg) => seg.kind !== "html" || seg.html.trim() !== "")
 }
 
 export function hostedSitePrimarySlot(surface: "app" | "signin"): hosted_site_widget_slot {

@@ -101,7 +101,8 @@ export function defaultHostedSiteCss(): string {
 .hs-workspace-title { margin: 0.4rem 0 0; font-size: 1.25rem; font-weight: 650; letter-spacing: -0.025em; }
 .hs-run-slot, .hs-output-slot, .hs-chatbot-slot, .hs-docs-slot { margin: 0 auto; max-width: 56rem; border-radius: 1.1rem; overflow: hidden; border: 1px solid color-mix(in srgb, var(--hs-fg) 10%, transparent); box-shadow: 0 22px 60px color-mix(in srgb, var(--hs-fg) 12%, transparent); background: #fff; color: inherit; }
 .hs-sql-slot, .hs-action-slot { margin: 0 auto; max-width: 28rem; text-align: center; }
-.hs-action-row { display: flex; flex-wrap: wrap; justify-content: center; align-items: stretch; gap: 1rem; width: 100%; margin: 0 auto; }
+.hs-sql-slot { margin-top: 2.25rem; }
+.hs-action-row { display: flex; flex-wrap: wrap; justify-content: center; align-items: stretch; gap: 1rem; width: 100%; margin: 0 auto 4rem; padding: 0 1.25rem; }
 .hs-action-row .hs-action-slot { margin: 0; max-width: 17.5rem; width: 17.5rem; flex: 0 0 17.5rem; text-align: center; }
 .hs-action-widget { width: 100%; }
 .hs-action-card { display: flex; flex-direction: column; height: 100%; padding: 1.15rem 1.15rem 1.2rem; border-radius: 1.05rem; border: 1px solid color-mix(in srgb, var(--hs-fg) 10%, transparent); background: color-mix(in srgb, #fff 82%, var(--hs-bg)); box-shadow: 0 10px 28px color-mix(in srgb, var(--hs-fg) 7%, transparent); text-align: center; }

@@ -73,7 +73,6 @@ describe("named run slots", () => {
   it("groups adjacent action slots into a centered row", () => {
     const segs = splitHostedSiteSlots("<div class=\"hs-action-row\">{{action}}\n    {{action:collatz}}</div>")
     expect(groupHostedActionSlots(segs)).toEqual([
-      { kind: "html", html: "<div class=\"hs-action-row\">" },
       {
         kind: "action-row",
         slots: [
@@ -81,8 +80,17 @@ describe("named run slots", () => {
           { kind: "slot", slot: "action", alias: "collatz" },
         ],
       },
-      { kind: "html", html: "</div>" },
     ])
+  })
+
+  it("keeps complete chrome HTML when actions are not nested", () => {
+    const html =
+      "<nav class=\"hs-nav\"></nav>\n<header class=\"hs-hero\"></header>\n{{sql:shared_number}}\n{{action}}\n{{action:collatz}}\n"
+    const grouped = groupHostedActionSlots(splitHostedSiteSlots(html))
+    expect(grouped.filter((s) => s.kind === "html").every((s) => s.kind === "html" && !s.html.includes("<section"))).toBe(
+      true,
+    )
+    expect(grouped.some((s) => s.kind === "action-row")).toBe(true)
   })
 })
 

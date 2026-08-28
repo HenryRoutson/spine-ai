@@ -245,7 +245,7 @@
       "companyName": "Shared Number",
       "tagline": "Everyone shares the same number"
     },
-    "customHtml": "<nav class=\"hs-nav\">\n  <div class=\"hs-nav-brand\">\n    {{logo}}\n    <span class=\"hs-nav-name\">{{company}}</span>\n  </div>\n</nav>\n<header class=\"hs-hero\">\n  <p class=\"hs-kicker\">Shared number</p>\n  <h1 class=\"hs-title\">{{tagline}}</h1>\n  <p class=\"hs-lede\">One SQL row. Double it, or take the next Collatz step.</p>\n</header>\n<section class=\"hs-counter\" id=\"run\">\n  {{sql:shared_number}}\n  <div class=\"hs-action-row\">\n    {{action}}\n    {{action:collatz}}\n  </div>\n</section>\n",
+    "customHtml": "<nav class=\"hs-nav\">\n  <div class=\"hs-nav-brand\">\n    {{logo}}\n    <span class=\"hs-nav-name\">{{company}}</span>\n  </div>\n</nav>\n<header class=\"hs-hero\">\n  <p class=\"hs-kicker\">Shared number</p>\n  <h1 class=\"hs-title\">{{tagline}}</h1>\n  <p class=\"hs-lede\">One SQL row. Double it, or take the next Collatz step.</p>\n</header>\n{{sql:shared_number}}\n{{action}}\n{{action:collatz}}\n",
     "customCss": ".hs-hero { padding: 3.25rem 1.5rem 0.35rem; }\n.hs-lede { max-width: 26rem; }\n.hs-counter { max-width: 46rem; margin: 0 auto; padding: 2.25rem 1.25rem 4rem; text-align: center; }\n.hs-sql-widget { margin: 0 0 1.75rem; }\n.hs-sql-value { font-size: 4.5rem; font-weight: 750; letter-spacing: -0.07em; line-height: 1; }\n.hs-sql-caption { margin-top: 0.65rem; font-size: 0.85rem; color: color-mix(in srgb, var(--hs-fg) 58%, transparent); }\n"
   }
 }
