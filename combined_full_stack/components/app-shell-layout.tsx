@@ -5,6 +5,9 @@
 // AI :   mount a DOM WorkspaceView; keep this header so the toggle stays reachable. Not Ink-in-browser.
 // AI : TODO (spine-in-spine-bootstrap-S10-flag) — SPINE_IN_SPINE_UI serves the hosted guest site as
 // AI :   chrome instead of AppWindowNav + per-tab panels. Slot widgets + page studio stay React.
+// AI : TODO (spine-in-spine-simple-S10-flag) — SPINE_IN_SPINE_UI=simple → 4-page guest
+// AI : TODO (spine-in-spine-full-F8-flag) — SPINE_IN_SPINE_UI=full → pixel-exact guest
+// AI :   Do not iframe this layout into {{run}} — that voids the pixel test (dogfood D7).
 import dynamic from "next/dynamic"
 import { useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react"
 import { Loader2 } from "lucide-react"

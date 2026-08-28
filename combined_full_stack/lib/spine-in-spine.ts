@@ -3,6 +3,11 @@
 // AI : TODO (spine-in-spine-bootstrap) — this file is the P11 dogfood compiler (toy 3 tables + 1 mega page).
 // AI :   Rebuild the *product UI* as guest pages on the host engine — steps S1–S10 in
 // AI :   lib/server/spine-in-spine-bootstrap-roadmap.ts. Grep TODO (spine-in-spine-bootstrap.
+// AI : TODO (spine-in-spine-simple) — SPINE_PLATFORM_BLUEPRINT becomes the 4-page simple guest;
+// AI :   seed seeds/spine_in_spine_simple.json. Do not overload P11's toy seed.
+// AI : TODO (spine-in-spine-full) — add SPINE_PLATFORM_BLUEPRINT_FULL: one page per AppWindowId,
+// AI :   {{slot:structure|pipeline|…}} + spine-full CSS. Seed spine_in_spine_full.json.
+// AI :   Pixel goldens: lib/spine-in-spine-dogfood.ts SPINE_FULL_PIXEL_SCENES.
 
 export type field_def = {
   name: string

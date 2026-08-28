@@ -66,7 +66,7 @@ See `combined_full_stack/lib/server/platform-roadmap.ts`.
 | P14 | `structure_rows` table + RLS | Later |
 | P15 | Share chrome for storage packs | Later |
 | P16 | Unify/merge types across projects | Later |
-| P17 | Spine-in-Spine **bootstrap** (guest UI on host engine) | `lib/server/spine-in-spine-bootstrap-roadmap.ts` — grep `TODO (spine-in-spine-bootstrap` |
+| P17 | Spine-in-Spine **simple** (4-page guest) + **full** (pixel-exact) + OSS LoC dogfood | `lib/server/spine-in-spine-bootstrap-roadmap.ts` + `lib/spine-in-spine-dogfood.ts` — grep `TODO (spine-in-spine-simple` / `full` / `dogfood` |
 
 ## Principles
 

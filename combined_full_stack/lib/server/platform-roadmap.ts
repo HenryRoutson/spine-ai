@@ -104,3 +104,7 @@ export {}
 // AI : TODO (spine-in-spine-bootstrap) — v1 rebuilds the product chrome as hosted pages + slots +
 // AI :   SESSION_ACTIONS. Host keeps run_engine / SpineSession / slot renderer. Steps S0–S12:
 // AI :   lib/server/spine-in-spine-bootstrap-roadmap.ts
+// AI : TODO (spine-in-spine-simple) — 4-page functional guest. Seed spine_in_spine_simple.json
+// AI : TODO (spine-in-spine-full) — pixel-exact guest vs React goldens. Seed spine_in_spine_full.json
+// AI : TODO (spine-in-spine-dogfood) — LoC meter + OSS React clones: spine-in-spine-dogfood-roadmap.ts
+// AI :   catalog: lib/spine-in-spine-dogfood.ts

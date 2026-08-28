@@ -3,6 +3,8 @@
 // AI : TODO (spine-in-spine-bootstrap-S10-flag) — guest replacement for this shell is hosted page /
 // AI :   ({{chatbot}} + {{run:active-user-project}}). Do not port this split; compose slots.
 // AI :   Cut over from AppShellLayout when SPINE_IN_SPINE_UI is on. See bootstrap roadmap S10.
+// AI : TODO (spine-in-spine-full-F4-widgets) — full track mounts this panel as {{slot:vibe}}; do not
+// AI :   rewrite it to HTML. Pixel goldens include the vibe scene (homework_grader, 1280 and 390).
 
 import { useEffect, useState } from "react"
 import dynamic from "next/dynamic"

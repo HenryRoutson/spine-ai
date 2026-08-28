@@ -1,9 +1,16 @@
 // AI : Spine-in-Spine bootstrap — rebuild the Spine *product UI* as a Spine hosted app.
-// Grep: TODO (spine-in-spine-bootstrap
-// P11 dogfood (compiler + toy seed) already shipped — this file is the next work.
+// Grep: TODO (spine-in-spine-bootstrap   shared host/guest + simple steps S0–S12
+//        TODO (spine-in-spine-simple      simplified 4-page guest (this file S1–S10)
+//        TODO (spine-in-spine-full        pixel-exact guest (this file F1–F8)
+//        TODO (spine-in-spine-dogfood     LoC meter, pixel harness, OSS React clones
+// Catalog: lib/spine-in-spine-dogfood.ts
+// Dogfood steps: lib/server/spine-in-spine-dogfood-roadmap.ts
+// P11 compiler + toy seed already shipped.
 //
 // Vibe prompt (paste one step tag):
-//   Implement TODO (spine-in-spine-bootstrap-S<n>-…) in this file.
+//   Implement TODO (spine-in-spine-simple-S2-pages)
+//   or TODO (spine-in-spine-full-F1-goldens)
+//   or TODO (spine-in-spine-dogfood-D1-loc)
 //   Read the step block, the "Do not rebuild" list, and the files it names.
 //   Do not port React. Do not add a second run engine. Mark the tag DONE when shipped.
 
@@ -33,6 +40,30 @@ export {}
 //
 // v1 = guest UI on host engine. v2 (later) = describe the run engine itself as
 // Spine pipelines. v3 (later) = drop the React AppShell. Do v1 first.
+//
+// ---------------------------------------------------------------------------
+// Two guest tracks — simple vs full (both dogfood the host)
+// ---------------------------------------------------------------------------
+// SIMPLE  seed: seeds/spine_in_spine_simple.json
+//         grep: TODO (spine-in-spine-simple
+//         Goal: 4 pages, slots + tables, functional parity with a subset of tabs.
+//         Not pixel-matched. This is the default vibe-code path (S1–S10 below).
+//         LoC win is the point — authored guest lines << React (~46k tsx excl. shadcn).
+//
+// FULL    seed: seeds/spine_in_spine_full.json
+//         grep: TODO (spine-in-spine-full
+//         Goal: pixel-identical to the current React AppShell at frozen scenes.
+//         Widgets are the *same* React components mounted in HostedSlots
+//         (pixel-identical by construction). Chrome/nav/spacing/type match via
+//         CSS tokens. FORBIDDEN: iframe AppShell, mount AppShellLayout in {{run}},
+//         or copy 247 components into hosted HTML strings.
+//
+// P11     seeds/spine_in_spine.json stays the compiler demo (toy 3 tables).
+//         Do not overload it — simple/full are new seeds.
+//
+// Dogfood tests (both tracks + OSS clones):
+//   lib/server/spine-in-spine-dogfood-roadmap.ts
+//   lib/spine-in-spine-dogfood.ts  — OSS React apps to recreate, LoC types
 
 // ---------------------------------------------------------------------------
 // Efficiencies the bootstrapped version already gives you (vs the React app)
@@ -242,15 +273,13 @@ export {}
 // AI :   typed_ports stay: each guest function ↔ its input table.
 
 // ===========================================================================
-// S8 — Seed opens as a hosted site (dogfood the guest UI)
+// S8 — Seed opens as a hosted site (SIMPLE dogfood UI)
 // ===========================================================================
-// AI : TODO (spine-in-spine-bootstrap-S8-site) — seeds/spine_in_spine.json grows
-// AI :   HostedSiteOptions (pages from compiler, pipelineBindings for compile +
-// AI :   active-user-project). Opening the seed → Share → Site shows the guest
-// AI :   builder, not the marketing mega-page.
-// AI :   Inference preset "Compile Spine" stays for the meta pipeline.
-// AI :   Files: write_spine_in_spine_seed.ts, lib/shared-link-types.ts options shape.
-// AI :   Manual check: load seed, Publish, /site/{id} has nav + {{run}} + a table.
+// AI : TODO (spine-in-spine-bootstrap-S8-site) — seeds/spine_in_spine.json stays the P11 compiler demo.
+// AI : TODO (spine-in-spine-simple-S8-site) — new seeds/spine_in_spine_simple.json with
+// AI :   HostedSiteOptions.pages[] from the 4-page compiler. Opening it → Share → Site is
+// AI :   the simplified guest builder. Files: write_spine_in_spine_seed.ts.
+// AI :   Manual check: load simple seed, Publish, /site/{id} has nav + {{run}} + a table.
 
 // ===========================================================================
 // S9 — Parity: hosted guest === CLI/MCP/TUI actions
@@ -262,14 +291,88 @@ export {}
 // AI :   action (core/actions.ts) before adding a button.
 
 // ===========================================================================
-// S10 — Feature flag: guest shell beside React
+// S10 — Feature flag: SIMPLE guest shell beside React
 // ===========================================================================
-// AI : TODO (spine-in-spine-bootstrap-S10-flag) — env/localStorage SPINE_IN_SPINE_UI
-// AI :   serves the hosted Spine-in-Spine site as the app chrome instead of
+// AI : TODO (spine-in-spine-bootstrap-S10-flag) — env/localStorage SPINE_IN_SPINE_UI=simple
+// AI : TODO (spine-in-spine-simple-S10-flag) — serves the simple hosted site as chrome instead of
 // AI :   AppShellLayout tabs. React remains: slot widgets + page studio + host APIs.
-// AI :   Prove with parity-catalog.test + a hosted click-through of add project →
-// AI :   add structure → add step → run. Only then delete React tab panels.
-// AI :   File to branch on: components/app-shell-layout.tsx
+// AI :   Prove add project → add structure → add step → run. File: app-shell-layout.tsx
+// AI :   Full track uses SPINE_IN_SPINE_UI=full (F8) — do not mix the two shells.
+
+// ===========================================================================
+// SIMPLE aliases — same work as S1–S10, grep-friendly track name
+// ===========================================================================
+// AI : TODO (spine-in-spine-simple) — the simplified guest IS bootstrap S1–S10.
+// AI :   Four pages, slots, no pixel match. Seed spine_in_spine_simple.json.
+// AI :   LoC dogfood: authored guest lines vs components/**/*.tsx excluding ui/ (~46k).
+// AI : TODO (spine-in-spine-simple-S1-schema) — same as bootstrap-S1-schema
+// AI : TODO (spine-in-spine-simple-S2-pages) — same as bootstrap-S2-pages
+// AI : TODO (spine-in-spine-simple-S3-actions) — same as bootstrap-S3-actions
+// AI : TODO (spine-in-spine-simple-S4-slots) — same as bootstrap-S4-* (extract, don't rewrite)
+// AI : TODO (spine-in-spine-simple-S5-user-run) — same as bootstrap-S5-user-run
+// AI : TODO (spine-in-spine-simple-S6-mirror) — same as bootstrap-S6-mirror
+// AI : TODO (spine-in-spine-simple-S7-compile) — same as bootstrap-S7-compile
+
+// ===========================================================================
+// FULL — pixel-exact Spine (dogfood: screenshot the React app, match the guest)
+// ===========================================================================
+// Rule: widgets = existing React mounted in HostedSlots. Chrome = CSS token match.
+// Cheat codes that void the test: iframe /site wrapping AppShell; {{run}} mounting
+// AppShellLayout; copying PipelineBuilder into a HTML string.
+//
+// AI : TODO (spine-in-spine-full) — pixel-exact guest. Seed spine_in_spine_full.json.
+// AI :   One hosted page per AppWindowId (not the simple 4-page collapse).
+// AI :   Scenes: structure, pipeline, testing, inference, vibe, documents, share,
+// AI :   logging, cache, billing, settings — same seed (homework_grader), frozen
+// AI :   viewports 1280x800 and 390x844.
+// AI :
+// AI : TODO (spine-in-spine-full-F1-goldens) — Playwright captures of the *React*
+// AI :   AppShell at those scenes. Mask clocks, emails, run ids, cursors,
+// AI :   [data-dynamic]. Store under tests/pixel/react/*.png. Regenerating goldens
+// AI :   is explicit (script flag), not implicit on CI flake.
+// AI :   File: scripts/spine_in_spine_pixel.ts (new). Reuse landing rrweb only as
+// AI :   a reference — pixel goldens must be still frames, not replay.
+// AI :
+// AI : TODO (spine-in-spine-full-F2-css) — map hs-* / guest chrome to AppShell
+// AI :   colors, type, spacing (globals.css + app-chrome-header). Do not rewrite
+// AI :   Tailwind for hosted HTML. Token file: hosted-site-defaults.ts
+// AI :   "spine-full" theme. Screenshot chrome only (nav + window header) first.
+// AI :
+// AI : TODO (spine-in-spine-full-F3-hitboxes) — every visible control keeps the
+// AI :   same data-spine-id as PARITY_ROWS. After layout, bounding boxes of ids
+// AI :   must overlap the React goldens within N px (start N=8). This is the
+// AI :   interaction half of "pixel identical" — a pretty page with moved buttons
+// AI :   fails. File: lib/core/parity-catalog.ts
+// AI :
+// AI : TODO (spine-in-spine-full-F4-widgets) — mount existing panels in slots:
+// AI :   {{slot:vibe}}        vibe-panel observe + chatbot
+// AI :   {{slot:structure}}   StructureBuilder
+// AI :   {{slot:pipeline}}    PipelineCanvas / builder chrome
+// AI :   {{slot:testing}}     testing.tsx
+// AI :   {{slot:inference}}   inference.tsx
+// AI :   {{slot:documents}}   documents panel
+// AI :   {{slot:logging}}     logging / simple-step-trace
+// AI :   {{slot:share}}       ShareSiteForm (do not rebuild)
+// AI :   Those regions are pixel-identical because they ARE the React components.
+// AI :   Guest HTML only composes chrome + slot tokens. See bootstrap S4.
+// AI :
+// AI : TODO (spine-in-spine-full-F5-pages) — compiler emits one HTML doc per
+// AI :   AppWindowId, each with the matching {{slot:*}} and the same nav as
+// AI :   AppWindowNav. Not the simple 4-page map. Path == window id
+// AI :   (/pipeline, /structure, /vibe, …).
+// AI :
+// AI : TODO (spine-in-spine-full-F6-diff) — pixelmatch guest screenshot vs React
+// AI :   golden per scene. Fail if mismatched pixels > 0.1% after masks.
+// AI :   Write a diff PNG on failure. CI job on the full seed only (slow).
+// AI :
+// AI : TODO (spine-in-spine-full-F7-seed) — write_spine_in_spine_seed.ts also
+// AI :   emits seeds/spine_in_spine_full.json + documents/spine_in_spine_full/.
+// AI :   Full blueprint pages[] = AppWindowId list; CSS = spine-full theme.
+// AI :
+// AI : TODO (spine-in-spine-full-F8-flag) — SPINE_IN_SPINE_UI=full serves the
+// AI :   full hosted site as the app chrome. Independent of =simple. Pixel CI
+// AI :   runs against this flag. Do not delete React until F6 is green on
+// AI :   homework_grader + a second seed.
 
 // ===========================================================================
 // Later — not v1 (do not start these in the same vibe pass)
@@ -280,3 +383,4 @@ export {}
 // AI : TODO (spine-in-spine-bootstrap-S12-drop-react) — v3: AppShell / useStore /
 // AI :   per-tab pages go away. Remaining React is HostedSlot widgets + studio.
 // AI :   Blocked on S10 flag being the default for a full demo (homework grader).
+// AI :   Dogfood LoC + pixel + OSS clones: lib/server/spine-in-spine-dogfood-roadmap.ts

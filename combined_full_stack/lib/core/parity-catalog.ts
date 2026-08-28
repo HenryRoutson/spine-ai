@@ -1,5 +1,7 @@
 // AI : one row per GUI button — id is data-spine-id, grep target, MCP session_action, and docs table key.
 // AI : MCP column is *action* parity with the GUI, not a shared live store / "eyes".
+// AI : TODO (spine-in-spine-full-F3-hitboxes) — full guest must keep these ids; bounding boxes vs
+// AI :   React goldens within 8px (spine_in_spine_pixel.ts). A pretty page with moved buttons fails.
 
 import type { ParityRow, ParitySurface } from "@/lib/core/parity"
 import { AppWindowId } from "@/lib/app-window-id"

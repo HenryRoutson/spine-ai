@@ -2,6 +2,7 @@
 // AI : parity ids — structure.add-model structure.add-alias
 // AI : TODO (spine-in-spine-bootstrap-S4-type-expr) — guest Structures page is {{table:StructureModel}}
 // AI :   {{table:ModelField}} + {{slot:type-expr}} wrapping type-expr-editor. Do not port this panel.
+// AI : TODO (spine-in-spine-full-F4-widgets) — full track mounts this panel as {{slot:structure}}.
 
 // AI : TODO (spec) — per-structure "Quick summarise" button: cheap LLM flags inconsistencies (e.g. document_summary:int).
 // AI : TODO (media-view-B-ui) — model header defaultView picker (builtin + project visualizers).

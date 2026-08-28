@@ -1,8 +1,9 @@
 // AI : regenerate seeds/spine_in_spine.json + documents/spine_in_spine/* from the compiler source.
 // AI : TODO (spine-in-spine-bootstrap-S1-schema) — models[] must match SPINE_PLATFORM_BLUEPRINT tables
 // AI :   when S1 expands the product schema. Keep custom-code byte-equal to *CompileTs.
-// AI : TODO (spine-in-spine-bootstrap-S8-site) — emit HostedSiteOptions.pages[] from compileSpineApp
-// AI :   so the seed's Share → Site is the guest builder (four pages), not the marketing mega-page.
+// AI : TODO (spine-in-spine-simple-S8-site) — also emit seeds/spine_in_spine_simple.json (4-page guest).
+// AI : TODO (spine-in-spine-full-F7-seed) — also emit seeds/spine_in_spine_full.json (one page per AppWindowId).
+// AI : TODO (spine-in-spine-dogfood-D0-spine) — loc meter reads those two seeds as spine-simple / spine-full.
 import { mkdirSync, writeFileSync } from "node:fs"
 import { dirname, join } from "node:path"
 import { fileURLToPath } from "node:url"
