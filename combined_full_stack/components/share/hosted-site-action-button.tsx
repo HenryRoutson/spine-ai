@@ -1,9 +1,9 @@
 "use client"
 
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react"
-import { APP_SQL_CHANGED_EVENT } from "@/lib/app-sql"
 import { HostedSiteSimpleTrace } from "@/components/share/hosted-site-simple-trace"
 import { useHostedSqlRows } from "@/components/share/hosted-site-sql-widget"
+import { paintHostedSqlValue, releaseHostedSqlPaint } from "@/lib/hosted-sql-channel"
 import { awaitSharedRun, fetchSharedLink, startSharedRun, uploadSharedDoc } from "@/lib/shared-run-client"
 import { hostedActionButtonLabel, hostedActionTrigger } from "@/lib/hosted-site-slots"
 import {
@@ -21,6 +21,10 @@ import {
 import { mergeStepStates, type StepUiState } from "@/lib/run-engine"
 import { RunPhase } from "@/lib/run-phase"
 import type { ModuleId, PipelineModule } from "@/lib/types"
+
+function holdMs(ms = 650): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms))
+}
 
 function triggerFile(action: ReturnType<typeof hostedActionTrigger>): File {
   return new File([JSON.stringify({ action })], "trigger.json", { type: "application/json" })
@@ -119,7 +123,8 @@ export function HostedSiteActionButton({
     try {
       const link = await fetchSharedLink(linkId, alias)
       setModules(link.modules)
-      if (startN != null) setPlanned(hostedPipelineArithPreview(link.modules, kind, startN))
+      const preview = startN != null ? hostedPipelineArithPreview(link.modules, kind, startN) : []
+      setPlanned(preview)
       const input = link.modules.find((m) => m.kind === "input")
       if (!input) throw new Error("This page has no input step")
       const uploaded = await uploadSharedDoc(linkId, input.id, triggerFile(hostedActionTrigger(alias)))
@@ -131,6 +136,7 @@ export function HostedSiteActionButton({
         alias,
       )
       const seenOk = new Set<ModuleId>()
+      let revealing = Promise.resolve()
       await awaitSharedRun(
         linkId,
         jobId,
@@ -138,22 +144,33 @@ export function HostedSiteActionButton({
         {
           onStep: (steps) => {
             setStepStates((prev) => mergeStepStates(prev, steps))
-            // AI : refresh the live number only when a JSON SQL step newly succeeds.
+            const fresh: hosted_pipeline_step[] = []
             for (const step of steps) {
-              if (step.status !== "ok" || seenOk.has(step.moduleId)) continue
+              if (step.status !== "ok" && step.status !== "cached") continue
+              if (seenOk.has(step.moduleId)) continue
               seenOk.add(step.moduleId)
-              window.dispatchEvent(new Event(APP_SQL_CHANGED_EVENT))
+              const arith = preview.find((row) => row.moduleId === step.moduleId)
+              if (arith) fresh.push(arith)
             }
+            if (fresh.length === 0) return
+            // AI : reveal each JSON SQL UPDATE in order so 1→3 can paint before 4.
+            revealing = revealing.then(async () => {
+              for (const [i, row] of fresh.entries()) {
+                paintHostedSqlValue(linkId, "shared_number", row.to)
+                if (i < fresh.length - 1) await holdMs()
+              }
+            })
           },
         },
         180,
       )
+      await revealing
       setPhase(RunPhase.Done)
-      window.dispatchEvent(new Event(APP_SQL_CHANGED_EVENT))
     } catch (err) {
       setError((err as Error).message)
       setPhase(RunPhase.Idle)
     } finally {
+      releaseHostedSqlPaint(linkId, "shared_number")
       setPinnedN(null)
       setBusy(false)
     }

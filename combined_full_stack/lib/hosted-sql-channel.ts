@@ -14,6 +14,7 @@ type hosted_sql_channel = {
   error: string | null
   inflight: boolean
   pending: boolean
+  holdPainted: boolean
   interval: number
   onChange: () => void
 }
@@ -24,7 +25,24 @@ function channelKey(linkId: string, table: string): string {
   return `${linkId}::${table}`
 }
 
+export function paintHostedSqlValue(linkId: string, table: string, value: number): void {
+  const ch = CHANNELS.get(channelKey(linkId, table))
+  if (!ch?.rows?.[0]) return
+  // AI : show the JSON SQL step's result immediately; fetch confirms from app_sql_rows.
+  ch.holdPainted = true
+  ch.rows = [{ ...ch.rows[0], value }]
+  for (const listener of ch.listeners) listener(ch.rows, ch.error)
+}
+
+export function releaseHostedSqlPaint(linkId: string, table: string): void {
+  const ch = CHANNELS.get(channelKey(linkId, table))
+  if (!ch) return
+  ch.holdPainted = false
+  void fetchChannel(ch)
+}
+
 async function fetchChannel(ch: hosted_sql_channel): Promise<void> {
+  if (ch.holdPainted) return
   if (ch.inflight) {
     ch.pending = true
     return
@@ -77,6 +95,7 @@ export function subscribeHostedSql(
     error: null,
     inflight: false,
     pending: false,
+    holdPainted: false,
     interval: 0,
     onChange: () => undefined,
   }
