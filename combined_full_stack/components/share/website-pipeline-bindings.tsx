@@ -16,7 +16,8 @@ import { cn } from "@/lib/utils"
 import { spineActionProps } from "@/lib/core/parity"
 import { readAccountStateCache } from "@/lib/project-state-cache"
 import type { Project, ProjectId } from "@/lib/types"
-import type { HostedSiteOptions } from "@/lib/shared-link-types"
+import type { HostedSiteOptions, hosted_run_input_visibility } from "@/lib/shared-link-types"
+import { normalizeHostedRunInputChrome } from "@/lib/hosted-run-chrome"
 import {
   bindingsFromProjectIds,
   insertWebsitePipelineInCode,
@@ -60,7 +61,7 @@ export function WebsitePipelineBindings({
   function add(projectId: ProjectId) {
     if (linkedIds.includes(projectId)) return
     const nextIds = [...linkedIds, projectId]
-    const pipelineBindings = bindingsFromProjectIds(nextIds, catalog)
+    const pipelineBindings = bindingsFromProjectIds(nextIds, catalog, options.pipelineBindings)
     const added = pipelineBindings.find((b) => b.projectId === projectId)
     if (!added) return
     onChange(insertWebsitePipelineInCode({ ...options, pipelineBindings }, added.alias))
@@ -84,7 +85,19 @@ export function WebsitePipelineBindings({
     }
     const nextIds = linkedIds.filter((id) => id !== projectId)
     if (!nextIds.includes(primaryProjectId)) nextIds.unshift(primaryProjectId)
-    onChange({ ...stripped, pipelineBindings: bindingsFromProjectIds(nextIds, catalog) })
+    onChange({ ...stripped, pipelineBindings: bindingsFromProjectIds(nextIds, catalog, options.pipelineBindings) })
+  }
+
+  function patchBinding(
+    projectId: ProjectId,
+    patch: { visibility?: hosted_run_input_visibility; inputEditable?: boolean; clearInputAfterRun?: boolean },
+  ) {
+    onChange({
+      ...options,
+      pipelineBindings: linked.map((b) =>
+        b.projectId === projectId ? { ...b, ...normalizeHostedRunInputChrome({ ...b, ...patch }) } : b,
+      ),
+    })
   }
 
   return (
@@ -100,8 +113,9 @@ export function WebsitePipelineBindings({
           return (
             <span
               key={binding.projectId}
-              className="inline-flex h-8 max-w-full items-center gap-1 rounded-md border border-border bg-background pl-2 font-mono text-[11px]"
+              className="inline-flex max-w-full flex-col gap-1 rounded-md border border-border bg-background px-2 py-1.5 font-mono text-[11px]"
             >
+              <span className="inline-flex h-6 max-w-full items-center gap-1">
               <GitBranch className="h-3 w-3 shrink-0 text-muted-foreground" />
               <span className="truncate">{name}</span>
               <span className="text-[10px] text-muted-foreground">{binding.alias}</span>
@@ -117,6 +131,57 @@ export function WebsitePipelineBindings({
               >
                 <X className="h-3 w-3" />
               </DeleteButton>
+              </span>
+              <span className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[10px] text-muted-foreground">
+                <label className="inline-flex items-center gap-1">
+                  Input
+                  <select
+                    className="h-6 rounded border border-border bg-background px-1 text-[10px] text-foreground"
+                    value={binding.visibility}
+                    onChange={(e) =>
+                      patchBinding(binding.projectId, {
+                        visibility: e.target.value as hosted_run_input_visibility,
+                      })
+                    }
+                  >
+                    <option value="auto">auto</option>
+                    <option value="show">show</option>
+                    <option value="hide">hide</option>
+                  </select>
+                </label>
+                <label className="inline-flex items-center gap-1">
+                  <input
+                    type="checkbox"
+                    checked={binding.inputEditable}
+                    disabled={binding.visibility === "hide"}
+                    onChange={(e) =>
+                      patchBinding(
+                        binding.projectId,
+                        e.target.checked
+                          ? { visibility: "show", inputEditable: true }
+                          : { inputEditable: false },
+                      )
+                    }
+                  />
+                  Editable
+                </label>
+                <label className="inline-flex items-center gap-1">
+                  <input
+                    type="checkbox"
+                    checked={binding.clearInputAfterRun}
+                    disabled={binding.visibility === "hide"}
+                    onChange={(e) =>
+                      patchBinding(
+                        binding.projectId,
+                        e.target.checked
+                          ? { visibility: "show", clearInputAfterRun: true }
+                          : { clearInputAfterRun: false },
+                      )
+                    }
+                  />
+                  Clear after run
+                </label>
+              </span>
             </span>
           )
         })}

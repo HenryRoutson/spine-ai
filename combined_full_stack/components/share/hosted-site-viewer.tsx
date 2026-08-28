@@ -93,6 +93,7 @@ export function HostedSiteViewer({
           hideViewerMarkdown={hasDocsSlot}
           pipelineAlias={binding.alias}
           brand={options.brand}
+          inputChrome={binding}
           onRunEvent={onPipelineRunEvent}
         />
       )

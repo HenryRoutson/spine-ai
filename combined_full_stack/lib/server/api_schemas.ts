@@ -745,12 +745,16 @@ export const hostedSiteOptionsSchema = z
       )
       .max(8)
       .optional(),
-    pipelineBindings: z
+            pipelineBindings: z
       .array(
         z
           .object({
             alias: z.string().trim().min(1).max(40),
             projectId: projectIdSchema,
+            visibility: z.enum(["auto", "show", "hide"]).optional(),
+            showInput: z.boolean().optional(),
+            inputEditable: z.boolean().optional(),
+            clearInputAfterRun: z.boolean().optional(),
           })
           .strict(),
       )

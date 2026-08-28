@@ -74,10 +74,15 @@ export type HostedSitePage = {
 
 export type website_runtime_kind = "html" | "react";
 export type website_pipeline_alias = string & { __brand: "website_pipeline_alias" };
+export type hosted_run_input_visibility = "auto" | "show" | "hide";
 
 export type WebsitePipelineBinding = {
   alias: website_pipeline_alias;
   projectId: Project["id"];
+  // AI : show/hide the visitor form. hide forces inputEditable and clearInputAfterRun off.
+  visibility: hosted_run_input_visibility;
+  inputEditable: boolean;
+  clearInputAfterRun: boolean;
 };
 
 export type HostedSiteReactFile = {

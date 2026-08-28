@@ -5,6 +5,7 @@ import type {
   website_pipeline_alias,
   WebsitePipelineBinding,
 } from "@/lib/shared-link-types"
+import { DEFAULT_HOSTED_RUN_INPUT_CHROME, normalizeHostedRunInputChrome } from "@/lib/hosted-run-chrome"
 
 export function websiteDisplayName(site: Pick<SharedLinkRecord, "name" | "siteOptions">): string {
   return site.siteOptions.brand.companyName.trim() || site.name
@@ -47,7 +48,11 @@ export function normalizeWebsitePipelineBindings(raw: unknown): WebsitePipelineB
     }
     usedAliases.add(alias)
     usedProjects.add(projectId)
-    out.push({ alias: alias as website_pipeline_alias, projectId })
+    out.push({
+      alias: alias as website_pipeline_alias,
+      projectId,
+      ...normalizeHostedRunInputChrome(rec),
+    })
   }
   return out
 }
@@ -57,11 +62,11 @@ export function resolveWebsitePipelineBindings(
   bindings: WebsitePipelineBinding[],
 ): WebsitePipelineBinding[] {
   if (bindings.length === 0) {
-    return [{ alias: DEFAULT_WEBSITE_PIPELINE_ALIAS, projectId: primaryProjectId }]
+    return [{ alias: DEFAULT_WEBSITE_PIPELINE_ALIAS, projectId: primaryProjectId, ...DEFAULT_HOSTED_RUN_INPUT_CHROME }]
   }
   if (bindings.some((b) => b.projectId === primaryProjectId)) return bindings
   return [
-    { alias: DEFAULT_WEBSITE_PIPELINE_ALIAS, projectId: primaryProjectId },
+    { alias: DEFAULT_WEBSITE_PIPELINE_ALIAS, projectId: primaryProjectId, ...DEFAULT_HOSTED_RUN_INPUT_CHROME },
     ...bindings.filter((b) => b.alias !== DEFAULT_WEBSITE_PIPELINE_ALIAS),
   ]
 }
@@ -73,9 +78,10 @@ export function remapHostedSitePipelineBindings(
   clonedBoundBySeedId: Partial<Record<string, ProjectId>> = {},
 ): WebsitePipelineBinding[] {
   return resolveWebsitePipelineBindings(seedProjectId, bindings).map((binding) => {
-    if (binding.projectId === seedProjectId) return { ...binding, projectId: clonedProjectId }
+    const chrome = normalizeHostedRunInputChrome(binding)
+    if (binding.projectId === seedProjectId) return { ...binding, ...chrome, projectId: clonedProjectId }
     const remapped = clonedBoundBySeedId[binding.projectId]
-    return remapped ? { ...binding, projectId: remapped } : binding
+    return remapped ? { ...binding, ...chrome, projectId: remapped } : { ...binding, ...chrome }
   })
 }
 
@@ -89,13 +95,16 @@ export function websiteBoundProjectIds(
 export function bindingsFromProjectIds(
   projectIds: ProjectId[],
   projects: Pick<Project, "id" | "name">[],
+  previous: WebsitePipelineBinding[] = [],
 ): WebsitePipelineBinding[] {
   const unique = [...new Set(projectIds)]
   return unique.map((projectId, i) => {
     const name = projects.find((p) => p.id === projectId)?.name ?? projectId
+    const prev = previous.find((b) => b.projectId === projectId)
     return {
       alias: i === 0 ? DEFAULT_WEBSITE_PIPELINE_ALIAS : websitePipelineAliasFromName(name),
       projectId,
+      ...normalizeHostedRunInputChrome(prev),
     }
   })
 }

@@ -17,6 +17,7 @@ import { addSharedWithMe } from "@/lib/shared-with-me"
 import { viewerFundsSharedRun } from "@/lib/shared-link-funding"
 import type { HostedSiteBrand, SharedLinkPublicView } from "@/lib/shared-link-types"
 import { DEFAULT_HOSTED_SITE_OPTIONS } from "@/lib/shared-link-types"
+import type { HostedRunInputChrome } from "@/lib/hosted-run-chrome"
 import { HostedFunctionChrome } from "@/components/share/hosted-function-chrome"
 import { MarkdownView } from "@/components/highlight"
 import { cn } from "@/lib/utils"
@@ -32,6 +33,7 @@ export function SharedRunViewer({
   hideViewerMarkdown = false,
   pipelineAlias,
   brand,
+  inputChrome,
 }: {
   linkId: string
   variant?: "page" | "embed" | "site"
@@ -40,6 +42,7 @@ export function SharedRunViewer({
   hideViewerMarkdown?: boolean
   pipelineAlias?: string
   brand?: HostedSiteBrand
+  inputChrome?: HostedRunInputChrome
 }) {
   const [link, setLink] = useState<SharedLinkPublicView | null>(null)
   const [loadError, setLoadError] = useState<string | null>(null)
@@ -86,6 +89,7 @@ export function SharedRunViewer({
       hideViewerMarkdown={hideViewerMarkdown}
       pipelineAlias={pipelineAlias}
       brand={brand}
+      inputChrome={inputChrome}
     />
   )
 }
@@ -99,6 +103,7 @@ function SharedRunContent({
   hideViewerMarkdown,
   pipelineAlias,
   brand,
+  inputChrome,
 }: {
   link: SharedLinkPublicView
   linkId: string
@@ -108,6 +113,7 @@ function SharedRunContent({
   hideViewerMarkdown: boolean
   pipelineAlias?: string
   brand?: HostedSiteBrand
+  inputChrome?: HostedRunInputChrome
 }) {
   const { email, isAuthenticated, ready, signOut } = useSupabaseSession()
   const isEmbed = variant === "embed"
@@ -243,6 +249,7 @@ function SharedRunContent({
           embedSessionToken={embedSessionToken}
           pipelineAlias={pipelineAlias}
           compact={isSite}
+          inputChrome={inputChrome}
           insufficientCredit={insufficientCredit}
           onOpenBilling={() => {
             window.location.href = "/"

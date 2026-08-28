@@ -48,6 +48,7 @@ export function useSharedInferenceRun(
   embedSessionToken?: string,
   onRunEvent?: (event: SharedRunLifecycleEvent) => void,
   pipelineAlias?: string,
+  ignoreDefaultDocs = false,
 ) {
   const modules = link.modules
   const inputModules = useMemo(() => orderedInputModules(modules), [modules])
@@ -73,9 +74,10 @@ export function useSharedInferenceRun(
     (m: PipelineModule) => {
       const docs = docsForInputModule(inputDocs, m.id)
       if (moduleInputReady(m, { [m.id]: docs } as InputDocsAssignment)) return true
+      if (ignoreDefaultDocs) return false
       return !!link.defaultDocs.find((d) => d.moduleId === m.id)
     },
-    [inputDocs, link.defaultDocs],
+    [inputDocs, link.defaultDocs, ignoreDefaultDocs],
   )
 
   const allInputsReady = inputModules.every(moduleReady)
@@ -136,6 +138,10 @@ export function useSharedInferenceRun(
     humanReviewResolveRef.current = null
     setJobId(null)
     setProgressToken(null)
+  }
+
+  function clearInputAssignment() {
+    setInputDocs({})
   }
 
   async function start() {
@@ -270,5 +276,6 @@ export function useSharedInferenceRun(
     outModelFor,
     start,
     reset,
+    clearInputAssignment,
   }
 }

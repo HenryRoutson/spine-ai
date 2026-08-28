@@ -182,7 +182,9 @@ describe("hosted site UI vibe agent prompts", () => {
       reactFilePatches: [{ path: "src/App.tsx", contents: "export default function App(){return <h1>Hi</h1>}" }],
     })
     expect(next.runtime).toBe("react")
-    expect(next.pipelineBindings).toEqual(current.pipelineBindings)
+    expect(next.pipelineBindings.map((b) => ({ alias: b.alias, projectId: b.projectId }))).toEqual(
+      current.pipelineBindings,
+    )
     expect(next.customHtml).toBe(OPTIONS.customHtml)
     expect(next.reactFiles.find((f) => f.path === "src/App.tsx")?.contents).toContain("Hi")
   })

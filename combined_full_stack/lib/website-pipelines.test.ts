@@ -19,7 +19,15 @@ const P2 = "p2" as ProjectId
 describe("website pipeline bindings", () => {
   it("treats empty bindings as the primary project only", () => {
     expect(websiteBoundProjectIds(P1, [])).toEqual([P1])
-    expect(resolveWebsitePipelineBindings(P1, [])).toEqual([{ alias: "run", projectId: P1 }])
+    expect(resolveWebsitePipelineBindings(P1, [])).toEqual([
+      {
+        alias: "run",
+        projectId: P1,
+        visibility: "auto",
+        inputEditable: true,
+        clearInputAfterRun: false,
+      },
+    ])
   })
 
   it("keeps extra pipelines and unique aliases", () => {
@@ -29,10 +37,27 @@ describe("website pipeline bindings", () => {
       { alias: "invoice", projectId: "p3" },
     ])
     expect(bindings).toEqual([
-      { alias: "run", projectId: P1 },
-      { alias: "invoice", projectId: P2 },
-      { alias: "p3", projectId: "p3" },
+      { alias: "run", projectId: P1, visibility: "auto", inputEditable: true, clearInputAfterRun: false },
+      { alias: "invoice", projectId: P2, visibility: "auto", inputEditable: true, clearInputAfterRun: false },
+      { alias: "p3", projectId: "p3", visibility: "auto", inputEditable: true, clearInputAfterRun: false },
     ])
+  })
+
+  it("coerces hidden pipelines to locked non-clearing chrome", () => {
+    const bindings = normalizeWebsitePipelineBindings([
+      { alias: "run", projectId: P1, showInput: true, clearInputAfterRun: true },
+      { alias: "count", projectId: P2, showInput: false, inputEditable: true, clearInputAfterRun: true },
+    ])
+    expect(bindings[0]).toMatchObject({
+      visibility: "show",
+      inputEditable: true,
+      clearInputAfterRun: true,
+    })
+    expect(bindings[1]).toMatchObject({
+      visibility: "hide",
+      inputEditable: false,
+      clearInputAfterRun: false,
+    })
   })
 
   it("builds bindings from selected project ids", () => {
@@ -56,8 +81,8 @@ describe("website pipeline bindings", () => {
       { p_count_employees: clonedCount },
     )
     expect(next).toEqual([
-      { alias: "run", projectId: cloned },
-      { alias: "count", projectId: clonedCount },
+      { alias: "run", projectId: cloned, visibility: "auto", inputEditable: true, clearInputAfterRun: false },
+      { alias: "count", projectId: clonedCount, visibility: "auto", inputEditable: true, clearInputAfterRun: false },
     ])
   })
 })
@@ -171,7 +196,9 @@ describe("hosted site options normalize", () => {
       reactFiles: [{ path: "src/App.tsx", contents: "export default function App(){return null}" }],
     })
     expect(next.runtime).toBe("react")
-    expect(next.pipelineBindings).toEqual([{ alias: "run", projectId: P1 }])
+    expect(next.pipelineBindings).toEqual([
+      { alias: "run", projectId: P1, visibility: "auto", inputEditable: true, clearInputAfterRun: false },
+    ])
     expect(next.reactFiles[0]?.path).toBe("src/App.tsx")
   })
 })

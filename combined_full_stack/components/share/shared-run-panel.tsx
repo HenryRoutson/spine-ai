@@ -3,7 +3,7 @@
 // AI : TODO (arch-consumer-run) — own-pipeline-run-panel is the same chrome; one ConsumerRunPanel with funding/download slots.
 // AI : DONE (media-view-A-share) — InferenceRunOutputs here picks up DataViewPanel.
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import {
   AlertTriangle,
   CreditCard,
@@ -32,7 +32,7 @@ import { fetchSharedDownload } from "@/lib/shared-run-client"
 import { useSharedInferenceRun, type SharedRunLifecycleEvent } from "@/lib/use-shared-inference-run"
 import { sharedLinkRequiresSignIn, viewerFundsSharedRun } from "@/lib/shared-link-funding"
 import { SharedRunDocScopeProvider } from "@/lib/shared-run-doc-scope"
-import { hostedRunHidesInputSlots } from "@/lib/hosted-run-chrome"
+import { hostedRunAllowsChangeJson, hostedRunShowsInputSlots, DEFAULT_HOSTED_RUN_INPUT_CHROME, type HostedRunInputChrome } from "@/lib/hosted-run-chrome"
 import type { SharedLinkPublicView } from "@/lib/shared-link-types"
 
 type SharedRunPanelProps = {
@@ -47,6 +47,7 @@ type SharedRunPanelProps = {
   onRunEvent?: (event: SharedRunLifecycleEvent) => void
   pipelineAlias?: string
   compact?: boolean
+  inputChrome?: HostedRunInputChrome
 }
 
 export function SharedRunPanel({
@@ -61,6 +62,7 @@ export function SharedRunPanel({
   onRunEvent,
   pipelineAlias,
   compact = false,
+  inputChrome = DEFAULT_HOSTED_RUN_INPUT_CHROME,
 }: SharedRunPanelProps) {
   const run = useSharedInferenceRun(
     link,
@@ -70,15 +72,28 @@ export function SharedRunPanel({
     embedSessionToken,
     onRunEvent,
     pipelineAlias,
+    inputChrome.visibility === "show",
   )
   const [downloadBusy, setDownloadBusy] = useState(false)
   const [downloadError, setDownloadError] = useState<string | null>(null)
   const [inputsOpen, setInputsOpen] = useState(false)
-  const hideInputSlots = hostedRunHidesInputSlots(
-    run.inputModules.map((m) => m.id),
-    link.defaultDocs,
-  )
-  const showInputSlots = run.inputModules.length > 0 && (!compact || !hideInputSlots || inputsOpen)
+  const chrome = inputChrome
+  const chromeArgs = {
+    chrome,
+    inputModuleIds: run.inputModules.map((m) => m.id),
+    defaultDocs: link.defaultDocs,
+    compact,
+  }
+  const showInputSlots =
+    hostedRunShowsInputSlots(chromeArgs) || (compact && inputsOpen && hostedRunAllowsChangeJson(chromeArgs))
+  const allowChangeJson = hostedRunAllowsChangeJson(chromeArgs)
+  const inputLocked = compact && !chrome.inputEditable
+
+  useEffect(() => {
+    if (!chrome.clearInputAfterRun) return
+    if (run.phase !== "done" || !run.run) return
+    run.clearInputAssignment()
+  }, [chrome.clearInputAfterRun, run.phase, run.run?.id]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleDownloadAll = async () => {
     if (!run.run || !run.jobId || !run.progressToken) return
@@ -139,7 +154,7 @@ export function SharedRunPanel({
             variant="upload"
             inputModule={m}
             outModel={run.outModelFor(m)}
-            defaultFilename={run.defaultForModule(m.id)}
+            defaultFilename={chrome.visibility === "show" ? undefined : run.defaultForModule(m.id)}
             docs={docsForInputModule(run.inputDocs, m.id)}
             uploading={run.uploadingModule === m.id}
             onUpload={(file) => void run.handleUpload(m.id, file)}
@@ -150,7 +165,7 @@ export function SharedRunPanel({
               }
             }}
             jsonStruct={inputModuleJsonStructSchema(m, link.models, [])}
-            jsonStructDisabled={run.phase === "running"}
+            jsonStructDisabled={run.phase === "running" || inputLocked}
             jsonStructSource={{
               docs: run.inputModules.flatMap((mod) => docsForInputModule(run.inputDocs, mod.id)),
               project: null,
@@ -231,7 +246,7 @@ export function SharedRunPanel({
         inputCount={run.inputModules.length}
         simple={compact}
       />
-      {compact && hideInputSlots && run.inputModules.length > 0 ? (
+      {allowChangeJson ? (
         <button
           type="button"
           className="w-full text-center text-xs text-muted-foreground underline-offset-2 hover:underline"

@@ -98,7 +98,7 @@ export function defaultHostedSiteCss(): string {
 .hs-feature p { margin: 0.45rem 0 0; font-size: 0.88rem; line-height: 1.5; color: color-mix(in srgb, var(--hs-fg) 64%, transparent); }
 .hs-run { padding: 0 1rem 2.75rem; }
 .hs-workspace-head { max-width: 56rem; margin: 0 auto 1rem; text-align: center; }
-.hs-workspace-title { margin: 0.4rem 0 0; font-size: 1.25rem; font-weight: 650; letter-spacing: -0.025em; }
+.hs-workspace-title { margin: 0.4rem 0 0; font-size: 1.25rem; font-weight: 650; letter-spacing: -0.025em; text-align: center; }
 .hs-run-slot, .hs-output-slot, .hs-chatbot-slot, .hs-docs-slot { margin: 0 auto; max-width: 56rem; border-radius: 1.1rem; overflow: hidden; border: 1px solid color-mix(in srgb, var(--hs-fg) 10%, transparent); box-shadow: 0 22px 60px color-mix(in srgb, var(--hs-fg) 12%, transparent); background: var(--hs-fn-bg, #fff); color: var(--hs-fn-fg, inherit); }
 .hs-fn { color: var(--hs-fn-fg, inherit); background: var(--hs-fn-bg, transparent); }
 .hs-fn .bg-background { background: var(--hs-fn-bg); }
@@ -133,6 +133,7 @@ export function defaultHostedSiteCss(): string {
 .hs-account { display: flex; justify-content: flex-end; align-items: center; gap: 0.6rem; padding: 0.65rem 0.85rem; font-size: 0.72rem; border-bottom: 1px solid color-mix(in srgb, var(--hs-fg) 8%, transparent); color: color-mix(in srgb, var(--hs-fg) 62%, transparent); }
 .hs-split { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1.25rem; max-width: 72rem; margin: 0 auto; padding: 0 1.25rem 3rem; }
 .hs-split .hs-run-slot { max-width: none; margin: 0; }
+.hs-split-heads { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1.25rem; max-width: 72rem; margin: 0 auto; padding: 1.5rem 1.25rem 0.35rem; text-align: center; }
 .hs-sql-table-wrap { overflow-x: auto; text-align: left; }
 .hs-sql-table { width: 100%; border-collapse: collapse; font-size: 0.88rem; }
 .hs-sql-table th, .hs-sql-table td { padding: 0.55rem 0.7rem; border-bottom: 1px solid color-mix(in srgb, var(--hs-fg) 10%, transparent); }
@@ -140,6 +141,7 @@ export function defaultHostedSiteCss(): string {
 .hs-sql-caption { margin-top: 0.65rem; font-size: 0.85rem; color: color-mix(in srgb, var(--hs-fg) 58%, transparent); }
 @media (max-width: 860px) {
   .hs-split { grid-template-columns: 1fr; }
+  .hs-split-heads { grid-template-columns: 1fr; }
 }
 @media (max-width: 720px) {
   .hs-features { grid-template-columns: 1fr; }
