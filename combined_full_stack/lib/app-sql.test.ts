@@ -138,6 +138,8 @@ describe("double shared number seed", () => {
     expect(report.ok, report.issues.map((i) => `${i.level}:${i.code} ${i.message}`).join("\n")).toBe(true)
     expect(report.pageHtml).toContain("hs-sql-slot")
     expect(report.pageHtml).toContain("hs-action-slot")
+    expect(report.pageHtml).toContain("hs-action-row")
+    expect(report.pageHtml).toContain("justify-content: center")
     expect(report.pageHtml).not.toContain('class="hs-run-slot"')
   })
 })

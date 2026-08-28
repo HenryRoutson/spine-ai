@@ -2,7 +2,7 @@
   "id": "p_double_shared_number",
   "name": "Double Shared Number",
   "kind": "double-number-demo",
-  "documentation": "Hosted-app SQL backend. shared_number starts at 1. Double it runs UPDATE … SET value = value * 2. 3n+1 applies one Collatz step: if odd, times three then plus one as two SQL steps; if even, divide by two. The hosted page shows a simplified inference trace while those steps run.",
+  "documentation": "Hosted-app SQL backend. shared_number starts at 1. The page shows two centered cards: Double (n → 2n, one SQL step) and 3n+1 (odd: times three then plus one; even: divide by two). The hosted trace only lists those arithmetic steps.",
   "models": [
     {
       "id": "m_trigger",
@@ -245,7 +245,7 @@
       "companyName": "Shared Number",
       "tagline": "Everyone shares the same number"
     },
-    "customHtml": "<nav class=\"hs-nav\">\n  <div class=\"hs-nav-brand\">\n    {{logo}}\n    <span class=\"hs-nav-name\">{{company}}</span>\n  </div>\n</nav>\n<header class=\"hs-hero\">\n  <p class=\"hs-kicker\">Shared counter</p>\n  <h1 class=\"hs-title\">{{tagline}}</h1>\n  <p class=\"hs-lede\">This number lives in SQL. Double it, or apply one 3n+1 step. Times three and plus one are separate backend steps.</p>\n</header>\n<section class=\"hs-counter\" id=\"run\">\n  {{sql:shared_number}}\n  <div class=\"hs-action-row\">\n    {{action}}\n    {{action:collatz}}\n  </div>\n</section>\n",
-    "customCss": ".hs-counter { max-width: 36rem; margin: 0 auto; padding: 2.5rem 1.25rem 4rem; text-align: center; }\n.hs-sql-widget { margin: 0 0 1.25rem; }\n.hs-sql-value { font-size: 4.5rem; font-weight: 750; letter-spacing: -0.07em; line-height: 1; }\n.hs-sql-caption { margin-top: 0.65rem; font-size: 0.85rem; color: color-mix(in srgb, var(--hs-fg) 58%, transparent); }\n.hs-action-row { display: flex; flex-wrap: wrap; justify-content: center; gap: 0.85rem; align-items: flex-start; }\n.hs-action-slot { margin: 0; max-width: 20rem; text-align: center; }\n.hs-action-btn { min-width: 10rem; height: 2.6rem; border: 0; border-radius: 999px; background: var(--hs-accent); color: #fff; font-weight: 600; font-size: 0.95rem; cursor: pointer; }\n.hs-action-btn:disabled { opacity: 0.6; cursor: wait; }\n.hs-step-trace { margin-top: 1rem; padding: 0.85rem 0.9rem; border-radius: 0.9rem; border: 1px solid color-mix(in srgb, var(--hs-fg) 10%, transparent); background: color-mix(in srgb, var(--hs-bg) 92%, #fff); text-align: left; }\n"
+    "customHtml": "<nav class=\"hs-nav\">\n  <div class=\"hs-nav-brand\">\n    {{logo}}\n    <span class=\"hs-nav-name\">{{company}}</span>\n  </div>\n</nav>\n<header class=\"hs-hero\">\n  <p class=\"hs-kicker\">Shared number</p>\n  <h1 class=\"hs-title\">{{tagline}}</h1>\n  <p class=\"hs-lede\">One SQL row. Double it, or take the next Collatz step.</p>\n</header>\n<section class=\"hs-counter\" id=\"run\">\n  {{sql:shared_number}}\n  <div class=\"hs-action-row\">\n    {{action}}\n    {{action:collatz}}\n  </div>\n</section>\n",
+    "customCss": ".hs-hero { padding: 3.25rem 1.5rem 0.35rem; }\n.hs-lede { max-width: 26rem; }\n.hs-counter { max-width: 46rem; margin: 0 auto; padding: 2.25rem 1.25rem 4rem; text-align: center; }\n.hs-sql-widget { margin: 0 0 1.75rem; }\n.hs-sql-value { font-size: 4.5rem; font-weight: 750; letter-spacing: -0.07em; line-height: 1; }\n.hs-sql-caption { margin-top: 0.65rem; font-size: 0.85rem; color: color-mix(in srgb, var(--hs-fg) 58%, transparent); }\n"
   }
 }

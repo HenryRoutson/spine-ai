@@ -5,15 +5,9 @@ import { APP_SQL_CHANGED_EVENT } from "@/lib/app-sql"
 import { API_ROUTES } from "@/lib/api-routes"
 import { FETCH_NO_STORE, parseFetchJson } from "@/lib/api-client"
 
-type sql_row = Record<string, unknown>
+export type sql_row = Record<string, unknown>
 
-export function HostedSiteSqlWidget({
-  linkId,
-  table,
-}: {
-  linkId: string
-  table: string
-}) {
+export function useHostedSqlRows(linkId: string, table: string): { rows: sql_row[] | null; error: string | null } {
   const [rows, setRows] = useState<sql_row[] | null>(null)
   const [error, setError] = useState<string | null>(null)
 
@@ -42,6 +36,18 @@ export function HostedSiteSqlWidget({
       window.clearInterval(tick)
     }
   }, [load])
+
+  return { rows, error }
+}
+
+export function HostedSiteSqlWidget({
+  linkId,
+  table,
+}: {
+  linkId: string
+  table: string
+}) {
+  const { rows, error } = useHostedSqlRows(linkId, table)
 
   const value = rows?.[0]?.value
   const showBig = rows?.length === 1 && (typeof value === "number" || typeof value === "string")

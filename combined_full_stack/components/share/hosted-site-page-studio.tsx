@@ -177,8 +177,8 @@ export function HostedSitePageStudio({
       }}
       runByAlias={runByAlias}
       actionByAlias={{
-        run: <HostedSiteActionPreview label="Double it" />,
-        collatz: <HostedSiteActionPreview label="3n + 1" />,
+        run: <HostedSiteActionPreview />,
+        collatz: <HostedSiteActionPreview alias="collatz" />,
       }}
       editable={value.runtime !== "react"}
     />
