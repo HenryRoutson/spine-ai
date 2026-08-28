@@ -32,6 +32,7 @@ import {
   pipelineHasFork,
 } from "@/lib/fork-pipeline"
 import { formatIfCondition } from "@/lib/if-else-pipeline"
+import { formatModuleSpineOut } from "@/lib/spine-type"
 import { forkJoinCaption } from "@/lib/fork-join-caption"
 import { isAutoQuoteStep } from "@/lib/quote-steps"
 import { inputTargetStructureId, isAutoDocToTextStep, isAutoStructureParseStep, isManagedLockedStep } from "@/lib/structure-parse-steps"
@@ -144,6 +145,7 @@ export function PipelineCanvas({
           ) : null}
           <PipelineDagGraph
             modules={modules}
+            models={models}
             selectedId={selectedId}
             onSelect={onSelect}
             stepStatus={stepStatus}
@@ -305,7 +307,11 @@ function SegmentRow({
                 <>
                   <StructureLink models={models} structureId={fork.inStructureId} fallback="pipeline" />
                   <span className="text-muted-foreground/60"> → </span>
-                  <StructureLink models={models} structureId={fork.outStructureId} />
+                  {isIfElseKind(fork.kind) ? (
+                    <span>{formatModuleSpineOut(fork, models)}</span>
+                  ) : (
+                    <StructureLink models={models} structureId={fork.outStructureId} />
+                  )}
                   <span className="text-muted-foreground/60">
                     {" "}
                     · {isIfElseKind(fork.kind) ? formatIfCondition(fork.ifCondition) : joinCaption.title}
@@ -408,6 +414,8 @@ function SegmentRow({
           {isIfElseKind(fork.kind) && (
             <p className="mt-3 rounded-md border border-dashed border-chart-4/50 bg-background/60 px-2.5 py-2 font-mono text-[10px] text-muted-foreground">
               if {formatIfCondition(fork.ifCondition)} → Then, else Else (optional)
+              {" · join "}
+              {formatModuleSpineOut(fork, models)}
             </p>
           )}
         </div>

@@ -431,7 +431,8 @@ export function PipelineModuleFields({
         selected.kind !== ModuleKind.Chatbot &&
         selected.kind !== ModuleKind.Assemble &&
         selected.kind !== ModuleKind.Parallel &&
-        selected.kind !== ModuleKind.Fork && (
+        selected.kind !== ModuleKind.Fork &&
+        selected.kind !== ModuleKind.IfElse && (
         <PipelineField
           label="Output model"
           hint={invalid?.kind === InvalidKind.NoOutput ? "required — step must emit a structure" : undefined}

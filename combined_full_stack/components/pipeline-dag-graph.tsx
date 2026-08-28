@@ -6,14 +6,15 @@ import { layoutPipelineDag } from "@/lib/pipeline-dag-layout"
 import { pipelineToDag, type PipelineDagEdgeKind } from "@/lib/pipeline-dag"
 import { KindIcon, PipelineNode } from "@/lib/module-ui"
 import { isIfElseKind, isNestedLaneKind } from "@/lib/fork-pipeline"
-import { MODULE_META } from "@/lib/types"
+import { MODULE_META, type ModuleId, type PipelineModule, type RunStepStatus, type StructureModel } from "@/lib/types"
 import { cn } from "@/lib/utils"
 import { invalidForModule, type InvalidMap } from "@/lib/validity"
 import { uiContextTargetProps } from "@/lib/ui-context-dom"
-import type { ModuleId, PipelineModule, RunStepStatus } from "@/lib/types"
+import { formatModuleSpineOut } from "@/lib/spine-type"
 
 type PipelineDagGraphProps = {
   modules: PipelineModule[]
+  models?: StructureModel[]
   selectedId?: ModuleId
   onSelect?: (id: ModuleId) => void
   stepStatus?: Map<ModuleId, RunStepStatus>
@@ -29,6 +30,7 @@ function edgeStroke(kind: PipelineDagEdgeKind): string {
 
 export function PipelineDagGraph({
   modules,
+  models = [],
   selectedId,
   onSelect,
   stepStatus,
@@ -127,7 +129,9 @@ export function PipelineDagGraph({
               <span className="min-w-0 flex-1">
                 <span className="block truncate text-sm font-medium leading-snug">{m.label}</span>
                 <span className="block truncate font-mono text-[10px] leading-snug text-muted-foreground">
-                  {isIfElseKind(m.kind) ? n.label.replace(`${m.label}: `, "") : MODULE_META[m.kind].label}
+                  {isIfElseKind(m.kind)
+                    ? `${n.label.replace(`${m.label}: `, "")} · ${formatModuleSpineOut(m, models)}`
+                    : MODULE_META[m.kind].label}
                 </span>
               </span>
               {issue ? <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-destructive" /> : null}

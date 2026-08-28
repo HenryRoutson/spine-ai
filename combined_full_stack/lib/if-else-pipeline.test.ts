@@ -1,6 +1,10 @@
+import { resolve } from "node:path"
 import { describe, expect, it } from "vitest"
 import { computeInvalid } from "@/lib/validity"
 import { flattenPipelineModules, isNestedLaneKind, deriveIfElseStepTypes } from "@/lib/fork-pipeline"
+import { loadProjectSeed, SEEDS_DIR } from "@/lib/server/seed"
+import { formatModuleSpineOut } from "@/lib/spine-type"
+import { derivePipelineMermaid } from "@/lib/pipeline-mermaid"
 import {
   defaultIfElseBranches,
   evalIfCondition,
@@ -246,5 +250,19 @@ describe("if/else step", () => {
       branchId: "Then",
     })
     expect(holder.modules.find((m) => m.kind === ModuleKind.IfElse)?.forkBranches?.[0]?.modules[0]?.label).toBe("LegalThen")
+  })
+
+  it("Urgent Ticket Route seed unions Then PagerAlert with Else QueueTicket", () => {
+    const { project } = loadProjectSeed(resolve(SEEDS_DIR, "urgent_ticket.json"))
+    const route = project.modules.find((m) => m.kind === ModuleKind.IfElse)
+    expect(route?.ifCondition).toEqual({ kind: IfConditionKind.Path, path: "urgent" })
+    expect(formatModuleSpineOut(route!, project.models)).toBe("PagerAlert | QueueTicket")
+    const thenOut = route?.forkBranches?.[0]?.modules[0]
+    const elseOut = route?.forkBranches?.[1]?.modules[0]
+    expect(formatModuleSpineOut(thenOut!, project.models)).toBe("PagerAlert")
+    expect(formatModuleSpineOut(elseOut!, project.models)).toBe("QueueTicket")
+    const chart = derivePipelineMermaid(project.modules, project.models)
+    expect(chart).toContain("Then")
+    expect(chart).toContain("Else")
   })
 })
