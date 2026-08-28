@@ -2,15 +2,10 @@
 
 import { AlertTriangle, CheckCircle2, Circle, Loader2 } from "lucide-react"
 import { Progress } from "@/components/ui/progress"
-import { flattenPipelineModules } from "@/lib/fork-pipeline"
+import { hostedPipelineTraceRows, type hosted_pipeline_step } from "@/lib/hosted-pipeline-trace"
 import type { StepUiState } from "@/lib/run-engine"
-import type { ModuleId, PipelineModule } from "@/lib/types"
+import type { ModuleId } from "@/lib/types"
 import { RunPhase } from "@/lib/run-phase"
-
-function rowState(states: Map<ModuleId, StepUiState>, id: ModuleId | undefined): StepUiState["status"] | "idle" {
-  if (!id) return "idle"
-  return states.get(id)?.status ?? "idle"
-}
 
 function HostedArithRow({
   label,
@@ -38,23 +33,17 @@ function HostedArithRow({
 }
 
 export function HostedSiteSimpleTrace({
-  modules,
+  planned,
   stepStates,
   phase,
-  labels,
 }: {
-  modules: PipelineModule[]
+  planned: hosted_pipeline_step[]
   stepStates: Map<ModuleId, StepUiState>
   phase: RunPhase
-  labels: string[]
 }) {
   if (phase !== RunPhase.Running && phase !== RunPhase.Done) return null
-  // AI : hosted UI only lists the 1–2 arithmetic steps, not the full pipeline tree.
-  const flat = flattenPipelineModules(modules)
-  const rows = labels.map((label) => {
-    const mod = flat.find((m) => m.label === label)
-    return { label, state: rowState(stepStates, mod?.id) }
-  })
+  const rows = hostedPipelineTraceRows(planned, stepStates)
+  if (rows.length === 0) return null
   const done = rows.filter((row) => row.state !== "idle" && row.state !== "running").length
   const progressPct = phase === RunPhase.Done ? 100 : Math.round((done / Math.max(1, rows.length)) * 100)
 
@@ -71,7 +60,7 @@ export function HostedSiteSimpleTrace({
       ) : null}
       <div className="space-y-2">
         {rows.map((row) => (
-          <HostedArithRow key={row.label} label={row.label} state={row.state} />
+          <HostedArithRow key={row.id} label={row.label} state={row.state} />
         ))}
       </div>
     </div>

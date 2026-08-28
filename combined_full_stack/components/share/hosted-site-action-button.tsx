@@ -1,6 +1,6 @@
 "use client"
 
-import { useCallback, useRef, useState, type ReactNode } from "react"
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react"
 import { APP_SQL_CHANGED_EVENT } from "@/lib/app-sql"
 import { HostedSiteSimpleTrace } from "@/components/share/hosted-site-simple-trace"
 import { useHostedSqlRows } from "@/components/share/hosted-site-sql-widget"
@@ -8,11 +8,16 @@ import { awaitSharedRun, fetchSharedLink, startSharedRun, uploadSharedDoc } from
 import { hostedActionButtonLabel, hostedActionTrigger } from "@/lib/hosted-site-slots"
 import {
   hostedActionCardTitle,
-  hostedArithLabels,
   hostedPreviewLines,
   parseHostedNumber,
   type hosted_action_kind,
+  type hosted_preview_line,
 } from "@/lib/hosted-collatz"
+import {
+  hostedPipelineArithPreview,
+  hostedPipelinePreviewLines,
+  type hosted_pipeline_step,
+} from "@/lib/hosted-pipeline-trace"
 import { mergeStepStates, type StepUiState } from "@/lib/run-engine"
 import { RunPhase } from "@/lib/run-phase"
 import type { ModuleId, PipelineModule } from "@/lib/types"
@@ -23,7 +28,7 @@ function triggerFile(action: ReturnType<typeof hostedActionTrigger>): File {
 
 function HostedActionCard({
   kind,
-  n,
+  lines,
   buttonLabel,
   busy,
   error,
@@ -32,7 +37,7 @@ function HostedActionCard({
   trace,
 }: {
   kind: hosted_action_kind
-  n: number | null
+  lines: hosted_preview_line[]
   buttonLabel: string
   busy?: boolean
   error?: string | null
@@ -40,8 +45,6 @@ function HostedActionCard({
   preview?: boolean
   trace?: ReactNode
 }) {
-  const lines = hostedPreviewLines(kind, n)
-  // AI : each card shows both sides of the arithmetic so Double and 3n+1 stay visible together.
   return (
     <div className="hs-action-widget hs-action-card" data-spine-id="site.sql-action">
       <p className="hs-action-card-title">{hostedActionCardTitle(kind)}</p>
@@ -73,7 +76,6 @@ export function HostedSiteActionButton({
 }) {
   const kind = hostedActionTrigger(alias)
   const shown = label ?? hostedActionButtonLabel(alias)
-  // AI : live n drives the card equations; pin it while the run is in flight.
   const { rows } = useHostedSqlRows(linkId, "shared_number")
   const liveN = parseHostedNumber(rows?.[0]?.value)
   const liveNRef = useRef(liveN)
@@ -84,10 +86,24 @@ export function HostedSiteActionButton({
   const [phase, setPhase] = useState<RunPhase>(RunPhase.Idle)
   const [modules, setModules] = useState<PipelineModule[]>([])
   const [stepStates, setStepStates] = useState<Map<ModuleId, StepUiState>>(new Map())
-  const [traceLabels, setTraceLabels] = useState<string[]>(() => hostedArithLabels(kind, liveN))
+  const [planned, setPlanned] = useState<hosted_pipeline_step[]>([])
   const [pinnedN, setPinnedN] = useState<number | null>(null)
 
   const previewN = pinnedN ?? liveN
+  const pipelineLines = hostedPipelinePreviewLines(modules, kind, previewN)
+  const lines = pipelineLines.length > 0 ? pipelineLines : hostedPreviewLines(kind, previewN)
+
+  useEffect(() => {
+    let cancelled = false
+    void fetchSharedLink(linkId, alias)
+      .then((link) => {
+        if (!cancelled) setModules(link.modules)
+      })
+      .catch(() => undefined)
+    return () => {
+      cancelled = true
+    }
+  }, [alias, linkId])
 
   const run = useCallback(async () => {
     const startN = liveNRef.current
@@ -95,11 +111,12 @@ export function HostedSiteActionButton({
     setError(null)
     setPhase(RunPhase.Running)
     setStepStates(new Map())
+    setPlanned([])
     setPinnedN(startN)
-    setTraceLabels(hostedArithLabels(kind, startN))
     try {
       const link = await fetchSharedLink(linkId, alias)
       setModules(link.modules)
+      if (startN != null) setPlanned(hostedPipelineArithPreview(link.modules, kind, startN))
       const input = link.modules.find((m) => m.kind === "input")
       if (!input) throw new Error("This page has no input step")
       const uploaded = await uploadSharedDoc(linkId, input.id, triggerFile(hostedActionTrigger(alias)))
@@ -117,6 +134,8 @@ export function HostedSiteActionButton({
         {
           onStep: (steps) => {
             setStepStates((prev) => mergeStepStates(prev, steps))
+            // AI : each SQL step mutates app_sql_rows — refresh the live number from the pipeline, not JS.
+            window.dispatchEvent(new Event(APP_SQL_CHANGED_EVENT))
           },
         },
         220,
@@ -135,14 +154,12 @@ export function HostedSiteActionButton({
   return (
     <HostedActionCard
       kind={kind}
-      n={previewN}
+      lines={lines}
       buttonLabel={shown}
       busy={busy}
       error={error}
       onClick={() => void run()}
-      trace={
-        <HostedSiteSimpleTrace modules={modules} stepStates={stepStates} phase={phase} labels={traceLabels} />
-      }
+      trace={<HostedSiteSimpleTrace planned={planned} stepStates={stepStates} phase={phase} />}
     />
   )
 }
@@ -156,6 +173,11 @@ export function HostedSiteActionPreview({
 }) {
   const kind = hostedActionTrigger(alias)
   return (
-    <HostedActionCard kind={kind} n={1} buttonLabel={label ?? hostedActionButtonLabel(alias)} preview />
+    <HostedActionCard
+      kind={kind}
+      lines={hostedPreviewLines(kind, 1)}
+      buttonLabel={label ?? hostedActionButtonLabel(alias)}
+      preview
+    />
   )
 }
