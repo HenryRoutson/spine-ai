@@ -28,7 +28,7 @@ export const VIBE_HARNESS_MAX_TURNS = 8
 export const VIBE_HARNESS_MAX_TOKENS = 8192
 export const VIBE_HARNESS_MAX_FILE_CHARS = 48_000
 export const VIBE_HARNESS_MAX_FILES = 48
-export const VIBE_HARNESS_MAX_TOOLS_PER_TURN = 8
+export const VIBE_HARNESS_MAX_TOOLS_PER_TURN = 12
 
 const READONLY_PATHS = new Set(["AGENTS.md", "examples/few-shot.md"])
 
@@ -199,6 +199,7 @@ This is a **file workspace**, not a chat dump. Edit files, then \`run_tests\`. T
 - \`structureIn\` is the **item** name (never \`list[...]\`).
 - \`structureOut\` for llm-batch / example-select / chunk: item name only (kind already emits a list).
 - \`structureOut\` for input / llm / custom-code: write \`list[Name]\` when the step emits a list.
+- Blank projects already have Input + Output. Replace that pipeline; do not treat it as finished.
 - Input of pdf/word/image/web/text: \`structureOut\` is Document or \`list[Document]\` — never a parsed model.
 - Many same-kind files → one input with \`list[Document]\` + llm-batch. Two different kinds → process first, then combine (raw side file immediately before combine) **or** assemble after both are parsed. Never a third upload.
 - Independent extracts on one input → fork + product join, not one mega-llm, not parallel.

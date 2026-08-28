@@ -84,6 +84,7 @@ import { customCodeEntriesForModule } from "@/lib/custom_code_entries";
 import { lintPipeline } from "./pipeline_lint";
 import { VIBE_THINKING_MAX_TOKENS, type VibeWorkspaceDraft } from "./vibe-coding-workspace";
 import {
+  harnessDraftHasPipelineWork,
   runVibeCodingHarness,
   vibeHarnessEnabled,
 } from "./vibe-coding-harness";
@@ -1032,8 +1033,11 @@ function makeMessageExtractor(onMessageDelta: (delta: string) => void): (rawDelt
   };
 }
 
-function draftToAssistantRaw(draft: VibeWorkspaceDraft): z.infer<typeof assistantResponseSchema> | null {
-  if (draft.errors.length) return null;
+function parseAssistantDraft(draft: VibeWorkspaceDraft): {
+  raw: z.infer<typeof assistantResponseSchema> | null;
+  schemaErrors: string[];
+} {
+  if (draft.errors.length) return { raw: null, schemaErrors: [] };
   const parsed = assistantResponseSchema.safeParse({
     message: draft.message || "I'll update the project.",
     modules: draft.modules,
@@ -1046,10 +1050,20 @@ function draftToAssistantRaw(draft: VibeWorkspaceDraft): z.infer<typeof assistan
     targetFunctionName: draft.targetFunctionName,
     proposedActions: draft.proposedActions,
   });
-  return parsed.success ? parsed.data : null;
+  if (parsed.success) return { raw: parsed.data, schemaErrors: [] };
+  return {
+    raw: null,
+    schemaErrors: parsed.error.issues
+      .slice(0, 12)
+      .map((i) => `${i.path.length ? i.path.join(".") : "root"}: ${i.message}`),
+  };
 }
 
-function runVibeWorkspaceChecks(
+function draftToAssistantRaw(draft: VibeWorkspaceDraft): z.infer<typeof assistantResponseSchema> | null {
+  return parseAssistantDraft(draft).raw;
+}
+
+export function runVibeWorkspaceChecks(
   draft: VibeWorkspaceDraft,
   project: Project,
   globalModel: ModelId,
@@ -1058,10 +1072,14 @@ function runVibeWorkspaceChecks(
   if (draft.errors.length) {
     return `FAIL parse\n${draft.errors.map((e) => `- ${e}`).join("\n")}`;
   }
-  const raw = draftToAssistantRaw(draft);
-  if (!raw) {
-    return "FAIL schema — pipeline.json / structures/*.json / aliases.json do not match the assistant schema. Read examples/few-shot.md.";
+  const parsed = parseAssistantDraft(draft);
+  if (!parsed.raw) {
+    const details = parsed.schemaErrors.length
+      ? parsed.schemaErrors.map((e) => `- ${e}`).join("\n")
+      : "- pipeline.json / structures/*.json / aliases.json do not match the assistant schema";
+    return `FAIL schema\n${details}\nFix: non-JSON inputs structureOut Document or list[Document]; llm-batch structureIn is the item name (Document), not list[Document].`;
   }
+  const raw = parsed.raw;
   const proposal = materializeProposal(raw, project, globalModel, testDocsCatalog);
   if (!proposal) {
     return "PASS (no project file changes — Q&A only). Write message.md if the user should see a reply.";
@@ -1133,8 +1151,8 @@ async function tryVibeFileHarness(args: {
   const harnessRaw = draftToAssistantRaw(harness.draft);
   if (!harnessRaw) return null;
   const proposal = materializeProposal(harnessRaw, args.project, args.globalModel, args.testDocsCatalog);
-  // AI : empty / Q&A file loops must not replace the JSON few-shot path.
-  if (!proposal) return null;
+  // AI : empty / Q&A / stub Input+Output file loops must not replace the JSON few-shot path.
+  if (!proposal || !harnessDraftHasPipelineWork(harness.draft)) return null;
   return { raw: harnessRaw, proposal, turns: harness.turns };
 }
 

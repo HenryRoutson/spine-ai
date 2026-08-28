@@ -32,10 +32,13 @@ const harnessToolCallSchema = z.object({
 })
 
 export const vibeHarnessTurnSchema = z.object({
-  tools: z
-    .array(harnessToolCallSchema)
-    .max(VIBE_HARNESS_MAX_TOOLS_PER_TURN)
-    .describe("1–8 tools this turn. Prefer write_file. Empty tools = done."),
+  tools: z.preprocess(
+    (val) => (Array.isArray(val) ? val.slice(0, VIBE_HARNESS_MAX_TOOLS_PER_TURN) : val),
+    z
+      .array(harnessToolCallSchema)
+      .max(VIBE_HARNESS_MAX_TOOLS_PER_TURN)
+      .describe("1–12 tools this turn. Prefer write_file. Extra tools are dropped, not rejected. Empty tools is not done unless run_tests already PASSed."),
+  ),
   note: z.string().optional().describe("Private scratch; not shown to the user"),
 })
 
@@ -119,6 +122,58 @@ export function executeVibeHarnessTool(
   return `error: unknown tool ${tool}`
 }
 
+export function harnessDraftHasPipelineWork(draft: VibeWorkspaceDraft): boolean {
+  if (!Array.isArray(draft.modules) || draft.modules.length === 0) return false
+  return draft.modules.some((m) => {
+    if (!m || typeof m !== "object") return false
+    const kind = String((m as { kind?: unknown }).kind ?? "")
+    return kind !== "" && kind !== "input" && kind !== "output"
+  })
+}
+
+export function isHarnessProposalPass(report: string, draft: VibeWorkspaceDraft): boolean {
+  if (!/^PASS\b/m.test(report)) return false
+  if (/Q&A only/i.test(report)) return false
+  return harnessDraftHasPipelineWork(draft)
+}
+
+export function applyHarnessTurn(
+  plan: VibeHarnessTurn,
+  workspace: VibeWorkspace,
+  runChecks: VibeHarnessChecksFn,
+): { results: string[]; done: boolean; wrote: boolean } {
+  const calls = [...plan.tools]
+    .sort((a, b) => toolOrder(a.tool) - toolOrder(b.tool))
+    .slice(0, VIBE_HARNESS_MAX_TOOLS_PER_TURN)
+  const results: string[] = []
+  let done = false
+  let wrote = false
+  let ranTests = false
+  for (const call of calls) {
+    const result = executeVibeHarnessTool(call, workspace, runChecks)
+    results.push(`$ ${call.tool}${call.path ? ` ${call.path}` : ""}\n${result}`)
+    if (call.tool === "write_file" || call.tool === "delete_file") wrote = true
+    if (call.tool === "run_tests") ranTests = true
+    if (call.tool === "run_tests") {
+      const draft = parseVibeWorkspaceFiles(workspace.files, workspace.seed)
+      if (isHarnessProposalPass(result, draft)) done = true
+    }
+    if (call.tool === "done") {
+      const draft = parseVibeWorkspaceFiles(workspace.files, workspace.seed)
+      const report = workspace.files.get("VALIDATION.md") ?? result
+      if (isHarnessProposalPass(report, draft)) done = true
+    }
+  }
+  // AI : always validate after writes — live models often skip run_tests and then look "done".
+  if (wrote && !ranTests) {
+    const result = executeVibeHarnessTool({ tool: "run_tests" }, workspace, runChecks)
+    results.push(`$ run_tests (auto)\n${result}`)
+    const draft = parseVibeWorkspaceFiles(workspace.files, workspace.seed)
+    if (isHarnessProposalPass(result, draft)) done = true
+  }
+  return { results, done, wrote }
+}
+
 function buildHarnessSystemPrompt(): string {
   return `You are a coding agent editing a Spine project in an in-memory file workspace (OpenCode / Pi loop: write files, run_tests, repeat).
 
@@ -129,12 +184,14 @@ Tools: write_file, read_file, run_tests, list_dir, delete_file, done.
 - Workspace is RAM on this server. Never ask for API keys or write secrets.
 - AGENTS.md and examples/few-shot.md are read-only.
 - The first user message ALREADY includes AGENTS.md, project.json, and pipeline.json. Do not spend a turn only on list_dir or read_file.
-- Greenfield (pipeline.json is [] or empty): this turn MUST write_file structures, pipeline.json, tests/*, docs.md, and message.md.
+- Blank projects start with Input + Output — REPLACE pipeline.json this turn. Do not leave only those two steps.
+- Many same-kind files (receipts, notes, invoices) → one input list[Document] + llm-batch (NOT a single llm).
+- Two different doc kinds (policy + company pack) → two inputs, parse each, then assemble or combine (side file immediately before combine).
+- Non-JSON inputs (text/pdf/word/image/web): structureOut is Document or list[Document]. Typed rows belong on a later llm/llm-batch.
+- Write structures/*.json, pipeline.json, tests/*, docs.md, message.md. Up to 12 tools per turn; more files → next turn.
 - message.md is future tense ("I'll add…") — the user still has to Approve.
-- After writes, run_tests. Call done when VALIDATION.md is PASS, or when the user only asked a question.
-- Empty tools means done. Do not return empty tools while pipeline.json is still empty.
-
-pipeline.json is a JSON array of steps (kind, label, note, structureIn item name never list[...], structureOut). Many same-kind files → input list[Document] + llm-batch. Two different doc kinds → assemble after both parses, or combine with the side file immediately before combine.
+- After writes, run_tests. Call done only when VALIDATION.md starts with PASS (not Q&A-only).
+- Empty tools is ignored unless tests already PASSed a real pipeline.
 
 Example (copy the shape, change names for the task):
 {"tools":[
@@ -160,7 +217,7 @@ function buildHarnessUserPrompt(args: {
   return `Turn ${args.turn + 1}/${VIBE_HARNESS_MAX_TURNS}
 Task: ${args.task}
 ${thinking}${args.extra}
-${first ? "Write files this turn (do not only list_dir / read_file)." : "Continue from the tool results. If writes succeeded, run_tests; if PASS, done."}
+${first ? "Write files this turn (do not only list_dir / read_file). Replace the stub Input + Output." : "Continue from the tool results. If VALIDATION.md is FAIL, fix files. If PASS, done. Empty tools is not done."}
 
 ${first ? "Workspace (already loaded):" : "Last tool results:"}
 ${args.lastResults || "(empty workspace)"}
@@ -206,55 +263,59 @@ export async function runVibeCodingHarness(args: {
 
   for (let turn = 0; turn < VIBE_HARNESS_MAX_TURNS && !done; turn++) {
     turns = turn + 1
-    const plan = await llmStructured(
-      buildHarnessUserPrompt({
-        task: args.task,
-        thinking: args.thinking,
-        extra: args.extraPrompt,
-        lastResults,
-        turn,
-      }),
-      vibeHarnessTurnSchema,
-      {
-        model: args.globalModel,
-        ledger: args.ledger,
-        system: buildHarnessSystemPrompt(),
-        maxTokens: VIBE_HARNESS_MAX_TOKENS,
-        onStructuredFailure: (detail) => {
-          llmAttempt += 1
-          args.onStructuredFailure?.({
-            attempt: llmAttempt,
-            failureKind: detail.kind,
-            error: detail.error,
-          })
+    let plan: VibeHarnessTurn
+    try {
+      plan = await llmStructured(
+        buildHarnessUserPrompt({
+          task: args.task,
+          thinking: args.thinking,
+          extra: args.extraPrompt,
+          lastResults,
+          turn,
+        }),
+        vibeHarnessTurnSchema,
+        {
+          model: args.globalModel,
+          ledger: args.ledger,
+          system: buildHarnessSystemPrompt(),
+          maxTokens: VIBE_HARNESS_MAX_TOKENS,
+          onStructuredFailure: (detail) => {
+            llmAttempt += 1
+            args.onStructuredFailure?.({
+              attempt: llmAttempt,
+              failureKind: detail.kind,
+              error: detail.error,
+            })
+          },
         },
-      },
-    )
-    llmAttempt += 1
-    args.onTurn?.(`harness-${turns}`, plan)
-    const calls = [...plan.tools].sort((a, b) => toolOrder(a.tool) - toolOrder(b.tool))
-    if (!calls.length) {
-      done = true
+      )
+    } catch {
+      // AI : keep files from earlier turns — a 429 mid-loop must not discard a partial proposal.
       break
     }
-    const results: string[] = []
-    for (const call of calls) {
-      const result = executeVibeHarnessTool(call, workspace, args.runChecks)
-      results.push(`$ ${call.tool}${call.path ? ` ${call.path}` : ""}\n${result}`)
-      if (call.tool === "done") {
+    llmAttempt += 1
+    args.onTurn?.(`harness-${turns}`, plan)
+    if (!plan.tools.length) {
+      const draft = parseVibeWorkspaceFiles(workspace.files, workspace.seed)
+      const report = workspace.files.get("VALIDATION.md") ?? ""
+      if (isHarnessProposalPass(report, draft) || turn === VIBE_HARNESS_MAX_TURNS - 1) {
         done = true
-        doneMessage = call.message?.trim() || doneMessage
+        break
       }
-      // AI : PASS means the proposal is materializable — do not burn turns rewriting the same files.
-      if (call.tool === "run_tests" && /^PASS\b/m.test(result)) {
-        const draft = parseVibeWorkspaceFiles(workspace.files, workspace.seed)
-        if (draft.modules || draft.models || draft.docs) done = true
-      }
+      lastResults = `${lastResults}\n\nEmpty tools ignored — stub Input is not a finished pipeline. write_file then run_tests.`
+      continue
     }
-    toolLog.push(...results)
+    const applied = applyHarnessTurn(plan, workspace, args.runChecks)
+    const doneCall = plan.tools.find((c) => c.tool === "done")
+    if (applied.done) {
+      done = true
+      doneMessage = doneCall?.message?.trim() || doneMessage
+    }
+    toolLog.push(...applied.results)
     lastResults = [
       `Files: ${listVibePaths(workspace.files).join(", ")}`,
       `pipeline.json\n${workspace.files.get("pipeline.json") ?? "[]"}`,
+      `VALIDATION.md\n${workspace.files.get("VALIDATION.md") ?? "(not run)"}`,
       toolLog.slice(-12).join("\n\n"),
     ].join("\n\n")
   }

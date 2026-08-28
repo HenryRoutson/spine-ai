@@ -4,7 +4,7 @@ import { createSpineSession } from "@/lib/core/session"
 import { loadProjectContext } from "@/lib/cli/project_context"
 import { DEFAULT_MODEL, FieldType, ModuleKind, type StructureModel, type StructureModelId } from "@/lib/types"
 import { uid } from "@/lib/id"
-import { materializeProposal } from "@/lib/server/pipeline_assistant"
+import { materializeProposal, runVibeWorkspaceChecks } from "@/lib/server/pipeline_assistant"
 import { formatPipelineValidationErrors } from "@/lib/server/validity"
 import { SEEDS_DIR } from "@/lib/server/seed"
 import {
@@ -17,7 +17,14 @@ import {
   parseVibeWorkspaceFiles,
   seedVibeWorkspace,
 } from "@/lib/server/vibe-coding-workspace"
-import { executeVibeHarnessTool, vibeHarnessEnabled } from "@/lib/server/vibe-coding-harness"
+import {
+  executeVibeHarnessTool,
+  vibeHarnessEnabled,
+  applyHarnessTurn,
+  isHarnessProposalPass,
+  harnessDraftHasPipelineWork,
+  vibeHarnessTurnSchema,
+} from "@/lib/server/vibe-coding-harness"
 
 type AssistantRaw = Parameters<typeof materializeProposal>[0]
 
@@ -178,5 +185,127 @@ describe("vibe coding harness tools", () => {
     const tested = executeVibeHarnessTool({ tool: "run_tests" }, ws, () => "PASS\nI/O valid")
     expect(tested).toContain("PASS")
     expect(ws.files.get("VALIDATION.md")).toContain("PASS")
+  })
+
+  it("auto run_tests after writes and ignores Q&A PASS / premature done", () => {
+    const session = createSpineSession()
+    session.addProject({ open: true })
+    const ws = seedVibeWorkspace({ project: session.project!, globalModel: DEFAULT_MODEL })
+    const qa = isHarnessProposalPass("PASS (no project file changes — Q&A only).", {
+      message: "hi",
+      modules: null,
+      models: null,
+      typeAliases: null,
+      docs: null,
+      documentationUpdate: null,
+      projectNameUpdate: null,
+      targetFunctionName: null,
+      proposedActions: null,
+      errors: [],
+    })
+    expect(qa).toBe(false)
+
+    const applied = applyHarnessTurn(
+      {
+        tools: [
+          { tool: "write_file", path: "message.md", content: "I'll add a notes pipeline." },
+          { tool: "done", message: "done early" },
+        ],
+      },
+      ws,
+      () => "FAIL schema — pipeline.json still a stub Input",
+    )
+    expect(applied.wrote).toBe(true)
+    expect(applied.done).toBe(false)
+    expect(applied.results.some((r) => r.includes("run_tests (auto)"))).toBe(true)
+    expect(ws.files.get("VALIDATION.md")).toMatch(/FAIL/)
+  })
+
+  it("keeps the first 12 tools instead of failing the turn", () => {
+    const tools = Array.from({ length: 15 }, (_, i) => ({
+      tool: "write_file" as const,
+      path: i === 0 ? "pipeline.json" : `tests/doc_${i}.txt`,
+      content: i === 0 ? "[]" : `file ${i}`,
+    }))
+    const parsed = vibeHarnessTurnSchema.safeParse({ tools })
+    expect(parsed.success).toBe(true)
+    if (!parsed.success) return
+    expect(parsed.data.tools).toHaveLength(12)
+    expect(parsed.data.tools[0]?.path).toBe("pipeline.json")
+  })
+
+  it("run_tests reports Document structureOut errors instead of a generic FAIL", () => {
+    const session = createSpineSession()
+    session.addProject({ open: true })
+    const ws = seedVibeWorkspace({ project: session.project!, globalModel: DEFAULT_MODEL })
+    executeVibeHarnessTool(
+      {
+        tool: "write_file",
+        path: "pipeline.json",
+        content: JSON.stringify(
+          [
+            {
+              kind: "input",
+              label: "Policy",
+              note: "KYC policy PDF.",
+              inputType: "pdf",
+              structureOut: "KycRule",
+            },
+            {
+              kind: "output",
+              label: "Out",
+              structureIn: "KycRule",
+              structureOut: "KycRule",
+            },
+          ],
+          null,
+          2,
+        ),
+      },
+      ws,
+      () => "unused",
+    )
+    const draft = parseVibeWorkspaceFiles(ws.files, ws.seed)
+    const report = runVibeWorkspaceChecks(draft, session.project!, DEFAULT_MODEL, [])
+    expect(report).toMatch(/^FAIL schema/m)
+    expect(report).toMatch(/structureOut Document/)
+  })
+
+  it("does not treat Input+Output as a finished pipeline", () => {
+    expect(
+      harnessDraftHasPipelineWork({
+        message: "ok",
+        modules: [
+          { kind: "input", label: "Input", note: "in", structureOut: "Document" },
+          { kind: "output", label: "Output" },
+        ],
+        models: null,
+        typeAliases: null,
+        docs: null,
+        documentationUpdate: null,
+        projectNameUpdate: null,
+        targetFunctionName: null,
+        proposedActions: null,
+        errors: [],
+      }),
+    ).toBe(false)
+    expect(
+      harnessDraftHasPipelineWork({
+        message: "ok",
+        modules: [
+          { kind: "input", label: "Files", note: "uploads", structureOut: "list[Document]" },
+          { kind: "llm-batch", label: "Extract", note: "one row", structureIn: "Document", structureOut: "Row" },
+          { kind: "output", label: "Rows" },
+        ],
+        models: null,
+        typeAliases: null,
+        docs: null,
+        documentationUpdate: null,
+        projectNameUpdate: null,
+        targetFunctionName: null,
+        proposedActions: null,
+        errors: [],
+      }),
+    ).toBe(true)
   })
 })
