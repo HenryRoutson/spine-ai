@@ -166,6 +166,7 @@ export function SharedRunPanel({
             }}
             jsonStruct={inputModuleJsonStructSchema(m, link.models, [])}
             jsonStructDisabled={run.phase === "running" || inputLocked}
+            simple={compact}
             jsonStructSource={{
               docs: run.inputModules.flatMap((mod) => docsForInputModule(run.inputDocs, mod.id)),
               project: null,

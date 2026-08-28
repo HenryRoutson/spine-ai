@@ -53,7 +53,6 @@
       "note": "JSON array of Employee objects. Upload a file or fill the structure-derived form.",
       "inputType": "json",
       "inputDescription": "JSON document: a list of employees, each with id, name, and number.",
-      "inputNameContains": "employees",
       "outStructureId": "m_employee",
       "outType": {
         "kind": "list",
