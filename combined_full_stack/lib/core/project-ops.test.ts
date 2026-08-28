@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest"
 import { emptySessionSnapshot } from "@/lib/core/session"
-import { deleteProjectSnapshot, patchProjectInList, projectPatchFromChanges, renamedProjects, withProjectDocumentation } from "@/lib/core/project-ops"
+import { deleteProjectSnapshot, patchProjectInList, projectPatchFromChanges, proposalGraphPatch, renamedProjects, withProjectDocumentation } from "@/lib/core/project-ops"
 import { AUTHORED_PROJECT_KIND } from "@/lib/project-assistant-types"
 import { FieldType, ModuleKind, type Project, type ProjectId, type StructureModel, type StructureModelId } from "@/lib/types"
 
@@ -81,5 +81,55 @@ describe("project-ops", () => {
     expect(patch?.kind).toBe(AUTHORED_PROJECT_KIND)
     expect(patch?.models?.map((m) => m.name)).toEqual(["Finding"])
     expect(patch?.modules?.length).toBeGreaterThan(0)
+  })
+
+  it("proposalGraphPatch adds a named function without replacing Main modules", () => {
+    const project: Project = {
+      ...base("p1", "Pack"),
+      modules: [
+        {
+          id: "mod_in",
+          kind: ModuleKind.Input,
+          label: "Input",
+          note: "",
+          cached: true,
+          avgMs: 0,
+          avgCostCents: 0,
+        },
+      ],
+    }
+    const extra = [
+      {
+        id: "mod_notes",
+        kind: ModuleKind.Input,
+        label: "Notes",
+        note: "",
+        cached: true,
+        avgMs: 0,
+        avgCostCents: 0,
+      },
+    ]
+    const patch = proposalGraphPatch(
+      project,
+      {
+        targetFunctionName: "Summarize",
+        models: [],
+        modules: extra,
+        typeAliases: [],
+        changed: {
+          modules: true,
+          models: false,
+          typeAliases: false,
+          docs: false,
+          documentation: false,
+          function: true,
+        },
+      },
+      "gpt-4",
+    )
+    expect(patch?.functions).toHaveLength(2)
+    expect(patch?.functions?.map((fn) => fn.name)).toEqual(["Main", "Summarize"])
+    expect(patch?.modules?.[0]?.label).toBe("Notes")
+    expect(patch?.functions?.find((fn) => fn.name === "Main")?.modules[0]?.id).toBe("mod_in")
   })
 })

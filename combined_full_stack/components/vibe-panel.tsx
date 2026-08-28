@@ -20,7 +20,6 @@ import { prefetchWorkspacePanel } from "@/lib/prefetch-workspace-panel"
 import { usePersistedLeadingWidth } from "@/lib/use-persisted-leading-width"
 import { cn } from "@/lib/utils"
 import { WebsiteBackendPeek } from "@/components/share/website-backend-peek"
-import { PipelineFunctionSelect } from "@/components/pipeline-function-select"
 
 const Inference = dynamic(() => import("@/components/inference").then((m) => ({ default: m.Inference })), {
   loading: () => <PanelLoading label="loading inference…" />,
@@ -96,7 +95,6 @@ export function VibePanel() {
                 if (isVibeObserveTab(window)) setVibeObserveTab(window)
               }}
               items={VIBE_OBSERVE_NAV_ITEMS}
-              trailing={<PipelineFunctionSelect />}
             />
             <div className="relative min-h-0 flex-1">
               {VIBE_OBSERVE_NAV_ITEMS.map((item) => {

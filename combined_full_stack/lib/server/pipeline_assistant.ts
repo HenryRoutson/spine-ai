@@ -77,6 +77,7 @@ import {
   type StructureModelId,
   type TypeAlias,
 } from "./types";
+import { blankPipelineModules, functionsOnProject, functionsPromptSummary } from "@/lib/pipeline-functions";
 
 const MODULE_KINDS = USER_ADDABLE_MODULE_KINDS;
 
@@ -354,6 +355,14 @@ const assistantResponseSchema = z.object({
   documentationUpdate: z.string().max(48_000).nullable(),
   // AI : rename only when project is still "Untitled Pipeline" — server enforces.
   projectNameUpdate: z.string().max(120).nullable(),
+  // AI : named pipeline for these modules — a new name adds a function and leaves the others unchanged.
+  targetFunctionName: z
+    .string()
+    .max(80)
+    .nullish()
+    .describe(
+      "Name of the function (pipeline) these modules belong to. Null = the currently active function. A new name adds a function without replacing the others.",
+    ),
   // AI : client runs these after approve — never claim finished in this turn.
   proposedActions: z.array(proposedActionSchema).max(3).nullish(),
 });
@@ -371,6 +380,7 @@ export type PipelineAssistantProposal = {
   docs: ProjectAssistantDocSpec[];
   documentation: string;
   projectName?: string;
+  targetFunctionName?: string;
   proposedActions?: AssistantProposedAction[];
   changed: {
     modules: boolean;
@@ -380,6 +390,7 @@ export type PipelineAssistantProposal = {
     documentation: boolean;
     name?: boolean;
     actions?: boolean;
+    function?: boolean;
   };
 };
 
@@ -793,6 +804,7 @@ function buildThinkingUserPrompt(
   return `Project: ${project.name} (${project.kind})
 Default model: ${globalModel}
 ${historyBlock}${surfaceBlock}${validationBlock}${uiBlock}${testDocsBlock}${recentRunsBlock}${lastFailedBlock}
+${functionsPromptSummary(project)}
 Structure models:
 ${modelsBlock}
 
@@ -870,6 +882,7 @@ export function materializeProposal(
     trimmedNameUpdate !== project.name;
   const proposedActions = (raw.proposedActions ?? []).filter(Boolean);
   const hasActions = proposedActions.length > 0;
+  const targetFunctionName = raw.targetFunctionName?.trim() || undefined;
   if (
     !hasPipelineChange &&
     !hasModelChange &&
@@ -900,13 +913,23 @@ export function materializeProposal(
     raw.typeAliases !== null
       ? stripBuiltinTypeAliases(materializeTypeAliases(raw.typeAliases, project.typeAliases ?? [], models))
       : (project.typeAliases ?? []);
+  const named = targetFunctionName
+    ? functionsOnProject(project).find((fn) => fn.name.toLowerCase() === targetFunctionName.toLowerCase())
+    : undefined;
+  const baseModules = named
+    ? named.modules
+    : targetFunctionName
+      ? hasPipelineRewrite
+        ? []
+        : blankPipelineModules()
+      : project.modules;
   let modules: PipelineModule[];
   if (hasPipelineRewrite) {
-    modules = expandModuleSpecs(raw.modules ?? [], models, globalModel, project.modules);
+    modules = expandModuleSpecs(raw.modules ?? [], models, globalModel, baseModules);
   } else if (hasPipelinePatch) {
-    modules = applyModulePatches(project.modules, raw.modulePatch!, models);
+    modules = applyModulePatches(baseModules, raw.modulePatch!, models);
   } else {
-    modules = project.modules;
+    modules = baseModules.length ? baseModules : project.modules;
   }
   const docs = materializeDocs(raw.docs);
   const shouldAlign = docs.length > 0 || inputsNeedStandInAlign(modules, alignDocs);
@@ -935,8 +958,10 @@ export function materializeProposal(
       documentation: hasDocumentationChange,
       name: hasNameChange,
       actions: hasActions,
+      function: Boolean(targetFunctionName),
     },
     ...(hasNameChange ? { projectName: trimmedNameUpdate } : {}),
+    ...(targetFunctionName ? { targetFunctionName } : {}),
     ...(hasActions ? { proposedActions } : {}),
   };
 }

@@ -173,7 +173,7 @@ const BUILDER_WINDOW_HEADERS: Record<AppWindowId, WindowHeaderCopy> = {
   structure: {
     step: AppWindowStepLabel.Structure,
     title: AppWindowTitle.Structure,
-    description: "Shared types for this project — each structure is a SQL table. View SQL, stored rows, and which functions use the type.",
+    description: "Shared types for this project — each structure is a SQL table. Code preview, stored rows, and which functions use the type.",
   },
   pipeline: {
     step: AppWindowStepLabel.Pipeline,

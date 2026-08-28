@@ -20,10 +20,10 @@ Do **not** add a Data tab that duplicates Structures. SQL preview and stored row
 
 | Surface | Role |
 |---------|------|
-| **Vibe** | Chat to build. Pick which function to run (inference). |
-| **Structures** | Author types. View SQL. See which functions use a type. Edit stored rows. |
+| **Vibe** | Chat to build. Switch pipelines in the header; observe Inference / Schedule / Share / Logging. |
+| **Structures** | Author shared types. Code preview (SQL / Python / TS). See which functions use a type. Edit stored rows. |
 | **Pipeline** | Build the selected function (steps). This is the backend editor. |
-| **Testing / Inference / Schedule** | Operate the selected function. |
+| **Testing / Inference / Schedule** | Operate the selected function. Schedule records which function it fires. |
 | **Page studio** | Hosted websites. Bind many functions. |
 | **Share** | Mine / shared with me / marketplace — pipelines today; websites already; storage later. |
 

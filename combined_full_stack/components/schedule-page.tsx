@@ -31,6 +31,7 @@ import {
 import { shareDefaultDocsByModule } from "@/lib/share-default-docs"
 import type { PipelineScheduleRecord, PipelineScheduleRuntime } from "@/lib/schedule-types"
 import { useStore } from "@/lib/store"
+import { activeFunction, activeFunctionId, functionNameOnProject } from "@/lib/pipeline-functions"
 import { computeWorkspaceValidity } from "@/lib/workspace-validity-ui"
 import { spineActionProps } from "@/lib/core/parity"
 import { timeAgo, timeUntil } from "@/lib/time-ago"
@@ -57,6 +58,7 @@ function friendlyCron(howOften: ScheduleHowOftenId, clock: string, weekday: week
 
 export function SchedulePage({ simple }: { simple?: boolean } = {}) {
   const { project, docs, inferenceInputDocIds, modules, models, typeAliases } = useStore()
+  const schedulingFn = activeFunction(project)
   const { setActiveWindow } = useAppShell()
   const { runTabsBlocked, typesInvalid } = computeWorkspaceValidity(
     modules,
@@ -144,6 +146,7 @@ export function SchedulePage({ simple }: { simple?: boolean } = {}) {
           timezone,
           defaultDocsByModule,
           tickUrl: tickUrl.trim() || undefined,
+          functionId: activeFunctionId(project),
         }),
       })
       await refresh()
@@ -221,8 +224,8 @@ export function SchedulePage({ simple }: { simple?: boolean } = {}) {
                 <h3 className="text-sm font-semibold">{simple ? "Run this on a schedule" : "New schedule"}</h3>
                 <p className="text-xs text-muted-foreground">
                   {simple
-                    ? "Pick how often. We'll reuse the files you already chose when you run."
-                    : "Choose how often this pipeline should run. Each time, we’ll reuse the files you picked in Inference."}
+                    ? `This runs ${schedulingFn.name}. Switch pipelines in the header to schedule a different one.`
+                    : `Choose how often ${schedulingFn.name} should run. Each time, we’ll reuse the files you picked in Inference.`}
                 </p>
               </div>
             </div>
@@ -391,6 +394,8 @@ export function SchedulePage({ simple }: { simple?: boolean } = {}) {
                       <div className="min-w-0">
                         <p className="truncate text-sm font-medium">{row.name}</p>
                         <p className="text-[11px] text-muted-foreground">
+                          {functionNameOnProject(project, row.functionId)}
+                          {" · "}
                           {describeCronExpr(row.cron)}
                           {row.timezone === "UTC" ? " · UTC" : ` · ${timezoneCity(row.timezone)} time`}
                         </p>

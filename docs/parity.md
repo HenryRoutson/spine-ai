@@ -698,5 +698,5 @@ Grep an id (example): `rg 'project.add' combined_full_stack docs mcp_tool`.
 | `pipeline.function-select` | Function | TUI edits project.modules as the active function [N] | PUT /api/projects/:id functions + modules | session_action + patch_project [P] | session.setActiveFunction(id) |
 | `pipeline.function-add` | Function | TUI has no add-function command yet [N] | PUT /api/projects/:id functions + modules | session_action + patch_project [P] | session.addPipelineFunction(name) |
 | `structure.open-function` | Used by | TUI lists structures only [N] | local navigation [n/a] | local navigation [n/a] | openPipeline(moduleId) / setActiveFunction |
-| `structure.view-sql` | View SQL | TUI backend lists tables only [N] | local schema preview [n/a] | local schema preview [n/a] | setView('code') + allModelsToSql |
+| `structure.view-sql` | Code preview | TUI backend lists tables only [N] | local schema preview [n/a] | local schema preview [n/a] | setView('code') + allModelsToSql |
 | `platform.pay-slot` | Continue to pay | hosted HTML only [N] | share funding mode [n/a] | share funding mode [n/a] | HostedPaySlot on {{pay}} [host] |

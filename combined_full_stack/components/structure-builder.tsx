@@ -4,7 +4,7 @@
 // AI : TODO (spec) — per-structure "Quick summarise" button: cheap LLM flags inconsistencies (e.g. document_summary:int).
 // AI : TODO (media-view-B-ui) — model header defaultView picker (builtin + project visualizers).
 import { useEffect, useMemo, useRef, useState } from "react"
-import { Plus, Code2, Sparkles, Lock, Braces, FileSpreadsheet, Loader2, Upload, KeyRound, Database } from "lucide-react"
+import { Plus, Code2, Sparkles, Lock, Braces, FileSpreadsheet, Loader2, Upload, KeyRound } from "lucide-react"
 import { StructureExcelEditor } from "@/components/structure-excel-editor"
 import { StructureTypeAliasEditor, TypeAliasTextSync } from "@/components/structure-type-alias-editor"
 import { Button, buttonVariants } from "@/components/ui/button"
@@ -471,7 +471,7 @@ export function StructureBuilder() {
                 </EntityRailSection>
 
                 <div className="shrink-0 border-t border-border/60 p-1.5">
-                  <EntityRailItem active={view === "code"} onClick={() => setView("code")}>
+                  <EntityRailItem active={view === "code"} onClick={() => setView("code")} spineId="structure.view-sql">
                     <div className="flex items-center gap-2">
                       <Code2 className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
                       <div>
@@ -563,17 +563,6 @@ export function StructureBuilder() {
                       ) : (
                         <span />
                       )}
-                      <Button
-                        type="button"
-                        size="sm"
-                        variant="outline"
-                        className="h-7 text-[10px]"
-                        onClick={() => setView("code")}
-                        spineId="structure.view-sql"
-                      >
-                        <Database className="mr-1 h-3 w-3" />
-                        View SQL
-                      </Button>
                     </div>
                     <div className="min-h-0 min-w-0 flex-1 overflow-hidden">
                       <StructureExcelEditor

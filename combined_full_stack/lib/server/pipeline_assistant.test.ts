@@ -57,6 +57,7 @@ function receiptMapRaw(overrides?: Partial<AssistantRaw>): AssistantRaw {
     documentationUpdate: null,
     projectNameUpdate: null,
     proposedActions: null,
+    targetFunctionName: null,
     ...overrides,
   }
 }
@@ -396,6 +397,19 @@ describe("pipeline assistant materialize", () => {
       true,
     )
     expect(warnings.some((w) => w.kind === PipelineWarningKind.PromptListVsItem)).toBe(true)
+  })
+
+  it("targetFunctionName keeps the proposal on a new named function", () => {
+    const session = createSpineSession()
+    session.addProject({ open: true })
+    const proposal = materializeProposal(
+      receiptMapRaw({ targetFunctionName: "Summarize" }),
+      session.project!,
+      DEFAULT_MODEL,
+    )
+    expect(proposal?.targetFunctionName).toBe("Summarize")
+    expect(proposal?.changed.function).toBe(true)
+    expect(proposal?.modules.some((m) => m.kind === ModuleKind.LlmBatch)).toBe(true)
   })
 })
 

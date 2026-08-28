@@ -50,6 +50,7 @@ type EntityRailItemProps = {
   children: ReactNode
   className?: string
   disabled?: boolean
+  spineId?: string
   uiContext?: {
     kind: UiContextKind
     id: string
@@ -64,6 +65,7 @@ export function EntityRailItem({
   children,
   className,
   disabled,
+  spineId,
   uiContext,
 }: EntityRailItemProps) {
   const Tag = onClick ? "button" : "div"
@@ -88,6 +90,7 @@ export function EntityRailItem({
         disabled && "pointer-events-none opacity-50",
         className,
       )}
+      {...(spineId ? { "data-spine-id": spineId } : {})}
       {...ctx}
     >
       {children}

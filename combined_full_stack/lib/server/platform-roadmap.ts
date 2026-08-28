@@ -87,7 +87,8 @@ export {}
 // P12 — Multiple functions per project
 // ---------------------------------------------------------------------------
 // AI : DONE (platform-P12-functions) — Project.functions + activeFunctionId; PipelineFunctionSelect
-// AI : DONE (platform-P12-vibe-select) — Vibe observe chrome selects which function to run
+// AI : DONE (platform-P12-vibe-select) — header pipeline select on every tab after Structures (not on Structures)
+// AI : DONE (platform-P12-vibe-add) — assistant targetFunctionName adds a named function without replacing Main
 
 // ---------------------------------------------------------------------------
 // P13 — Rows on projects.data

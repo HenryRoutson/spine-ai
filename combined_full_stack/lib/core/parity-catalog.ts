@@ -1233,7 +1233,7 @@ export const PARITY_ROWS: ParityRow[] = [
   row(
     "structure.view-sql",
     "structure",
-    { label: "View SQL", file: "components/structure-builder.tsx" },
+    { label: "Code preview", file: "components/structure-builder.tsx" },
     n("TUI backend lists tables only"),
     na("local schema preview"),
     na("local schema preview"),

@@ -38,6 +38,7 @@ import {
   modulesPatchWithSync,
   patchProjectInList,
   projectPatchFromChanges,
+  proposalGraphPatch,
   renamedProjects,
   typeAliasesPatch,
   withProjectDocumentation,
@@ -577,13 +578,8 @@ export class SpineSession {
     if (proposal.changed.name && proposal.projectName) {
       this.renameProject(project.id, proposal.projectName)
     }
-    if (proposal.changed.models || proposal.changed.modules || proposal.changed.typeAliases) {
-      this.applyProjectChanges({
-        ...(proposal.changed.models ? { models: proposal.models } : {}),
-        ...(proposal.changed.modules ? { modules: proposal.modules } : {}),
-        ...(proposal.changed.typeAliases ? { typeAliases: proposal.typeAliases } : {}),
-      })
-    }
+    const graph = proposalGraphPatch(this.requireProject(), proposal, this.snap.model)
+    if (graph) this.patchProject(graph)
     if (proposal.changed.documentation) {
       this.setDocumentation(proposal.documentation)
     }

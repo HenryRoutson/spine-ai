@@ -665,6 +665,7 @@ export function compactProposalReview(proposal: ProjectProposal) {
       .filter(([, v]) => v)
       .map(([k]) => k),
     ...(proposal.projectName ? { projectName: proposal.projectName } : {}),
+    ...(proposal.targetFunctionName ? { targetFunctionName: proposal.targetFunctionName } : {}),
     models: proposal.models.map((m) => m.name),
     steps: proposal.modules.map((m) => ({ kind: m.kind, label: m.label })),
     docs: proposal.docs.map((d) => d.name),

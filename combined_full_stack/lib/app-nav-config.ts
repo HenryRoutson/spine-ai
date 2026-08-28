@@ -84,12 +84,14 @@ export const BUILD_STEPS: BuildStepConfig[] = [
 
 export const BUILD_STEP_IDS = new Set<BuildStepId>(BUILD_STEPS.map((s) => s.id))
 
+// AI : Structures stay shared — selector is for every operate surface after that, including Vibe.
 export const PIPELINE_FUNCTION_WINDOWS: AppWindowId[] = [
-  AppWindowId.Structure,
   AppWindowId.Pipeline,
   AppWindowId.Testing,
   AppWindowId.Inference,
   AppWindowId.Schedule,
+  AppWindowId.Vibe,
+  AppWindowId.Share,
 ]
 
 export function showsPipelineFunctionSelect(window: AppWindowId): boolean {

@@ -99,6 +99,45 @@ export function addPipelineFunction(project: Project, name?: string): Partial<Pr
   }
 }
 
+export function ensureNamedFunction(project: Project, name: string): Partial<Project> {
+  const trimmed = name.trim()
+  if (!trimmed) return {}
+  const fns = functionsOnProject(project)
+  const match = fns.find((fn) => fn.name.toLowerCase() === trimmed.toLowerCase())
+  if (match) return switchActiveFunction(project, match.id)
+  return addPipelineFunction(project, trimmed)
+}
+
+export function projectForFunction(project: Project, functionId?: string | null): Project | null {
+  const fns = functionsOnProject(project)
+  const wanted = (functionId as pipeline_function_id | undefined) ?? DEFAULT_FUNCTION_ID
+  const fn = fns.find((row) => row.id === wanted)
+  if (!fn) return null
+  return {
+    ...project,
+    modules: fn.modules,
+    activeFunctionId: fn.id,
+    functions: fns,
+  }
+}
+
+export function functionNameOnProject(project: Project, functionId?: string | null): string {
+  const fns = functionsOnProject(project)
+  const match = fns.find((fn) => fn.id === functionId)
+  if (match) return match.name
+  if (!functionId || functionId === DEFAULT_FUNCTION_ID) return "Main"
+  return "Unknown function"
+}
+
+export function functionsPromptSummary(project: Project): string {
+  const active = activeFunctionId(project)
+  const lines = functionsOnProject(project).map((fn) => {
+    const steps = fn.modules.map((m) => m.label).join(" → ") || "(empty)"
+    return `- ${fn.name}${fn.id === active ? " (active)" : ""}: ${steps}`
+  })
+  return `Functions in this project (structures are shared; each function is a named pipeline):\n${lines.join("\n")}`
+}
+
 export function renamePipelineFunction(
   project: Project,
   id: pipeline_function_id,

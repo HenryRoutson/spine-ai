@@ -3,9 +3,11 @@ import { InputType, ModuleKind, type ModuleId, type Project, type ProjectId } fr
 import {
   DEFAULT_FUNCTION_ID,
   addPipelineFunction,
+  ensureNamedFunction,
   functionsOnProject,
   nextFunctionName,
   patchWithSyncedModules,
+  projectForFunction,
   switchActiveFunction,
   syncFunctionsWithModules,
 } from "@/lib/pipeline-functions"
@@ -93,5 +95,31 @@ describe("pipeline functions", () => {
     expect(patch.modules[0]?.label).toBe("Patched")
     expect(patch.functions?.find((fn) => fn.id === p.activeFunctionId)?.modules[0]?.label).toBe("Patched")
     expect(patch.functions?.find((fn) => fn.id === DEFAULT_FUNCTION_ID)?.modules[0]?.id).toBe("mod_in")
+  })
+
+  it("ensureNamedFunction adds by name or switches to an existing one", () => {
+    const added = ensureNamedFunction(project(), "Summarize")
+    expect(added.functions).toHaveLength(2)
+    expect(added.functions?.[1]?.name).toBe("Summarize")
+    const withFns = project({
+      functions: added.functions,
+      activeFunctionId: added.activeFunctionId,
+      modules: added.modules!,
+    })
+    const back = ensureNamedFunction(withFns, "Main")
+    expect(back.activeFunctionId).toBe(DEFAULT_FUNCTION_ID)
+    expect(back.modules?.[0]?.id).toBe("mod_in")
+  })
+
+  it("projectForFunction returns that function's modules", () => {
+    const added = addPipelineFunction(project(), "Compile")
+    const p = project({
+      functions: added.functions,
+      activeFunctionId: added.activeFunctionId,
+      modules: added.modules!,
+    })
+    const main = projectForFunction(p, DEFAULT_FUNCTION_ID)
+    expect(main?.modules[0]?.id).toBe("mod_in")
+    expect(projectForFunction(p, "fn_missing")).toBeNull()
   })
 })

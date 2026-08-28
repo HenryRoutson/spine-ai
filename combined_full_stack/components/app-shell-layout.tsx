@@ -578,6 +578,11 @@ function BuilderShellLayoutInner({ variant = "default" }: { variant?: "default" 
           onPrimarySectionChange={onPrimarySectionChange}
           embed={embed}
           projectSlot={<ProjectSelector embed={embed} />}
+          functionSlot={
+            !embed && !editingWebsite && showsPipelineFunctionSelect(activeWindow) ? (
+              <PipelineFunctionSelect allowAdd={!hideDeveloperTools} />
+            ) : null
+          }
           trailing={
             !embed && (
               <>
@@ -620,10 +625,7 @@ function BuilderShellLayoutInner({ variant = "default" }: { variant?: "default" 
             showItems={showWorkspaceTabs}
             trailing={
               !embed && showWorkspaceTabs ? (
-                <>
-                  {showsPipelineFunctionSelect(activeWindow) ? <PipelineFunctionSelect /> : null}
-                  <ProjectAssistantDockToggle />
-                </>
+                <ProjectAssistantDockToggle />
               ) : null
             }
           />

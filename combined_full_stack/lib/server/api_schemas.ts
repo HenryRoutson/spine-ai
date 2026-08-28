@@ -961,6 +961,7 @@ export const createPipelineScheduleBodySchema = z
     defaultDocsByModule: inputDocsByModuleSchema,
     enabled: z.boolean().optional(),
     tickUrl: z.string().trim().url().max(512).optional(),
+    functionId: z.string().trim().min(1).max(128).optional(),
   })
   .strict();
 
@@ -979,6 +980,7 @@ export const patchPipelineScheduleBodySchema = z
     defaultDocsByModule: inputDocsByModuleSchema,
     enabled: z.boolean().optional(),
     tickUrl: z.string().trim().url().max(512).optional(),
+    functionId: z.string().trim().min(1).max(128).optional(),
   })
   .strict()
   .refine(
@@ -989,7 +991,8 @@ export const patchPipelineScheduleBodySchema = z
       data.defaultModel !== undefined ||
       data.defaultDocsByModule !== undefined ||
       data.enabled !== undefined ||
-      data.tickUrl !== undefined,
+      data.tickUrl !== undefined ||
+      data.functionId !== undefined,
     { message: "Provide at least one field to update" },
   );
 

@@ -12,6 +12,7 @@ export {
   modulesPatchWithSync,
   patchProjectInList,
   projectPatchFromChanges,
+  proposalGraphPatch,
   renamedProjects,
   typeAliasesPatch,
   withProjectDocumentation,
