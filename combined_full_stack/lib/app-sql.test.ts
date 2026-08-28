@@ -4,6 +4,7 @@ import { evalSqlExpr, parseAppSql, sqlWhereMatches, tableNameForModel } from "@/
 import { execAppSql, resetAppSqlForTests } from "@/lib/server/app_sql"
 import { loadProjectSeed, SEEDS_DIR } from "@/lib/server/seed"
 import { shouldCheckInputDescription } from "@/lib/server/input_description_check"
+import { computeInvalid, migrateProjectModules } from "@/lib/server/validity"
 import { ModuleKind } from "@/lib/types"
 import { compileHostedSiteLooksOk, normalizeHostedSiteOptions } from "@/lib/hosted-site"
 
