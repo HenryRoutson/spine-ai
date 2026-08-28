@@ -26,7 +26,7 @@ export type logo_url_string = string & { __brand: "logo_url" }
 export type hosted_site_surface = "app" | "signin"
 export type hosted_site_viewport = "desktop" | "mobile"
 
-export { DEFAULT_HOSTED_SITE_AUTH_HTML, DEFAULT_HOSTED_SITE_HTML, DEFAULT_HOSTED_SITE_WORKSPACE_HTML, defaultHostedSiteCss } from "@/lib/hosted-site-defaults"
+export { DEFAULT_HOSTED_SITE_AUTH_HTML, DEFAULT_HOSTED_SITE_HTML, DEFAULT_HOSTED_SITE_LANDING_HTML, DEFAULT_HOSTED_SITE_WORKSPACE_HTML, defaultHostedSiteCss } from "@/lib/hosted-site-defaults"
 export {
   HOSTED_SITE_AUTH_SLOT,
   HOSTED_SITE_CHATBOT_SLOT,

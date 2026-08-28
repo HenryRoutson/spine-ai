@@ -1,3 +1,4 @@
+import { DEFAULT_HOSTED_SITE_HTML, DEFAULT_HOSTED_SITE_LANDING_HTML } from "@/lib/hosted-site-defaults"
 import type { Project, ProjectId } from "@/lib/types"
 import type {
   HostedSiteOptions,
@@ -56,21 +57,27 @@ export function resolveWebsitePipelineBindings(
   primaryProjectId: ProjectId,
   bindings: WebsitePipelineBinding[],
 ): WebsitePipelineBinding[] {
-  if (bindings.length === 0) {
+  const listed = listedWebsitePipelineBindings(bindings)
+  if (listed.length === 0) {
     return [{ alias: DEFAULT_WEBSITE_PIPELINE_ALIAS, projectId: primaryProjectId }]
   }
-  if (bindings.some((b) => b.projectId === primaryProjectId)) return bindings
+  if (listed.some((b) => b.projectId === primaryProjectId)) return listed
   return [
     { alias: DEFAULT_WEBSITE_PIPELINE_ALIAS, projectId: primaryProjectId },
-    ...bindings.filter((b) => b.alias !== DEFAULT_WEBSITE_PIPELINE_ALIAS),
+    ...listed.filter((b) => b.alias !== DEFAULT_WEBSITE_PIPELINE_ALIAS),
   ]
 }
 
+// AI : stored attachments only — empty means a Lovable-style page with no pipeline backend.
+export function listedWebsitePipelineBindings(bindings: WebsitePipelineBinding[]): WebsitePipelineBinding[] {
+  return normalizeWebsitePipelineBindings(bindings)
+}
+
 export function websiteBoundProjectIds(
-  primaryProjectId: ProjectId,
+  _primaryProjectId: ProjectId,
   bindings: WebsitePipelineBinding[],
 ): ProjectId[] {
-  return [...new Set(resolveWebsitePipelineBindings(primaryProjectId, bindings).map((b) => b.projectId))]
+  return [...new Set(listedWebsitePipelineBindings(bindings).map((b) => b.projectId))]
 }
 
 export function bindingsFromProjectIds(
@@ -85,6 +92,31 @@ export function bindingsFromProjectIds(
       projectId,
     }
   })
+}
+
+// AI : picker / Share mint — empty pipeline list is a Lovable page (no {{run}}), not an implicit host pipeline.
+export function hostedSiteOptionsForCreate({
+  name,
+  pipelineIds,
+  projects,
+}: {
+  name: string
+  pipelineIds: ProjectId[]
+  projects: Pick<Project, "id" | "name">[]
+}): {
+  brand: { companyName: string; tagline: string }
+  customHtml: string
+  pipelineBindings: WebsitePipelineBinding[]
+} {
+  const hasPipelines = pipelineIds.length > 0
+  return {
+    brand: {
+      companyName: name,
+      tagline: hasPipelines ? "Run attached pipelines" : "Your product",
+    },
+    customHtml: hasPipelines ? DEFAULT_HOSTED_SITE_HTML : DEFAULT_HOSTED_SITE_LANDING_HTML,
+    pipelineBindings: hasPipelines ? bindingsFromProjectIds(pipelineIds, projects) : [],
+  }
 }
 
 function htmlRunToken(alias: string): string {

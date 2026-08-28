@@ -2,9 +2,12 @@ import { describe, expect, it } from "vitest"
 import { htmlSiteToReactFiles, parseReactPreviewTree } from "@/lib/hosted-site-react"
 import { splitHostedSiteSlots } from "@/lib/hosted-site-slots"
 import { normalizeHostedSiteOptions } from "@/lib/hosted-site"
+import { DEFAULT_HOSTED_SITE_HTML, DEFAULT_HOSTED_SITE_LANDING_HTML } from "@/lib/hosted-site-defaults"
 import {
   bindingsFromProjectIds,
+  hostedSiteOptionsForCreate,
   insertWebsitePipelineInCode,
+  listedWebsitePipelineBindings,
   normalizeWebsitePipelineBindings,
   resolveWebsitePipelineBindings,
   stripWebsitePipelineFromCode,
@@ -16,9 +19,24 @@ const P1 = "p1" as ProjectId
 const P2 = "p2" as ProjectId
 
 describe("website pipeline bindings", () => {
-  it("treats empty bindings as the primary project only", () => {
-    expect(websiteBoundProjectIds(P1, [])).toEqual([P1])
+  it("treats stored empty bindings as no pipelines; viewer still defaults to primary", () => {
+    expect(listedWebsitePipelineBindings([])).toEqual([])
+    expect(websiteBoundProjectIds(P1, [])).toEqual([])
     expect(resolveWebsitePipelineBindings(P1, [])).toEqual([{ alias: "run", projectId: P1 }])
+  })
+
+  it("mints landing HTML when no pipelines are selected", () => {
+    const none = hostedSiteOptionsForCreate({ name: "Acme", pipelineIds: [], projects: [] })
+    expect(none.pipelineBindings).toEqual([])
+    expect(none.customHtml).toBe(DEFAULT_HOSTED_SITE_LANDING_HTML)
+    expect(none.customHtml).not.toContain("{{run}}")
+    const withRun = hostedSiteOptionsForCreate({
+      name: "Acme",
+      pipelineIds: [P1],
+      projects: [{ id: P1, name: "Extract" }],
+    })
+    expect(withRun.pipelineBindings).toEqual([{ alias: "run", projectId: P1 }])
+    expect(withRun.customHtml).toBe(DEFAULT_HOSTED_SITE_HTML)
   })
 
   it("keeps extra pipelines and unique aliases", () => {
