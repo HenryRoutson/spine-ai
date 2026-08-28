@@ -232,7 +232,7 @@ describe.skipIf(!hasLiveOpenRouterKey())("vibe json vs file-harness A/B (OpenRou
   for (const task of TASKS) {
     it(
       `${task.id}: json path proposes a pipeline`,
-      { timeout: 300_000 },
+      { timeout: 600_000 },
       async () => {
         const json = await runMode("json", task.id, task.prompt)
         rows.push(json)
@@ -243,7 +243,7 @@ describe.skipIf(!hasLiveOpenRouterKey())("vibe json vs file-harness A/B (OpenRou
 
     it(
       `${task.id}: file harness proposes a pipeline`,
-      { timeout: 300_000 },
+      { timeout: 600_000 },
       async () => {
         const json = rows.find((r) => r.task === task.id && r.mode === "json")
         const harness = await runMode("harness", task.id, task.prompt)
