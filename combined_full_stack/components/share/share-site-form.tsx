@@ -1,7 +1,7 @@
 "use client"
 // AI : parity ids — share.create-site
 
-import { useEffect, useMemo, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 import { Copy, ExternalLink, LayoutTemplate, Loader2, Save } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -85,6 +85,13 @@ export function ShareSiteForm({
   )
   const { viewerMarkdown, fieldsProps } = useShareViewerMarkdown(project.documentation ?? "")
   const viewerFunds = viewerFundsSharedRun(fundingMode)
+  const persistTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  useEffect(() => {
+    return () => {
+      if (persistTimer.current) clearTimeout(persistTimer.current)
+    }
+  }, [])
 
   useEffect(() => {
     if (!editingWebsite || !isSiteLinkId(editingWebsite.id)) return
@@ -92,6 +99,28 @@ export function ShareSiteForm({
     setCreated({ url: `${origin}/site/${editingWebsite.id}`, link: editingWebsite })
     setSiteOptions(normalizeHostedSiteOptions(editingWebsite.siteOptions))
   }, [editingWebsite])
+
+  function commitSiteOptions(next: HostedSiteOptions) {
+    setSiteOptions(next)
+    if (!editingWebsite || !shell) return
+    const link = { ...editingWebsite, siteOptions: next }
+    shell.patchEditingWebsite(link)
+    setCreated((c) => (c ? { ...c, link } : c))
+    const id = created?.link.id ?? editingWebsite.id
+    if (persistTimer.current) clearTimeout(persistTimer.current)
+    persistTimer.current = setTimeout(() => {
+      void apiJson<{ link: SharedLinkRecord }>(API_ROUTES.sharedLink(id), {
+        method: "PATCH",
+        headers: JSON_HEADERS,
+        body: JSON.stringify({ siteOptions: normalizeHostedSiteOptions(next), viewerMarkdown }),
+      })
+        .then((body) => {
+          setCreated((c) => (c ? { ...c, link: body.link } : c))
+          shell.patchEditingWebsite(body.link)
+        })
+        .catch((e) => setError((e as Error).message))
+    }, 400)
+  }
   const defaultDocsByModule = useMemo(
     () => shareDefaultDocsByModule(project, docs, inferenceInputDocIds),
     [project, docs, inferenceInputDocIds],
@@ -193,7 +222,7 @@ export function ShareSiteForm({
       <HostedSitePageStudio
         project={project}
         value={siteOptions}
-        onChange={setSiteOptions}
+        onChange={commitSiteOptions}
         viewerMarkdown={viewerMarkdown}
         forcedTab={hideDeveloperTools ? "vibe" : undefined}
         hideSurfaceTabs={hideDeveloperTools}
