@@ -82,7 +82,7 @@ import { flattenPipelineModules } from "@/lib/fork-pipeline";
 import { tryCompileCustomCodeEntry } from "@/lib/custom_code";
 import { customCodeEntriesForModule } from "@/lib/custom_code_entries";
 import { lintPipeline } from "./pipeline_lint";
-import { VIBE_THINKING_MAX_TOKENS, type VibeWorkspaceDraft } from "./vibe-coding-workspace";
+import { VIBE_THINKING_MAX_TOKENS, coerceVibePipelineModules, type VibeWorkspaceDraft } from "./vibe-coding-workspace";
 import {
   harnessDraftHasPipelineWork,
   runVibeCodingHarness,
@@ -1148,11 +1148,16 @@ async function tryVibeFileHarness(args: {
     onTurn: args.onTurn,
     onStructuredFailure: args.onStructuredFailure,
   });
-  const harnessRaw = draftToAssistantRaw(harness.draft);
+  let draft = harness.draft;
+  let harnessRaw = draftToAssistantRaw(draft);
+  if (!harnessRaw && Array.isArray(draft.modules)) {
+    draft = { ...draft, modules: coerceVibePipelineModules(draft.modules) };
+    harnessRaw = draftToAssistantRaw(draft);
+  }
   if (!harnessRaw) return null;
   const proposal = materializeProposal(harnessRaw, args.project, args.globalModel, args.testDocsCatalog);
   // AI : empty / Q&A / stub Input+Output file loops must not replace the JSON few-shot path.
-  if (!proposal || !harnessDraftHasPipelineWork(harness.draft)) return null;
+  if (!proposal || !harnessDraftHasPipelineWork(draft)) return null;
   return { raw: harnessRaw, proposal, turns: harness.turns };
 }
 
@@ -1311,36 +1316,53 @@ export async function proposePipelineChange(
       const msgExtractor = opts?.onMessageDelta
         ? makeMessageExtractor(opts.onMessageDelta)
         : null;
-      raw = await llmStreamStructured(
-        buildUserPrompt(
-          project,
-          effectiveMessage,
-          history,
-          globalModel,
-          promptOpts,
-          thinking,
-          liveValidation,
-          forceFix,
-        ),
-        assistantResponseSchema,
-        {
-          model: globalModel,
-          ledger,
-          system: buildSystemPrompt(globalModel, project.name),
-          onStructuredFailure: (detail) => {
-            llmAttempt += 1;
-            opts?.onStructuredFailure?.({
-              attempt: llmAttempt,
-              failureKind: detail.kind,
-              error: detail.error,
-            });
+      try {
+        raw = await llmStreamStructured(
+          buildUserPrompt(
+            project,
+            effectiveMessage,
+            history,
+            globalModel,
+            promptOpts,
+            thinking,
+            liveValidation,
+            forceFix,
+          ),
+          assistantResponseSchema,
+          {
+            model: globalModel,
+            ledger,
+            system: buildSystemPrompt(globalModel, project.name),
+            onStructuredFailure: (detail) => {
+              llmAttempt += 1;
+              opts?.onStructuredFailure?.({
+                attempt: llmAttempt,
+                failureKind: detail.kind,
+                error: detail.error,
+              });
+            },
           },
-        },
-        (rawDelta) => msgExtractor?.(rawDelta),
-      );
-      llmAttempt += 1;
-      opts?.onLlmResponse?.(fixErrors ? `retry-${fixAttempt}` : "initial", raw);
-      proposal = materializeProposal(raw, project, globalModel, catalog);
+          (rawDelta) => msgExtractor?.(rawDelta),
+        );
+        llmAttempt += 1;
+        opts?.onLlmResponse?.(fixErrors ? `retry-${fixAttempt}` : "initial", raw);
+        proposal = materializeProposal(raw, project, globalModel, catalog);
+      } catch (err) {
+        // AI : JSON fallback after a file-loop miss must not 500 — the live KYC run threw here.
+        raw = {
+          message: `I couldn't produce a valid pipeline JSON (${(err as Error).message.slice(0, 240)}). Try the request again.`,
+          modules: null,
+          modulePatch: null,
+          models: null,
+          typeAliases: null,
+          docs: null,
+          documentationUpdate: null,
+          projectNameUpdate: null,
+          targetFunctionName: null,
+          proposedActions: null,
+        };
+        proposal = null;
+      }
     }
 
     if (!raw) {

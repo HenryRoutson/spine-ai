@@ -16,6 +16,7 @@ import {
   normalizeVibePath,
   parseVibeWorkspaceFiles,
   seedVibeWorkspace,
+  coerceVibePipelineModules,
 } from "@/lib/server/vibe-coding-workspace"
 import {
   executeVibeHarnessTool,
@@ -307,5 +308,28 @@ describe("vibe coding harness tools", () => {
         errors: [],
       }),
     ).toBe(true)
+  })
+
+  it("coerces typed non-JSON inputs to Document and drops empty forks", () => {
+    const coerced = coerceVibePipelineModules([
+      {
+        kind: "input",
+        label: "Policy",
+        note: "KYC policy PDF.",
+        inputType: "pdf",
+        structureOut: "KycRule",
+      },
+      { kind: "fork", label: "Split" },
+      {
+        kind: "fork",
+        label: "Extract",
+        prompt: "Extract rules.",
+        structureOut: "KycRule",
+      },
+      { kind: "output", label: "Out", structureIn: "KycRule", structureOut: "KycRule" },
+    ]) as Array<{ kind: string; structureOut?: string }>
+    expect(coerced[0]?.structureOut).toBe("Document")
+    expect(coerced.map((s) => s.kind)).toEqual(["input", "llm", "output"])
+    expect(coerced[1]?.structureOut).toBe("KycRule")
   })
 })

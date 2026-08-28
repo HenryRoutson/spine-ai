@@ -8,6 +8,8 @@ import {
   structureOutForAssistant,
   type AssistantTestDocCatalogEntry,
 } from "./assistant-prompt"
+import { parseStructureHint } from "./assistant-shared"
+import { inputTypesAreAllJsonNative } from "@/lib/inference-input-core"
 import { isManagedLockedStep } from "./validity-sync"
 import { customCodeEntriesForModule } from "@/lib/custom_code_entries"
 import { functionsOnProject, activeFunction } from "@/lib/pipeline-functions"
@@ -344,6 +346,40 @@ function structurePaths(files: VibeWorkspaceFiles): string[] {
 
 function testPaths(files: VibeWorkspaceFiles): string[] {
   return [...files.keys()].filter((p) => p.startsWith("tests/") && p !== "tests/").sort()
+}
+
+// AI : live models keep typing pdf/text inputs as KycRule and emitting fork without lanes.
+export function coerceVibePipelineModules(modules: unknown[]): unknown[] {
+  const out: unknown[] = []
+  for (const m of modules) {
+    if (!m || typeof m !== "object") {
+      out.push(m)
+      continue
+    }
+    const spec = { ...(m as Record<string, unknown>) }
+    if (spec.kind === "input" && typeof spec.structureOut === "string") {
+      const hint = parseStructureHint(spec.structureOut)
+      const inputType = typeof spec.inputType === "string" ? spec.inputType : undefined
+      const jsonNative =
+        inputType != null && inputTypesAreAllJsonNative([inputType as InputType])
+      if (hint && !jsonNative && hint.name.toLowerCase() !== "document") {
+        spec.structureOut = hint.isList ? "list[Document]" : "Document"
+      }
+    }
+    if (spec.kind === "fork") {
+      const branches = spec.forkBranches
+      if (!Array.isArray(branches) || branches.length < 2) {
+        if (spec.prompt || spec.structureOut) {
+          spec.kind = spec.structureIn ? "llm-batch" : "llm"
+          delete spec.forkBranches
+        } else {
+          continue
+        }
+      }
+    }
+    out.push(spec)
+  }
+  return out
 }
 
 export function parseVibeWorkspaceFiles(files: VibeWorkspaceFiles, seed: Record<string, string>): VibeWorkspaceDraft {
