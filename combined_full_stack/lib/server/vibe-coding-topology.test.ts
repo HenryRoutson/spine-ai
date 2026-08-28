@@ -45,12 +45,18 @@ describe("vibe topology cheat-sheet", () => {
     expect(
       topologyAdvice("Each meeting note has several action items — one spreadsheet row per item", ["llm-batch"]),
     ).toEqual(expect.arrayContaining([expect.stringMatching(/flatten/)]))
-    expect(topologyAdvice("Check expense lines against a policy table", ["fork", "llm"])).toEqual(
+    expect(topologyAdvice("Check expense line items against a policy table", ["fork", "llm"])).toEqual(
       expect.arrayContaining([expect.stringMatching(/combine/)]),
+    )
+    expect(topologyAdvice("Check expense line items against a policy table", ["combine", "llm"])).toEqual(
+      expect.arrayContaining([expect.stringMatching(/custom-code/)]),
     )
     expect(topologyAdvice("Many resumes plus one job description → spreadsheet of skill matches", ["combine", "llm"])).toEqual(
       expect.arrayContaining([expect.stringMatching(/assemble/)]),
     )
+    expect(
+      topologyAdvice("Many resumes plus one job description → spreadsheet of skill matches", ["assemble", "llm-batch"]),
+    ).toEqual(expect.arrayContaining([expect.stringMatching(/flatten/)]))
     expect(
       topologyAdvice("From one contract extract risks, parties, and dates independently, then write a memo", ["llm"]),
     ).toEqual(expect.arrayContaining([expect.stringMatching(/fork/)]))

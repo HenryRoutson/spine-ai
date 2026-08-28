@@ -58,11 +58,23 @@ export function topologyAdvice(task: string, kinds: string[]): string[] {
   ) {
     hints.push("split-join: split lines with custom-code, llm-batch each line, then custom-code join")
   }
-  if ((t.includes("policy table") || (t.includes("expense") && t.includes("policy"))) && !has("combine")) {
-    hints.push("combine: policy + expenses — process policy first, side file immediately before combine")
+  if (t.includes("policy table") || (t.includes("expense") && t.includes("policy"))) {
+    if (!has("combine")) {
+      hints.push("combine: policy + expenses — process policy first, side file immediately before combine")
+    } else if (!has("custom-code")) {
+      hints.push(
+        "combine: parse the policy table with custom-code before the side input; after combine, custom-code merge then one llm — not extra llms on raw files",
+      )
+    }
   }
-  if ((t.includes("job description") || t.includes("skill matches")) && !has("assemble")) {
-    hints.push("assemble: resumes + job must assemble after both parses (assembleBindings), not combine or custom-code zip")
+  if (t.includes("job description") || t.includes("skill matches")) {
+    if (!has("assemble")) {
+      hints.push("assemble: resumes + job must assemble after both parses (assembleBindings), not combine or custom-code zip")
+    } else if (!has("custom-code")) {
+      hints.push(
+        "assemble: after assemble, custom-code flatten to skill-match rows; bind quoted resume lists to Link Quotes",
+      )
+    }
   }
   if (
     ((t.includes("independently") && t.includes("memo")) || t.includes("risks, parties, and dates")) &&

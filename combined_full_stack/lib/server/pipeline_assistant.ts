@@ -1152,6 +1152,9 @@ export function runVibeWorkspaceChecks(
     lines.push("topology:", ...topoHints.map((h) => `- ${h}`));
   }
   if (ok && !topoHints.length) lines.push("I/O valid, custom-code compiled, lint clean.");
+  else if (topoHints.length) {
+    lines.push("Fix: rewrite pipeline.json from examples/few-shot.md for this TOPOLOGY — do not patch a wrong spine.");
+  }
   return lines.join("\n");
 }
 
