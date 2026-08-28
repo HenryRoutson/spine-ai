@@ -52,7 +52,7 @@ function CompactHostedJsonModal({
             <X className="h-4 w-4" />
           </button>
         </div>
-        <pre className="min-h-0 flex-1 overflow-auto bg-background p-4 font-mono text-[13px] leading-relaxed text-foreground">
+        <pre className="min-h-0 flex-1 overflow-auto bg-white p-6 font-mono text-sm leading-relaxed text-neutral-900">
           {prettyHostedJson(json)}
         </pre>
       </div>
