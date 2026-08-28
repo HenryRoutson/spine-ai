@@ -64,5 +64,6 @@ export function hostedRunAllowsChangeJson(args: {
   compact: boolean
 }): boolean {
   if (!args.compact || args.chrome.visibility !== "auto") return false
+  if (!args.chrome.inputEditable) return false
   return args.inputModuleIds.length > 0 && hostedRunHidesInputSlots(args.inputModuleIds, args.defaultDocs)
 }

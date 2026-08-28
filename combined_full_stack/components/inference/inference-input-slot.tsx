@@ -84,7 +84,8 @@ export function InferenceInputSlot(props: {
     !!onJsonStructAssigned &&
     inputMinCountForModule(inputModule) === 1 &&
     (upload ? !!jsonStructSource : !!storeProps)
-  const [mode, setMode] = useState<JsonStructMode>("file")
+  // AI : hosted compact run — open the structure form instead of the file picker.
+  const [mode, setMode] = useState<JsonStructMode>(simple && jsonModes ? "empty" : "file")
   const [branchSeed, setBranchSeed] = useState<DocRef | null>(null)
   const clearSlot = uploadProps?.onClearSlot ?? storeProps?.onClearSlot
   const openPicker = storeProps?.onOpenPicker
@@ -150,7 +151,7 @@ export function InferenceInputSlot(props: {
         variant="outline"
         size={compact ? "icon-sm" : "sm"}
         className={compact ? "shrink-0 bg-transparent" : "w-full bg-transparent"}
-        disabled={upload && uploading}
+        disabled={jsonStructDisabled || (upload && uploading)}
         onClick={upload ? () => inputRef.current?.click() : storeProps!.onOpenPicker}
         aria-label={emptyPickerLabel}
         title={compact ? emptyPickerLabel : undefined}
@@ -203,8 +204,13 @@ export function InferenceInputSlot(props: {
       })}
     >
       {simple ? (
-        <div className="mb-2 flex items-start justify-between gap-3">
-          <div className="min-w-0">
+        <div
+          className={cn(
+            "mb-2",
+            emptyFileSlot ? "flex items-start justify-between gap-3" : "text-center",
+          )}
+        >
+          <div className={cn("min-w-0", !emptyFileSlot && "w-full")}>
             <p className="text-sm font-medium">{inputModule.label}</p>
             {description ? (
               <p className="mt-1 text-xs leading-relaxed text-muted-foreground">{description}</p>
@@ -248,7 +254,7 @@ export function InferenceInputSlot(props: {
         </>
       )}
 
-      {jsonModes && (
+      {jsonModes && !jsonStructDisabled && (
         <div className="mb-3 flex flex-wrap gap-1 rounded-md border border-border bg-muted/20 p-1">
           {jsonModeTabs.map(([id, label]) => (
             <button

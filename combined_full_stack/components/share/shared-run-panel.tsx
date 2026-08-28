@@ -33,6 +33,7 @@ import { useSharedInferenceRun, type SharedRunLifecycleEvent } from "@/lib/use-s
 import { sharedLinkRequiresSignIn, viewerFundsSharedRun } from "@/lib/shared-link-funding"
 import { SharedRunDocScopeProvider } from "@/lib/shared-run-doc-scope"
 import { hostedRunAllowsChangeJson, hostedRunShowsInputSlots, DEFAULT_HOSTED_RUN_INPUT_CHROME, type HostedRunInputChrome } from "@/lib/hosted-run-chrome"
+import { RunStatus } from "@/lib/types"
 import type { SharedLinkPublicView } from "@/lib/shared-link-types"
 
 type SharedRunPanelProps = {
@@ -77,6 +78,7 @@ export function SharedRunPanel({
   const [downloadBusy, setDownloadBusy] = useState(false)
   const [downloadError, setDownloadError] = useState<string | null>(null)
   const [inputsOpen, setInputsOpen] = useState(false)
+  const [inputEpoch, setInputEpoch] = useState(0)
   const chrome = inputChrome
   const chromeArgs = {
     chrome,
@@ -92,8 +94,10 @@ export function SharedRunPanel({
   useEffect(() => {
     if (!chrome.clearInputAfterRun) return
     if (run.phase !== "done" || !run.run) return
+    if (run.run.status !== RunStatus.Ok) return
     run.clearInputAssignment()
-  }, [chrome.clearInputAfterRun, run.phase, run.run?.id]) // eslint-disable-line react-hooks/exhaustive-deps
+    setInputEpoch((n) => n + 1)
+  }, [chrome.clearInputAfterRun, run.phase, run.run?.id, run.run?.status]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleDownloadAll = async () => {
     if (!run.run || !run.jobId || !run.progressToken) return
@@ -150,7 +154,7 @@ export function SharedRunPanel({
         )}
         {run.inputModules.map((m) => (
           <InferenceInputSlot
-            key={m.id}
+            key={`${m.id}:${inputEpoch}`}
             variant="upload"
             inputModule={m}
             outModel={run.outModelFor(m)}

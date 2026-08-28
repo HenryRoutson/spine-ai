@@ -71,5 +71,13 @@ describe("hosted run chrome", () => {
         compact: true,
       }),
     ).toBe(false)
+    expect(
+      hostedRunAllowsChangeJson({
+        chrome: normalizeHostedRunInputChrome({ visibility: "auto", inputEditable: false }),
+        inputModuleIds: [IN],
+        defaultDocs: defaults,
+        compact: true,
+      }),
+    ).toBe(false)
   })
 })
