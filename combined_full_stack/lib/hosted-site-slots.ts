@@ -67,7 +67,12 @@ export type HostedSiteActionRowSegment = {
   slots: Array<Extract<HostedSiteHtmlSegment, { kind: "slot" }>>
 }
 
-export type HostedSiteRenderSegment = HostedSiteHtmlSegment | HostedSiteActionRowSegment
+export type HostedSiteRunRowSegment = {
+  kind: "run-row"
+  slots: Array<Extract<HostedSiteHtmlSegment, { kind: "slot" }>>
+}
+
+export type HostedSiteRenderSegment = HostedSiteHtmlSegment | HostedSiteActionRowSegment | HostedSiteRunRowSegment
 
 export function splitHostedSiteSlots(html: string): HostedSiteHtmlSegment[] {
   const parts = html.split(SLOT_SPLIT_RE)
@@ -95,21 +100,22 @@ export function splitHostedSiteSlots(html: string): HostedSiteHtmlSegment[] {
   return segments.length > 0 ? segments : [{ kind: "html", html }]
 }
 
-// AI : {{action}} tokens split the HTML tree, so adjacent buttons must be regrouped in React.
+// AI : {{action}} / {{run:alias}} tokens split the HTML tree, so adjacent widgets must be regrouped in React.
 const ACTION_ROW_OPEN_RE = /<div\s+class=["']hs-action-row["']\s*>/gi
 const COUNTER_OPEN_RE = /<section\b[^>]*\bhs-counter\b[^>]*>/gi
+const SPLIT_OPEN_RE = /<section\b[^>]*\bhs-split\b[^>]*>/gi
 
 export function groupHostedActionSlots(segments: HostedSiteHtmlSegment[]): HostedSiteRenderSegment[] {
   const out: HostedSiteRenderSegment[] = []
   let i = 0
   while (i < segments.length) {
     const seg = segments[i]!
-    if (seg.kind === "slot" && seg.slot === "action") {
+    if (seg.kind === "slot" && (seg.slot === "action" || seg.slot === "run")) {
       const slots: Array<Extract<HostedSiteHtmlSegment, { kind: "slot" }>> = [seg]
       let j = i + 1
       while (j < segments.length) {
         const next = segments[j]!
-        if (next.kind === "slot" && next.slot === "action") {
+        if (next.kind === "slot" && next.slot === seg.slot) {
           slots.push(next)
           j += 1
           continue
@@ -120,7 +126,11 @@ export function groupHostedActionSlots(segments: HostedSiteHtmlSegment[]): Hoste
         }
         break
       }
-      out.push(slots.length > 1 ? { kind: "action-row", slots } : slots[0]!)
+      if (slots.length > 1) {
+        out.push({ kind: seg.slot === "run" ? "run-row" : "action-row", slots })
+      } else {
+        out.push(slots[0]!)
+      }
       i = j
       continue
     }
@@ -130,12 +140,13 @@ export function groupHostedActionSlots(segments: HostedSiteHtmlSegment[]): Hoste
   return dropEmptyHtml(stripHostedActionRowMarkup(out))
 }
 
-// AI : leftover open/close hs-action-row tags hydrate as invalid HTML against the React row.
+// AI : leftover open/close hs-action-row / hs-split tags hydrate as invalid HTML against the React row.
 function stripHostedActionRowMarkup(segments: HostedSiteRenderSegment[]): HostedSiteRenderSegment[] {
   return segments.map((seg, i, arr) => {
     if (seg.kind !== "html") return seg
-    let html = seg.html.replace(ACTION_ROW_OPEN_RE, "").replace(COUNTER_OPEN_RE, "")
-    if (arr[i - 1]?.kind === "action-row") {
+    let html = seg.html.replace(ACTION_ROW_OPEN_RE, "").replace(COUNTER_OPEN_RE, "").replace(SPLIT_OPEN_RE, "")
+    const prev = arr[i - 1]
+    if (prev && (prev.kind === "action-row" || prev.kind === "run-row")) {
       html = html.replace(/^\s*<\/div>/, "").replace(/^\s*<\/section>/, "")
     }
     return { kind: "html", html }

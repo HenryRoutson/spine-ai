@@ -80,7 +80,10 @@ export function InferenceInputSlot(props: {
 
   // AI : exclusive modes — never stack file chip + form (that looked like in-place file edit).
   const jsonModes =
-    !!jsonStruct && !!onJsonStructAssigned && !multi && (upload ? !!jsonStructSource : !!storeProps)
+    !!jsonStruct &&
+    !!onJsonStructAssigned &&
+    inputMinCountForModule(inputModule) === 1 &&
+    (upload ? !!jsonStructSource : !!storeProps)
   const [mode, setMode] = useState<JsonStructMode>("file")
   const [branchSeed, setBranchSeed] = useState<DocRef | null>(null)
   const clearSlot = uploadProps?.onClearSlot ?? storeProps?.onClearSlot

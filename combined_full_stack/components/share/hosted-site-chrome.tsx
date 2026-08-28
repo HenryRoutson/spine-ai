@@ -165,6 +165,17 @@ export function HostedSiteChrome({
             </div>
           )
         }
+        if (seg.kind === "run-row") {
+          return (
+            <div key={`run-row-${i}`} className="hs-split">
+              {seg.slots.map((slot, j) => (
+                <div key={`slot-${slot.slot}-${slot.alias ?? "run"}-${j}`} className={HOSTED_SITE_SLOT_CLASS.run}>
+                  {slotNode(slot.slot, slot.alias)}
+                </div>
+              ))}
+            </div>
+          )
+        }
         return (
           <div key={`slot-${seg.slot}-${i}`} className={HOSTED_SITE_SLOT_CLASS[seg.slot]}>
             {slotNode(seg.slot, seg.alias)}

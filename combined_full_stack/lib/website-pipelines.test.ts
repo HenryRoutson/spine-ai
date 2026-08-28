@@ -111,6 +111,20 @@ describe("named run slots", () => {
     )
     expect(grouped.some((s) => s.kind === "action-row")).toBe(true)
   })
+
+  it("groups adjacent named run slots into a split row", () => {
+    const grouped = groupHostedActionSlots(splitHostedSiteSlots("<h2>Pipelines</h2>{{run}}\n{{run:count}}"))
+    expect(grouped).toEqual([
+      { kind: "html", html: "<h2>Pipelines</h2>" },
+      {
+        kind: "run-row",
+        slots: [
+          { kind: "slot", slot: "run" },
+          { kind: "slot", slot: "run", alias: "count" },
+        ],
+      },
+    ])
+  })
 })
 
 describe("html to react conversion", () => {
