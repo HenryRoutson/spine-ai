@@ -1,9 +1,11 @@
 "use client"
 
-import { useState } from "react"
-import { AlertTriangle, CheckCircle2, Maximize2 } from "lucide-react"
+import { useEffect, useState } from "react"
+import { createPortal } from "react-dom"
+import { AlertTriangle, CheckCircle2, Maximize2, X } from "lucide-react"
 import { DataViewPanel } from "@/components/data-view-panel"
 import { PopupModal, type PopupPayload } from "@/components/logging/popup-modal"
+import { HTML_POPUP_CHROME } from "@/lib/html-popup"
 import { cn } from "@/lib/utils"
 import { useStatusPalette } from "@/lib/chart-colors"
 import { hasDisplayableStepOutput, isDocReferenceOutputJson } from "@/lib/step-doc"
@@ -14,6 +16,50 @@ import {
 } from "@/lib/hosted-run-chrome"
 import type { hosted_run_output_view } from "@/lib/shared-link-types"
 import type { RunStep, StructureModel } from "@/lib/types"
+
+function prettyHostedJson(json: string): string {
+  try {
+    return JSON.stringify(JSON.parse(json), null, 2)
+  } catch {
+    return json
+  }
+}
+
+// AI : compact hosted fullscreen is pretty JSON text so the visitor can see the SQL result is not JS.
+function CompactHostedJsonModal({
+  json,
+  title,
+  onClose,
+}: {
+  json: string
+  title: string
+  onClose: () => void
+}) {
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose()
+    }
+    window.addEventListener("keydown", onKey)
+    return () => window.removeEventListener("keydown", onKey)
+  }, [onClose])
+  return createPortal(
+    <div className={HTML_POPUP_CHROME.overlay}>
+      <button type="button" aria-label="Close viewer" className={HTML_POPUP_CHROME.backdrop} onClick={onClose} />
+      <div className={HTML_POPUP_CHROME.panel}>
+        <div className={HTML_POPUP_CHROME.header}>
+          <span className={HTML_POPUP_CHROME.title}>{title} · raw JSON</span>
+          <button type="button" onClick={onClose} className={HTML_POPUP_CHROME.close} aria-label="Close viewer">
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+        <pre className="min-h-0 flex-1 overflow-auto bg-background p-4 font-mono text-[13px] leading-relaxed text-foreground">
+          {prettyHostedJson(json)}
+        </pre>
+      </div>
+    </div>,
+    document.body,
+  )
+}
 
 function OutputStepLabel() {
   return (
@@ -59,7 +105,7 @@ export function InferenceRunOutputs({
               ? () =>
                   setPopup({
                     json: step.outputJson!,
-                    models,
+                    models: compact ? undefined : models,
                     title: `${step.label} (output)`,
                     defaultView: "json",
                   })
@@ -67,7 +113,11 @@ export function InferenceRunOutputs({
           }
         />
       ))}
-      {popup && <PopupModal payload={popup} onClose={() => setPopup(null)} />}
+      {popup?.json && compact ? (
+        <CompactHostedJsonModal json={popup.json} title={popup.title} onClose={() => setPopup(null)} />
+      ) : popup ? (
+        <PopupModal payload={popup} onClose={() => setPopup(null)} />
+      ) : null}
     </div>
   )
 }
