@@ -193,6 +193,10 @@ describe("employee roster seeds", () => {
     expect(html).toContain("Check length")
     expect(html).toContain("{{run}}")
     expect(html).toContain("{{run:count}}")
+    expect(html).toContain("hs-split-head")
+    const rosterChunk = html.split('id="roster"')[1] ?? ""
+    expect(rosterChunk.indexOf("</section>")).toBeLessThan(rosterChunk.indexOf("{{sql:employee}}"))
+    expect(html.split("hs-split-heads")[1]?.split("{{run}}")[0]).not.toContain("{{run")
     const hosted = normalizeHostedSiteOptions(seed.hostedSite as Parameters<typeof normalizeHostedSiteOptions>[0])
     expect(hosted.pipelineBindings.map((b) => b.alias)).toEqual(["run", "count"])
     expect(hosted.pipelineBindings.map((b) => b.projectId)).toEqual(["p_save_employees", "p_count_employees"])

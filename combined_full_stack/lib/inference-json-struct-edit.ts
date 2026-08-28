@@ -24,7 +24,8 @@ export function inputModuleJsonStructSchema(
   const model = models.find((m) => m.id === outId)
   if (!model || isBuiltinDocumentModel(model)) return null
   let schemaZod = zodFromModel(model, models, typeAliases)
-  if (stepEmitsList(inputModule)) schemaZod = z.array(schemaZod)
+  // AI : list forms start with one empty item so the visitor sees fields immediately.
+  if (stepEmitsList(inputModule)) schemaZod = z.array(schemaZod).min(1)
   return {
     schema: z.toJSONSchema(schemaZod) as Record<string, unknown>,
     modelName: model.name,

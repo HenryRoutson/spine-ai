@@ -134,7 +134,7 @@ export function defaultHostedSiteCss(): string {
 .hs-split { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1.25rem; max-width: 72rem; margin: 0 auto; padding: 0 1.25rem 3rem; }
 .hs-split .hs-run-slot { max-width: none; margin: 0; }
 .hs-split-heads { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1.25rem; max-width: 72rem; margin: 0 auto; padding: 1.5rem 1.25rem 0.35rem; text-align: center; }
-.hs-split-heads > div { text-align: center; }
+.hs-split-head { text-align: center; min-width: 0; }
 .hs-split-heads .hs-kicker, .hs-split-heads .hs-workspace-title { text-align: center; }
 .hs-sql-table-wrap { overflow-x: auto; text-align: left; }
 .hs-sql-table { width: 100%; border-collapse: collapse; font-size: 0.88rem; }
