@@ -19,6 +19,7 @@ import { fieldToTypeExpr, stepEmitsList } from "./type_expr";
 import type { ModuleKind, PipelineModule, StructureModel } from "./types";
 import { customCodeEntriesForModule } from "@/lib/custom_code_entries";
 import { listConnectActions } from "@/lib/connect-catalog";
+import { activeFunction, functionsPromptSummary } from "@/lib/pipeline-functions";
 
 function structureName(models: StructureModel[], id: string | undefined): string | undefined {
   if (!id) return undefined;
@@ -953,16 +954,27 @@ Key patterns all examples demonstrate:
 - Do not add user models that duplicate Document (content + filename).`;
 }
 
+export function buildProjectFunctionsPromptBlock(): string {
+  return `Functions (named pipelines in one project):
+- Structures (models) are SHARED by every function. When you add types, return the full models array.
+- Each function is a separate pipeline (modules). The active function's steps are listed as "Current pipeline". Other functions are listed by name — do not replace them unless the user asked.
+- To ADD another pipeline and keep the current one: set targetFunctionName to a new short name (e.g. "Summarize") and modules to that function's FULL step list. modulePatch MUST be null. Never overwrite Main / the active function when the user asked for a second or another function.
+- To EDIT an existing named function: set targetFunctionName to that exact name. Prefer a FULL modules replacement when it is not the active function (modulePatch indexes are for the target function's steps).
+- To edit only the currently active function: set targetFunctionName to null (or that function's name) and change modules/modulePatch as usual.
+- Set targetFunctionName to null when you are not adding or retargeting a function.`;
+}
+
 export function buildProjectAssistantSystemPrompt(globalModel: ModelId, projectName: string): string {
   return `You are the Agent for "Spine" — a series-parallel document-processing IDE with structure models, a step pipeline, and a document store for inference.
 
 You can propose changes to ALL of the following in one response:
-1. Structure models (pydantic schemas for LLM I/O)
+1. Structure models (pydantic schemas for LLM I/O) — shared by every function in the project
 2. Reusable type aliases (Python-style types referenced by struct fields)
-3. Pipeline steps (series-parallel processing graph)
+3. Pipeline steps for one named function (series-parallel processing graph)
 4. Project documentation (markdown — keeps the Docs tab accurate as the pipeline evolves)
 5. Test documents (text/json files linked to this project for inference)
 6. Project name (only when the project is still unnamed — see Project naming rules)
+7. A new named function (set targetFunctionName) so a second pipeline does not replace the first
 
 ${buildAgentControlParityPromptBlock()}
 
@@ -978,6 +990,8 @@ Input types (for input steps):
 ${buildInputTypesPromptBlock()}
 
 ${buildStructureRulesPromptBlock()}
+
+${buildProjectFunctionsPromptBlock()}
 
 ${buildAssistantStructuredResponsePromptBlock()}
 
@@ -1072,15 +1086,19 @@ export function buildProjectContextBlock(
   const unnamedNote = isUnnamedProjectName(project.name)
     ? ` (unnamed — you may set projectNameUpdate when proposing changes)\n`
     : "\n"
+  const activeFn = activeFunction(project)
   return `${docsBlock}Project: ${project.name} (${project.kind})${unnamedNote}Default model: ${globalModel}
 ${historyBlock}
+${functionsPromptSummary(project)}
+Active function: ${activeFn.name}
+
 Current type aliases (${project.typeAliases?.length ?? 0}):
 ${typeAliasesJson}
 
 Current structure models (${project.models.length}):
 ${modelsJson}
 
-Current pipeline (${project.modules.length} steps):
+Current pipeline (${activeFn.name}, ${project.modules.length} steps):
 ${modulesJson}
 ${extras ?? ""}`;
 }

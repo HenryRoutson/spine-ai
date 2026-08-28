@@ -24,6 +24,8 @@ import { useMarkPrimarySectionReady } from "@/lib/primary-section-opening"
 import { AppPrimarySection } from "@/lib/app-primary-section-labels"
 import { useStore, uid } from "@/lib/store"
 import { StructureCodeView } from "@/components/structure-code-view"
+import { StructureFunctionLinks } from "@/components/structure-function-links"
+import { StructureRowsPanel } from "@/components/platform/structure-rows-panel"
 import { IdInspector } from "@/components/id-inspector"
 import { useProjectIdIndex } from "@/lib/use-project-id-index"
 import { collectSqlIdTypes } from "@/lib/sql-id-types"
@@ -469,12 +471,12 @@ export function StructureBuilder() {
                 </EntityRailSection>
 
                 <div className="shrink-0 border-t border-border/60 p-1.5">
-                  <EntityRailItem active={view === "code"} onClick={() => setView("code")}>
+                  <EntityRailItem active={view === "code"} onClick={() => setView("code")} spineId="structure.view-sql">
                     <div className="flex items-center gap-2">
                       <Code2 className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
                       <div>
                         <p className="font-mono text-xs text-foreground">Code preview</p>
-                        <p className="font-mono text-[10px] text-muted-foreground">Python · TS · Rust</p>
+                        <p className="font-mono text-[10px] text-muted-foreground">SQL · Python · TS</p>
                       </div>
                     </div>
                   </EntityRailItem>
@@ -554,10 +556,32 @@ export function StructureBuilder() {
                     loading={idIndexLoading}
                   />
                 ) : (
-                  <StructureExcelEditor
-                    selectedId={selectedStructId}
-                    onSelectId={(id) => setTarget({ kind: "struct", id })}
-                  />
+                  <div className="flex h-full min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+                    <div className="flex shrink-0 flex-wrap items-center justify-between gap-2 border-b border-border px-4 py-2">
+                      {selectedStructId ? (
+                        <StructureFunctionLinks modelId={selectedStructId as StructureModelId} />
+                      ) : (
+                        <span />
+                      )}
+                    </div>
+                    <div className="min-h-0 min-w-0 flex-1 overflow-hidden">
+                      <StructureExcelEditor
+                        selectedId={selectedStructId}
+                        onSelectId={(id) => setTarget({ kind: "struct", id })}
+                      />
+                    </div>
+                    {selectedStructId ? (
+                      <div className="max-h-[40%] shrink-0 overflow-y-auto border-t border-border px-4 py-3">
+                        <p className="mb-2 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                          Stored rows
+                        </p>
+                        <StructureRowsPanel
+                          models={models}
+                          lockModelId={selectedStructId as StructureModelId}
+                        />
+                      </div>
+                    ) : null}
+                  </div>
                 )}
               </div>
             }

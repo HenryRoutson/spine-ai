@@ -1,11 +1,13 @@
 import { resolve } from "node:path"
-import { describe, expect, it } from "vitest"
+import { afterAll, beforeAll, describe, expect, it } from "vitest"
 import { createSpineSession } from "@/lib/core/session"
 import { loadProjectContext } from "@/lib/cli/project_context"
 import { DEFAULT_MODEL, FieldType, ModuleKind, type StructureModel, type StructureModelId } from "@/lib/types"
 import { uid } from "@/lib/id"
 import { BUILTIN_DOCUMENT_ID } from "@/lib/server/builtin_models"
-import { materializeProposal } from "@/lib/server/pipeline_assistant"
+import { materializeProposal, proposePipelineChange } from "@/lib/server/pipeline_assistant"
+import { clearLlmProviderCache } from "@/lib/server/llm/registry"
+import { functionsOnProject } from "@/lib/pipeline-functions"
 import { computeWarnings, formatPipelineValidationErrors } from "@/lib/server/validity"
 import { PipelineWarningKind } from "@/lib/server/validity-types"
 import { stepEmitsList } from "@/lib/server/type_expr"
@@ -57,6 +59,7 @@ function receiptMapRaw(overrides?: Partial<AssistantRaw>): AssistantRaw {
     documentationUpdate: null,
     projectNameUpdate: null,
     proposedActions: null,
+    targetFunctionName: null,
     ...overrides,
   }
 }
@@ -397,6 +400,19 @@ describe("pipeline assistant materialize", () => {
     )
     expect(warnings.some((w) => w.kind === PipelineWarningKind.PromptListVsItem)).toBe(true)
   })
+
+  it("targetFunctionName keeps the proposal on a new named function", () => {
+    const session = createSpineSession()
+    session.addProject({ open: true })
+    const proposal = materializeProposal(
+      receiptMapRaw({ targetFunctionName: "Summarize" }),
+      session.project!,
+      DEFAULT_MODEL,
+    )
+    expect(proposal?.targetFunctionName).toBe("Summarize")
+    expect(proposal?.changed.function).toBe(true)
+    expect(proposal?.modules.some((m) => m.kind === ModuleKind.LlmBatch)).toBe(true)
+  })
 })
 
 describe("combine seeds", () => {
@@ -408,5 +424,40 @@ describe("combine seeds", () => {
       project.typeAliases ?? [],
     )
     expect(errors).not.toMatch(/no field for the side input/)
+  })
+})
+
+describe("seed LLM can add a second named function", () => {
+  const prevProvider = process.env.LLM_PROVIDER
+
+  beforeAll(() => {
+    process.env.LLM_PROVIDER = "seed"
+    clearLlmProviderCache()
+  })
+
+  afterAll(() => {
+    if (prevProvider === undefined) delete process.env.LLM_PROVIDER
+    else process.env.LLM_PROVIDER = prevProvider
+    clearLlmProviderCache()
+  })
+
+  it("approving Main then Hello Notes keeps both functions", async () => {
+    const session = createSpineSession()
+    session.addProject({ open: true })
+    const first = await proposePipelineChange(session.project!, "Make a pipeline that summarizes notes I paste.", [])
+    expect(first.proposal).toBeTruthy()
+    expect(first.invalidCount).toBe(0)
+    expect(first.proposal!.targetFunctionName).toBeUndefined()
+    session.applyProposal(first.proposal!)
+
+    const second = await proposePipelineChange(
+      session.project!,
+      "Keep Main. Also add a second function named Hello Notes that greets pasted text.",
+      [],
+    )
+    expect(second.proposal?.targetFunctionName).toBe("Hello Notes")
+    expect(second.invalidCount).toBe(0)
+    session.applyProposal(second.proposal!)
+    expect(functionsOnProject(session.project!).map((fn) => fn.name)).toEqual(["Main", "Hello Notes"])
   })
 })

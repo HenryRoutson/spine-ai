@@ -57,6 +57,7 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: strin
       defaultDocs: parsed.defaultDocsByModule
         ? scheduleDocsFromByModule(parsed.defaultDocsByModule)
         : undefined,
+      functionId: parsed.functionId as import("@/lib/server/types").pipeline_function_id | undefined,
     });
     if (!updated) return apiError("schedule not found", HTTP.NOT_FOUND);
     return NextResponse.json({ schedule: updated });

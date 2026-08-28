@@ -13,7 +13,8 @@ import type { hosted_site_react_bundle } from "@/lib/hosted-site-react"
 import { clearWorkspaceClientSession } from "@/lib/clear-workspace-client-session"
 import { useSupabaseSession } from "@/lib/use-supabase-session"
 import { resolveWebsitePipelineBindings } from "@/lib/website-pipelines"
-import type { ProjectId } from "@/lib/types"
+import { hostedTableSlotsForProject } from "@/components/platform/hosted-table-slot"
+import type { Project, ProjectId, StructureModel } from "@/lib/types"
 import type { ReactNode } from "react"
 
 export function HostedSiteViewer({
@@ -23,6 +24,8 @@ export function HostedSiteViewer({
   projectId,
   reactBundle,
   reactCompileError,
+  models = [],
+  structureRows,
 }: {
   linkId: string
   siteOptions?: HostedSiteOptions | null
@@ -30,6 +33,8 @@ export function HostedSiteViewer({
   projectId: ProjectId
   reactBundle?: hosted_site_react_bundle | null
   reactCompileError?: string | null
+  models?: StructureModel[]
+  structureRows?: Project["structureRows"]
 }) {
   const options = normalizeHostedSiteOptions(siteOptions ?? DEFAULT_HOSTED_SITE_OPTIONS)
   const { email, isAuthenticated, signOut } = useSupabaseSession()
@@ -66,6 +71,10 @@ export function HostedSiteViewer({
     }
     return map
   }, [bindings, hasDocsSlot, linkId])
+  const tableByAlias = useMemo(
+    () => hostedTableSlotsForProject({ id: projectId, models, structureRows }),
+    [projectId, models, structureRows],
+  )
 
   const accountBar =
     options.auth.enabled && isAuthenticated && email ? (
@@ -112,6 +121,8 @@ export function HostedSiteViewer({
         <HostedSiteReactPreview
           options={options}
           runByAlias={{ ...runByAlias, run: runSlot }}
+          tableByAlias={tableByAlias}
+          slots={widgets}
           bundle={reactBundle}
           compileError={reactCompileError}
         />
@@ -127,6 +138,7 @@ export function HostedSiteViewer({
         run: runSlot,
       }}
       runByAlias={{ ...runByAlias, run: runSlot }}
+      tableByAlias={tableByAlias}
     />
   )
 }

@@ -5,6 +5,7 @@ import { DataViewPanel } from "@/components/data-view-panel"
 import { MarkdownView } from "@/components/highlight"
 import { SharedLinkPreview } from "@/components/share/shared-link-preview"
 import { Chat, ChatBubble, ChatBubbleAvatar, ChatBubbleContent, ChatInput, ChatList, ChatMessage } from "@/components/ui/chat"
+import { HostedPaySlot } from "@/components/platform/hosted-pay-slot"
 import type { hosted_site_widget_slot } from "@/lib/hosted-site-slots"
 import type { PipelineModule } from "@/lib/types"
 import type { ReactNode } from "react"
@@ -16,11 +17,13 @@ export function HostedSiteSlotWidgets({
   viewerMarkdown,
   modules,
   hideDocsInRun,
+  paySlot,
 }: {
   projectName: string
   viewerMarkdown: string
   modules: PipelineModule[]
   hideDocsInRun: boolean
+  paySlot?: ReactNode
 }): Partial<Record<hosted_site_widget_slot, ReactNode>> {
   return {
     run: (
@@ -40,6 +43,7 @@ export function HostedSiteSlotWidgets({
     ) : (
       <p className="px-4 py-3 text-xs text-muted-foreground">Viewer docs appear here</p>
     ),
+    pay: paySlot ?? <HostedPaySlot companyName={projectName} />,
   }
 }
 

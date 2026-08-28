@@ -1,10 +1,7 @@
 "use client"
 
-import { Hammer, Sparkles } from "lucide-react"
-import {
-  BUILD_SURFACE_NAV,
-  BuildSurface,
-} from "@/lib/build-surface"
+import { Switch } from "@/components/ui/switch"
+import { writeHideDeveloperTools } from "@/lib/developer-tools-settings"
 import { prefetchBuildPanel } from "@/lib/prefetch-build-panel"
 import { prefetchWorkspacePanel } from "@/lib/prefetch-workspace-panel"
 import { AppWindowId } from "@/lib/app-window-id"
@@ -12,97 +9,36 @@ import { cn } from "@/lib/utils"
 import { spineActionProps } from "@/lib/core/parity"
 import { useCallback } from "react"
 
-type surface_copy = { label: string; title: string }
-
 type BuildSurfaceNavProps = {
-  value: BuildSurface
-  onChange: (surface: BuildSurface) => void
+  simplified: boolean
   className?: string
-  vibeCopy?: surface_copy
-  editorsCopy?: surface_copy
-  editorsIcon?: React.ComponentType<{ className?: string }>
 }
 
-// AI : L0 Build sub-decision — Vibe vs visual editors (same project selector).
-export function BuildSurfaceNav({
-  value,
-  onChange,
-  className,
-  vibeCopy,
-  editorsCopy,
-  editorsIcon: EditorsIcon = Hammer,
-}: BuildSurfaceNavProps) {
-  const warmVibe = useCallback(() => {
-    prefetchWorkspacePanel(AppWindowId.Vibe)
-    prefetchBuildPanel()
+// AI : Simplified on = former Vibe chrome (`nav.build.vibe`); off = former Building editors (`nav.build.editors`).
+export function BuildSurfaceNav({ simplified, className }: BuildSurfaceNavProps) {
+  const warmSimplified = useCallback(() => {
+    prefetchWorkspacePanel(AppWindowId.Inference)
+    prefetchWorkspacePanel(AppWindowId.Share)
   }, [])
-  const warmEditors = useCallback(() => {
+  const warmFull = useCallback(() => {
     prefetchBuildPanel()
   }, [])
 
   return (
-    <div
-      role="group"
-      aria-label="Build surface"
+    <label
       className={cn(
-        "inline-flex shrink-0 rounded-md border border-border/80 bg-background/80 p-0.5",
+        "inline-flex shrink-0 cursor-pointer items-center gap-2 rounded-md border border-border/80 bg-background/80 px-2 py-1",
         className,
       )}
+      onMouseEnter={simplified ? warmFull : warmSimplified}
     >
-      <SurfaceButton
-        active={value === BuildSurface.Vibe}
-        onClick={() => onChange(BuildSurface.Vibe)}
-        onWarm={warmVibe}
-        icon={Sparkles}
-        spineId="nav.build.vibe"
-        {...(vibeCopy ?? BUILD_SURFACE_NAV[BuildSurface.Vibe])}
+      <Switch
+        size="sm"
+        checked={simplified}
+        onCheckedChange={(checked) => writeHideDeveloperTools(!!checked)}
+        {...spineActionProps(simplified ? "nav.build.vibe" : "nav.build.editors")}
       />
-      <SurfaceButton
-        active={value === BuildSurface.Editors}
-        onClick={() => onChange(BuildSurface.Editors)}
-        onWarm={warmEditors}
-        icon={EditorsIcon}
-        spineId="nav.build.editors"
-        {...(editorsCopy ?? BUILD_SURFACE_NAV[BuildSurface.Editors])}
-      />
-    </div>
-  )
-}
-
-function SurfaceButton({
-  active,
-  onClick,
-  onWarm,
-  icon: Icon,
-  label,
-  title,
-  spineId,
-}: {
-  active: boolean
-  onClick: () => void
-  onWarm?: () => void
-  icon: React.ComponentType<{ className?: string }>
-  label: string
-  title: string
-  spineId: string
-}) {
-  return (
-    <button
-      type="button"
-      title={title}
-      onClick={onClick}
-      onMouseEnter={onWarm}
-      onFocus={onWarm}
-      {...spineActionProps(spineId)}
-      className={cn(
-        "flex items-center gap-1.5 rounded px-2 py-1 font-mono text-[11px] transition-colors",
-        active
-          ? "bg-muted text-foreground shadow-sm"
-          : "text-muted-foreground hover:text-foreground",
-      )}
-    >
-      <Icon className="h-3.5 w-3.5 shrink-0" />
-      <span>{label}</span>
-    </button>
+      <span className="font-mono text-[11px]">Simplified</span>
+    </label>
   )
 }

@@ -41,6 +41,7 @@ export function toProjectProposal(proposal: PipelineAssistantProposal): ProjectP
     })),
     documentation: proposal.documentation,
     projectName: proposal.projectName,
+    targetFunctionName: proposal.targetFunctionName,
     proposedActions: proposal.proposedActions,
     changed: proposal.changed,
   }

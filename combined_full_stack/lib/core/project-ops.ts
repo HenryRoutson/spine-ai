@@ -2,7 +2,8 @@
 
 import type { ProjectPatch } from "@/lib/core/types"
 import type { SessionSnapshot } from "@/lib/core/types"
-import { AUTHORED_PROJECT_KIND } from "@/lib/project-assistant-types"
+import { AUTHORED_PROJECT_KIND, type ProjectProposal } from "@/lib/project-assistant-types"
+import { ensureNamedFunction, patchWithSyncedModules } from "@/lib/pipeline-functions"
 import { stripBuiltinTypeAliases, stripSharedModels, withBuiltinTypeAliases, withSharedModels } from "@/lib/structure"
 import { syncManagedPipelineSteps } from "@/lib/structure-parse-steps"
 import type { PipelineModule, Project, ProjectId, StructureModel, TypeAlias } from "@/lib/types"
@@ -54,11 +55,38 @@ export function projectPatchFromChanges(
   return {
     ...(changes.models ? { models: nextModels } : {}),
     ...(changes.typeAliases ? { typeAliases: stripBuiltinTypeAliases(changes.typeAliases) } : {}),
-    ...(nextModules !== undefined ? { modules: nextModules } : {}),
+    ...(nextModules !== undefined ? patchWithSyncedModules(project, nextModules) : {}),
     ...(changes.documentation !== undefined ? { documentation: changes.documentation || undefined } : {}),
     ...(changes.name ? { name: changes.name } : {}),
     ...(leaveBlank ? { kind: AUTHORED_PROJECT_KIND } : {}),
   }
+}
+
+// AI : Vibe Approve — switch/add the named function first, then write models/modules onto that spine.
+export function proposalGraphPatch(
+  project: Project,
+  proposal: Pick<ProjectProposal, "changed" | "models" | "modules" | "typeAliases" | "targetFunctionName">,
+  globalModel: string,
+): Partial<Project> | null {
+  let working = project
+  const out: Partial<Project> = {}
+  const targetName = proposal.targetFunctionName?.trim()
+  if (targetName) {
+    const fnPatch = ensureNamedFunction(working, targetName)
+    working = { ...working, ...fnPatch }
+    Object.assign(out, fnPatch)
+  }
+  const rest = projectPatchFromChanges(
+    working,
+    {
+      models: proposal.changed.models ? proposal.models : undefined,
+      modules: proposal.changed.modules ? proposal.modules : undefined,
+      typeAliases: proposal.changed.typeAliases ? proposal.typeAliases : undefined,
+    },
+    globalModel,
+  )
+  if (rest) Object.assign(out, rest)
+  return Object.keys(out).length ? out : null
 }
 
 // AI : GUI setModels syncs managed pipeline steps — SpineSession must match (parity.md §8.5).
@@ -70,9 +98,10 @@ export function modelsPatchWithSync(
   const prev = stripSharedModels(project.models)
   const raw = typeof models === "function" ? models(withSharedModels(prev)) : models
   const nextModels = stripSharedModels(raw)
+  const nextModules = syncManagedPipelineSteps(project.modules, withSharedModels(nextModels), globalModel)
   return {
     models: nextModels,
-    modules: syncManagedPipelineSteps(project.modules, withSharedModels(nextModels), globalModel),
+    ...patchWithSyncedModules(project, nextModules),
   }
 }
 
@@ -90,7 +119,8 @@ export function modulesPatchWithSync(
   modules: PipelineModule[],
   globalModel: string,
 ): Partial<Project> {
-  return { modules: syncManagedPipelineSteps(modules, project.models, globalModel) }
+  const synced = syncManagedPipelineSteps(modules, project.models, globalModel)
+  return patchWithSyncedModules(project, synced)
 }
 
 // AI : merge a patch into one project row — shared by SpineSession.patchProject + useStore.patchProject.

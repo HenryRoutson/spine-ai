@@ -39,6 +39,7 @@ function shouldCompile(path: string): boolean {
   if (path.endsWith(".d.ts")) return false
   if (path === "src/main.tsx" || path === "src/main.ts") return false
   if (/RunPipeline\.(t|j)sx?$/.test(path)) return false
+  if (/HostedSlot\.(t|j)sx?$/.test(path)) return false
   if (!path.startsWith("src/")) return false
   return /\.(tsx|ts|jsx|js)$/.test(path)
 }
@@ -53,6 +54,8 @@ function rewriteRequires(code: string, fromPath: string, files: Set<string>): st
     const resolved = resolveLocal(fromPath, spec, files)
     if (resolved && /RunPipeline\.(t|j)sx?$/.test(resolved)) return `require("__hs_run")`
     if (spec.includes("RunPipeline")) return `require("__hs_run")`
+    if (resolved && /HostedSlot\.(t|j)sx?$/.test(resolved)) return `require("__hs_slot")`
+    if (spec.includes("HostedSlot")) return `require("__hs_slot")`
     if (!resolved) throw new Error(`Cannot find module "${spec}" from ${fromPath}`)
     if (resolved.endsWith(".css")) return `require("__hs_css")`
     return `require(${JSON.stringify(resolved)})`

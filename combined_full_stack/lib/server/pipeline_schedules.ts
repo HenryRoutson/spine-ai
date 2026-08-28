@@ -23,7 +23,7 @@ import { dataDir } from "./config";
 import { createAdminClient } from "./supabase_admin";
 import { isMissingSchemaError } from "./supabase_store";
 import type { user_id_string } from "./require_auth";
-import type { ModelId, PipelineScheduleId, ProjectId } from "./types";
+import type { ModelId, PipelineScheduleId, ProjectId, pipeline_function_id } from "./types";
 import { logger } from "./server_logger";
 
 const scheduleLog = logger("pipeline-schedules");
@@ -86,6 +86,7 @@ export function toPublicRecord(row: StoredSchedule): PipelineScheduleRecord {
     lastError: row.lastError,
     runCount: row.runCount,
     createdAt: row.createdAt,
+    functionId: row.functionId ?? ("main" as pipeline_function_id),
   };
 }
 
@@ -107,6 +108,7 @@ function rowFromDb(row: Record<string, unknown>): StoredSchedule {
     lastError: (row.last_error as string | null) ?? undefined,
     runCount: Number(row.run_count ?? 0),
     createdAt: Number(row.created_at),
+    functionId: ((row.function_id as string | null) ?? "main") as pipeline_function_id,
   };
 }
 
@@ -128,6 +130,7 @@ function toDbRow(row: StoredSchedule): Record<string, unknown> {
     last_error: row.lastError ?? null,
     run_count: row.runCount,
     created_at: row.createdAt,
+    function_id: row.functionId,
   };
 }
 
@@ -296,6 +299,7 @@ export type CreateScheduleInput = {
   defaultDocs: ScheduleDefaultDoc[];
   enabled?: boolean;
   tickUrl?: string;
+  functionId?: pipeline_function_id;
 };
 
 export async function createSchedule(input: CreateScheduleInput): Promise<PipelineScheduleRecord> {
@@ -314,6 +318,7 @@ export async function createSchedule(input: CreateScheduleInput): Promise<Pipeli
     nextRunAt: spec.nextRunAt,
     runCount: 0,
     createdAt: Date.now(),
+    functionId: input.functionId ?? ("main" as pipeline_function_id),
   };
   await persistSchedule(row);
   await ensureScheduleRuntime(input.tickUrl);
@@ -327,6 +332,7 @@ export type PatchScheduleInput = {
   enabled?: boolean;
   defaultModel?: ModelId | null;
   defaultDocs?: ScheduleDefaultDoc[];
+  functionId?: pipeline_function_id;
 };
 
 export async function patchSchedule(
@@ -350,6 +356,7 @@ export async function patchSchedule(
     enabled: patch.enabled ?? existing.enabled,
     defaultModel: patch.defaultModel === null ? undefined : (patch.defaultModel ?? existing.defaultModel),
     defaultDocs: patch.defaultDocs ?? existing.defaultDocs,
+    functionId: patch.functionId ?? existing.functionId,
     nextRunAt,
     lastError: cronChanged ? undefined : existing.lastError,
   };
@@ -374,7 +381,14 @@ async function persistSchedule(row: StoredSchedule): Promise<void> {
     return;
   }
   if (!isServerless()) saveLocalSchedule(row);
-  const { error } = await db.from("pipeline_schedules").upsert(toDbRow(row));
+  const payload = toDbRow(row);
+  let { error } = await db.from("pipeline_schedules").upsert(payload);
+  if (error && /function_id/.test(error.message)) {
+    const legacy = { ...payload };
+    delete legacy.function_id;
+    const retry = await db.from("pipeline_schedules").upsert(legacy);
+    error = retry.error;
+  }
   if (error) {
     if (isServerless() || !isMissingSchemaError(error)) {
       throw new Error(`schedule persistence failed: ${error.message}`);

@@ -12,6 +12,8 @@ import {
 import { HOSTED_SITE_SLOT_CLASS, type hosted_site_widget_slot } from "@/lib/hosted-site-slots"
 import type { HostedSiteOptions } from "@/lib/shared-link-types"
 import { escapeHtml } from "@/lib/standalone-html"
+import { generateUploadFormHtml } from "@/lib/hosted-site-upload-ui"
+import { generateStepProgressHtml } from "@/lib/hosted-site-progress"
 import type { Project } from "@/lib/types"
 
 export type HostedSiteExportFile = {
@@ -44,9 +46,11 @@ export function hostedSiteOptionsForExport(project: Project, siteOptions?: unkno
 
 function slotExportComment(slot: hosted_site_widget_slot): string {
   if (slot === "auth") return "<!-- auth form mounts here when you wire sign-in later -->"
-  if (slot === "run") return "<!-- pipeline run form / inference_ui.html mounts here -->"
+  if (slot === "run") return "<!-- pipeline run form / auto-generated upload UI mounts here -->"
   if (slot === "output") return "<!-- DataViewPanel / run output mounts here -->"
   if (slot === "chatbot") return "<!-- ChatbotPanel mounts here -->"
+  if (slot === "pay") return "<!-- checkout / pay widget mounts here -->"
+  if (slot === "table") return "<!-- live structure table mounts here -->"
   return "<!-- viewer markdown mounts here -->"
 }
 
@@ -103,15 +107,33 @@ export function generateHostedSiteExportFiles(project: Project, siteOptions?: un
     const parts = compileHostedSitePageHtml(options, page.html)
     return {
       filename: `hosted/${page.path}.html`,
-      content: hostedSiteStandaloneFromParts(options, parts, "run"),
+      content: injectRunSlotWidgets(
+        hostedSiteStandaloneFromParts(options, parts, "run"),
+        project.modules,
+      ),
       mime: "text/html",
     }
   })
   return [
-    { filename: "hosted/index.html", content: hostedSiteStandaloneHtml(options, "app"), mime: "text/html" },
+    {
+      filename: "hosted/index.html",
+      content: injectRunSlotWidgets(hostedSiteStandaloneHtml(options, "app"), project.modules),
+      mime: "text/html",
+    },
     ...extraPages,
     { filename: "hosted/auth.html", content: hostedSiteStandaloneHtml(options, "signin"), mime: "text/html" },
     { filename: "hosted/styles.css", content: `${app.css.trim()}\n`, mime: "text/css" },
     { filename: "hosted/.env.example", content: `${HOSTED_APP_ENV_PLACEHOLDERS}\n`, mime: "text/plain" },
   ]
+}
+
+function injectRunSlotWidgets(html: string, modules: Project["modules"]): string {
+  // AI : inject progress + upload together so a filled run slot still gets both widgets.
+  const progress = generateStepProgressHtml(modules)
+  const form = generateUploadFormHtml(modules)
+  const inner = [progress, form].filter(Boolean).join("\n")
+  if (html.includes('class="hs-run-slot"')) {
+    return html.replace(/(<div class="hs-run-slot"[^>]*>)/, `$1\n${inner}\n`)
+  }
+  return `${html}\n<div class="hs-run-slot">\n${inner}\n</div>`
 }

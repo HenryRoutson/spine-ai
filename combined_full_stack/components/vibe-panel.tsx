@@ -19,7 +19,6 @@ import { vibeChatSplit } from "@/lib/layout-split-settings"
 import { prefetchWorkspacePanel } from "@/lib/prefetch-workspace-panel"
 import { usePersistedLeadingWidth } from "@/lib/use-persisted-leading-width"
 import { cn } from "@/lib/utils"
-import { WebsiteBackendPeek } from "@/components/share/website-backend-peek"
 
 const Inference = dynamic(() => import("@/components/inference").then((m) => ({ default: m.Inference })), {
   loading: () => <PanelLoading label="loading inference…" />,
@@ -51,7 +50,7 @@ function renderObservePanel(tab: VibeObserveTab) {
 // AI : DONE (media-view-A-share) — InferenceRunOutputs → DataViewPanel; Play tab works in simple / share / embed.
 export function VibePanel() {
   useMarkPrimarySectionReady(AppPrimarySection.Build)
-  const { vibeObserveTab, setVibeObserveTab, editingWebsite, websiteSurface } = useAppShell()
+  const { vibeObserveTab, setVibeObserveTab, editingWebsite } = useAppShell()
   const { width, setWidth, commitWidth } = usePersistedLeadingWidth(vibeChatSplit)
   const [mountedObserve, setMountedObserve] = useState<Set<VibeObserveTab>>(
     () => new Set([vibeObserveTab]),
@@ -68,16 +67,10 @@ export function VibePanel() {
   }, [vibeObserveTab])
 
   if (editingWebsite) {
-    const showBackend = websiteSurface === "backend"
+    // AI : Website vibe is the page studio only — Inference/Schedule live on the opened pipeline.
     return (
       <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-        <div
-          className={cn("flex min-h-0 flex-1 flex-col overflow-hidden", showBackend && "hidden")}
-          aria-hidden={showBackend}
-        >
-          <Share simple />
-        </div>
-        {showBackend ? <WebsiteBackendPeek /> : null}
+        <Share simple />
       </div>
     )
   }

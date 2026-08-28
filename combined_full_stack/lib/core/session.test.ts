@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest"
-import { FieldType, InputType, DocLabel, type ProjectId } from "@/lib/types"
+import { FieldType, InputType, DocLabel, ModuleKind, type ModuleId, type ProjectId } from "@/lib/types"
 import { createSpineSession, createMemoryPersist, emptySessionSnapshot } from "@/lib/core/session"
 import { createThrowingEgress, EgressBlockedError } from "@/lib/core/transport"
 import { toPipelineView, toSessionSummary } from "@/lib/core/view"
@@ -249,6 +249,55 @@ describe("SpineSession React-like API", () => {
     expect(store.documentation).toBe("Agent wrote this")
     expect(store.docs.some((d) => d.name === "lease.txt")).toBe(true)
     expect(store.pendingProposal).toBeNull()
+  })
+
+  it("applyProposal with targetFunctionName adds a second function and leaves Main", () => {
+    const store = createSpineSession()
+    store.addProject({ open: true })
+    const mainModules = store.modules
+    const extra = [
+      {
+        id: uid<ModuleId>("mod_"),
+        kind: ModuleKind.Input,
+        label: "Notes",
+        note: "Function input",
+        inputType: InputType.Text,
+        cached: true,
+        avgMs: 80,
+        avgCostCents: 0,
+      },
+      {
+        id: uid<ModuleId>("mod_"),
+        kind: ModuleKind.Output,
+        label: "Summary",
+        note: "",
+        cached: true,
+        avgMs: 40,
+        avgCostCents: 0,
+      },
+    ]
+    store.applyProposal({
+      modules: extra,
+      models: store.project!.models,
+      typeAliases: [],
+      docs: [],
+      documentation: "",
+      targetFunctionName: "Summarize",
+      changed: {
+        modules: true,
+        models: false,
+        typeAliases: false,
+        docs: false,
+        documentation: false,
+        function: true,
+      },
+    })
+    const fns = store.project?.functions ?? []
+    expect(fns).toHaveLength(2)
+    expect(fns.map((fn) => fn.name)).toEqual(["Main", "Summarize"])
+    expect(store.project?.modules[0]?.label).toBe("Notes")
+    const main = fns.find((fn) => fn.name === "Main")
+    expect(main?.modules[0]?.id).toBe(mainModules[0]?.id)
   })
 
   it("createShareLink posts /api/shared-links and records the id", async () => {

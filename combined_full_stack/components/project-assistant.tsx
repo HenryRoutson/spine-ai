@@ -38,6 +38,7 @@ import {
 import { uid } from "@/lib/id"
 import { useAppShell, AppWindowId } from "@/lib/app-shell"
 import { cn } from "@/lib/utils"
+import { proposalGraphPatch } from "@/lib/core/project-ops"
 
 type ProjectAssistantProps = {
   className?: string
@@ -58,7 +59,7 @@ export function ProjectAssistant({ className, chatId, simple = false }: ProjectA
     model: globalModel,
     addDoc,
     addDocContent,
-    applyProjectChanges,
+    patchProject,
     setDocumentation,
     renameProject,
     refresh,
@@ -171,13 +172,8 @@ export function ProjectAssistant({ className, chatId, simple = false }: ProjectA
     if (proposal.changed.name && proposal.projectName) {
       renameProject(project.id, proposal.projectName)
     }
-    if (proposal.changed.models || proposal.changed.modules || proposal.changed.typeAliases) {
-      applyProjectChanges({
-        ...(proposal.changed.models ? { models: proposal.models } : {}),
-        ...(proposal.changed.modules ? { modules: proposal.modules } : {}),
-        ...(proposal.changed.typeAliases ? { typeAliases: proposal.typeAliases } : {}),
-      })
-    }
+    const graph = proposalGraphPatch(project, proposal, globalModel)
+    if (graph) patchProject(graph)
     if (proposal.changed.documentation) {
       setDocumentation(proposal.documentation)
     }
@@ -196,8 +192,9 @@ export function ProjectAssistant({ className, chatId, simple = false }: ProjectA
     if (!actions.length) return
 
     const nextModules = proposal.changed.modules ? proposal.modules : modules
+    const graphProject = graph ? { ...project, ...graph } : project
     const nextProject = {
-      ...project,
+      ...graphProject,
       modules: nextModules,
       models: proposal.changed.models ? proposal.models : models,
       typeAliases: proposal.changed.typeAliases ? proposal.typeAliases : typeAliases,
@@ -455,6 +452,9 @@ function SimpleProjectProposalPreview({ msg }: { msg: AssistantChatMessage<Proje
       {showName && p.projectName ? (
         <p className="mb-2 text-xs text-muted-foreground">Name: {p.projectName}</p>
       ) : null}
+      {p.targetFunctionName ? (
+        <p className="mb-2 text-xs text-muted-foreground">Function: {p.targetFunctionName}</p>
+      ) : null}
       {showModules && p.modules.length > 0 ? (
         <ol className="mb-2 space-y-1">
           {p.modules.map((step, i) => (
@@ -563,6 +563,11 @@ function TechnicalProjectProposalPreview({ msg }: { msg: AssistantChatMessage<Pr
             rename → {p.projectName}
           </Badge>
         )}
+        {p.targetFunctionName ? (
+          <Badge variant="outline" className="font-mono text-[9px]">
+            function → {p.targetFunctionName}
+          </Badge>
+        ) : null}
         {showModules && (
           <Badge variant="outline" className="font-mono text-[9px]">
             {p.modules.length} steps

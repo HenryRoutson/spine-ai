@@ -69,7 +69,7 @@ export function StructureCodeView({
   return (
     <MultiLangReadonlyCodeViewer
       sources={sources}
-      defaultLanguage="python"
+      defaultLanguage="sql"
       editorHeight="100%"
       className="min-h-0 min-w-0 flex-1 overflow-hidden"
     />

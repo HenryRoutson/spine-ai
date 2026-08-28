@@ -181,7 +181,7 @@ function ensureIdInOpenTabs(openIds: string[] | undefined, chatId: string): stri
 }
 
 export function ProjectAssistantProvider({ children }: { children: ReactNode }) {
-  const [open, setOpen] = useState(false)
+  const [open, setOpen] = useState(true)
   const [selectMode, setSelectMode] = useState(false)
   const [uiContextPins, setUiContextPins] = useState<UiContextRef[]>([])
   const [messagesByChat, setMessagesByChat] = useState<

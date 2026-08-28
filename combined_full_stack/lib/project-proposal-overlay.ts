@@ -1,5 +1,6 @@
 import type { Project } from "@/lib/types"
 import type { ProjectProposal } from "@/lib/project-assistant-types"
+import { ensureNamedFunction, patchWithSyncedModules } from "@/lib/pipeline-functions"
 
 export type ProposalChanged = ProjectProposal["changed"]
 
@@ -16,11 +17,18 @@ export function overlayProposalOnProject(
   proposal: ProjectProposal | null | undefined,
 ): Project {
   if (!proposal) return project
+  let next = project
+  const targetName = proposal.targetFunctionName?.trim()
+  if (targetName) {
+    next = { ...next, ...ensureNamedFunction(next, targetName) }
+  }
+  if (proposal.changed.modules) {
+    next = { ...next, ...patchWithSyncedModules(next, proposal.modules) }
+  }
   return {
-    ...project,
+    ...next,
     ...(proposal.changed.name && proposal.projectName ? { name: proposal.projectName } : {}),
     ...(proposal.changed.models ? { models: proposal.models } : {}),
-    ...(proposal.changed.modules ? { modules: proposal.modules } : {}),
     ...(proposal.changed.typeAliases ? { typeAliases: proposal.typeAliases } : {}),
     ...(proposal.changed.documentation ? { documentation: proposal.documentation } : {}),
   }
@@ -39,6 +47,7 @@ export function mergePendingProposals(
     documentation: Boolean(prev.changed.documentation || next.changed.documentation),
     name: Boolean(prev.changed.name || next.changed.name),
     actions: Boolean(prev.changed.actions || next.changed.actions),
+    function: Boolean(prev.changed.function || next.changed.function || next.targetFunctionName || prev.targetFunctionName),
   }
   return {
     modules: next.changed.modules ? next.modules : prev.modules,
@@ -47,6 +56,7 @@ export function mergePendingProposals(
     docs: next.changed.docs ? mergeDocsByName(prev.docs, next.docs) : prev.docs,
     documentation: next.changed.documentation ? next.documentation : prev.documentation,
     projectName: next.changed.name ? next.projectName : prev.projectName,
+    targetFunctionName: next.targetFunctionName ?? prev.targetFunctionName,
     proposedActions: next.changed.actions ? next.proposedActions : prev.proposedActions,
     reviewFrom: next.reviewFrom ?? prev.reviewFrom,
     changed,
