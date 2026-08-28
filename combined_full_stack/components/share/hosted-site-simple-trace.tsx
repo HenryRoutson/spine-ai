@@ -1,6 +1,6 @@
 "use client"
 
-import { InferenceStepRow } from "@/components/inference/inference-step-trace"
+import { AlertTriangle, CheckCircle2, Circle, Loader2 } from "lucide-react"
 import { Progress } from "@/components/ui/progress"
 import { flattenPipelineModules } from "@/lib/fork-pipeline"
 import type { StepUiState } from "@/lib/run-engine"
@@ -10,6 +10,31 @@ import { RunPhase } from "@/lib/run-phase"
 function rowState(states: Map<ModuleId, StepUiState>, id: ModuleId | undefined): StepUiState["status"] | "idle" {
   if (!id) return "idle"
   return states.get(id)?.status ?? "idle"
+}
+
+function HostedArithRow({
+  label,
+  state,
+}: {
+  label: string
+  state: StepUiState["status"] | "idle"
+}) {
+  const icon =
+    state === "ok" || state === "cached" ? (
+      <CheckCircle2 className="h-4 w-4 shrink-0" style={{ color: "var(--hs-accent)" }} />
+    ) : state === "running" ? (
+      <Loader2 className="h-4 w-4 shrink-0 animate-spin opacity-55" />
+    ) : state === "error" ? (
+      <AlertTriangle className="h-4 w-4 shrink-0 text-red-600" />
+    ) : (
+      <Circle className="h-4 w-4 shrink-0 opacity-30" />
+    )
+  return (
+    <div className="hs-arith-row">
+      {icon}
+      <span>{label}</span>
+    </div>
+  )
 }
 
 export function HostedSiteSimpleTrace({
@@ -38,15 +63,15 @@ export function HostedSiteSimpleTrace({
       {phase === RunPhase.Running ? (
         <div className="mb-3 space-y-2">
           <div className="flex items-center justify-between gap-2">
-            <p className="text-sm text-muted-foreground">Working…</p>
-            <span className="text-sm tabular-nums text-muted-foreground">{progressPct}%</span>
+            <p className="text-sm opacity-60">Working…</p>
+            <span className="text-sm tabular-nums opacity-60">{progressPct}%</span>
           </div>
           <Progress value={progressPct} className="h-1.5" />
         </div>
       ) : null}
       <div className="space-y-2">
         {rows.map((row) => (
-          <InferenceStepRow key={row.label} label={row.label} state={row.state} />
+          <HostedArithRow key={row.label} label={row.label} state={row.state} />
         ))}
       </div>
     </div>

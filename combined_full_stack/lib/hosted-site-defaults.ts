@@ -113,6 +113,7 @@ export function defaultHostedSiteCss(): string {
 .hs-action-btn { width: 100%; min-width: 0; height: 2.55rem; border: 0; border-radius: 999px; background: var(--hs-accent); color: #fff; font-weight: 600; font-size: 0.95rem; cursor: pointer; }
 .hs-action-btn:disabled { opacity: 0.6; cursor: wait; }
 .hs-step-trace { margin-top: 0.95rem; padding: 0.75rem 0.8rem; border-radius: 0.8rem; border: 1px solid color-mix(in srgb, var(--hs-fg) 10%, transparent); background: color-mix(in srgb, var(--hs-bg) 92%, #fff); text-align: left; }
+.hs-arith-row { display: flex; align-items: center; gap: 0.5rem; font-size: 0.82rem; color: var(--hs-fg); }
 .hs-output-slot, .hs-chatbot-slot, .hs-docs-slot { margin-top: 1rem; margin-bottom: 1rem; }
 .hs-foot, .hs-footer { padding: 0 1.5rem 2rem; text-align: center; font-size: 0.72rem; opacity: 0.55; }
 .hs-footer { display: flex; justify-content: center; gap: 0.75rem; flex-wrap: wrap; }
