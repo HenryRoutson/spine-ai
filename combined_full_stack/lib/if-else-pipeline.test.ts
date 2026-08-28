@@ -34,6 +34,7 @@ const routeModel: StructureModel = {
   fields: [
     { id: "f_ok", name: "is_legal", type: FieldType.Bool, optional: false, description: "" },
     { id: "f_kind", name: "kind", type: FieldType.Text, optional: false, description: "" },
+    { id: "f_score", name: "score", type: FieldType.Int, optional: false, description: "" },
   ],
 }
 
@@ -60,6 +61,19 @@ describe("if/else step", () => {
     expect(evalIfCondition({ kind: IfConditionKind.Equals, path: "kind", value: "legal" }, { kind: "billing" })).toBe(false)
     expect(formatIfCondition({ kind: IfConditionKind.Path, path: "is_legal" })).toBe("is_legal")
     expect(formatIfCondition({ kind: IfConditionKind.Equals, path: "kind", value: "legal" })).toBe('kind === "legal"')
+  })
+
+  it("evaluates numeric, empty, contains, in, and truthy kinds", () => {
+    expect(evalIfCondition({ kind: IfConditionKind.Gt, path: "score", value: 80 }, { score: 90 })).toBe(true)
+    expect(evalIfCondition({ kind: IfConditionKind.Lte, path: "score", value: 80 }, { score: 80 })).toBe(true)
+    expect(evalIfCondition({ kind: IfConditionKind.NotEquals, path: "kind", value: "legal" }, { kind: "billing" })).toBe(true)
+    expect(evalIfCondition({ kind: IfConditionKind.Exists, path: "maybe" }, { maybe: 1 })).toBe(true)
+    expect(evalIfCondition({ kind: IfConditionKind.Exists, path: "maybe" }, {})).toBe(false)
+    expect(evalIfCondition({ kind: IfConditionKind.Empty, path: "tags" }, { tags: [] })).toBe(true)
+    expect(evalIfCondition({ kind: IfConditionKind.Contains, path: "title", value: "tax" }, { title: "tax-2024" })).toBe(true)
+    expect(evalIfCondition({ kind: IfConditionKind.In, path: "kind", value: ["legal", "billing"] }, { kind: "billing" })).toBe(true)
+    expect(evalIfCondition({ kind: IfConditionKind.Truthy, path: "items" }, { items: [1] })).toBe(true)
+    expect(formatIfCondition({ kind: IfConditionKind.Gt, path: "score", value: 80 })).toBe("score > 80")
   })
 
   it("joins the chosen lane or passthrough", () => {
@@ -171,6 +185,30 @@ describe("if/else step", () => {
     const msgs = [...invalid.values()].flat().map((i) => ("structureMessage" in i ? i.structureMessage : i.kind))
     expect(msgs.join(" ")).not.toMatch(/Then lane is empty/)
     expect(msgs.join(" ")).not.toMatch(/Else/)
+  })
+
+  it("type-checks numeric and equals conditions against the spine field", () => {
+    const prev = step({
+      id: "in",
+      kind: ModuleKind.Input,
+      label: "In",
+      note: "input",
+      outStructureId: "m_route" as StructureModelId,
+      outType: { kind: TypeExprKind.Ref, modelId: "m_route" as StructureModelId },
+    })
+    const ok = createPipelineModule({ kind: ModuleKind.IfElse, note: "route" }, [routeModel], "deepseek-v4")
+    ok.id = "ife" as ModuleId
+    ok.ifCondition = { kind: IfConditionKind.Gt, path: "score", value: 80 }
+    ok.forkBranches = [
+      { id: "t", label: "Then", modules: [step({ id: "t1", kind: ModuleKind.Output, label: "High", note: "", inStructureId: "m_route" as StructureModelId, outStructureId: "m_route" as StructureModelId })] },
+      { id: "e", label: "Else", modules: [] },
+    ]
+    const okMsgs = [...computeInvalid([prev, ok], [routeModel]).values()].flat().map((i) => ("structureMessage" in i ? i.structureMessage : i.kind))
+    expect(okMsgs.join(" ")).not.toMatch(/must be int or float/)
+
+    const bad = { ...ok, ifCondition: { kind: IfConditionKind.Gt, path: "kind", value: 80 } }
+    const badMsgs = [...computeInvalid([prev, bad], [routeModel]).values()].flat().map((i) => ("structureMessage" in i ? i.structureMessage : i.kind))
+    expect(badMsgs.join(" ")).toMatch(/must be int or float/)
   })
 
   it("syncs list-ops inside Then", () => {

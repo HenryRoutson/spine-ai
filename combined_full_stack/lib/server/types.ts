@@ -193,7 +193,7 @@ export enum ModuleKind {
   Parallel = "parallel",
   // AI : nested linear lanes + join (not Parallel LLM-only). See lib/server/fork-roadmap.ts.
   Fork = "fork",
-  // AI : exclusive Then/Else lanes — run one side from a typed bool path or field equals. Else may be empty (passthrough).
+  // AI : exclusive Then/Else lanes — run one side from a typed spine condition. Else may be empty (passthrough).
   IfElse = "if-else",
   Combine = "combine",
   Chunk = "chunk", // AI : split text / document into list chunks (generated TS)
@@ -308,15 +308,35 @@ export type ForkBranch = {
   modules: PipelineModule[];
 };
 
-// AI : if-else condition — path must type-check as bool; equals compares a spine field to a JSON value.
+// AI : if-else condition — kind is chosen from the spine field type (bool / number / list / optional / …).
 export enum IfConditionKind {
   Path = "path",
   Equals = "equals",
+  NotEquals = "not-equals",
+  Gt = "gt",
+  Gte = "gte",
+  Lt = "lt",
+  Lte = "lte",
+  Exists = "exists",
+  Empty = "empty",
+  Contains = "contains",
+  In = "in",
+  Truthy = "truthy",
 }
 
 export type IfCondition =
   | { kind: IfConditionKind.Path; path: string }
-  | { kind: IfConditionKind.Equals; path: string; value: unknown };
+  | { kind: IfConditionKind.Equals; path: string; value: unknown }
+  | { kind: IfConditionKind.NotEquals; path: string; value: unknown }
+  | { kind: IfConditionKind.Gt; path: string; value: number }
+  | { kind: IfConditionKind.Gte; path: string; value: number }
+  | { kind: IfConditionKind.Lt; path: string; value: number }
+  | { kind: IfConditionKind.Lte; path: string; value: number }
+  | { kind: IfConditionKind.Exists; path: string }
+  | { kind: IfConditionKind.Empty; path: string }
+  | { kind: IfConditionKind.Contains; path: string; value: unknown }
+  | { kind: IfConditionKind.In; path: string; value: unknown[] }
+  | { kind: IfConditionKind.Truthy; path: string };
 
 // AI : one language key per entry — e.g. { "typescript": "(input) => input" } or { "python": "..." }.
 export interface CustomCodeEntry { typescript?: string; python?: string };
@@ -936,7 +956,7 @@ export const MODULE_META: Record<ModuleKind, { label: string; description: strin
   },
   [ModuleKind.IfElse]: {
     label: "If / Else",
-    description: "Run Then or Else from a typed spine condition (bool path or field equals). Else may be empty (passthrough).",
+    description: "Run Then or Else from a typed spine condition (bool, equals, numeric, empty, contains, …). Else may be empty (passthrough). Loops stay in custom-code / llm-batch.",
   },
   [ModuleKind.Combine]: { label: "Combine Inputs", description: "Bring in another document and merge it with the spine" },
   [ModuleKind.Chunk]: {
@@ -949,7 +969,7 @@ export const MODULE_META: Record<ModuleKind, { label: string; description: strin
   },
   [ModuleKind.CustomCode]: {
     label: "Custom Code",
-    description: "TypeScript or Python (input) => output with ordered fallbacks on failure",
+    description: "TypeScript or Python (input) => output with ordered fallbacks — for/while loops live here, not as graph nodes",
   },
   [ModuleKind.Assert]: {
     label: "Assert",

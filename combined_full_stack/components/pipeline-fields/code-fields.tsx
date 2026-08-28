@@ -65,7 +65,7 @@ export function CodeModuleFields({ selected, edit, onUpdate }: CodeModuleFieldsP
       hint={
         isAssert
           ? "auto-placed after the latest referenced step label — passthrough on success"
-          : undefined
+          : "for/while loops belong here (or use llm-batch to map over a list) — the pipeline DAG is acyclic"
       }
     >
       {edit ? (

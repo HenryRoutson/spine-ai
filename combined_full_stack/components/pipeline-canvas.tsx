@@ -2,6 +2,7 @@
 
 // AI : TODO refactor (spec) — remove combine segments when implicit multi-input merge ships (pipeline-layout.ts).
 // AI : TODO (spec) — execution-order view maximizing parallel llm-batch; dependency arrows from step() label refs.
+import { useState } from "react"
 import {
   ArrowRight,
   ChevronRight,
@@ -9,6 +10,8 @@ import {
   Plus,
   Zap,
 } from "lucide-react"
+import { PipelineDagGraph } from "@/components/pipeline-dag-graph"
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import {
   blocksInsertBefore,
   insertAfterIndex,
@@ -115,8 +118,41 @@ export function PipelineCanvas({
     : false
 
   const wide = pipelineHasFork(modules)
+  const [view, setView] = useState<"lanes" | "graph">(editMode ? "lanes" : "graph")
+  const showGraph = view === "graph"
+
   return (
-    <div className={cn("mx-auto flex w-full flex-col items-stretch gap-0", wide ? "max-w-none" : "max-w-xl", className)}>
+    <div className={cn("mx-auto flex w-full flex-col items-stretch gap-0", wide || showGraph ? "max-w-none" : "max-w-xl", className)}>
+      <div className="mb-3 flex items-center justify-center gap-2">
+        <Tabs value={view} onValueChange={(v) => setView(v === "graph" ? "graph" : "lanes")}>
+          <TabsList variant="line">
+            <TabsTrigger value="lanes" className="font-mono text-[10px]">
+              Lanes
+            </TabsTrigger>
+            <TabsTrigger value="graph" className="font-mono text-[10px]">
+              DAG
+            </TabsTrigger>
+          </TabsList>
+        </Tabs>
+      </div>
+      {showGraph ? (
+        <div className="flex w-full flex-col items-stretch gap-3">
+          {editMode ? (
+            <p className="text-center font-mono text-[10px] text-muted-foreground">
+              d3-dag layout of the typed pipeline. Switch to Lanes to insert steps. For/while loops stay in custom-code or llm-batch.
+            </p>
+          ) : null}
+          <PipelineDagGraph
+            modules={modules}
+            selectedId={selectedId}
+            onSelect={onSelect}
+            stepStatus={stepStatus}
+            invalid={invalid}
+          />
+          {renderFooter?.()}
+        </div>
+      ) : (
+        <>
       <div className="mx-auto flex w-full flex-col items-center">
         <PipelineNode label="Start" subtle />
         {segments.length > 0 && renderInsertBefore?.(insertBeforeIndex(segments[0]))}
@@ -145,6 +181,8 @@ export function PipelineCanvas({
         <PipelineNode label="End" subtle />
         {renderFooter?.()}
       </div>
+        </>
+      )}
     </div>
   )
 }

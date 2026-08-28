@@ -68,7 +68,6 @@ import {
   InputType,
   ModuleKind,
   ChatbotMode,
-  IfConditionKind,
   type ModelId,
   type ModuleId,
   type PipelineModule,
@@ -78,6 +77,7 @@ import {
   type TypeAlias,
 } from "./types";
 import { blankPipelineModules, functionsOnProject, functionsPromptSummary } from "@/lib/pipeline-functions";
+import { ifConditionSchema, parseIfCondition } from "@/lib/if-condition";
 
 const MODULE_KINDS = USER_ADDABLE_MODULE_KINDS;
 
@@ -165,13 +165,11 @@ const moduleSpecSchema = z
       .max(12)
       .optional()
       .describe("fork / if-else — linear lanes; if-else is Then then Else (Else may be empty)"),
-    ifCondition: z
-      .discriminatedUnion("kind", [
-        z.object({ kind: z.literal("path"), path: z.string() }),
-        z.object({ kind: z.literal("equals"), path: z.string(), value: z.unknown() }),
-      ])
+    ifCondition: ifConditionSchema
       .optional()
-      .describe("if-else only — bool spine path, or equals path + JSON value"),
+      .describe(
+        "if-else only — typed spine predicate: path (bool), equals/not-equals, gt/gte/lt/lte, exists, empty, contains, in, truthy",
+      ),
     n8nNodeType: z
       .string()
       .optional()
@@ -297,12 +295,7 @@ const modulePatchEntrySchema = z.object({
   model: z.string().optional(),
   inputMinCount: z.number().int().min(1).optional(),
   assembleBindings: assembleBindingsSchema.optional(),
-  ifCondition: z
-    .discriminatedUnion("kind", [
-      z.object({ kind: z.literal("path"), path: z.string() }),
-      z.object({ kind: z.literal("equals"), path: z.string(), value: z.unknown() }),
-    ])
-    .optional(),
+  ifCondition: ifConditionSchema.optional(),
   n8nNodeType: z.string().optional(),
   n8nParameters: z.record(z.string(), z.unknown()).optional(),
   connectActionId: z.string().optional(),
@@ -528,9 +521,11 @@ function makeModuleFromSpec(
       forkBranches,
       ifCondition:
         spec.kind === ModuleKind.IfElse && spec.ifCondition
-          ? spec.ifCondition.kind === "equals"
-            ? { kind: IfConditionKind.Equals, path: spec.ifCondition.path, value: spec.ifCondition.value }
-            : { kind: IfConditionKind.Path, path: spec.ifCondition.path }
+          ? parseIfCondition(
+              spec.ifCondition.kind,
+              spec.ifCondition.path,
+              "value" in spec.ifCondition ? spec.ifCondition.value : undefined,
+            )
           : undefined,
       n8nNodeType: spec.kind === "n8n" ? spec.n8nNodeType : undefined,
       n8nParameters: spec.kind === "n8n" ? spec.n8nParameters : undefined,

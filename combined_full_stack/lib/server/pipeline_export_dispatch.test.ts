@@ -6,7 +6,7 @@ import { generatePipelineSourcePy } from "@/lib/server/pipeline_py_export";
 import { generatePipelineSourceRust } from "@/lib/server/pipeline_rs_export";
 import { generatePipelineSourceTs } from "@/lib/server/pipeline_ts_export";
 import { EXPORT_LANGS, STEP_BODY, emitStepBody } from "@/lib/server/pipeline_export_dispatch";
-import { ModuleKind, type ModuleId, type PipelineModule, type Project, type ProjectId } from "@/lib/server/types";
+import { IfConditionKind, ModuleKind, type ModuleId, type PipelineModule, type Project, type ProjectId } from "@/lib/server/types";
 
 function stubModule(kind: ModuleKind): PipelineModule {
   return {
@@ -58,6 +58,18 @@ describe("pipeline export dispatch", () => {
     expect(generatePipelineSourceGo(project)).toMatch(/func step_/);
     expect(generatePipelineSourceRust(project)).toMatch(/async fn step_/);
   });
+
+  it("emits typed if/else conditions in ts export", () => {
+    const m = stubModule(ModuleKind.IfElse)
+    m.ifCondition = { kind: IfConditionKind.Gt, path: "score", value: 80 }
+    m.forkBranches = [
+      { id: "t", label: "Then", modules: [{ ...stubModule(ModuleKind.Output), id: "mod_then" as ModuleId, label: "High" }] },
+      { id: "e", label: "Else", modules: [] },
+    ]
+    const ctx = { m, project: stubProject(m), inType: "Route", outType: "Route" }
+    expect(emitStepBody("ts", ctx)).toMatch(/Number\(.*score.*\) > 80/)
+    expect(generatePipelineSourceTs(ctx.project)).toMatch(/if \(/)
+  })
 
   it("fork merge join uses mergeFold on lane outputs", () => {
     const m = stubModule(ModuleKind.Fork);

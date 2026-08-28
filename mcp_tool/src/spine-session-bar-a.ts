@@ -8,6 +8,7 @@ import { createApiEgress, createThrowingEgress, SPINE_API_TOKEN_ENV, SPINE_API_U
 import { toBillingView, toCacheView, toMcpProjectReview, toSettingsView, toShareView, toValidationView } from "@/lib/core/view"
 import { createFilePersist, resolveSessionPath } from "@/lib/cli/session_persist"
 import { lintPipeline } from "@/lib/server/pipeline_lint"
+import { parseIfCondition } from "@/lib/if-condition"
 import {
   addModelField,
   addNamedModel,
@@ -1235,7 +1236,7 @@ export async function runSessionAction(args: SessionActionArgs): Promise<unknown
     case "pipeline.configure-step":
       if (!args.stepId) throw new Error("stepId required")
       {
-        const patch: { label?: string; prompt?: string; note?: string; forkJoin?: string; ifCondition?: { kind: "path" | "equals"; path: string; value?: unknown } } = {
+        const patch: { label?: string; prompt?: string; note?: string; forkJoin?: string; ifCondition?: ReturnType<typeof parseIfCondition> } = {
           label: args.label,
           prompt: args.prompt,
           note: args.note,
@@ -1243,16 +1244,19 @@ export async function runSessionAction(args: SessionActionArgs): Promise<unknown
         }
         const path = typeof args.ifConditionPath === "string" ? args.ifConditionPath.trim() : ""
         if (path) {
-          const equals = args.ifConditionKind === "equals"
-          let value: unknown = true
-          if (equals && typeof args.ifConditionValue === "string" && args.ifConditionValue.trim()) {
+          let value: unknown = undefined
+          if (typeof args.ifConditionValue === "string" && args.ifConditionValue.trim()) {
             try {
               value = JSON.parse(args.ifConditionValue) as unknown
             } catch {
               value = args.ifConditionValue
             }
           }
-          patch.ifCondition = equals ? { kind: "equals", path, value } : { kind: "path", path }
+          patch.ifCondition = parseIfCondition(
+            typeof args.ifConditionKind === "string" ? args.ifConditionKind : "path",
+            path,
+            value,
+          )
         }
         return patchStepFromSession(args.stepId, patch, sessionPath)
       }

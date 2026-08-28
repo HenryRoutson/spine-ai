@@ -9,7 +9,13 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import { formatIfCondition } from "@/lib/if-else-pipeline"
+import {
+  IF_CONDITION_KINDS,
+  IF_CONDITION_KIND_META,
+  formatIfCondition,
+  ifConditionNeedsValue,
+  parseIfCondition,
+} from "@/lib/if-condition"
 import { IfConditionKind, type IfCondition, type PipelineModule } from "@/lib/types"
 
 type IfElseModuleFieldsProps = {
@@ -28,12 +34,19 @@ function parseEqualsValue(raw: string): unknown {
   }
 }
 
+function valueText(cond: IfCondition | undefined): string {
+  if (!cond || !("value" in cond)) return ""
+  try {
+    return JSON.stringify(cond.value)
+  } catch {
+    return String(cond.value)
+  }
+}
+
 export function IfElseModuleFields({ selected, edit, onUpdate }: IfElseModuleFieldsProps) {
   const cond = selected.ifCondition
-  const kind = cond?.kind === IfConditionKind.Equals ? IfConditionKind.Equals : IfConditionKind.Path
+  const kind = cond?.kind ?? IfConditionKind.Path
   const path = cond?.path ?? ""
-  const valueText =
-    cond?.kind === IfConditionKind.Equals ? JSON.stringify(cond.value) : ""
 
   function setCondition(next: IfCondition) {
     onUpdate?.({ ifCondition: next })
@@ -43,50 +56,44 @@ export function IfElseModuleFields({ selected, edit, onUpdate }: IfElseModuleFie
     <>
       <PipelineField
         label="Condition"
-        hint="Typed path on the previous spine. Path must be bool, or use equals to compare a field to a JSON value."
+        hint="Typed predicate on the previous spine. Kind is validated against the field type (bool, number, list, optional, …). For/while loops stay in custom-code or llm-batch — the graph is acyclic."
       >
         {edit ? (
           <div className="flex flex-col gap-2">
             <Select
               value={kind}
               onValueChange={(v) => {
-                if (v === IfConditionKind.Equals) {
-                  setCondition({ kind: IfConditionKind.Equals, path, value: cond?.kind === IfConditionKind.Equals ? cond.value : true })
-                } else {
-                  setCondition({ kind: IfConditionKind.Path, path })
-                }
+                if (!v) return
+                const nextKind = (IF_CONDITION_KINDS as readonly string[]).includes(v) ? (v as IfConditionKind) : IfConditionKind.Path
+                setCondition(parseIfCondition(nextKind, path, cond && "value" in cond ? cond.value : undefined))
               }}
             >
               <SelectTrigger className="h-8 font-mono text-xs">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value={IfConditionKind.Path}>bool path</SelectItem>
-                <SelectItem value={IfConditionKind.Equals}>field equals</SelectItem>
+                {IF_CONDITION_KINDS.map((k) => (
+                  <SelectItem key={k} value={k}>
+                    {IF_CONDITION_KIND_META[k].label}
+                  </SelectItem>
+                ))}
               </SelectContent>
             </Select>
             <Input
               value={path}
-              onChange={(e) =>
-                setCondition(
-                  kind === IfConditionKind.Equals
-                    ? { kind: IfConditionKind.Equals, path: e.target.value, value: cond?.kind === IfConditionKind.Equals ? cond.value : true }
-                    : { kind: IfConditionKind.Path, path: e.target.value },
-                )
-              }
+              onChange={(e) => setCondition(parseIfCondition(kind, e.target.value, cond && "value" in cond ? cond.value : undefined))}
               className="h-8 font-mono text-xs"
               placeholder="is_legal"
             />
-            {kind === IfConditionKind.Equals && (
+            {ifConditionNeedsValue(kind) && (
               <Input
-                value={valueText}
-                onChange={(e) =>
-                  setCondition({ kind: IfConditionKind.Equals, path, value: parseEqualsValue(e.target.value) })
-                }
+                value={valueText(cond)}
+                onChange={(e) => setCondition(parseIfCondition(kind, path, parseEqualsValue(e.target.value)))}
                 className="h-8 font-mono text-xs"
-                placeholder='"legal" or true'
+                placeholder={kind === IfConditionKind.In ? '["legal","billing"]' : '"legal" or 3'}
               />
             )}
+            <p className="font-mono text-[10px] text-muted-foreground">{IF_CONDITION_KIND_META[kind].hint}</p>
           </div>
         ) : (
           <StaticValue mono>{formatIfCondition(cond)}</StaticValue>

@@ -9,6 +9,7 @@ import { isUnavailableSeedDoc, unavailableSeedDocMessage } from "../seed-doc";
 import { TypeExprSchema } from "./spine_types";
 import { normalizeStructureModels } from "./type_expr";
 import { syncForkModules } from "@/lib/fork-pipeline";
+import { ifConditionSchema } from "@/lib/if-condition";
 import {
   DocLabel,
   FIELD_TYPES,
@@ -252,12 +253,7 @@ const SeedFileSchema = z.object({
           }),
         )
         .optional(),
-      ifCondition: z
-        .discriminatedUnion("kind", [
-          z.object({ kind: z.literal("path"), path: z.string() }),
-          z.object({ kind: z.literal("equals"), path: z.string(), value: z.unknown() }),
-        ])
-        .optional(),
+      ifCondition: ifConditionSchema.optional(),
       mergePolicy: z
         .object({
           default: z

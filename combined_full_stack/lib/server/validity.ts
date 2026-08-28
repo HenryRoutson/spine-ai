@@ -16,7 +16,7 @@ import type {
   StructureModelId,
   TypeAlias,
 } from "./types";
-import { ModuleKind, FieldType, IfConditionKind } from "./types";
+import { ModuleKind, FieldType } from "./types";
 import { getN8nNode, missingN8nParams } from "@/lib/n8n-catalog";
 import { getConnectAction, missingConnectParams } from "@/lib/connect-catalog";
 import { customCodeEntriesForModule } from "@/lib/custom_code_entries";
@@ -43,7 +43,6 @@ import {
   typeExprEqual,
   typeExprItemRef,
   TypeExprKind,
-  PrimName,
   type TypeExpr,
 } from "./type_expr";
 import { typeExprAssignable, validateAssembleBindings } from "@/lib/assemble-type-expr";
@@ -61,6 +60,8 @@ import {
   validateForkAssembleJoin,
 } from "@/lib/fork-pipeline";
 import { ifThenBranch } from "@/lib/if-else-pipeline";
+import { ifConditionTypeError } from "@/lib/if-condition";
+import { pipelineDagIsAcyclic, pipelineToDag } from "@/lib/pipeline-dag";
 import { typeExprAtPath } from "@/lib/type-expr-polymorph";
 import { exampleSelectAcceptsWrapper, isExampleSelectKind } from "@/lib/example-select";
 import {
@@ -1011,13 +1012,13 @@ function computeIfElseInvalid(
         kind: InvalidKind.StructureField,
         structureMessage: `unknown condition path "${path}"`,
       });
-    } else if (m.ifCondition?.kind !== IfConditionKind.Equals) {
-      const isBool = at.kind === TypeExprKind.Prim && at.name === PrimName.Bool;
-      if (!isBool) {
+    } else if (m.ifCondition) {
+      const typeErr = ifConditionTypeError(m.ifCondition, at);
+      if (typeErr) {
         pushInvalid(invalid, {
           moduleId: m.id,
           kind: InvalidKind.StructureField,
-          structureMessage: `condition path "${path}" must be bool`,
+          structureMessage: typeErr,
         });
       }
     }
@@ -1052,6 +1053,16 @@ export function computeInvalid(
   mergeInvalid(invalid, computeMissingCombineBeforeInputInvalid(flat));
   mergeInvalid(invalid, computeForkInvalid(modules, models, opts?.typeAliases ?? []));
   mergeInvalid(invalid, computeIfElseInvalid(modules, models, opts?.typeAliases ?? []));
+  if (!pipelineDagIsAcyclic(pipelineToDag(modules))) {
+    const first = modules[0];
+    if (first) {
+      pushInvalid(invalid, {
+        moduleId: first.id,
+        kind: InvalidKind.StructureField,
+        structureMessage: "pipeline DAG has a cycle — loops belong in custom-code or llm-batch, not graph edges",
+      });
+    }
+  }
   if (opts?.requireInputDescriptions) {
     mergeInvalid(invalid, computeInputDescriptionInvalid(flat));
   }

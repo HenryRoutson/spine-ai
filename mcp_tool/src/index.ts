@@ -443,8 +443,11 @@ server.tool(
     branchId: z.string().optional(),
     forkJoin: z.string().optional().describe("pipeline.configure-step on a fork: product | assemble | merge"),
     ifConditionPath: z.string().optional().describe("pipeline.configure-step on if-else: spine field path"),
-    ifConditionKind: z.string().optional().describe("pipeline.configure-step on if-else: path | equals"),
-    ifConditionValue: z.string().optional().describe("pipeline.configure-step on if-else equals: JSON value"),
+    ifConditionKind: z
+      .string()
+      .optional()
+      .describe("pipeline.configure-step on if-else: path|equals|not-equals|gt|gte|lt|lte|exists|empty|contains|in|truthy"),
+    ifConditionValue: z.string().optional().describe("pipeline.configure-step on if-else: JSON value when the kind needs one"),
     runId: z.string().optional(),
     timeoutMs: z.number().optional(),
     quote: z.string().optional(),
