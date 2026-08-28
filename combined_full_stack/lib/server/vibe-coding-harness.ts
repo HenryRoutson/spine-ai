@@ -244,8 +244,16 @@ export async function runVibeCodingHarness(args: {
         done = true
         doneMessage = call.message?.trim() || doneMessage
       }
+      // AI : PASS means the proposal is materializable — do not burn turns rewriting the same files.
+      if (call.tool === "run_tests" && /^PASS\b/m.test(result)) {
+        done = true
+      }
     }
-    lastResults = results.join("\n\n")
+    lastResults = [
+      `Files: ${listVibePaths(workspace.files).join(", ")}`,
+      `pipeline.json\n${workspace.files.get("pipeline.json") ?? "[]"}`,
+      results.join("\n\n"),
+    ].join("\n\n")
   }
 
   const draft = parseVibeWorkspaceFiles(workspace.files, workspace.seed)

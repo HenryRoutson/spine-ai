@@ -326,24 +326,25 @@ function seedVibeHarnessReply(prompt: string): string | null {
   const title = named || "Notes";
   const unnamed = /\bUntitled Pipeline\b/.test(prompt);
   const payload = seedNotesProposalPayload(title, named, unnamed);
-  const wrotePipeline = /wrote pipeline\.json/i.test(prompt);
+  const wrotePipeline = /wrote pipeline\.json/i.test(prompt) || /"kind":\s*"input"/i.test(prompt);
   const ranTests = /\$ run_tests\b/i.test(prompt);
-  if (!wrotePipeline) {
-    return JSON.stringify({
-      tools: [
-        { tool: "write_file", path: "structures/NoteSummary.json", content: prettyJson(payload.models[0]) },
-        { tool: "write_file", path: "pipeline.json", content: prettyJson(payload.modules) },
-        { tool: "write_file", path: "tests/sample_note.txt", content: payload.docs[0]!.content },
-        { tool: "write_file", path: "docs.md", content: payload.documentationUpdate },
-        { tool: "write_file", path: "message.md", content: payload.message },
-      ],
-      note: "seed writes the same notes pipeline the JSON path uses",
-    });
+  const passed = /^PASS\b/m.test(prompt);
+  if (passed || (wrotePipeline && ranTests)) {
+    return JSON.stringify({ tools: [{ tool: "done", message: payload.message }] });
   }
-  if (!ranTests) {
+  if (wrotePipeline) {
     return JSON.stringify({ tools: [{ tool: "run_tests" }] });
   }
-  return JSON.stringify({ tools: [{ tool: "done", message: payload.message }] });
+  return JSON.stringify({
+    tools: [
+      { tool: "write_file", path: "structures/NoteSummary.json", content: prettyJson(payload.models[0]) },
+      { tool: "write_file", path: "pipeline.json", content: prettyJson(payload.modules) },
+      { tool: "write_file", path: "tests/sample_note.txt", content: payload.docs[0]!.content },
+      { tool: "write_file", path: "docs.md", content: payload.documentationUpdate },
+      { tool: "write_file", path: "message.md", content: payload.message },
+    ],
+    note: "seed writes the same notes pipeline the JSON path uses",
+  });
 }
 
 /** Deterministic chat completion body for a single prompt. */
