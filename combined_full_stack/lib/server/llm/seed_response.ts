@@ -213,8 +213,96 @@ function fillFromContextOnly(context: JsonValue | null): JsonValue {
   return {};
 }
 
+function extractUserRequest(prompt: string): string {
+  const marker = "User request:";
+  const idx = prompt.lastIndexOf(marker);
+  if (idx < 0) return prompt;
+  return prompt.slice(idx + marker.length).trim();
+}
+
+// AI : "named Hello Notes that greets…" → Hello Notes (stop before that/which/to/for).
+export function seedNamedFunctionFromPrompt(userRequest: string): string | null {
+  const m = userRequest.match(
+    /\b(?:second|another|new)?\s*function\s+(?:named|called)\s+(.+?)(?:\s+(?:that|which|to|for)\b|[.,]|$)/i,
+  );
+  const raw = m?.[1]?.trim();
+  if (!raw) return null;
+  return raw.replace(/^["']|["']$/g, "").replace(/[."']+$/g, "").trim().slice(0, 80) || null;
+}
+
+function notesSummarizerModules(title: string) {
+  return [
+    {
+      kind: "input",
+      label: `${title} notes`,
+      note: "Paste notes as text.",
+      structureOut: "list[Document]",
+      inputType: "text",
+      inputDescription: "notes",
+    },
+    {
+      kind: "llm-batch",
+      label: `Summarize ${title}`,
+      note: "One summary per note.",
+      structureIn: "Document",
+      structureOut: "NoteSummary",
+      prompt: "Write a short summary of the note.",
+      inputDescription: "notes",
+    },
+    {
+      kind: "output",
+      label: `${title} out`,
+      structureIn: "NoteSummary",
+      structureOut: "NoteSummary",
+      inputDescription: "summaries",
+    },
+  ];
+}
+
+function isProjectAssistantSchemaPrompt(prompt: string): boolean {
+  return prompt.includes('"targetFunctionName"') && prompt.includes('"modulePatch"') && prompt.includes('"proposedActions"');
+}
+
+// AI : offline Vibe — valid assistant JSON so a second named function does not need OpenRouter.
+function seedProjectAssistantReply(prompt: string): string | null {
+  if (!isProjectAssistantSchemaPrompt(prompt)) return null;
+  const userRequest = extractUserRequest(prompt);
+  const named = seedNamedFunctionFromPrompt(userRequest);
+  const title = named || "Notes";
+  const unnamed = /\bUntitled Pipeline\b/.test(prompt);
+  return JSON.stringify({
+    message: named
+      ? `I'll add a ${named} function that summarizes notes, and keep the existing one.`
+      : "I'll add a notes summarizer pipeline.",
+    modules: notesSummarizerModules(title),
+    modulePatch: null,
+    models: [
+      {
+        name: "NoteSummary",
+        description: "A short summary of one note.",
+        fields: [{ name: "summary", type: "text", optional: false, description: "Summary" }],
+      },
+    ],
+    typeAliases: null,
+    docs: [{ name: "sample_note.txt", type: "text", content: "Buy milk. Call Alex about Friday." }],
+    documentationUpdate: `# ${title}\n\nSummarizes pasted notes.`,
+    projectNameUpdate: !named && unnamed ? "Notes" : null,
+    targetFunctionName: named,
+    proposedActions: null,
+  });
+}
+
+function seedObservePlanReply(prompt: string): string | null {
+  if (!/Plan READ-ONLY observe tool calls/i.test(prompt)) return null;
+  return JSON.stringify({ tools: [], reason: "seed" });
+}
+
 /** Deterministic chat completion body for a single prompt. */
 export function seedLlmReply(prompt: string, jsonMode = true): string {
+  const assistant = seedProjectAssistantReply(prompt);
+  if (assistant) return assistant;
+  const observe = seedObservePlanReply(prompt);
+  if (observe) return observe;
   const schema = extractJsonSchemaFromPrompt(prompt);
   const context = extractContextFromPrompt(prompt);
   if (schema && !schemaIsEmpty(schema)) {

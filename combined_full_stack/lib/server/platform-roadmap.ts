@@ -89,6 +89,7 @@ export {}
 // AI : DONE (platform-P12-functions) — Project.functions + activeFunctionId; PipelineFunctionSelect
 // AI : DONE (platform-P12-vibe-select) — header pipeline select on every tab after Structures (not on Structures)
 // AI : DONE (platform-P12-vibe-add) — assistant targetFunctionName adds a named function without replacing Main
+// AI : DONE (platform-P12-seed-vibe) — seed LLM returns a valid second-function proposal for offline Vibe
 
 // ---------------------------------------------------------------------------
 // P13 — Rows on projects.data
