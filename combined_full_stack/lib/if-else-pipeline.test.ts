@@ -13,6 +13,7 @@ import { syncListOpsModules } from "@/lib/list-ops-steps"
 import { addPipelineStep } from "@/lib/cli/workspace_edits"
 import { createPipelineModule } from "@/lib/pipeline-module-factory"
 import { FieldType, IfConditionKind, ModuleKind, type ModuleId, type PipelineModule, type StructureModel, type StructureModelId } from "@/lib/types"
+import { ifConditionSchema } from "@/lib/if-condition"
 import { TypeExprKind, type TypeExpr } from "@/lib/server/type_expr"
 import { segmentPipeline } from "@/lib/pipeline-layout"
 
@@ -74,6 +75,11 @@ describe("if/else step", () => {
     expect(evalIfCondition({ kind: IfConditionKind.In, path: "kind", value: ["legal", "billing"] }, { kind: "billing" })).toBe(true)
     expect(evalIfCondition({ kind: IfConditionKind.Truthy, path: "items" }, { items: [1] })).toBe(true)
     expect(formatIfCondition({ kind: IfConditionKind.Gt, path: "score", value: 80 })).toBe("score > 80")
+  })
+
+  it("accepts incomplete equals conditions in the persist schema", () => {
+    expect(ifConditionSchema.safeParse({ kind: IfConditionKind.Equals, path: "kind" }).success).toBe(true)
+    expect(ifConditionSchema.safeParse({ kind: IfConditionKind.Gt, path: "score" }).success).toBe(true)
   })
 
   it("joins the chosen lane or passthrough", () => {

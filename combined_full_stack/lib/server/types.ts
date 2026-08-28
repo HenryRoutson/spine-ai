@@ -326,16 +326,16 @@ export enum IfConditionKind {
 
 export type IfCondition =
   | { kind: IfConditionKind.Path; path: string }
-  | { kind: IfConditionKind.Equals; path: string; value: unknown }
-  | { kind: IfConditionKind.NotEquals; path: string; value: unknown }
-  | { kind: IfConditionKind.Gt; path: string; value: number }
-  | { kind: IfConditionKind.Gte; path: string; value: number }
-  | { kind: IfConditionKind.Lt; path: string; value: number }
-  | { kind: IfConditionKind.Lte; path: string; value: number }
+  | { kind: IfConditionKind.Equals; path: string; value?: unknown }
+  | { kind: IfConditionKind.NotEquals; path: string; value?: unknown }
+  | { kind: IfConditionKind.Gt; path: string; value?: number }
+  | { kind: IfConditionKind.Gte; path: string; value?: number }
+  | { kind: IfConditionKind.Lt; path: string; value?: number }
+  | { kind: IfConditionKind.Lte; path: string; value?: number }
   | { kind: IfConditionKind.Exists; path: string }
   | { kind: IfConditionKind.Empty; path: string }
-  | { kind: IfConditionKind.Contains; path: string; value: unknown }
-  | { kind: IfConditionKind.In; path: string; value: unknown[] }
+  | { kind: IfConditionKind.Contains; path: string; value?: unknown }
+  | { kind: IfConditionKind.In; path: string; value?: unknown[] }
   | { kind: IfConditionKind.Truthy; path: string };
 
 // AI : one language key per entry — e.g. { "typescript": "(input) => input" } or { "python": "..." }.

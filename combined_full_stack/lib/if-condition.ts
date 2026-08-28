@@ -95,19 +95,22 @@ export function parseIfCondition(kindRaw: string, path: string, value?: unknown)
 }
 
 const pathField = z.string().max(512)
+const optionalValue = z.unknown().optional()
+const optionalNumber = z.number().optional()
+const optionalList = z.array(z.unknown()).optional()
 
 export const ifConditionSchema = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal(IfConditionKind.Path), path: pathField }),
-  z.object({ kind: z.literal(IfConditionKind.Equals), path: pathField, value: z.unknown() }),
-  z.object({ kind: z.literal(IfConditionKind.NotEquals), path: pathField, value: z.unknown() }),
-  z.object({ kind: z.literal(IfConditionKind.Gt), path: pathField, value: z.number() }),
-  z.object({ kind: z.literal(IfConditionKind.Gte), path: pathField, value: z.number() }),
-  z.object({ kind: z.literal(IfConditionKind.Lt), path: pathField, value: z.number() }),
-  z.object({ kind: z.literal(IfConditionKind.Lte), path: pathField, value: z.number() }),
+  z.object({ kind: z.literal(IfConditionKind.Equals), path: pathField, value: optionalValue }),
+  z.object({ kind: z.literal(IfConditionKind.NotEquals), path: pathField, value: optionalValue }),
+  z.object({ kind: z.literal(IfConditionKind.Gt), path: pathField, value: optionalNumber }),
+  z.object({ kind: z.literal(IfConditionKind.Gte), path: pathField, value: optionalNumber }),
+  z.object({ kind: z.literal(IfConditionKind.Lt), path: pathField, value: optionalNumber }),
+  z.object({ kind: z.literal(IfConditionKind.Lte), path: pathField, value: optionalNumber }),
   z.object({ kind: z.literal(IfConditionKind.Exists), path: pathField }),
   z.object({ kind: z.literal(IfConditionKind.Empty), path: pathField }),
-  z.object({ kind: z.literal(IfConditionKind.Contains), path: pathField, value: z.unknown() }),
-  z.object({ kind: z.literal(IfConditionKind.In), path: pathField, value: z.array(z.unknown()) }),
+  z.object({ kind: z.literal(IfConditionKind.Contains), path: pathField, value: optionalValue }),
+  z.object({ kind: z.literal(IfConditionKind.In), path: pathField, value: optionalList }),
   z.object({ kind: z.literal(IfConditionKind.Truthy), path: pathField }),
 ])
 
@@ -191,11 +194,13 @@ export function evalIfCondition(cond: IfCondition | undefined, spine: unknown): 
     case IfConditionKind.Lt:
     case IfConditionKind.Lte: {
       const n = asFiniteNumber(got)
+      const rhs = asFiniteNumber(cond.value)
       if (n === undefined) throw new Error(`if/else path "${path}" must be a number, got ${typeof got}`)
-      if (cond.kind === IfConditionKind.Gt) return n > cond.value
-      if (cond.kind === IfConditionKind.Gte) return n >= cond.value
-      if (cond.kind === IfConditionKind.Lt) return n < cond.value
-      return n <= cond.value
+      if (rhs === undefined) throw new Error(`if/else ${cond.kind} needs a numeric value`)
+      if (cond.kind === IfConditionKind.Gt) return n > rhs
+      if (cond.kind === IfConditionKind.Gte) return n >= rhs
+      if (cond.kind === IfConditionKind.Lt) return n < rhs
+      return n <= rhs
     }
     case IfConditionKind.Exists:
       return got !== undefined && got !== null
@@ -204,7 +209,7 @@ export function evalIfCondition(cond: IfCondition | undefined, spine: unknown): 
     case IfConditionKind.Contains:
       return containsValue(got, cond.value)
     case IfConditionKind.In:
-      return cond.value.some((item) => jsonEqual(got, item))
+      return (cond.value ?? []).some((item) => jsonEqual(got, item))
     case IfConditionKind.Truthy:
       return isTruthyValue(got)
     default:
@@ -288,7 +293,7 @@ export function ifConditionTypeError(cond: IfCondition, at: TypeExpr): string | 
       if (!jsonFitsType(cond.value, at)) return `equals value does not match type of "${path}"`
       return undefined
     case IfConditionKind.In:
-      if (!cond.value.length) return `in-list needs at least one value`
+      if (!cond.value?.length) return `in-list needs at least one value`
       if (cond.value.some((item) => !jsonFitsType(item, at))) return `in-list value does not match type of "${path}"`
       return undefined
     case IfConditionKind.Exists:
