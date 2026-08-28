@@ -130,6 +130,7 @@ describe("vibe json vs file-harness A/B (seed LLM)", () => {
     else process.env.SPINE_VIBE_HARNESS = prevHarness
     clearLlmProviderCache()
     mkdirSync("/opt/cursor/artifacts", { recursive: true })
+    const payload = { generated: new Date().toISOString(), rows }
     writeFileSync("/opt/cursor/artifacts/vibe-ab-seed.json", `${JSON.stringify(payload, null, 2)}\n`)
     const lines = [
       "# Vibe JSON vs file-harness A/B (seed LLM)",
