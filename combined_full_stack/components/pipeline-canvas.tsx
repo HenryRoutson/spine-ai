@@ -139,7 +139,7 @@ export function PipelineCanvas({
         <div className="flex w-full flex-col items-stretch gap-3">
           {editMode ? (
             <p className="text-center font-mono text-[10px] text-muted-foreground">
-              d3-dag layout of the typed pipeline. Switch to Lanes to insert steps. For/while loops stay in custom-code or llm-batch.
+              Same step cards as Lanes, laid out as a DAG. Switch to Lanes to insert steps. For/while loops stay in custom-code or llm-batch.
             </p>
           ) : null}
           <PipelineDagGraph
