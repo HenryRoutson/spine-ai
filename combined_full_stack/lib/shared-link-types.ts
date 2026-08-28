@@ -31,6 +31,8 @@ export const DEFAULT_EMBED_OPTIONS: EmbedOptions = {
 };
 
 // AI : hosted HTML wrapper around a share-link backend — company chrome, no database of their own.
+export type hosted_function_theme = "light" | "dark";
+
 export type HostedSiteBrand = {
   companyName: string;
   tagline: string;
@@ -39,6 +41,11 @@ export type HostedSiteBrand = {
   accentColor: string;
   backgroundColor: string;
   textColor: string;
+  // AI : run-panel visualisation — independent of the page chrome so functions can be light on a tinted site.
+  functionTheme: hosted_function_theme;
+  functionBackgroundColor: string;
+  functionTextColor: string;
+  functionAccentColor: string;
 };
 
 export type HostedSiteAuthProvider = "spine" | "custom_supabase";
@@ -102,6 +109,10 @@ export const DEFAULT_HOSTED_SITE_OPTIONS: HostedSiteOptions = {
     accentColor: "#2563eb",
     backgroundColor: "#f8fafc",
     textColor: "#0f172a",
+    functionTheme: "light",
+    functionBackgroundColor: "",
+    functionTextColor: "",
+    functionAccentColor: "",
   },
   customHtml: "",
   customCss: "",

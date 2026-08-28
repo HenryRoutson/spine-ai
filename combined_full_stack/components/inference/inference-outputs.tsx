@@ -24,14 +24,18 @@ function outputStepOutlineClass(isOutputStep: boolean) {
 export function InferenceRunOutputs({
   steps,
   models,
+  compact = false,
 }: {
   steps: RunStep[]
   models?: StructureModel[]
+  compact?: boolean
 }) {
   const [popup, setPopup] = useState<PopupPayload | null>(null)
   return (
     <div className="space-y-3">
-      <p className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">final outputs</p>
+      {compact ? null : (
+        <p className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">final outputs</p>
+      )}
       {steps.map((step, i) => (
         <InferenceStepOutput
           key={step.moduleId}

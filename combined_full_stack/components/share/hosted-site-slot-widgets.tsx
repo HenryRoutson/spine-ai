@@ -7,7 +7,9 @@ import { SharedLinkPreview } from "@/components/share/shared-link-preview"
 import { HostedSiteActionPreview } from "@/components/share/hosted-site-action-button"
 import { HostedSiteSqlPreview } from "@/components/share/hosted-site-sql-widget"
 import { Chat, ChatBubble, ChatBubbleAvatar, ChatBubbleContent, ChatInput, ChatList, ChatMessage } from "@/components/ui/chat"
+import { HostedFunctionChrome } from "@/components/share/hosted-function-chrome"
 import type { hosted_site_widget_slot } from "@/lib/hosted-site-slots"
+import type { HostedSiteBrand } from "@/lib/shared-link-types"
 import type { PipelineModule } from "@/lib/types"
 import type { ReactNode } from "react"
 
@@ -18,21 +20,24 @@ export function HostedSiteSlotWidgets({
   viewerMarkdown,
   modules,
   hideDocsInRun,
+  brand,
 }: {
   projectName: string
   viewerMarkdown: string
   modules: PipelineModule[]
   hideDocsInRun: boolean
+  brand?: HostedSiteBrand
 }): Partial<Record<hosted_site_widget_slot, ReactNode>> {
+  const runPreview = (
+    <SharedLinkPreview
+      projectName={projectName}
+      viewerMarkdown={hideDocsInRun ? "" : viewerMarkdown}
+      modules={modules}
+      variant="site"
+    />
+  )
   return {
-    run: (
-      <SharedLinkPreview
-        projectName={projectName}
-        viewerMarkdown={hideDocsInRun ? "" : viewerMarkdown}
-        modules={modules}
-        variant="site"
-      />
-    ),
+    run: brand ? <HostedFunctionChrome brand={brand}>{runPreview}</HostedFunctionChrome> : runPreview,
     output: <DataViewPanel json={OUTPUT_PREVIEW_JSON} defaultView="json" className="min-h-40" />,
     chatbot: <HostedSiteChatbotPreview />,
     docs: viewerMarkdown.trim() ? (

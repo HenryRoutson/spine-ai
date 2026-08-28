@@ -83,11 +83,69 @@ export function isSafeLogoUrl(raw: string): raw is logo_url_string {
 }
 
 export function hostedSiteBrandVars(brand: HostedSiteBrand): Record<string, string> {
+  const fn = hostedFunctionResolvedColors(brand)
   return {
     ["--hs-bg"]: brand.backgroundColor,
     ["--hs-fg"]: brand.textColor,
     ["--hs-primary"]: brand.primaryColor,
     ["--hs-accent"]: brand.accentColor,
+    ["--hs-fn-bg"]: fn.bg,
+    ["--hs-fn-fg"]: fn.fg,
+    ["--hs-fn-accent"]: fn.accent,
+  }
+}
+
+const LIGHT_FN_BG = "#ffffff" as hex_color_string
+const LIGHT_FN_FG = "#0f172a" as hex_color_string
+const DARK_FN_BG = "#0f172a" as hex_color_string
+const DARK_FN_FG = "#f8fafc" as hex_color_string
+
+function hexChannel(hex: hex_color_string, i: number): number {
+  return Number.parseInt(hex.slice(1 + i * 2, 3 + i * 2), 16)
+}
+
+export function contrastingInk(hex: hex_color_string): hex_color_string {
+  const r = hexChannel(hex, 0)
+  const g = hexChannel(hex, 1)
+  const b = hexChannel(hex, 2)
+  const lum = (0.299 * r + 0.587 * g + 0.114 * b) / 255
+  return lum > 0.55 ? LIGHT_FN_FG : ("#ffffff" as hex_color_string)
+}
+
+export function hostedFunctionResolvedColors(brand: HostedSiteBrand): {
+  bg: hex_color_string
+  fg: hex_color_string
+  accent: hex_color_string
+  onAccent: hex_color_string
+} {
+  const dark = brand.functionTheme === "dark"
+  const bg = parseHexColor(brand.functionBackgroundColor, dark ? DARK_FN_BG : LIGHT_FN_BG)
+  const fg = parseHexColor(brand.functionTextColor, dark ? DARK_FN_FG : parseHexColor(brand.textColor, LIGHT_FN_FG))
+  const accent = parseHexColor(brand.functionAccentColor, parseHexColor(brand.accentColor, "#2563eb" as hex_color_string))
+  return { bg, fg, accent, onAccent: contrastingInk(accent) }
+}
+
+export function hostedFunctionTokenVars(brand: HostedSiteBrand): Record<string, string> {
+  const { bg, fg, accent, onAccent } = hostedFunctionResolvedColors(brand)
+  return {
+    ["--hs-fn-bg"]: bg,
+    ["--hs-fn-fg"]: fg,
+    ["--hs-fn-accent"]: accent,
+    ["--background"]: bg,
+    ["--foreground"]: fg,
+    ["--card"]: bg,
+    ["--card-foreground"]: fg,
+    ["--popover"]: bg,
+    ["--popover-foreground"]: fg,
+    ["--primary"]: accent,
+    ["--primary-foreground"]: onAccent,
+    ["--accent"]: accent,
+    ["--accent-foreground"]: onAccent,
+    ["--muted"]: `color-mix(in srgb, ${fg} 8%, ${bg})`,
+    ["--muted-foreground"]: `color-mix(in srgb, ${fg} 62%, ${bg})`,
+    ["--border"]: `color-mix(in srgb, ${fg} 14%, ${bg})`,
+    ["--input"]: `color-mix(in srgb, ${fg} 14%, ${bg})`,
+    ["--ring"]: accent,
   }
 }
 
@@ -411,7 +469,17 @@ export function normalizeHostedSiteBrand(raw: unknown): HostedSiteBrand {
     accentColor: parseHexColor(typeof o.accentColor === "string" ? o.accentColor : "", d.accentColor as hex_color_string),
     backgroundColor: parseHexColor(typeof o.backgroundColor === "string" ? o.backgroundColor : "", d.backgroundColor as hex_color_string),
     textColor: parseHexColor(typeof o.textColor === "string" ? o.textColor : "", d.textColor as hex_color_string),
+    functionTheme: o.functionTheme === "dark" ? "dark" : "light",
+    functionBackgroundColor: parseOptionalFnColor(o.functionBackgroundColor),
+    functionTextColor: parseOptionalFnColor(o.functionTextColor),
+    functionAccentColor: parseOptionalFnColor(o.functionAccentColor),
   }
+}
+
+function parseOptionalFnColor(raw: unknown): string {
+  if (typeof raw !== "string" || !raw.trim()) return ""
+  const hex = expandHexColor(raw)
+  return hex ?? ""
 }
 
 function normalizeHostedSiteAuth(raw: unknown): HostedSiteAuth {

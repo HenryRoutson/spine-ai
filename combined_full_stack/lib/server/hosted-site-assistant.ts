@@ -176,6 +176,10 @@ export function applyHostedSiteAssistantPatch(
       accentColor: mergeHex(patch.accentColor, base.brand.accentColor),
       backgroundColor: mergeHex(patch.backgroundColor, base.brand.backgroundColor),
       textColor: mergeHex(patch.textColor, base.brand.textColor),
+      functionTheme: base.brand.functionTheme,
+      functionBackgroundColor: base.brand.functionBackgroundColor,
+      functionTextColor: base.brand.functionTextColor,
+      functionAccentColor: base.brand.functionAccentColor,
     },
     customHtml: reactMode
       ? base.customHtml

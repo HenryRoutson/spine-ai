@@ -45,6 +45,7 @@ export function SharedLinkPreview({
           </div>
         ) : null}
 
+        {variant === "site" || inputs.length === 0 ? null : (
         <div className="space-y-2">
           <p className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
             pipeline inputs · {inputs.length} slot{inputs.length === 1 ? "" : "s"}
@@ -65,6 +66,7 @@ export function SharedLinkPreview({
             </div>
           ))}
         </div>
+        )}
 
         <Button type="button" className="w-full gap-2" disabled>
           <Zap className="h-4 w-4" />

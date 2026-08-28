@@ -49,6 +49,7 @@ export function HostedSiteViewer({
     viewerMarkdown,
     modules: [],
     hideDocsInRun: hasDocsSlot,
+    brand: options.brand,
   })
   const bindings = resolveWebsitePipelineBindings(projectId, options.pipelineBindings)
   const compiled = useMemo(() => compileHostedSiteHtml(options), [options])
@@ -91,17 +92,18 @@ export function HostedSiteViewer({
           variant="site"
           hideViewerMarkdown={hasDocsSlot}
           pipelineAlias={binding.alias}
+          brand={options.brand}
           onRunEvent={onPipelineRunEvent}
         />
       )
     }
     if (!map.run) {
       map.run = (
-        <SharedRunViewer linkId={linkId} variant="site" hideViewerMarkdown={hasDocsSlot} onRunEvent={onPipelineRunEvent} />
+        <SharedRunViewer linkId={linkId} variant="site" hideViewerMarkdown={hasDocsSlot} brand={options.brand} onRunEvent={onPipelineRunEvent} />
       )
     }
     return map
-  }, [bindings, hasDocsSlot, linkId])
+  }, [bindings, hasDocsSlot, linkId, options.brand])
 
   const accountBar =
     options.auth.enabled && isAuthenticated && email ? (

@@ -99,7 +99,10 @@ export function defaultHostedSiteCss(): string {
 .hs-run { padding: 0 1rem 2.75rem; }
 .hs-workspace-head { max-width: 56rem; margin: 0 auto 1rem; text-align: center; }
 .hs-workspace-title { margin: 0.4rem 0 0; font-size: 1.25rem; font-weight: 650; letter-spacing: -0.025em; }
-.hs-run-slot, .hs-output-slot, .hs-chatbot-slot, .hs-docs-slot { margin: 0 auto; max-width: 56rem; border-radius: 1.1rem; overflow: hidden; border: 1px solid color-mix(in srgb, var(--hs-fg) 10%, transparent); box-shadow: 0 22px 60px color-mix(in srgb, var(--hs-fg) 12%, transparent); background: #fff; color: inherit; }
+.hs-run-slot, .hs-output-slot, .hs-chatbot-slot, .hs-docs-slot { margin: 0 auto; max-width: 56rem; border-radius: 1.1rem; overflow: hidden; border: 1px solid color-mix(in srgb, var(--hs-fg) 10%, transparent); box-shadow: 0 22px 60px color-mix(in srgb, var(--hs-fg) 12%, transparent); background: var(--hs-fn-bg, #fff); color: var(--hs-fn-fg, inherit); }
+.hs-fn { color: var(--hs-fn-fg, inherit); background: var(--hs-fn-bg, transparent); }
+.hs-fn .bg-background { background: var(--hs-fn-bg); }
+.hs-run-slot .hs-fn { min-height: 0; }
 .hs-sql-slot, .hs-action-slot { margin: 0 auto; max-width: 28rem; text-align: center; }
 .hs-sql-slot { margin-top: 2.25rem; }
 .hs-action-row { display: flex; flex-wrap: wrap; justify-content: center; align-items: stretch; gap: 1rem; width: 100%; margin: 0 auto 4rem; padding: 0 1.25rem; }

@@ -162,6 +162,18 @@ describe("hosted site wrapper", () => {
     expect(report.pageHtml).toContain("hs-docs-slot")
   })
 
+  it("defaults function panels to light and keeps optional panel colors", () => {
+    const next = normalizeHostedSiteOptions({ brand: { companyName: "Acme" } })
+    expect(next.brand.functionTheme).toBe("light")
+    expect(next.brand.functionBackgroundColor).toBe("")
+    const dark = normalizeHostedSiteOptions({
+      brand: { functionTheme: "dark", functionBackgroundColor: "#111", functionAccentColor: "#f80" },
+    })
+    expect(dark.brand.functionTheme).toBe("dark")
+    expect(dark.brand.functionBackgroundColor).toBe("#111111")
+    expect(dark.brand.functionAccentColor).toBe("#ff8800")
+  })
+
   it("normalizes extra pages and skips reserved paths", () => {
     const next = normalizeHostedSiteOptions({
       pages: [

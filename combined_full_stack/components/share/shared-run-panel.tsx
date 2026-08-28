@@ -32,6 +32,7 @@ import { fetchSharedDownload } from "@/lib/shared-run-client"
 import { useSharedInferenceRun, type SharedRunLifecycleEvent } from "@/lib/use-shared-inference-run"
 import { sharedLinkRequiresSignIn, viewerFundsSharedRun } from "@/lib/shared-link-funding"
 import { SharedRunDocScopeProvider } from "@/lib/shared-run-doc-scope"
+import { hostedRunHidesInputSlots } from "@/lib/hosted-run-chrome"
 import type { SharedLinkPublicView } from "@/lib/shared-link-types"
 
 type SharedRunPanelProps = {
@@ -45,6 +46,7 @@ type SharedRunPanelProps = {
   embedSessionToken?: string
   onRunEvent?: (event: SharedRunLifecycleEvent) => void
   pipelineAlias?: string
+  compact?: boolean
 }
 
 export function SharedRunPanel({
@@ -58,6 +60,7 @@ export function SharedRunPanel({
   embedSessionToken,
   onRunEvent,
   pipelineAlias,
+  compact = false,
 }: SharedRunPanelProps) {
   const run = useSharedInferenceRun(
     link,
@@ -70,6 +73,12 @@ export function SharedRunPanel({
   )
   const [downloadBusy, setDownloadBusy] = useState(false)
   const [downloadError, setDownloadError] = useState<string | null>(null)
+  const [inputsOpen, setInputsOpen] = useState(false)
+  const hideInputSlots = hostedRunHidesInputSlots(
+    run.inputModules.map((m) => m.id),
+    link.defaultDocs,
+  )
+  const showInputSlots = run.inputModules.length > 0 && (!compact || !hideInputSlots || inputsOpen)
 
   const handleDownloadAll = async () => {
     if (!run.run || !run.jobId || !run.progressToken) return
@@ -117,10 +126,13 @@ export function SharedRunPanel({
         </div>
       )}
 
+      {showInputSlots ? (
       <div className="space-y-2">
-        <p className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
-          pipeline inputs · {run.inputModules.length} slot{run.inputModules.length === 1 ? "" : "s"}
-        </p>
+        {compact ? null : (
+          <p className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
+            pipeline inputs · {run.inputModules.length} slot{run.inputModules.length === 1 ? "" : "s"}
+          </p>
+        )}
         {run.inputModules.map((m) => (
           <InferenceInputSlot
             key={m.id}
@@ -153,6 +165,7 @@ export function SharedRunPanel({
           />
         ))}
       </div>
+      ) : null}
 
       {(link.billingMultiple > 1 || link.flatFeeCents > 0) && viewerFunds && (
         <p className="rounded-lg border border-border bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
@@ -216,7 +229,17 @@ export function SharedRunPanel({
         ready={run.allInputsReady}
         running={run.phase === "running"}
         inputCount={run.inputModules.length}
+        simple={compact}
       />
+      {compact && hideInputSlots && run.inputModules.length > 0 ? (
+        <button
+          type="button"
+          className="w-full text-center text-xs text-muted-foreground underline-offset-2 hover:underline"
+          onClick={() => setInputsOpen((v) => !v)}
+        >
+          {inputsOpen ? "Hide JSON" : "Change JSON"}
+        </button>
+      ) : null}
 
       {run.pendingHumanReview && (
         <HumanReviewPanel
@@ -242,7 +265,7 @@ export function SharedRunPanel({
       {(run.phase === "running" || run.phase === "done") && (
         <>
           {run.phase === "done" && run.outputSteps.length > 0 && (
-            <InferenceRunOutputs steps={run.outputSteps} models={link.models} />
+            <InferenceRunOutputs steps={run.outputSteps} models={link.models} compact={compact} />
           )}
 
           {run.phase === "done" && run.run && run.run.status !== "ok" && (
@@ -283,6 +306,12 @@ export function SharedRunPanel({
             />
           )}
 
+          {compact && run.phase === "running" ? (
+            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+              <Loader2 className="h-4 w-4 animate-spin" />
+              Working…
+            </div>
+          ) : compact ? null : (
           <InferenceStepTracePanel
             modules={run.modules}
             phase={run.phase}
@@ -311,6 +340,7 @@ export function SharedRunPanel({
               ) : undefined
             }
           />
+          )}
         </>
       )}
 

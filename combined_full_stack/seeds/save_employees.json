@@ -144,7 +144,8 @@
   "hostedSite": {
     "brand": {
       "companyName": "Northwind Roster",
-      "tagline": "Two pipelines, one shared employee table"
+      "tagline": "Two pipelines, one shared employee table",
+      "functionTheme": "light"
     },
     "pipelineBindings": [
       {
