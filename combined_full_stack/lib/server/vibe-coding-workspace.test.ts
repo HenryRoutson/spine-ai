@@ -61,7 +61,7 @@ function receiptModules(): AssistantRaw["modules"] {
 
 describe("vibe coding workspace", () => {
   it("gives thinking enough budget for a real plan", () => {
-    expect(VIBE_THINKING_MAX_TOKENS).toBeGreaterThanOrEqual(4096)
+    expect(VIBE_THINKING_MAX_TOKENS).toBeGreaterThanOrEqual(8192)
     expect(VIBE_HARNESS_MAX_TOKENS).toBeGreaterThanOrEqual(4096)
   })
 

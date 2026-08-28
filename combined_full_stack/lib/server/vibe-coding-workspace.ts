@@ -8,6 +8,7 @@ import {
   structureOutForAssistant,
   type AssistantTestDocCatalogEntry,
 } from "./assistant-prompt"
+import { buildVibeTopologyPromptBlock } from "./vibe-coding-topology"
 import { parseStructureHint } from "./assistant-shared"
 import { inputTypesAreAllJsonNative } from "@/lib/inference-input-core"
 import { isManagedLockedStep } from "./validity-sync"
@@ -25,7 +26,7 @@ import {
   type StructureModel,
 } from "./types"
 
-export const VIBE_THINKING_MAX_TOKENS = 4096
+export const VIBE_THINKING_MAX_TOKENS = 8192
 export const VIBE_HARNESS_MAX_TURNS = 8
 export const VIBE_HARNESS_MAX_TOKENS = 8192
 export const VIBE_HARNESS_MAX_FILE_CHARS = 48_000
@@ -204,8 +205,11 @@ This is a **file workspace**, not a chat dump. Edit files, then \`run_tests\`. T
 - Blank projects already have Input + Output. Replace that pipeline; do not treat it as finished.
 - Input of pdf/word/image/web/text: \`structureOut\` is Document or \`list[Document]\` — never a parsed model.
 - Many same-kind files → one input with \`list[Document]\` + llm-batch. Two different kinds → process first, then combine (raw side file immediately before combine) **or** assemble after both are parsed. Never a third upload.
-- Independent extracts on one input → fork + product join, not one mega-llm, not parallel.
+- Independent extracts on one input → fork + product join, not one mega-llm, not parallel. Lane llms \`structureIn\` is Document.
 - custom-code is a **TypeScript arrow** \`(rows) => …\`, never Python. After Link Quotes, quoted fields are \`{ text, quote }\` — use \`.text\`.
+
+## Topology
+${buildVibeTopologyPromptBlock()}
 - Spreadsheet goals end at \`list[Row]\` → output. Do not fold CSV strings.
 - Prompts are not templates — no \`{state.X}\`. Previous JSON is appended at runtime.
 

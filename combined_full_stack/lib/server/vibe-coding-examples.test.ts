@@ -23,7 +23,7 @@ describe("vibe few-shot example catalog", () => {
   })
 
   for (const ex of vibeExampleTasks()) {
-    it(`${ex.id} few-shot JSON materializes${ex.id === "ex5" ? " with a fork" : " and is I/O-valid"}`, () => {
+    it(`${ex.id} few-shot JSON materializes and is I/O-valid`, () => {
       const session = createSpineSession()
       session.addProject({ open: true })
       const proposal = materializeProposal(ex.payload, session.project!, DEFAULT_MODEL, [])
@@ -34,11 +34,9 @@ describe("vibe few-shot example catalog", () => {
         proposal!.typeAliases ?? [],
       )
       const kinds = flattenPipelineModules(proposal!.modules).map((s) => s.kind)
-      if (ex.id === "ex5") {
-        // AI : few-shot fork JSON still I/O-invalid; topology is what the example teaches.
+      expect(errors, `${ex.id} I/O ${errors}`).toBeFalsy()
+      if (ex.topology === "fork") {
         expect(kinds.includes("fork"), `${ex.id} kinds=${kinds.join(",")}`).toBe(true)
-      } else {
-        expect(errors, `${ex.id} I/O ${errors}`).toBeFalsy()
       }
       expect(seedHarnessWriteTools(ex.payload).some((t) => t.path === "pipeline.json")).toBe(true)
     })

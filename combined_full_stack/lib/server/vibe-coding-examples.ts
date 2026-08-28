@@ -137,7 +137,7 @@ export function matchVibeExample(text: string): VibeExampleTask | null {
   return null
 }
 
-export function exampleTopologyHit(task: VibeExampleTask, kinds: string[], inputCount: number): boolean {
+export function exampleTopologyHit(task: VibeExampleTask, kinds: string[], _inputCount: number): boolean {
   switch (task.topology) {
     case "batch-map":
       return kinds.includes("llm-batch")
@@ -146,7 +146,7 @@ export function exampleTopologyHit(task: VibeExampleTask, kinds: string[], input
     case "split-join":
       return kinds.includes("custom-code") && kinds.includes("llm-batch")
     case "combine":
-      return kinds.includes("combine") || inputCount >= 2
+      return kinds.includes("combine")
     case "assemble":
       return kinds.includes("assemble")
     case "fork":

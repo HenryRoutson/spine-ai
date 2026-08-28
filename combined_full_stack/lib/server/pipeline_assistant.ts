@@ -78,7 +78,7 @@ import {
   type TypeAlias,
 } from "./types";
 import { blankPipelineModules, functionsOnProject, functionsPromptSummary } from "@/lib/pipeline-functions";
-import { flattenPipelineModules } from "@/lib/fork-pipeline";
+import { flattenPipelineModules, syncForkModules } from "@/lib/fork-pipeline";
 import { tryCompileCustomCodeEntry } from "@/lib/custom_code";
 import { customCodeEntriesForModule } from "@/lib/custom_code_entries";
 import { lintPipeline } from "./pipeline_lint";
@@ -88,6 +88,7 @@ import {
   runVibeCodingHarness,
   vibeHarnessEnabled,
 } from "./vibe-coding-harness";
+import { buildVibeTopologyPromptBlock, formatTopologyRetryErrors, topologyAdvice } from "./vibe-coding-topology";
 
 const MODULE_KINDS = USER_ADDABLE_MODULE_KINDS;
 
@@ -640,6 +641,27 @@ function wireAssembleSpineIn(modules: PipelineModule[]): PipelineModule[] {
   });
 }
 
+// AI : llm after fork defaults inStructureId to models[0] — consume the auto-derived fork product instead.
+function wireForkProductSpineIn(modules: PipelineModule[]): PipelineModule[] {
+  return modules.map((m, i) => {
+    const prev = i > 0 ? modules[i - 1] : undefined;
+    if (!prev || prev.kind !== ModuleKind.Fork) return m;
+    if (
+      m.kind === ModuleKind.Fork ||
+      m.kind === ModuleKind.Assemble ||
+      m.kind === ModuleKind.Input ||
+      m.kind === ModuleKind.IfElse ||
+      m.kind === ModuleKind.Parallel
+    ) {
+      return m;
+    }
+    const prevOut = prev.outStructureId;
+    if (!prevOut || m.inStructureId === prevOut) return m;
+    // AI : drop stale inType so migrate re-derives from the fork product, not models[0].
+    return migrateModuleSpineTypes({ ...m, inStructureId: prevOut, inType: undefined });
+  });
+}
+
 // AI : quoted llm-batch is followed by auto Link Quotes — state["Extract …"] should read the linked list.
 function wireAssembleQuoteLabels(modules: PipelineModule[]): PipelineModule[] {
   return modules.map((m) => {
@@ -765,8 +787,10 @@ function buildThinkingSystemPrompt(hasValidationErrors: boolean): string {
 
 ${hasValidationErrors
     ? "The live project has pipeline validation errors — diagnose each listed mismatch (structure name vs list[structure] cardinality). Plan exact structureOut/list[...] fixes per step. Do not propose a greenfield architecture."
-    : "Reason thoroughly: (1) structures needed, (2) series-parallel spine with single vs list at each hop, (3) many same-kind files → list[Document] + llm-batch (NOT one llm), (4) two different doc kinds: process first on spine, then either combine (raw side upload immediately before combine) OR assemble after both are parsed — never a third upload, (5) independent mixed-kind sub-pipelines that share one input → Fork (lanes + join), not Parallel (LLM-only) and not serialize, (6) synthetic test docs. Flag where validation would fail if list-ness is wrong."}
-Budget real reasoning — do not rush. Plain text only — no JSON, no markdown headings.`;
+    : `First line MUST be: TOPOLOGY: batch-map | explode | split-join | combine | assemble | fork
+${buildVibeTopologyPromptBlock()}
+Then reason thoroughly: (1) structures needed, (2) series-parallel spine with single vs list at each hop, (3) many same-kind files → list[Document] + llm-batch (NOT one llm), (4) two different doc kinds: process first on spine, then either combine (raw side upload immediately before combine) OR assemble after both are parsed — never a third upload, (5) independent mixed-kind sub-pipelines that share one input → Fork (lanes + join; lane structureIn is Document), not Parallel (LLM-only) and not serialize, (6) synthetic test docs. Flag where validation would fail if list-ness is wrong.`}
+Budget real reasoning — do not rush. Plain text only after the TOPOLOGY line — no JSON, no markdown headings.`;
 }
 
 function buildThinkingUserPrompt(
@@ -821,7 +845,10 @@ ${modelsBlock}
 Current pipeline (${project.modules.length} steps):
 ${stepsBlock}
 
-User request: ${resolveAssistantUserMessage(project, message, history)}`;
+${buildVibeTopologyPromptBlock()}
+
+User request: ${resolveAssistantUserMessage(project, message, history)}
+First line of your reply: TOPOLOGY: <name>`;
 }
 
 function buildSystemPrompt(globalModel: ModelId, projectName: string): string {
@@ -906,7 +933,7 @@ export function materializeProposal(
   }
 
   const aliasNames = collectTypeAliasNames(project.typeAliases ?? [], raw.typeAliases);
-  const models = materializeModels(raw.models, project.models, aliasNames);
+  let models = materializeModels(raw.models, project.models, aliasNames);
   const modelsReallyChanged = hasModelChange && diffStructureModels(project.models, models).length > 0;
   if (
     !hasPipelineChange &&
@@ -950,7 +977,9 @@ export function materializeProposal(
     modules = syncManagedPipelineSteps(modules, models, globalModel) ?? modules;
   }
   if (hasPipelineChange) {
-    modules = wireAssembleQuoteLabels(wireAssembleSpineIn(modules));
+    const forkSynced = syncForkModules(modules, models, typeAliases);
+    modules = wireAssembleQuoteLabels(wireAssembleSpineIn(wireForkProductSpineIn(forkSynced.modules)));
+    models = forkSynced.models;
   }
   return {
     modules: modules ?? [],
@@ -1068,6 +1097,7 @@ export function runVibeWorkspaceChecks(
   project: Project,
   globalModel: ModelId,
   testDocsCatalog: AssistantTestDocCatalogEntry[],
+  task?: string,
 ): string {
   if (draft.errors.length) {
     return `FAIL parse\n${draft.errors.map((e) => `- ${e}`).join("\n")}`;
@@ -1107,7 +1137,9 @@ export function runVibeWorkspaceChecks(
   );
   const lintErrors = lint.lints.filter((l) => l.severity === "error");
   const ok = !validation && compileErrors.length === 0 && lintErrors.length === 0;
-  const lines = [ok ? "PASS" : "FAIL"];
+  const kinds = flattenPipelineModules(proposal.modules).map((m) => m.kind);
+  const topoHints = task ? topologyAdvice(task, kinds) : [];
+  const lines = [ok && !topoHints.length ? "PASS" : topoHints.length && ok ? "FAIL topology" : "FAIL"];
   if (validation) lines.push("I/O:", validation.trim());
   if (compileErrors.length) lines.push("custom-code:", ...compileErrors.map((e) => `- ${e}`));
   if (lintErrors.length) {
@@ -1116,7 +1148,10 @@ export function runVibeWorkspaceChecks(
       ...lintErrors.map((l) => `- ${l.stepLabel ?? l.structureName ?? l.code}: ${l.message}`),
     );
   }
-  if (ok) lines.push("I/O valid, custom-code compiled, lint clean.");
+  if (topoHints.length) {
+    lines.push("topology:", ...topoHints.map((h) => `- ${h}`));
+  }
+  if (ok && !topoHints.length) lines.push("I/O valid, custom-code compiled, lint clean.");
   return lines.join("\n");
 }
 
@@ -1144,7 +1179,7 @@ async function tryVibeFileHarness(args: {
     ledger: args.ledger,
     testDocsCatalog: args.testDocsCatalog,
     runChecks: (draft) =>
-      runVibeWorkspaceChecks(draft, args.project, args.globalModel, args.testDocsCatalog),
+      runVibeWorkspaceChecks(draft, args.project, args.globalModel, args.testDocsCatalog, args.task),
     onTurn: args.onTurn,
     onStructuredFailure: args.onStructuredFailure,
   });
@@ -1269,6 +1304,7 @@ export async function proposePipelineChange(
     let harnessUsed = false;
     const catalog = opts?.testDocsCatalog ?? [];
     const extraHarnessPrompt = [
+      buildVibeTopologyPromptBlock(),
       buildHumanSurfacePromptBlock(opts?.humanSurface),
       buildUiContextPromptBlock(uiContext),
       formatValidationBlock(
@@ -1372,11 +1408,15 @@ export async function proposePipelineChange(
     let retryCount = 0;
 
     for (let retry = 0; retry < MAX_VALIDATION_RETRIES && proposal; retry++) {
-      const validationErrors = formatPipelineValidationErrors(
+      const ioErrors = formatPipelineValidationErrors(
         proposal.modules,
         proposal.models,
         proposal.typeAliases ?? [],
       );
+      const kinds = flattenPipelineModules(proposal.modules).map((m) => m.kind);
+      const validationErrors = [ioErrors.trim(), formatTopologyRetryErrors(effectiveMessage, kinds)]
+        .filter(Boolean)
+        .join("\n\n");
       if (!validationErrors) break;
 
       retryCount += 1;

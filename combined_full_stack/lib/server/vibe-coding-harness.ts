@@ -19,6 +19,7 @@ import {
   type VibeWorkspace,
   type VibeWorkspaceDraft,
 } from "./vibe-coding-workspace"
+import { buildVibeTopologyPromptBlock } from "./vibe-coding-topology"
 
 // AI : write_file first — generic schema fill uses enum[0]; list_dir-first is why seed scored 0.
 const HARNESS_TOOLS = ["write_file", "read_file", "run_tests", "list_dir", "delete_file", "done"] as const
@@ -188,6 +189,8 @@ Tools: write_file, read_file, run_tests, list_dir, delete_file, done.
 - Many same-kind files (receipts, notes, invoices) → one input list[Document] + llm-batch (NOT a single llm).
 - Two different doc kinds (policy + company pack) → two inputs, parse each, then assemble or combine (side file immediately before combine).
 - Non-JSON inputs (text/pdf/word/image/web): structureOut is Document or list[Document]. Typed rows belong on a later llm/llm-batch.
+${buildVibeTopologyPromptBlock()}
+- run_tests FAILs topology even when I/O is valid — rebuild the named spine; do not call done.
 - Write structures/*.json, pipeline.json, tests/*, docs.md, message.md. Up to 12 tools per turn; more files → next turn.
 - message.md is future tense ("I'll add…") — the user still has to Approve.
 - After writes, run_tests. Call done only when VALIDATION.md starts with PASS (not Q&A-only).
@@ -216,8 +219,8 @@ function buildHarnessUserPrompt(args: {
   const first = args.turn === 0
   return `Turn ${args.turn + 1}/${VIBE_HARNESS_MAX_TURNS}
 Task: ${args.task}
-${thinking}${args.extra}
-${first ? "Write files this turn (do not only list_dir / read_file). Replace the stub Input + Output." : "Continue from the tool results. If VALIDATION.md is FAIL, fix files. If PASS, done. Empty tools is not done."}
+${first ? `${buildVibeTopologyPromptBlock()}\n` : ""}${thinking}${args.extra}
+${first ? "Write files this turn (do not only list_dir / read_file). Replace the stub Input + Output. Pick TOPOLOGY first." : "Continue from the tool results. If VALIDATION.md is FAIL (including FAIL topology), fix files. If PASS, done. Empty tools is not done."}
 
 ${first ? "Workspace (already loaded):" : "Last tool results:"}
 ${args.lastResults || "(empty workspace)"}
