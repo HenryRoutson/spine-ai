@@ -27,10 +27,11 @@ function channelKey(linkId: string, table: string): string {
 
 export function paintHostedSqlValue(linkId: string, table: string, value: number): void {
   const ch = CHANNELS.get(channelKey(linkId, table))
-  if (!ch?.rows?.[0]) return
+  if (!ch) return
   // AI : show the JSON SQL step's result immediately; fetch confirms from app_sql_rows.
+  const base = ch.rows?.[0] ?? { id: "global" }
   ch.holdPainted = true
-  ch.rows = [{ ...ch.rows[0], value }]
+  ch.rows = [{ ...base, value }]
   for (const listener of ch.listeners) listener(ch.rows, ch.error)
 }
 

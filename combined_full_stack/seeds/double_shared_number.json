@@ -141,7 +141,7 @@
                       "sql": "UPDATE shared_number SET value = value * 3 WHERE id = 'global' RETURNING *",
                       "sqlSeedRows": [{ "id": "global", "value": 1, "odd": 1 }],
                       "cached": false,
-                      "avgMs": 700,
+                      "avgMs": 1100,
                       "avgCostCents": 0
                     },
                     {
@@ -155,7 +155,7 @@
                       "sql": "UPDATE shared_number SET value = value + 1 WHERE id = 'global' RETURNING *",
                       "sqlSeedRows": [{ "id": "global", "value": 1, "odd": 1 }],
                       "cached": false,
-                      "avgMs": 700,
+                      "avgMs": 1100,
                       "avgCostCents": 0
                     }
                   ]
@@ -175,7 +175,7 @@
                       "sql": "UPDATE shared_number SET value = value / 2 WHERE id = 'global' RETURNING *",
                       "sqlSeedRows": [{ "id": "global", "value": 1, "odd": 1 }],
                       "cached": false,
-                      "avgMs": 700,
+                      "avgMs": 1100,
                       "avgCostCents": 0
                     }
                   ]

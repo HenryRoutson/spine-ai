@@ -22,7 +22,7 @@ import { mergeStepStates, type StepUiState } from "@/lib/run-engine"
 import { RunPhase } from "@/lib/run-phase"
 import type { ModuleId, PipelineModule } from "@/lib/types"
 
-function holdMs(ms = 650): Promise<void> {
+function holdMs(ms = 900): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms))
 }
 
@@ -155,9 +155,9 @@ export function HostedSiteActionButton({
             if (fresh.length === 0) return
             // AI : reveal each JSON SQL UPDATE in order so 1→3 can paint before 4.
             revealing = revealing.then(async () => {
-              for (const [i, row] of fresh.entries()) {
+              for (const row of fresh) {
                 paintHostedSqlValue(linkId, "shared_number", row.to)
-                if (i < fresh.length - 1) await holdMs()
+                await holdMs()
               }
             })
           },
