@@ -1,12 +1,18 @@
 "use client"
 
 import { useState } from "react"
-import { AlertTriangle, CheckCircle2 } from "lucide-react"
+import { AlertTriangle, CheckCircle2, Maximize2 } from "lucide-react"
 import { DataViewPanel } from "@/components/data-view-panel"
 import { PopupModal, type PopupPayload } from "@/components/logging/popup-modal"
 import { cn } from "@/lib/utils"
 import { useStatusPalette } from "@/lib/chart-colors"
 import { hasDisplayableStepOutput, isDocReferenceOutputJson } from "@/lib/step-doc"
+import {
+  deriveHostedOutputView,
+  extractHostedMetric,
+  type hosted_resolved_output_view,
+} from "@/lib/hosted-run-chrome"
+import type { hosted_run_output_view } from "@/lib/shared-link-types"
 import type { RunStep, StructureModel } from "@/lib/types"
 
 function OutputStepLabel() {
@@ -26,10 +32,12 @@ export function InferenceRunOutputs({
   steps,
   models,
   compact = false,
+  outputView = "auto",
 }: {
   steps: RunStep[]
   models?: StructureModel[]
   compact?: boolean
+  outputView?: hosted_run_output_view
 }) {
   const [popup, setPopup] = useState<PopupPayload | null>(null)
   return (
@@ -45,6 +53,7 @@ export function InferenceRunOutputs({
           isOutputStep={step.kind === "output"}
           compact={compact}
           models={models}
+          outputView={outputView}
           onFullscreen={
             step.outputJson
               ? () =>
@@ -52,6 +61,7 @@ export function InferenceRunOutputs({
                     json: step.outputJson!,
                     models,
                     title: `${step.label} (output)`,
+                    defaultView: "json",
                   })
               : undefined
           }
@@ -68,6 +78,7 @@ function InferenceStepOutput({
   isOutputStep,
   compact = false,
   models,
+  outputView = "auto",
   onFullscreen,
 }: {
   step: RunStep
@@ -75,10 +86,17 @@ function InferenceStepOutput({
   isOutputStep: boolean
   compact?: boolean
   models?: StructureModel[]
+  outputView?: hosted_run_output_view
   onFullscreen?: () => void
 }) {
   const ok = step.status === "ok" || step.status === "cached"
   const palette = useStatusPalette()
+  const resolved: hosted_resolved_output_view | null = step.outputJson
+    ? compact
+      ? deriveHostedOutputView({ preference: outputView, json: step.outputJson })
+      : "table"
+    : null
+  const metric = resolved === "metric" && step.outputJson ? extractHostedMetric(step.outputJson) : null
   return (
     <div
       className={cn(
@@ -100,16 +118,35 @@ function InferenceStepOutput({
         {step.status === "cached" && (
           <span className="font-mono text-[10px] text-chart-3">cached</span>
         )}
+        {compact && onFullscreen ? (
+          <button
+            type="button"
+            className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded border border-border text-muted-foreground hover:bg-accent hover:text-foreground"
+            title="View full JSON"
+            aria-label="View full JSON"
+            onClick={onFullscreen}
+          >
+            <Maximize2 className="h-3 w-3" />
+          </button>
+        ) : null}
       </div>
-      {step.outputJson ? (
+      {metric ? (
+        <div className="flex flex-col items-center justify-center gap-1 px-4 py-7">
+          {metric.label ? (
+            <p className="text-[10px] font-medium uppercase tracking-[0.16em] text-muted-foreground">{metric.label}</p>
+          ) : null}
+          <p className="text-4xl font-semibold tabular-nums tracking-tight">{metric.text}</p>
+        </div>
+      ) : step.outputJson ? (
         <div className={expanded ? "h-[min(28rem,55vh)]" : "h-[min(16rem,32vh)]"}>
           <DataViewPanel
             json={step.outputJson}
             models={models}
-            defaultView="table"
+            defaultView={resolved === "json" ? "json" : "table"}
+            lockedView={compact ? (resolved === "json" ? "json" : "table") : undefined}
             className="h-full"
             simple={compact}
-            onFullscreen={onFullscreen}
+            onFullscreen={compact ? undefined : onFullscreen}
           />
         </div>
       ) : (

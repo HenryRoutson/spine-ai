@@ -16,7 +16,7 @@ import { cn } from "@/lib/utils"
 import { spineActionProps } from "@/lib/core/parity"
 import { readAccountStateCache } from "@/lib/project-state-cache"
 import type { Project, ProjectId } from "@/lib/types"
-import type { HostedSiteOptions, hosted_run_input_visibility } from "@/lib/shared-link-types"
+import type { HostedSiteOptions, hosted_run_input_visibility, hosted_run_output_view } from "@/lib/shared-link-types"
 import { normalizeHostedRunInputChrome } from "@/lib/hosted-run-chrome"
 import {
   bindingsFromProjectIds,
@@ -90,7 +90,13 @@ export function WebsitePipelineBindings({
 
   function patchBinding(
     projectId: ProjectId,
-    patch: { visibility?: hosted_run_input_visibility; inputEditable?: boolean; clearInputAfterRun?: boolean },
+    patch: {
+      visibility?: hosted_run_input_visibility
+      inputEditable?: boolean
+      clearInputAfterRun?: boolean
+      runLabel?: string
+      outputView?: hosted_run_output_view
+    },
   ) {
     onChange({
       ...options,
@@ -180,6 +186,33 @@ export function WebsitePipelineBindings({
                     }
                   />
                   Clear after run
+                </label>
+                <label className="inline-flex items-center gap-1">
+                  Button
+                  <input
+                    className="h-6 w-32 rounded border border-border bg-background px-1 text-[10px] text-foreground"
+                    value={binding.runLabel}
+                    placeholder="Run pipeline"
+                    maxLength={40}
+                    onChange={(e) => patchBinding(binding.projectId, { runLabel: e.target.value })}
+                  />
+                </label>
+                <label className="inline-flex items-center gap-1">
+                  Output
+                  <select
+                    className="h-6 rounded border border-border bg-background px-1 text-[10px] text-foreground"
+                    value={binding.outputView}
+                    onChange={(e) =>
+                      patchBinding(binding.projectId, {
+                        outputView: e.target.value as hosted_run_output_view,
+                      })
+                    }
+                  >
+                    <option value="auto">auto</option>
+                    <option value="table">table</option>
+                    <option value="metric">metric</option>
+                    <option value="json">json</option>
+                  </select>
                 </label>
               </span>
             </span>

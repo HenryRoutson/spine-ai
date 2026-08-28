@@ -32,7 +32,7 @@ import { fetchSharedDownload } from "@/lib/shared-run-client"
 import { useSharedInferenceRun, type SharedRunLifecycleEvent } from "@/lib/use-shared-inference-run"
 import { sharedLinkRequiresSignIn, viewerFundsSharedRun } from "@/lib/shared-link-funding"
 import { SharedRunDocScopeProvider } from "@/lib/shared-run-doc-scope"
-import { hostedRunAllowsChangeJson, hostedRunShowsInputSlots, DEFAULT_HOSTED_RUN_INPUT_CHROME, type HostedRunInputChrome } from "@/lib/hosted-run-chrome"
+import { hostedRunAllowsChangeJson, hostedRunIdleButtonLabel, hostedRunShowsInputSlots, DEFAULT_HOSTED_RUN_INPUT_CHROME, type HostedRunInputChrome } from "@/lib/hosted-run-chrome"
 import { RunStatus } from "@/lib/types"
 import type { SharedLinkPublicView } from "@/lib/shared-link-types"
 
@@ -242,7 +242,7 @@ export function SharedRunPanel({
           ) : (
             <Zap className="mr-1.5 h-4 w-4" />
           )}
-          {needsSignIn ? "Sign in to run" : run.runButtonLabel}
+          {needsSignIn ? "Sign in to run" : run.phase === "running" || run.pendingHumanReview ? run.runButtonLabel : hostedRunIdleButtonLabel(chrome)}
         </Button>
       )}
       <RunInputsNeededHint
@@ -285,7 +285,7 @@ export function SharedRunPanel({
       {(run.phase === "running" || run.phase === "done") && (
         <>
           {run.phase === "done" && run.outputSteps.length > 0 && (
-            <InferenceRunOutputs steps={run.outputSteps} models={link.models} compact={compact} />
+            <InferenceRunOutputs steps={run.outputSteps} models={link.models} compact={compact} outputView={chrome.outputView} />
           )}
 
           {run.phase === "done" && run.run && run.run.status !== "ok" && (

@@ -26,6 +26,8 @@ describe("website pipeline bindings", () => {
         visibility: "auto",
         inputEditable: true,
         clearInputAfterRun: false,
+        runLabel: "",
+        outputView: "auto",
       },
     ])
   })
@@ -37,9 +39,9 @@ describe("website pipeline bindings", () => {
       { alias: "invoice", projectId: "p3" },
     ])
     expect(bindings).toEqual([
-      { alias: "run", projectId: P1, visibility: "auto", inputEditable: true, clearInputAfterRun: false },
-      { alias: "invoice", projectId: P2, visibility: "auto", inputEditable: true, clearInputAfterRun: false },
-      { alias: "p3", projectId: "p3", visibility: "auto", inputEditable: true, clearInputAfterRun: false },
+      { alias: "run", projectId: P1, visibility: "auto", inputEditable: true, clearInputAfterRun: false, runLabel: "", outputView: "auto" },
+      { alias: "invoice", projectId: P2, visibility: "auto", inputEditable: true, clearInputAfterRun: false, runLabel: "", outputView: "auto" },
+      { alias: "p3", projectId: "p3", visibility: "auto", inputEditable: true, clearInputAfterRun: false, runLabel: "", outputView: "auto" },
     ])
   })
 
@@ -81,8 +83,8 @@ describe("website pipeline bindings", () => {
       { p_count_employees: clonedCount },
     )
     expect(next).toEqual([
-      { alias: "run", projectId: cloned, visibility: "auto", inputEditable: true, clearInputAfterRun: false },
-      { alias: "count", projectId: clonedCount, visibility: "auto", inputEditable: true, clearInputAfterRun: false },
+      { alias: "run", projectId: cloned, visibility: "auto", inputEditable: true, clearInputAfterRun: false, runLabel: "", outputView: "auto" },
+      { alias: "count", projectId: clonedCount, visibility: "auto", inputEditable: true, clearInputAfterRun: false, runLabel: "", outputView: "auto" },
     ])
   })
 })
@@ -211,7 +213,7 @@ describe("hosted site options normalize", () => {
     })
     expect(next.runtime).toBe("react")
     expect(next.pipelineBindings).toEqual([
-      { alias: "run", projectId: P1, visibility: "auto", inputEditable: true, clearInputAfterRun: false },
+      { alias: "run", projectId: P1, visibility: "auto", inputEditable: true, clearInputAfterRun: false, runLabel: "", outputView: "auto" },
     ])
     expect(next.reactFiles[0]?.path).toBe("src/App.tsx")
   })

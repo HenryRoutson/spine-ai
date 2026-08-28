@@ -75,6 +75,7 @@ export type HostedSitePage = {
 export type website_runtime_kind = "html" | "react";
 export type website_pipeline_alias = string & { __brand: "website_pipeline_alias" };
 export type hosted_run_input_visibility = "auto" | "show" | "hide";
+export type hosted_run_output_view = "auto" | "table" | "json" | "metric";
 
 export type WebsitePipelineBinding = {
   alias: website_pipeline_alias;
@@ -83,6 +84,9 @@ export type WebsitePipelineBinding = {
   visibility: hosted_run_input_visibility;
   inputEditable: boolean;
   clearInputAfterRun: boolean;
+  // AI : empty = "Run pipeline". Compact hosted outputs pick table/metric from the result shape.
+  runLabel: string;
+  outputView: hosted_run_output_view;
 };
 
 export type HostedSiteReactFile = {

@@ -755,6 +755,8 @@ export const hostedSiteOptionsSchema = z
             showInput: z.boolean().optional(),
             inputEditable: z.boolean().optional(),
             clearInputAfterRun: z.boolean().optional(),
+            runLabel: z.string().max(40).optional(),
+            outputView: z.enum(["auto", "table", "json", "metric"]).optional(),
           })
           .strict(),
       )
