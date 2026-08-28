@@ -18,6 +18,7 @@ export function JsonPreviewPanel({
   downloadBaseName,
   onFullscreen,
   excelOnly = false,
+  simple = false,
 }: {
   json: string
   models?: StructureModel[]
@@ -27,11 +28,13 @@ export function JsonPreviewPanel({
   downloadBaseName?: string
   onFullscreen?: () => void
   excelOnly?: boolean
+  simple?: boolean
 }) {
   // AI : DONE (media-view-A-registry) — this stays the JSON/table tab. DataViewPanel wraps it + media.
   const view = excelOnly ? "table" : defaultView
   return (
     <div className={cn("flex min-h-0 flex-1 flex-col", className)}>
+      {simple ? null : (
       <div className={cn("flex items-start gap-2 border-b border-border bg-secondary/20 px-4 py-2.5", excelOnly ? "justify-end" : "justify-between")}>
         {excelOnly ? null : (
           <JsonStructureMatches json={json} models={models} doc={doc} bare className="min-w-0 flex-1" />
@@ -56,6 +59,7 @@ export function JsonPreviewPanel({
           className="shrink-0"
         />
       </div>
+      )}
       <JsonViewerEmbed
         json={json}
         className={excelOnly ? "h-full min-h-[16rem] flex-1" : "min-h-0 flex-1"}

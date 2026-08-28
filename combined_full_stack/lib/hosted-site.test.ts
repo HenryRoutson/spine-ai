@@ -6,6 +6,7 @@ import {
   compileHostedSiteLooksOk,
   DEFAULT_HOSTED_SITE_HTML,
   expandHexColor,
+  hostedFunctionResolvedColors,
   HOSTED_SITE_AUTH_SLOT,
   HOSTED_SITE_RUN_SLOT,
   htmlColorInputValue,
@@ -172,6 +173,9 @@ describe("hosted site wrapper", () => {
     expect(dark.brand.functionTheme).toBe("dark")
     expect(dark.brand.functionBackgroundColor).toBe("#111111")
     expect(dark.brand.functionAccentColor).toBe("#ff8800")
+    const lightColors = hostedFunctionResolvedColors(next.brand)
+    expect(lightColors.bg).toBe("#ffffff")
+    expect(lightColors.fg).toBe("#0f172a")
   })
 
   it("normalizes extra pages and skips reserved paths", () => {

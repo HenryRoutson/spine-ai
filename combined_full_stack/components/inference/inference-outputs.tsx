@@ -17,7 +17,8 @@ function OutputStepLabel() {
   )
 }
 
-function outputStepOutlineClass(isOutputStep: boolean) {
+function outputStepOutlineClass(isOutputStep: boolean, compact = false) {
+  if (compact) return "border-border"
   return isOutputStep ? "border-white/55 ring-1 ring-white/35" : "border-border"
 }
 
@@ -42,6 +43,7 @@ export function InferenceRunOutputs({
           step={step}
           expanded={i === steps.length - 1}
           isOutputStep={step.kind === "output"}
+          compact={compact}
           models={models}
           onFullscreen={
             step.outputJson
@@ -64,12 +66,14 @@ function InferenceStepOutput({
   step,
   expanded,
   isOutputStep,
+  compact = false,
   models,
   onFullscreen,
 }: {
   step: RunStep
   expanded: boolean
   isOutputStep: boolean
+  compact?: boolean
   models?: StructureModel[]
   onFullscreen?: () => void
 }) {
@@ -79,12 +83,12 @@ function InferenceStepOutput({
     <div
       className={cn(
         "relative overflow-hidden rounded-lg border bg-card",
-        outputStepOutlineClass(isOutputStep),
+        outputStepOutlineClass(isOutputStep, compact),
       )}
     >
-      {isOutputStep && (
+      {isOutputStep && !compact ? (
         <span className="absolute bottom-0 left-0 top-0 w-1 bg-white/90 shadow-[2px_0_8px_rgba(255,255,255,0.15)]" aria-hidden />
-      )}
+      ) : null}
       <div className="flex items-center gap-2 border-b border-border px-4 py-2.5">
         {ok ? (
           <CheckCircle2 className="h-4 w-4 shrink-0" style={{ color: palette.ok }} />
@@ -92,7 +96,7 @@ function InferenceStepOutput({
           <AlertTriangle className="h-4 w-4 shrink-0" style={{ color: palette.err }} />
         )}
         <p className="min-w-0 flex-1 truncate text-sm font-medium">{step.label}</p>
-        {isOutputStep && <OutputStepLabel />}
+        {isOutputStep && !compact ? <OutputStepLabel /> : null}
         {step.status === "cached" && (
           <span className="font-mono text-[10px] text-chart-3">cached</span>
         )}
@@ -104,6 +108,7 @@ function InferenceStepOutput({
             models={models}
             defaultView="table"
             className="h-full"
+            simple={compact}
             onFullscreen={onFullscreen}
           />
         </div>

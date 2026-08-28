@@ -39,6 +39,7 @@ export function DataViewPanel({
   className,
   defaultView,
   onFullscreen,
+  simple = false,
 }: {
   json: string
   models?: StructureModel[]
@@ -46,6 +47,7 @@ export function DataViewPanel({
   className?: string
   defaultView?: JsonViewerHumanViewId
   onFullscreen?: () => void
+  simple?: boolean
 }) {
   const value = parseOutputJson(json)
   const view = resolveViewer({ value, models, outStructureId })
@@ -62,6 +64,7 @@ export function DataViewPanel({
         models={models}
         defaultView={defaultView}
         className={className}
+        simple={simple}
         onFullscreen={onFullscreen}
       />
     )
@@ -137,6 +140,7 @@ export function DataViewPanel({
           models={models}
           defaultView={defaultView}
           className="min-h-0 flex-1"
+          simple={simple}
           onFullscreen={onFullscreen}
         />
       )}

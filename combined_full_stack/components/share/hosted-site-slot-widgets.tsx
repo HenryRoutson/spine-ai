@@ -38,7 +38,13 @@ export function HostedSiteSlotWidgets({
   )
   return {
     run: brand ? <HostedFunctionChrome brand={brand}>{runPreview}</HostedFunctionChrome> : runPreview,
-    output: <DataViewPanel json={OUTPUT_PREVIEW_JSON} defaultView="json" className="min-h-40" />,
+    output: brand ? (
+      <HostedFunctionChrome brand={brand}>
+        <DataViewPanel json={OUTPUT_PREVIEW_JSON} defaultView="json" className="min-h-40" simple />
+      </HostedFunctionChrome>
+    ) : (
+      <DataViewPanel json={OUTPUT_PREVIEW_JSON} defaultView="json" className="min-h-40" />
+    ),
     chatbot: <HostedSiteChatbotPreview />,
     docs: viewerMarkdown.trim() ? (
       <div className="bg-background px-4 py-3">

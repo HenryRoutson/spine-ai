@@ -3,6 +3,7 @@
 // AI : thin app wrapper — shared embed + localStorage prefs from lib/json-viewer.
 
 import { JsonViewerEmbed as SharedJsonViewerEmbed } from "@shared/json-viewer/embed"
+import { useHostedFunctionChrome } from "@/components/share/hosted-function-chrome"
 import {
   JSON_VIEWER_SETTINGS_CHANGED_EVENT,
   readJsonViewerDefaultView,
@@ -27,6 +28,7 @@ export function JsonViewerEmbed({
   lockedView,
   onFullscreen,
 }: JsonViewerEmbedProps) {
+  const chrome = useHostedFunctionChrome()
   return (
     <SharedJsonViewerEmbed
       json={json}
@@ -37,6 +39,10 @@ export function JsonViewerEmbed({
       onSettingsEventName={JSON_VIEWER_SETTINGS_CHANGED_EVENT}
       readDefaultView={readJsonViewerDefaultView}
       readSyntaxTheme={readJsonViewerSyntaxTheme}
+      chromeTheme={chrome?.theme}
+      chromeColors={
+        chrome ? { bg: chrome.bg, fg: chrome.fg, accent: chrome.accent } : undefined
+      }
     />
   )
 }

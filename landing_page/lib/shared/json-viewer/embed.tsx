@@ -2,8 +2,13 @@
 
 // AI : embeds json-viewer.html (?embed) and sends JSON via postMessage — shared by app + landing.
 
-import { useEffect, useRef } from "react"
-import type { JsonViewerHumanViewId, JsonViewerSyntaxThemeId } from "./types"
+import { useEffect, useMemo, useRef } from "react"
+import type {
+  JsonViewerChromeColors,
+  JsonViewerChromeTheme,
+  JsonViewerHumanViewId,
+  JsonViewerSyntaxThemeId,
+} from "./types"
 import {
   DEFAULT_JSON_VIEWER_HUMAN_VIEW,
   DEFAULT_JSON_VIEWER_SYNTAX_THEME,
@@ -26,6 +31,9 @@ export type JsonViewerEmbedProps = {
   readSyntaxTheme?: () => JsonViewerSyntaxThemeId
   // AI : parent hosts a larger viewer (PopupModal) — shows ⛶ next to JSON + latex detail
   onFullscreen?: () => void
+  // AI : hosted {{run}} panels pass light/dark + brand colors into the iframe
+  chromeTheme?: JsonViewerChromeTheme
+  chromeColors?: JsonViewerChromeColors
 }
 
 export function JsonViewerEmbed({
@@ -38,6 +46,8 @@ export function JsonViewerEmbed({
   readDefaultView,
   readSyntaxTheme,
   onFullscreen,
+  chromeTheme,
+  chromeColors,
 }: JsonViewerEmbedProps) {
   const iframeRef = useRef<HTMLIFrameElement>(null)
   const onFullscreenRef = useRef(onFullscreen)
@@ -54,6 +64,11 @@ export function JsonViewerEmbed({
   const resolvedSyntaxTheme =
     syntaxTheme ?? readSyntaxTheme?.() ?? DEFAULT_JSON_VIEWER_SYNTAX_THEME
   const showFullscreen = !!onFullscreen
+  const chromeColorsKey = `${chromeTheme ?? ""}:${chromeColors?.bg ?? ""}:${chromeColors?.fg ?? ""}:${chromeColors?.accent ?? ""}`
+  const stableChromeColors = useMemo(
+    () => chromeColors,
+    [chromeColorsKey], // eslint-disable-line react-hooks/exhaustive-deps
+  )
 
   function sendLoad() {
     post({
@@ -63,12 +78,14 @@ export function JsonViewerEmbed({
       lockedView,
       syntaxTheme: resolvedSyntaxTheme,
       showFullscreen,
+      chromeTheme,
+      chromeColors: stableChromeColors,
     })
   }
 
   useEffect(() => {
     sendLoad()
-  }, [json, resolvedDefaultView, lockedView, resolvedSyntaxTheme, showFullscreen]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [json, resolvedDefaultView, lockedView, resolvedSyntaxTheme, showFullscreen, chromeTheme, chromeColorsKey]) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (!onSettingsEventName) return
@@ -79,11 +96,13 @@ export function JsonViewerEmbed({
         lockedView,
         syntaxTheme: syntaxTheme ?? readSyntaxTheme?.() ?? DEFAULT_JSON_VIEWER_SYNTAX_THEME,
         showFullscreen: !!onFullscreenRef.current,
+        chromeTheme,
+        chromeColors: stableChromeColors,
       })
     }
     window.addEventListener(onSettingsEventName, onSettings)
     return () => window.removeEventListener(onSettingsEventName, onSettings)
-  }, [onSettingsEventName, defaultView, lockedView, syntaxTheme, readDefaultView, readSyntaxTheme])
+  }, [onSettingsEventName, defaultView, lockedView, syntaxTheme, readDefaultView, readSyntaxTheme, chromeTheme, chromeColorsKey])
 
   useEffect(() => {
     if (!onFullscreen) return
