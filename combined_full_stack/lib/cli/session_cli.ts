@@ -60,7 +60,7 @@ Usage:
   spine session remove-field --model <Name> --name <field>
   spine session add-alias --name <Name> --expr <TypeExpr> [--params A,B]
   spine session add-step --kind <llm|input|fork|if-else|...> [--label <Label>] [--fork-id <id>] [--branch-id <id|Then|Else>]
-  spine session patch-step --id <id|label> [--label] [--prompt] [--note] [--if-path <field>] [--if-kind path|equals|not-equals|gt|gte|lt|lte|exists|empty|contains|in|truthy] [--if-value <json>]
+  spine session patch-step --id <id|label> [--label] [--prompt] [--note] [--if-path <bool field>]
   spine session assign-structure --id <id|label> --model <Name>
   spine session remove-step --id <id|label>
   spine session move-step --id <id|label> --at <index>
@@ -286,16 +286,7 @@ async function runSessionCommandInner(
     if (note) patch.note = note
     const ifPath = flagString(flags, "if-path")
     if (ifPath) {
-      let value: unknown = undefined
-      const raw = flagString(flags, "if-value")
-      if (raw) {
-        try {
-          value = JSON.parse(raw) as unknown
-        } catch {
-          value = raw
-        }
-      }
-      patch.ifCondition = parseIfCondition(flagString(flags, "if-kind") ?? "path", ifPath, value)
+      patch.ifCondition = parseIfCondition("path", ifPath)
     }
     const step = patchStep(session, id, patch)
     return ok("session patch-step", { step: { id: step.id, label: step.label, kind: step.kind } })

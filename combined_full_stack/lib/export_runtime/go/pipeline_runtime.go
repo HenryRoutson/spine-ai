@@ -451,7 +451,7 @@ func selectRelevant(items []json.RawMessage, description, template string, promp
 	return out, nil
 }
 
-// AI : typed if/else — walk JSON by dotted path and evaluate kind against a literal.
+// AI : if/else — walk JSON by dotted path; branch on a bool field (comparisons belong in user code).
 func MustJSON(raw string) any {
 	var v any
 	_ = json.Unmarshal([]byte(raw), &v)
@@ -474,117 +474,7 @@ func SpineDotPath(v any, path string) any {
 	return cur
 }
 
-func jsonEqual(a, b any) bool {
-	ab, _ := json.Marshal(a)
-	bb, _ := json.Marshal(b)
-	return bytes.Equal(ab, bb)
-}
-
-func asFloat(v any) (float64, bool) {
-	switch n := v.(type) {
-	case float64:
-		return n, true
-	case float32:
-		return float64(n), true
-	case int:
-		return float64(n), true
-	case int64:
-		return float64(n), true
-	case json.Number:
-		f, err := n.Float64()
-		return f, err == nil
-	}
-	return 0, false
-}
-
-func isEmptyJSON(v any) bool {
-	if v == nil {
-		return true
-	}
-	switch t := v.(type) {
-	case string:
-		return t == ""
-	case []any:
-		return len(t) == 0
-	case map[string]any:
-		return len(t) == 0
-	}
-	return false
-}
-
-func EvalIfCondition(kind string, got, value any) bool {
-	switch kind {
-	case "equals":
-		return jsonEqual(got, value)
-	case "not-equals":
-		return !jsonEqual(got, value)
-	case "gt", "gte", "lt", "lte":
-		n, ok := asFloat(got)
-		rhs, rok := asFloat(value)
-		if !ok || !rok {
-			return false
-		}
-		switch kind {
-		case "gt":
-			return n > rhs
-		case "gte":
-			return n >= rhs
-		case "lt":
-			return n < rhs
-		default:
-			return n <= rhs
-		}
-	case "exists":
-		return got != nil
-	case "empty":
-		return isEmptyJSON(got)
-	case "contains":
-		if s, ok := got.(string); ok {
-			return strings.Contains(s, fmt.Sprint(value))
-		}
-		arr, ok := got.([]any)
-		if !ok {
-			return false
-		}
-		for _, item := range arr {
-			if jsonEqual(item, value) {
-				return true
-			}
-		}
-		return false
-	case "in":
-		arr, ok := value.([]any)
-		if !ok {
-			return false
-		}
-		for _, item := range arr {
-			if jsonEqual(got, item) {
-				return true
-			}
-		}
-		return false
-	case "truthy":
-		if got == nil {
-			return false
-		}
-		if b, ok := got.(bool); ok {
-			return b
-		}
-		if n, ok := asFloat(got); ok {
-			return n != 0
-		}
-		if s, ok := got.(string); ok {
-			return s != ""
-		}
-		if arr, ok := got.([]any); ok {
-			return len(arr) > 0
-		}
-		if obj, ok := got.(map[string]any); ok {
-			return len(obj) > 0
-		}
-		return true
-	default:
-		b, _ := got.(bool)
-		return b
-	}
+func EvalIfCondition(_kind string, got, _value any) bool {
+	b, ok := got.(bool)
+	return ok && b
 }

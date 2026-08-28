@@ -59,15 +59,15 @@ describe("pipeline export dispatch", () => {
     expect(generatePipelineSourceRust(project)).toMatch(/async fn step_/);
   });
 
-  it("emits typed if/else conditions in ts export", () => {
+  it("emits bool-path if/else in ts export", () => {
     const m = stubModule(ModuleKind.IfElse)
-    m.ifCondition = { kind: IfConditionKind.Gt, path: "score", value: 80 }
+    m.ifCondition = { kind: IfConditionKind.Path, path: "is_legal" }
     m.forkBranches = [
       { id: "t", label: "Then", modules: [{ ...stubModule(ModuleKind.Output), id: "mod_then" as ModuleId, label: "High" }] },
       { id: "e", label: "Else", modules: [] },
     ]
     const ctx = { m, project: stubProject(m), inType: "Route", outType: "Route" }
-    expect(emitStepBody("ts", ctx)).toMatch(/Number\(.*score.*\) > 80/)
+    expect(emitStepBody("ts", ctx)).toMatch(/is_legal.*=== true/)
     expect(generatePipelineSourceTs(ctx.project)).toMatch(/if \(/)
   })
 

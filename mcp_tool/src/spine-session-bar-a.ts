@@ -1244,19 +1244,7 @@ export async function runSessionAction(args: SessionActionArgs): Promise<unknown
         }
         const path = typeof args.ifConditionPath === "string" ? args.ifConditionPath.trim() : ""
         if (path) {
-          let value: unknown = undefined
-          if (typeof args.ifConditionValue === "string" && args.ifConditionValue.trim()) {
-            try {
-              value = JSON.parse(args.ifConditionValue) as unknown
-            } catch {
-              value = args.ifConditionValue
-            }
-          }
-          patch.ifCondition = parseIfCondition(
-            typeof args.ifConditionKind === "string" ? args.ifConditionKind : "path",
-            path,
-            value,
-          )
+          patch.ifCondition = parseIfCondition("path", path)
         }
         return patchStepFromSession(args.stepId, patch, sessionPath)
       }

@@ -1,4 +1,4 @@
-// AI : exclusive Then/Else lanes — typed condition lives in if-condition.ts.
+// AI : exclusive Then/Else lanes — bool path in if-condition.ts; comparisons stay in custom-code.
 import {
   forkBranchesOf,
   laneLastModule,

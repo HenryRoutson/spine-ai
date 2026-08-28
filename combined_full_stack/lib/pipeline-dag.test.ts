@@ -46,7 +46,7 @@ describe("pipeline DAG IR", () => {
         id: "ife",
         kind: ModuleKind.IfElse,
         label: "Route",
-        ifCondition: { kind: IfConditionKind.Equals, path: "kind", value: "legal" },
+        ifCondition: { kind: IfConditionKind.Path, path: "is_legal" },
         forkBranches: [
           { id: "t", label: "Then", modules: [step({ id: "t1", kind: ModuleKind.N8n, label: "Legal" })] },
           { id: "e", label: "Else", modules: [step({ id: "e1", kind: ModuleKind.N8n, label: "Billing" })] },
@@ -186,7 +186,7 @@ describe("pipeline DAG layout core", () => {
         id: "ife",
         kind: ModuleKind.IfElse,
         label: "Route",
-        ifCondition: { kind: IfConditionKind.Equals, path: "kind", value: "legal" },
+        ifCondition: { kind: IfConditionKind.Path, path: "is_legal" },
         forkBranches: [
           { id: "t", label: "Then", modules: [step({ id: "t1", kind: ModuleKind.N8n, label: "Legal" })] },
           { id: "e", label: "Else", modules: [step({ id: "e1", kind: ModuleKind.N8n, label: "Billing" })] },

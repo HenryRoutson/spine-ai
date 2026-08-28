@@ -11,7 +11,7 @@ import { BUILTIN_DOCUMENT_ID, withSharedModels } from "./builtin_models";
 import { labelAsStateKey } from "./pipeline_state";
 import { forkBranchesOf, forkJoinOf, forkProductField, laneLastModule, locatePipelineModule, flattenPipelineModules } from "@/lib/fork-pipeline";
 import { ifElseBranch, ifThenBranch } from "@/lib/if-else-pipeline";
-import { FieldType, IfConditionKind, ModuleKind } from "./types";
+import { FieldType, ModuleKind } from "./types";
 import { migrateProjectModules } from "./validity";
 import {
   fieldToTypeExpr,
@@ -1246,99 +1246,17 @@ function exportDotPathTs(root: string, path: string): string {
 function ifConditionExportTs(m: PipelineModule, root: string): string {
   const path = m.ifCondition?.path.trim() ?? "";
   const access = exportDotPathTs(root, path);
-  const kind = m.ifCondition?.kind;
-  const value = m.ifCondition && "value" in m.ifCondition ? m.ifCondition.value : undefined;
-  const lit = JSON.stringify(value);
-  switch (kind) {
-    case IfConditionKind.Equals:
-      return `JSON.stringify(${access}) === JSON.stringify(${lit} as unknown)`;
-    case IfConditionKind.NotEquals:
-      return `JSON.stringify(${access}) !== JSON.stringify(${lit} as unknown)`;
-    case IfConditionKind.Gt:
-      return `Number(${access}) > ${Number(value)}`;
-    case IfConditionKind.Gte:
-      return `Number(${access}) >= ${Number(value)}`;
-    case IfConditionKind.Lt:
-      return `Number(${access}) < ${Number(value)}`;
-    case IfConditionKind.Lte:
-      return `Number(${access}) <= ${Number(value)}`;
-    case IfConditionKind.Exists:
-      return `${access} != null`;
-    case IfConditionKind.Empty:
-      return `(() => { const _v = ${access}; return _v == null || _v === "" || (Array.isArray(_v) && _v.length === 0) || (typeof _v === "object" && Object.keys(_v as object).length === 0); })()`;
-    case IfConditionKind.Contains:
-      return `(() => { const _v = ${access}; const _n = ${lit} as unknown; return typeof _v === "string" ? _v.includes(String(_n ?? "")) : Array.isArray(_v) && _v.some((x) => JSON.stringify(x) === JSON.stringify(_n)); })()`;
-    case IfConditionKind.In:
-      return `(${lit} as unknown[]).some((x) => JSON.stringify(x) === JSON.stringify(${access}))`;
-    case IfConditionKind.Truthy:
-      return `Boolean(${access})`;
-    default:
-      return `${access} === true`;
-  }
+  return `${access} === true`;
 }
 
 function ifConditionExportPy(m: PipelineModule, root: string): string {
   const parts = JSON.stringify((m.ifCondition?.path.trim() ?? "").split(".").map((p) => p.trim()).filter(Boolean));
   const walk = `_cur = ${root}\nfor _p in ${parts}:\n    _cur = _cur.get(_p) if isinstance(_cur, dict) else getattr(_cur, _p, None)`;
-  const kind = m.ifCondition?.kind;
-  const value = m.ifCondition && "value" in m.ifCondition ? m.ifCondition.value : undefined;
-  const lit = JSON.stringify(value);
-  let cond = "_cond = _cur is True";
-  switch (kind) {
-    case IfConditionKind.Equals:
-      cond = `_cond = _cur == ${lit}`;
-      break;
-    case IfConditionKind.NotEquals:
-      cond = `_cond = _cur != ${lit}`;
-      break;
-    case IfConditionKind.Gt:
-      cond = `_cond = float(_cur) > ${Number(value)}`;
-      break;
-    case IfConditionKind.Gte:
-      cond = `_cond = float(_cur) >= ${Number(value)}`;
-      break;
-    case IfConditionKind.Lt:
-      cond = `_cond = float(_cur) < ${Number(value)}`;
-      break;
-    case IfConditionKind.Lte:
-      cond = `_cond = float(_cur) <= ${Number(value)}`;
-      break;
-    case IfConditionKind.Exists:
-      cond = `_cond = _cur is not None`;
-      break;
-    case IfConditionKind.Empty:
-      cond = `_cond = _cur in (None, "", [], {}) or _cur == {}`;
-      break;
-    case IfConditionKind.Contains:
-      cond = `_cond = (isinstance(_cur, str) and str(${lit}) in _cur) or (isinstance(_cur, list) and ${lit} in _cur)`;
-      break;
-    case IfConditionKind.In:
-      cond = `_cond = _cur in ${lit}`;
-      break;
-    case IfConditionKind.Truthy:
-      cond = `_cond = bool(_cur)`;
-      break;
-    default:
-      break;
-  }
-  return `${walk}\n${cond}`;
-}
-
-function ifConditionKindWire(m: PipelineModule): string {
-  return m.ifCondition?.kind ?? IfConditionKind.Path;
+  return `${walk}\n_cond = _cur is True`;
 }
 
 function ifConditionPathWire(m: PipelineModule): string {
   return m.ifCondition?.path.trim() ?? "";
-}
-
-function ifConditionValueLit(m: PipelineModule): string {
-  return JSON.stringify(m.ifCondition && "value" in m.ifCondition ? m.ifCondition.value : null);
-}
-
-function goMustJSON(lit: string): string {
-  if (!lit.includes("`")) return `MustJSON(\`${lit}\`)`;
-  return `MustJSON(${JSON.stringify(lit)})`;
 }
 
 function ifElseStateExprTs(m: PipelineModule, thenSide: boolean): string {
@@ -1967,7 +1885,7 @@ function emitRsOrchestratorWalk(
       lines.push(`${indent}// ${i + 1}. ${m.label} (if/else)`);
       lines.push(`${indent}let __if_in = spine.clone();`);
       lines.push(
-        `${indent}if eval_if_condition(${JSON.stringify(ifConditionKindWire(m))}, &spine_dot_path(&__if_in, ${JSON.stringify(ifConditionPathWire(m))}), &serde_json::from_str(${JSON.stringify(ifConditionValueLit(m))}).unwrap_or(Value::Null)) {`,
+        `${indent}if eval_if_condition("path", &spine_dot_path(&__if_in, ${JSON.stringify(ifConditionPathWire(m))}), &Value::Null) {`,
       );
       lines.push(`${indent}    let mut spine = __if_in.clone();`);
       if (thenB?.modules.length) {
@@ -2057,7 +1975,7 @@ function emitGoOrchestratorWalk(
       lines.push(`${indent}var ifObj any`);
       lines.push(`${indent}if err := json.Unmarshal(ifIn, &ifObj); err != nil { return nil, err }`);
       lines.push(
-        `${indent}if EvalIfCondition(${JSON.stringify(ifConditionKindWire(m))}, SpineDotPath(ifObj, ${JSON.stringify(ifConditionPathWire(m))}), ${goMustJSON(ifConditionValueLit(m))}) {`,
+        `${indent}if EvalIfCondition("path", SpineDotPath(ifObj, ${JSON.stringify(ifConditionPathWire(m))}), nil) {`,
       );
       lines.push(`${indent}    spine = append(json.RawMessage(nil), ifIn...)`);
       if (thenB?.modules.length) {

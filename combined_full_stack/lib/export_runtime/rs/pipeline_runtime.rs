@@ -306,7 +306,7 @@ fn merge_pair(left: Value, right: Value, policy: &Value) -> Value {
     }
 }
 
-// AI : typed if/else — walk JSON by dotted path and evaluate kind against a literal.
+// AI : if/else — walk JSON by dotted path; branch on a bool field (comparisons belong in user code).
 pub fn spine_dot_path(v: &Value, path: &str) -> Value {
     let mut cur = v.clone();
     for p in path.split('.').map(str::trim).filter(|s| !s.is_empty()) {
@@ -315,60 +315,6 @@ pub fn spine_dot_path(v: &Value, path: &str) -> Value {
     cur
 }
 
-fn as_f64(v: &Value) -> Option<f64> {
-    v.as_f64()
-        .or_else(|| v.as_i64().map(|n| n as f64))
-        .or_else(|| v.as_u64().map(|n| n as f64))
-}
-
-fn is_empty_json(v: &Value) -> bool {
-    match v {
-        Value::Null => true,
-        Value::String(s) => s.is_empty(),
-        Value::Array(a) => a.is_empty(),
-        Value::Object(o) => o.is_empty(),
-        _ => false,
-    }
-}
-
-pub fn eval_if_condition(kind: &str, got: &Value, value: &Value) -> bool {
-    match kind {
-        "equals" => got == value,
-        "not-equals" => got != value,
-        "gt" | "gte" | "lt" | "lte" => {
-            let Some(n) = as_f64(got) else { return false };
-            let Some(rhs) = as_f64(value) else { return false };
-            match kind {
-                "gt" => n > rhs,
-                "gte" => n >= rhs,
-                "lt" => n < rhs,
-                _ => n <= rhs,
-            }
-        }
-        "exists" => !got.is_null(),
-        "empty" => is_empty_json(got),
-        "contains" => {
-            if let Some(s) = got.as_str() {
-                return s.contains(&value_to_string(value));
-            }
-            got.as_array().map(|a| a.iter().any(|item| item == value)).unwrap_or(false)
-        }
-        "in" => value.as_array().map(|a| a.iter().any(|item| item == got)).unwrap_or(false),
-        "truthy" => match got {
-            Value::Null => false,
-            Value::Bool(b) => *b,
-            Value::Number(n) => n.as_f64().unwrap_or(0.0) != 0.0,
-            Value::String(s) => !s.is_empty(),
-            Value::Array(a) => !a.is_empty(),
-            Value::Object(o) => !o.is_empty(),
-        },
-        _ => got.as_bool() == Some(true),
-    }
-}
-
-fn value_to_string(v: &Value) -> String {
-    match v {
-        Value::String(s) => s.clone(),
-        other => other.to_string(),
-    }
+pub fn eval_if_condition(_kind: &str, got: &Value, _value: &Value) -> bool {
+    got.as_bool() == Some(true)
 }

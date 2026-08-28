@@ -168,7 +168,7 @@ const moduleSpecSchema = z
     ifCondition: ifConditionSchema
       .optional()
       .describe(
-        "if-else only — typed spine predicate: path (bool), equals/not-equals, gt/gte/lt/lte, exists, empty, contains, in, truthy",
+        "if-else only — bool spine path. Compute comparisons in custom-code / Python.",
       ),
     n8nNodeType: z
       .string()
@@ -521,11 +521,7 @@ function makeModuleFromSpec(
       forkBranches,
       ifCondition:
         spec.kind === ModuleKind.IfElse && spec.ifCondition
-          ? parseIfCondition(
-              spec.ifCondition.kind,
-              spec.ifCondition.path,
-              "value" in spec.ifCondition ? spec.ifCondition.value : undefined,
-            )
+          ? parseIfCondition("path", spec.ifCondition.path)
           : undefined,
       n8nNodeType: spec.kind === "n8n" ? spec.n8nNodeType : undefined,
       n8nParameters: spec.kind === "n8n" ? spec.n8nParameters : undefined,

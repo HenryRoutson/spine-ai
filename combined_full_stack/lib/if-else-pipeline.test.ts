@@ -55,31 +55,15 @@ describe("if/else step", () => {
     expect(defaultIfElseBranches()).toHaveLength(2)
   })
 
-  it("evaluates bool path and equals", () => {
+  it("evaluates a bool spine path", () => {
     expect(evalIfCondition({ kind: IfConditionKind.Path, path: "is_legal" }, { is_legal: true })).toBe(true)
     expect(evalIfCondition({ kind: IfConditionKind.Path, path: "is_legal" }, { is_legal: false })).toBe(false)
-    expect(evalIfCondition({ kind: IfConditionKind.Equals, path: "kind", value: "legal" }, { kind: "legal" })).toBe(true)
-    expect(evalIfCondition({ kind: IfConditionKind.Equals, path: "kind", value: "legal" }, { kind: "billing" })).toBe(false)
     expect(formatIfCondition({ kind: IfConditionKind.Path, path: "is_legal" })).toBe("is_legal")
-    expect(formatIfCondition({ kind: IfConditionKind.Equals, path: "kind", value: "legal" })).toBe('kind === "legal"')
   })
 
-  it("evaluates numeric, empty, contains, in, and truthy kinds", () => {
-    expect(evalIfCondition({ kind: IfConditionKind.Gt, path: "score", value: 80 }, { score: 90 })).toBe(true)
-    expect(evalIfCondition({ kind: IfConditionKind.Lte, path: "score", value: 80 }, { score: 80 })).toBe(true)
-    expect(evalIfCondition({ kind: IfConditionKind.NotEquals, path: "kind", value: "legal" }, { kind: "billing" })).toBe(true)
-    expect(evalIfCondition({ kind: IfConditionKind.Exists, path: "maybe" }, { maybe: 1 })).toBe(true)
-    expect(evalIfCondition({ kind: IfConditionKind.Exists, path: "maybe" }, {})).toBe(false)
-    expect(evalIfCondition({ kind: IfConditionKind.Empty, path: "tags" }, { tags: [] })).toBe(true)
-    expect(evalIfCondition({ kind: IfConditionKind.Contains, path: "title", value: "tax" }, { title: "tax-2024" })).toBe(true)
-    expect(evalIfCondition({ kind: IfConditionKind.In, path: "kind", value: ["legal", "billing"] }, { kind: "billing" })).toBe(true)
-    expect(evalIfCondition({ kind: IfConditionKind.Truthy, path: "items" }, { items: [1] })).toBe(true)
-    expect(formatIfCondition({ kind: IfConditionKind.Gt, path: "score", value: 80 })).toBe("score > 80")
-  })
-
-  it("accepts incomplete equals conditions in the persist schema", () => {
-    expect(ifConditionSchema.safeParse({ kind: IfConditionKind.Equals, path: "kind" }).success).toBe(true)
-    expect(ifConditionSchema.safeParse({ kind: IfConditionKind.Gt, path: "score" }).success).toBe(true)
+  it("coerces legacy comparison kinds to a bool path in the persist schema", () => {
+    expect(ifConditionSchema.safeParse({ kind: "gt", path: "score", value: 80 }).success).toBe(true)
+    expect(ifConditionSchema.safeParse({ kind: "equals", path: "kind" }).data).toEqual({ kind: IfConditionKind.Path, path: "kind" })
   })
 
   it("joins the chosen lane or passthrough", () => {
@@ -193,7 +177,7 @@ describe("if/else step", () => {
     expect(msgs.join(" ")).not.toMatch(/Else/)
   })
 
-  it("type-checks numeric and equals conditions against the spine field", () => {
+  it("type-checks the condition path as bool — comparisons belong in custom-code", () => {
     const prev = step({
       id: "in",
       kind: ModuleKind.Input,
@@ -204,17 +188,17 @@ describe("if/else step", () => {
     })
     const ok = createPipelineModule({ kind: ModuleKind.IfElse, note: "route" }, [routeModel], "deepseek-v4")
     ok.id = "ife" as ModuleId
-    ok.ifCondition = { kind: IfConditionKind.Gt, path: "score", value: 80 }
+    ok.ifCondition = { kind: IfConditionKind.Path, path: "is_legal" }
     ok.forkBranches = [
       { id: "t", label: "Then", modules: [step({ id: "t1", kind: ModuleKind.Output, label: "High", note: "", inStructureId: "m_route" as StructureModelId, outStructureId: "m_route" as StructureModelId })] },
       { id: "e", label: "Else", modules: [] },
     ]
     const okMsgs = [...computeInvalid([prev, ok], [routeModel]).values()].flat().map((i) => ("structureMessage" in i ? i.structureMessage : i.kind))
-    expect(okMsgs.join(" ")).not.toMatch(/must be int or float/)
+    expect(okMsgs.join(" ")).not.toMatch(/must be bool/)
 
-    const bad = { ...ok, ifCondition: { kind: IfConditionKind.Gt, path: "kind", value: 80 } }
+    const bad = { ...ok, ifCondition: { kind: IfConditionKind.Path, path: "score" } }
     const badMsgs = [...computeInvalid([prev, bad], [routeModel]).values()].flat().map((i) => ("structureMessage" in i ? i.structureMessage : i.kind))
-    expect(badMsgs.join(" ")).toMatch(/must be int or float/)
+    expect(badMsgs.join(" ")).toMatch(/must be bool/)
   })
 
   it("syncs list-ops inside Then", () => {
