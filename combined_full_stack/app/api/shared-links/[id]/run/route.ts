@@ -182,7 +182,14 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
   );
 
   const boundSnapshot = await snapshotForWebsiteAlias(link, body.pipelineAlias, sharerStore);
-  const runLink = boundSnapshot === link.snapshot ? link : { ...link, snapshot: boundSnapshot, defaultDocs: [] };
+  const runLink =
+    boundSnapshot === link.snapshot
+      ? link
+      : {
+          ...link,
+          snapshot: boundSnapshot,
+          defaultDocs: link.defaultDocs.filter((d) => boundSnapshot.modules.some((m) => m.id === d.moduleId)),
+        }
   const project = runLink.snapshot;
   const inputModules = orderedInputModules(project.modules);
   const { assignment, contentByDocId } = await resolveAssignment(
