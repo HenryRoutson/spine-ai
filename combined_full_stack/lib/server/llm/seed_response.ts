@@ -1,5 +1,6 @@
 // AI : deterministic seed LLM replies — shared by server provider + OpenAI-compatible mock HTTP.
 // AI : Schema-aware fill from prompt context so UI (schema-first) and exports (schema-last) match.
+import { matchVibeExample, seedHarnessWriteTools } from "../vibe-coding-examples";
 
 export type JsonSchemaNode = {
   type?: string | string[];
@@ -214,6 +215,8 @@ function fillFromContextOnly(context: JsonValue | null): JsonValue {
 }
 
 function extractUserRequest(prompt: string): string {
+  const task = prompt.match(/Turn \d+\/\d+\s*\nTask:\s*([^\n]+)/);
+  if (task?.[1]?.trim()) return task[1].trim();
   const marker = "User request:";
   const idx = prompt.lastIndexOf(marker);
   if (idx < 0) return prompt;
@@ -259,6 +262,31 @@ function notesSummarizerModules(title: string) {
   ];
 }
 
+function seedNotesModel() {
+  return {
+    name: "NoteSummary",
+    description: "A short summary of one note.",
+    fields: [{ name: "summary", type: "text", optional: false, description: "Summary" }],
+  };
+}
+
+function seedNotesProposalPayload(title: string, named: string | null, unnamed: boolean) {
+  return {
+    message: named
+      ? `I'll add a ${named} function that summarizes notes, and keep the existing one.`
+      : "I'll add a notes summarizer pipeline.",
+    modules: notesSummarizerModules(title),
+    modulePatch: null,
+    models: [seedNotesModel()],
+    typeAliases: null,
+    docs: [{ name: "sample_note.txt", type: "text", content: "Buy milk. Call Alex about Friday." }],
+    documentationUpdate: `# ${title}\n\nSummarizes pasted notes.`,
+    projectNameUpdate: !named && unnamed ? "Notes" : null,
+    targetFunctionName: named,
+    proposedActions: null,
+  };
+}
+
 function isProjectAssistantSchemaPrompt(prompt: string): boolean {
   return prompt.includes('"targetFunctionName"') && prompt.includes('"modulePatch"') && prompt.includes('"proposedActions"');
 }
@@ -268,33 +296,52 @@ function seedProjectAssistantReply(prompt: string): string | null {
   if (!isProjectAssistantSchemaPrompt(prompt)) return null;
   const userRequest = extractUserRequest(prompt);
   const named = seedNamedFunctionFromPrompt(userRequest);
-  const title = named || "Notes";
+  if (named) {
+    const unnamed = /\bUntitled Pipeline\b/.test(prompt);
+    return JSON.stringify(seedNotesProposalPayload(named, named, unnamed));
+  }
+  const example = matchVibeExample(userRequest) ?? matchVibeExample(prompt);
+  if (example) return JSON.stringify(example.payload);
   const unnamed = /\bUntitled Pipeline\b/.test(prompt);
-  return JSON.stringify({
-    message: named
-      ? `I'll add a ${named} function that summarizes notes, and keep the existing one.`
-      : "I'll add a notes summarizer pipeline.",
-    modules: notesSummarizerModules(title),
-    modulePatch: null,
-    models: [
-      {
-        name: "NoteSummary",
-        description: "A short summary of one note.",
-        fields: [{ name: "summary", type: "text", optional: false, description: "Summary" }],
-      },
-    ],
-    typeAliases: null,
-    docs: [{ name: "sample_note.txt", type: "text", content: "Buy milk. Call Alex about Friday." }],
-    documentationUpdate: `# ${title}\n\nSummarizes pasted notes.`,
-    projectNameUpdate: !named && unnamed ? "Notes" : null,
-    targetFunctionName: named,
-    proposedActions: null,
-  });
+  return JSON.stringify(seedNotesProposalPayload("Notes", null, unnamed));
 }
 
 function seedObservePlanReply(prompt: string): string | null {
   if (!/Plan READ-ONLY observe tool calls/i.test(prompt)) return null;
   return JSON.stringify({ tools: [], reason: "seed" });
+}
+
+// AI : generic fillSchema picks enum[0] (list_dir) — that is why harness-first scored 0. Write files instead.
+function isVibeHarnessSchemaPrompt(prompt: string): boolean {
+  return (
+    prompt.includes('"write_file"') &&
+    prompt.includes('"run_tests"') &&
+    prompt.includes('"list_dir"') &&
+    prompt.includes('"done"')
+  );
+}
+
+function seedVibeHarnessReply(prompt: string): string | null {
+  if (!isVibeHarnessSchemaPrompt(prompt)) return null;
+  const userRequest = extractUserRequest(prompt);
+  const named = seedNamedFunctionFromPrompt(userRequest);
+  const example = named ? null : matchVibeExample(userRequest) ?? matchVibeExample(prompt);
+  const payload = example
+    ? example.payload
+    : seedNotesProposalPayload(named || "Notes", named, /\bUntitled Pipeline\b/.test(prompt));
+  const wrotePipeline = /wrote pipeline\.json/i.test(prompt);
+  const ranTests = /\$ run_tests\b/i.test(prompt);
+  const passed = /^PASS\b/m.test(prompt);
+  if (wrotePipeline && (passed || ranTests)) {
+    return JSON.stringify({ tools: [{ tool: "done", message: payload.message }] });
+  }
+  if (wrotePipeline) {
+    return JSON.stringify({ tools: [{ tool: "run_tests" }] });
+  }
+  return JSON.stringify({
+    tools: seedHarnessWriteTools(payload),
+    note: example ? `seed writes few-shot ${example.id}` : "seed writes the notes pipeline",
+  });
 }
 
 /** Deterministic chat completion body for a single prompt. */
@@ -303,6 +350,8 @@ export function seedLlmReply(prompt: string, jsonMode = true): string {
   if (assistant) return assistant;
   const observe = seedObservePlanReply(prompt);
   if (observe) return observe;
+  const harness = seedVibeHarnessReply(prompt);
+  if (harness) return harness;
   const schema = extractJsonSchemaFromPrompt(prompt);
   const context = extractContextFromPrompt(prompt);
   if (schema && !schemaIsEmpty(schema)) {

@@ -83,6 +83,11 @@ export async function buildLandingPipelineFromTask(
         ? (phase) => {
             // AI : landing stream has no "observing" wire phase — skip silently.
             if (phase === "observing") return
+            // AI : landing stream has no "coding" wire phase — file harness is still "structuring".
+            if (phase === "coding") {
+              hooks.onPhase?.("structuring")
+              return
+            }
             hooks.onPhase?.(phase)
           }
         : undefined,
