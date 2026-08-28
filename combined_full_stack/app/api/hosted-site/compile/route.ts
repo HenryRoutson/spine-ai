@@ -6,7 +6,7 @@ import { compileHostedSiteReactProject } from "@/lib/hosted-site-react-compile"
 import { normalizeHostedSiteReactFiles } from "@/lib/hosted-site-react"
 import { normalizeHostedSiteOptions } from "@/lib/hosted-site"
 
-export const maxDuration = 30
+export const maxDuration = 120
 
 export async function POST(req: NextRequest) {
   const ctx = await requireAuthStore()
