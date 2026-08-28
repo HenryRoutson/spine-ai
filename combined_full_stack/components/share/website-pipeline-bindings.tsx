@@ -17,6 +17,9 @@ import { spineActionProps } from "@/lib/core/parity"
 import { readAccountStateCache } from "@/lib/project-state-cache"
 import type { Project, ProjectId } from "@/lib/types"
 import type { HostedSiteOptions } from "@/lib/shared-link-types"
+import { guiDefaultWorkspaceWindow } from "@/lib/app-nav-config"
+import { useOptionalAppShell } from "@/lib/app-shell"
+import { useHideDeveloperTools } from "@/lib/developer-tools-settings"
 import { useOptionalStore } from "@/lib/store"
 import {
   bindingsFromProjectIds,
@@ -40,6 +43,9 @@ export function WebsitePipelineBindings({
   className?: string
 }) {
   const store = useOptionalStore()
+  const shell = useOptionalAppShell()
+  const hideDeveloperTools = useHideDeveloperTools()
+  const canOpenBackend = Boolean(shell?.editingWebsite && store)
   const linked = useMemo(
     () => listedWebsitePipelineBindings(options.pipelineBindings),
     [options.pipelineBindings],
@@ -89,11 +95,19 @@ export function WebsitePipelineBindings({
     add(created.id, { id: created.id, name: created.name })
   }
 
+  function openBackend(projectId: ProjectId) {
+    if (!shell || !store) return
+    // AI : Click through a bound pipeline to the backend workspace (Inference / Schedule / Structures).
+    shell.clearWebsiteEditor()
+    if (projectId !== store.project.id) store.setActiveProjectId(projectId)
+    shell.setActiveWindow(guiDefaultWorkspaceWindow(hideDeveloperTools, false))
+  }
+
   return (
     <div className={cn("space-y-1.5", className)}>
       <p className="text-xs font-medium">Pipelines on this website</p>
       <p className="text-[10px] text-muted-foreground">
-        Optional. Add a pipeline to drop a run widget into the page. The last one can come off too.
+        Optional backends. Add a pipeline for a run widget. Open it to edit — this page stays the frontend.
       </p>
       <div className="flex flex-wrap items-center gap-1.5">
         {linked.length === 0 ? (
@@ -107,7 +121,19 @@ export function WebsitePipelineBindings({
               className="inline-flex h-8 max-w-full items-center gap-1 rounded-md border border-border bg-background pl-2 font-mono text-[11px]"
             >
               <GitBranch className="h-3 w-3 shrink-0 text-muted-foreground" />
-              <span className="truncate">{name}</span>
+              {canOpenBackend ? (
+                <button
+                  type="button"
+                  className="truncate hover:text-foreground"
+                  title="Open this pipeline to edit the backend"
+                  onClick={() => openBackend(binding.projectId)}
+                  {...spineActionProps("website.open-backend")}
+                >
+                  {name}
+                </button>
+              ) : (
+                <span className="truncate">{name}</span>
+              )}
               <span className="text-[10px] text-muted-foreground">{binding.alias}</span>
               <DeleteButton
                 type="button"

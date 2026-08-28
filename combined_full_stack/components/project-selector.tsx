@@ -16,7 +16,7 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { Input } from "@/components/ui/input"
 import { navigateToProjectPicker } from "@/lib/app-mode-nav"
-import { isAccountWindow } from "@/lib/app-nav-config"
+import { guiDefaultWorkspaceWindow, isAccountWindow } from "@/lib/app-nav-config"
 import { useAppShell } from "@/lib/app-shell"
 import { AppWindowId } from "@/lib/app-window-id"
 import { API_ROUTES } from "@/lib/api-routes"
@@ -118,9 +118,10 @@ function WebsiteWorkspaceSelector({ embed, site }: { embed: boolean; site: Share
   }, [site.id])
 
   function openPipeline(projectId: typeof project.id) {
+    // AI : Leave the Lovable page studio — pipeline workspace owns Inference / Schedule / Structures.
     clearWebsiteEditor()
     if (projectId !== project.id) setActiveProjectId(projectId)
-    setActiveWindow(hideDeveloperTools ? AppWindowId.Inference : AppWindowId.Structure)
+    setActiveWindow(guiDefaultWorkspaceWindow(hideDeveloperTools, false))
   }
 
   return (
@@ -161,13 +162,13 @@ function WebsiteWorkspaceSelector({ embed, site }: { embed: boolean; site: Share
           <DropdownMenuSeparator />
           <DropdownMenuGroup>
             <DropdownMenuLabel className="font-mono text-[10px] text-muted-foreground">
-              backend
+              backend — open to edit
             </DropdownMenuLabel>
           </DropdownMenuGroup>
           <DropdownMenuGroup>
             {bindings.length === 0 ? (
               <DropdownMenuItem disabled className="text-xs text-muted-foreground">
-                No pipelines yet
+                Attach a pipeline on the page, then open it here
               </DropdownMenuItem>
             ) : (
               bindings.map((binding) => {

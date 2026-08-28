@@ -474,11 +474,12 @@ function BuilderShellLayoutInner({ variant = "default" }: { variant?: "default" 
   const primarySection = resolvePrimarySection(AppMode.Build, activeWindow)
   const isVibe = isVibeWindow(activeWindow)
   const isAccount = isAccountWindow(activeWindow)
-  const showSurfaceToggle = !embed && !isAccount
-  const showWorkspaceTabs = !isAccount && !isVibe
+  const onWebsite = Boolean(editingWebsite)
+  // AI : Website = Lovable page studio. Pipeline chrome (tabs, Simplified, project agent) is backend-only.
+  const showSurfaceToggle = !embed && !isAccount && !onWebsite
+  const showWorkspaceTabs = !isAccount && !isVibe && !onWebsite
   const showWorkspaceChrome = showSurfaceToggle || showWorkspaceTabs
-  const skipAssistantDock =
-    embed || isVibe || (!!editingWebsite && activeWindow === AppWindowId.Share)
+  const skipAssistantDock = embed || isVibe || onWebsite
   const { openingSection, beginOpening } = usePrimarySectionOpening()
   useSyncPrimarySectionReady(primarySection)
 
@@ -562,17 +563,19 @@ function BuilderShellLayoutInner({ variant = "default" }: { variant?: "default" 
           embed={embed}
           projectSlot={<ProjectSelector embed={embed} />}
           functionSlot={
-            !embed &&
-            showsPipelineFunctionSelect(activeWindow) &&
-            !(editingWebsite && activeWindow === AppWindowId.Share) ? (
+            !embed && showsPipelineFunctionSelect(activeWindow) && !onWebsite ? (
               <PipelineFunctionSelect allowAdd={!hideDeveloperTools} />
             ) : null
           }
           trailing={
             !embed && (
               <>
-                <RunningJobsHub />
-                <DiagnosisAgentHub />
+                {onWebsite ? null : (
+                  <>
+                    <RunningJobsHub />
+                    <DiagnosisAgentHub />
+                  </>
+                )}
                 <FeedbackButton />
               </>
             )

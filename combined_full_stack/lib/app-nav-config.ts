@@ -207,8 +207,12 @@ export function guiWindowAfterSimplified(
   simplified: boolean,
   editingWebsite: boolean,
 ): AppWindowId {
-  if (window === AppWindowId.Vibe) return guiDefaultWorkspaceWindow(true, editingWebsite)
-  if (simplified && isSimplifiedHiddenWindow(window)) return guiDefaultWorkspaceWindow(true, editingWebsite)
+  // AI : Billing/Settings stay reachable from a website; everything else is the page studio.
+  if (ACCOUNT_WINDOW_IDS.has(window)) return window
+  // AI : A website is a Lovable frontend — never sit on Inference/Schedule/Pipeline while editing a site.
+  if (editingWebsite) return AppWindowId.Share
+  if (window === AppWindowId.Vibe) return guiDefaultWorkspaceWindow(true, false)
+  if (simplified && isSimplifiedHiddenWindow(window)) return guiDefaultWorkspaceWindow(true, false)
   return window
 }
 
