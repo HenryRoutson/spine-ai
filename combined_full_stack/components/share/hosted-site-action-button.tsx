@@ -90,8 +90,11 @@ export function HostedSiteActionButton({
   const [pinnedN, setPinnedN] = useState<number | null>(null)
 
   const previewN = pinnedN ?? liveN
-  const pipelineLines = hostedPipelinePreviewLines(modules, kind, previewN)
-  const lines = pipelineLines.length > 0 ? pipelineLines : hostedPreviewLines(kind, previewN)
+  // AI : idle equations come from walking the pipeline JSON; JS Collatz math is studio-only fallback.
+  const lines =
+    modules.length > 0
+      ? hostedPipelinePreviewLines(modules, kind, previewN)
+      : hostedPreviewLines(kind, previewN)
 
   useEffect(() => {
     let cancelled = false
@@ -127,6 +130,7 @@ export function HostedSiteActionButton({
         undefined,
         alias,
       )
+      const seenOk = new Set<ModuleId>()
       await awaitSharedRun(
         linkId,
         jobId,
@@ -134,11 +138,15 @@ export function HostedSiteActionButton({
         {
           onStep: (steps) => {
             setStepStates((prev) => mergeStepStates(prev, steps))
-            // AI : each SQL step mutates app_sql_rows — refresh the live number from the pipeline, not JS.
-            window.dispatchEvent(new Event(APP_SQL_CHANGED_EVENT))
+            // AI : refresh the live number only when a JSON SQL step newly succeeds.
+            for (const step of steps) {
+              if (step.status !== "ok" || seenOk.has(step.moduleId)) continue
+              seenOk.add(step.moduleId)
+              window.dispatchEvent(new Event(APP_SQL_CHANGED_EVENT))
+            }
           },
         },
-        220,
+        180,
       )
       setPhase(RunPhase.Done)
       window.dispatchEvent(new Event(APP_SQL_CHANGED_EVENT))

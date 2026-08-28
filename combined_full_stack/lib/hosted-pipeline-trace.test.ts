@@ -2,7 +2,7 @@ import { resolve } from "node:path"
 import { describe, expect, it } from "vitest"
 import { loadProjectSeed, SEEDS_DIR } from "@/lib/server/seed"
 import { migrateProjectModules } from "@/lib/server/validity"
-import { hostedPipelineArithPreview, valueUpdateExpr } from "@/lib/hosted-pipeline-trace"
+import { hostedPipelineArithPreview, hostedPipelineTraceRows, valueUpdateExpr } from "@/lib/hosted-pipeline-trace"
 import { flattenPipelineModules } from "@/lib/fork-pipeline"
 import { ModuleKind } from "@/lib/types"
 
@@ -44,5 +44,15 @@ describe("hosted pipeline JSON walk", () => {
     const sql = flattenPipelineModules(modules).filter((m) => m.kind === ModuleKind.Sql)
     const valueSteps = sql.filter((m) => valueUpdateExpr(m))
     expect(valueSteps.map((m) => m.label)).toEqual(["Times three", "Plus one", "Divide by two", "Double"])
+  })
+
+  it("binds animation rows to JSON module ids so progress can tick them", () => {
+    const planned = hostedPipelineArithPreview(seedModules(), "collatz", 1)
+    const running = new Map([["mod_times_three" as const, { status: "running" as const }]])
+    const rows = hostedPipelineTraceRows(planned, running)
+    expect(rows.map((r) => [r.moduleId, r.label, r.expr, r.state])).toEqual([
+      ["mod_times_three", "Times three", "1 × 3", "running"],
+      ["mod_plus_one", "Plus one", "3 + 1", "idle"],
+    ])
   })
 })

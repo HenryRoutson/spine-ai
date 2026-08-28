@@ -8,10 +8,10 @@ import type { ModuleId } from "@/lib/types"
 import { RunPhase } from "@/lib/run-phase"
 
 function HostedArithRow({
-  label,
+  step,
   state,
 }: {
-  label: string
+  step: hosted_pipeline_step
   state: StepUiState["status"] | "idle"
 }) {
   const icon =
@@ -25,9 +25,15 @@ function HostedArithRow({
       <Circle className="h-4 w-4 shrink-0 opacity-30" />
     )
   return (
-    <div className="hs-arith-row">
+    <div className="hs-arith-row" data-hs-module-id={step.moduleId} data-hs-sql={step.expr}>
       {icon}
-      <span>{label}</span>
+      <span className="hs-arith-copy">
+        <span className="hs-arith-label">{step.label}</span>
+        <span className="hs-arith-sql">{step.expr}</span>
+      </span>
+      <span className="hs-arith-eq">
+        {step.from} → {step.to}
+      </span>
     </div>
   )
 }
@@ -60,7 +66,7 @@ export function HostedSiteSimpleTrace({
       ) : null}
       <div className="space-y-2">
         {rows.map((row) => (
-          <HostedArithRow key={row.id} label={row.label} state={row.state} />
+          <HostedArithRow key={row.moduleId} step={row} state={row.state} />
         ))}
       </div>
     </div>

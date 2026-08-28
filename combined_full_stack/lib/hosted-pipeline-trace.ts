@@ -107,13 +107,14 @@ export function hostedPipelinePreviewLines(
   }))
 }
 
+export type hosted_pipeline_trace_row = hosted_pipeline_step & { state: StepUiState["status"] | "idle" }
+
 export function hostedPipelineTraceRows(
   planned: hosted_pipeline_step[],
   stepStates: Map<ModuleId, StepUiState>,
-): { id: ModuleId; label: string; state: StepUiState["status"] | "idle" }[] {
+): hosted_pipeline_trace_row[] {
   return planned.map((step) => ({
-    id: step.moduleId,
-    label: step.label,
+    ...step,
     state: stepStates.get(step.moduleId)?.status ?? "idle",
   }))
 }

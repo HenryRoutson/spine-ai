@@ -7,8 +7,8 @@ import { jsonStringifyStepValue } from "../results"
 import { stepEmitsList } from "../../type_expr"
 import type { ExecResult, RunCtx, RunLogger } from "../engine_types"
 
-async function pauseForHostedAnimation(m: PipelineModule): Promise<void> {
-  // AI : pause after the write so the hosted live number can tick per JSON SQL step.
+export async function pauseForHostedAnimation(m: PipelineModule): Promise<void> {
+  // AI : hold after onStep ok so the hosted page can paint the SQL write before the next JSON step.
   if (process.env.VITEST) return
   const ms = Math.min(Math.max(m.avgMs ?? 0, 0), 1600)
   if (ms < 200) return
@@ -25,7 +25,6 @@ export async function execSqlStep(m: PipelineModule, ctx: RunCtx, log: RunLogger
   const table = out ? tableNameForModel(out) : undefined
   log.info(`sql step`, { moduleId: m.id, scope, table, sql })
   const rows = await execAppSql(scope, sql, { seedRows: sqlSeedRowsOf(m), pkField })
-  await pauseForHostedAnimation(m)
   const raw = stepEmitsList(m) ? rows : (rows[0] ?? {})
   const prev = prevModuleFor(ctx.project.modules, ctx.prevModuleId)
   const value = out

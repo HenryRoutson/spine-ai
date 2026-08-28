@@ -1,41 +1,20 @@
 "use client"
 
-import { useCallback, useEffect, useState } from "react"
-import { APP_SQL_CHANGED_EVENT } from "@/lib/app-sql"
-import { API_ROUTES } from "@/lib/api-routes"
-import { FETCH_NO_STORE, parseFetchJson } from "@/lib/api-client"
+import { useEffect, useState } from "react"
+import { subscribeHostedSql, type sql_row } from "@/lib/hosted-sql-channel"
 
-export type sql_row = Record<string, unknown>
+export type { sql_row }
 
 export function useHostedSqlRows(linkId: string, table: string): { rows: sql_row[] | null; error: string | null } {
   const [rows, setRows] = useState<sql_row[] | null>(null)
   const [error, setError] = useState<string | null>(null)
 
-  const load = useCallback(async () => {
-    try {
-      const res = await fetch(`${API_ROUTES.sharedLinkSql(linkId)}?table=${encodeURIComponent(table)}`, FETCH_NO_STORE)
-      const body = await parseFetchJson<{ rows?: sql_row[]; error?: string }>(res, "load app sql")
-      setRows(body.rows ?? [])
-      setError(null)
-    } catch (err) {
-      setError((err as Error).message)
-    }
-  }, [linkId, table])
-
   useEffect(() => {
-    void load()
-    const onChange = () => {
-      void load()
-    }
-    window.addEventListener(APP_SQL_CHANGED_EVENT, onChange)
-    const tick = window.setInterval(() => {
-      void load()
-    }, 250)
-    return () => {
-      window.removeEventListener(APP_SQL_CHANGED_EVENT, onChange)
-      window.clearInterval(tick)
-    }
-  }, [load])
+    return subscribeHostedSql(linkId, table, (nextRows, nextError) => {
+      setRows(nextRows)
+      setError(nextError)
+    })
+  }, [linkId, table])
 
   return { rows, error }
 }

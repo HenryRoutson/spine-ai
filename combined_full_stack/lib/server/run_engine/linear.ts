@@ -17,6 +17,7 @@ import { llmStepCostLimitCents, StepCostLimitExceededError } from "../step_cost_
 import { customCodeMaxRunMs } from "@/lib/custom-code-max-run";
 import { DEFAULT_INPUT_CHECK_MODEL, FailureKind, ModuleKind, RunStepStatus, type LlmCallRecord } from "../types";
 import { execModule } from "./exec_module";
+import { isSqlModuleKind, pauseForHostedAnimation } from "./steps/sql";
 import {
   applyModuleSideEffects,
   modelById,
@@ -449,6 +450,7 @@ export async function runLinearStepsFrom(
       log.warn(`pipeline aborted after error`, { failedModule: m.id, stepsCompleted: steps.length });
       return "error";
     }
+    if (isSqlModuleKind(m.kind)) await pauseForHostedAnimation(m);
   }
   return "ok";
 }
