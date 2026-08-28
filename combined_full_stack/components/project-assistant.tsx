@@ -295,10 +295,16 @@ export function ProjectAssistant({ className, chatId, simple = false }: ProjectA
         placeholder="What do you want to build?"
         loadingLabel={(phase) =>
           isVibe
-            ? "working…"
+            ? phase === "coding"
+              ? "writing files…"
+              : phase === "retrying"
+                ? "checking…"
+                : "working…"
             : phase === "retrying"
               ? "retrying…"
-              : phase === "structuring"
+              : phase === "coding"
+                ? "writing files…"
+                : phase === "structuring"
                 ? "designing project…"
                 : phase === "observing"
                   ? "reading runs…"

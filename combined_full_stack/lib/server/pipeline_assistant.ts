@@ -78,6 +78,15 @@ import {
   type TypeAlias,
 } from "./types";
 import { blankPipelineModules, functionsOnProject, functionsPromptSummary } from "@/lib/pipeline-functions";
+import { flattenPipelineModules } from "@/lib/fork-pipeline";
+import { tryCompileCustomCodeEntry } from "@/lib/custom_code";
+import { customCodeEntriesForModule } from "@/lib/custom_code_entries";
+import { lintPipeline } from "./pipeline_lint";
+import { VIBE_THINKING_MAX_TOKENS, type VibeWorkspaceDraft } from "./vibe-coding-workspace";
+import {
+  runVibeCodingHarness,
+  vibeHarnessEnabled,
+} from "./vibe-coding-harness";
 
 const MODULE_KINDS = USER_ADDABLE_MODULE_KINDS;
 
@@ -420,7 +429,7 @@ export type PipelineAssistantOpts = {
   // AI : injected after observe-tool planning; not set by callers.
   observeToolResults?: string;
   onThinkingDelta?: (delta: string) => void;
-  onPhase?: (phase: "thinking" | "observing" | "structuring" | "retrying") => void;
+  onPhase?: (phase: "thinking" | "observing" | "coding" | "structuring" | "retrying") => void;
   onThinkingDone?: (text: string) => void;
   // AI : streams the assistant message text as it arrives during the structuring phase.
   onMessageDelta?: (delta: string) => void;
@@ -754,9 +763,9 @@ function buildThinkingSystemPrompt(hasValidationErrors: boolean): string {
   return `You are the Agent for "Spine" — structures, pipeline steps, and inference test documents.
 
 ${hasValidationErrors
-    ? "The live project has pipeline validation errors — diagnose each listed mismatch (structure name vs list[structure] cardinality). Plan exact structureOut/list[...] fixes per step. Do not propose a greenfield architecture."
-    : "Reason step-by-step: (1) structures needed, (2) series-parallel spine with single vs list at each hop, (3) many same-kind files → list[Document] + llm-batch (NOT one llm), (4) two different doc kinds: process first on spine, then either combine (raw side upload immediately before combine) OR assemble after both are parsed — never a third upload, (5) independent mixed-kind sub-pipelines that share one input → Fork (lanes + join), not Parallel (LLM-only) and not serialize, (6) synthetic test docs. Flag where validation would fail if list-ness is wrong."}
-Plain text only — no JSON, no markdown headings. Be concise (roughly 150–300 words).`;
+    ? "The live project has pipeline validation errors — diagnose each listed mismatch (structure name vs list[structure] cardinality). Plan exact structureOut/list[...] file edits per step. Do not propose a greenfield architecture."
+    : "Reason thoroughly: (1) structures needed, (2) series-parallel spine with single vs list at each hop, (3) many same-kind files → list[Document] + llm-batch (NOT one llm), (4) two different doc kinds: process first on spine, then either combine (raw side upload immediately before combine) OR assemble after both are parsed — never a third upload, (5) independent mixed-kind sub-pipelines that share one input → Fork (lanes + join), not Parallel (LLM-only) and not serialize, (6) which files to write (structures/*.json, pipeline.json, tests/*), (7) synthetic test docs. Flag where validation would fail if list-ness is wrong."}
+You will next edit a file workspace like a coding agent (write files, run_tests). Budget real reasoning — do not rush. Plain text only — no JSON, no markdown headings.`;
 }
 
 function buildThinkingUserPrompt(
@@ -1023,6 +1032,76 @@ function makeMessageExtractor(onMessageDelta: (delta: string) => void): (rawDelt
   };
 }
 
+function draftToAssistantRaw(draft: VibeWorkspaceDraft): z.infer<typeof assistantResponseSchema> | null {
+  if (draft.errors.length) return null;
+  const parsed = assistantResponseSchema.safeParse({
+    message: draft.message || "I'll update the project.",
+    modules: draft.modules,
+    modulePatch: null,
+    models: draft.models,
+    typeAliases: draft.typeAliases,
+    docs: draft.docs,
+    documentationUpdate: draft.documentationUpdate,
+    projectNameUpdate: draft.projectNameUpdate,
+    targetFunctionName: draft.targetFunctionName,
+    proposedActions: draft.proposedActions,
+  });
+  return parsed.success ? parsed.data : null;
+}
+
+function runVibeWorkspaceChecks(
+  draft: VibeWorkspaceDraft,
+  project: Project,
+  globalModel: ModelId,
+  testDocsCatalog: AssistantTestDocCatalogEntry[],
+): string {
+  if (draft.errors.length) {
+    return `FAIL parse\n${draft.errors.map((e) => `- ${e}`).join("\n")}`;
+  }
+  const raw = draftToAssistantRaw(draft);
+  if (!raw) {
+    return "FAIL schema — pipeline.json / structures/*.json / aliases.json do not match the assistant schema. Read examples/few-shot.md.";
+  }
+  const proposal = materializeProposal(raw, project, globalModel, testDocsCatalog);
+  if (!proposal) {
+    return "PASS (no project file changes — Q&A only). Write message.md if the user should see a reply.";
+  }
+  const validation = formatPipelineValidationErrors(
+    proposal.modules,
+    proposal.models,
+    proposal.typeAliases ?? [],
+  );
+  const compileErrors: string[] = [];
+  for (const m of flattenPipelineModules(proposal.modules)) {
+    for (const entry of customCodeEntriesForModule(m)) {
+      const err = tryCompileCustomCodeEntry(entry);
+      if (err) compileErrors.push(`${m.label}: ${err}`);
+    }
+  }
+  const lint = lintPipeline(
+    {
+      ...project,
+      modules: proposal.modules,
+      models: proposal.models,
+      typeAliases: proposal.typeAliases,
+    },
+    { includeExport: false },
+  );
+  const lintErrors = lint.lints.filter((l) => l.severity === "error");
+  const ok = !validation && compileErrors.length === 0 && lintErrors.length === 0;
+  const lines = [ok ? "PASS" : "FAIL"];
+  if (validation) lines.push("I/O:", validation.trim());
+  if (compileErrors.length) lines.push("custom-code:", ...compileErrors.map((e) => `- ${e}`));
+  if (lintErrors.length) {
+    lines.push(
+      "lint:",
+      ...lintErrors.map((l) => `- ${l.stepLabel ?? l.structureName ?? l.code}: ${l.message}`),
+    );
+  }
+  if (ok) lines.push("I/O valid, custom-code compiled, lint clean.");
+  return lines.join("\n");
+}
+
 export async function proposePipelineChange(
   project: Project,
   message: string,
@@ -1047,7 +1126,7 @@ export async function proposePipelineChange(
   let thinking = "";
   let llmAttempt = 0;
   try {
-    if (!fixErrors && !forceFix) {
+    if (!fixErrors) {
       opts?.onPhase?.("thinking");
       thinking = await llmStreamString(
         buildThinkingUserPrompt(
@@ -1066,7 +1145,7 @@ export async function proposePipelineChange(
           model: globalModel,
           ledger,
           system: buildThinkingSystemPrompt(!!liveValidation),
-          maxTokens: 1024,
+          maxTokens: VIBE_THINKING_MAX_TOKENS,
         },
         (delta) => opts?.onThinkingDelta?.(delta),
       );
@@ -1118,10 +1197,6 @@ export async function proposePipelineChange(
       }
     }
 
-    opts?.onPhase?.("structuring");
-    const msgExtractor = opts?.onMessageDelta
-      ? makeMessageExtractor(opts.onMessageDelta)
-      : null;
     const promptOpts: PipelineAssistantOpts = {
       ...opts,
       fixValidationErrors: fixErrors,
@@ -1129,37 +1204,95 @@ export async function proposePipelineChange(
       uiContext,
       observeToolResults,
     };
-    let raw = await llmStreamStructured(
-      buildUserPrompt(
-        project,
-        effectiveMessage,
-        history,
-        globalModel,
-        promptOpts,
-        thinking,
-        liveValidation,
-        forceFix,
-      ),
-      assistantResponseSchema,
-      {
-        model: globalModel,
-        ledger,
-        system: buildSystemPrompt(globalModel, project.name),
-        onStructuredFailure: (detail) => {
-          llmAttempt += 1;
-          opts?.onStructuredFailure?.({
-            attempt: llmAttempt,
-            failureKind: detail.kind,
-            error: detail.error,
-          });
-        },
-      },
-      (rawDelta) => msgExtractor?.(rawDelta),
-    );
-    llmAttempt += 1;
-    opts?.onLlmResponse?.(fixErrors ? `retry-${fixAttempt}` : "initial", raw);
 
-    let proposal = materializeProposal(raw, project, globalModel, opts?.testDocsCatalog ?? []);
+    let raw: z.infer<typeof assistantResponseSchema> | undefined;
+    let proposal: PipelineAssistantProposal | null = null;
+    let harnessUsed = false;
+
+    if (!fixErrors && vibeHarnessEnabled()) {
+      opts?.onPhase?.("coding");
+      try {
+        const harness = await runVibeCodingHarness({
+          project,
+          task: effectiveMessage,
+          thinking,
+          extraPrompt: [
+            buildHumanSurfacePromptBlock(opts?.humanSurface),
+            buildUiContextPromptBlock(uiContext),
+            formatValidationBlock(
+              liveValidation,
+              "Current pipeline validation errors (fix when changing the pipeline):",
+            ),
+            observeToolResults?.trim() ?? "",
+          ]
+            .filter((b) => b.trim())
+            .join("\n"),
+          globalModel,
+          ledger,
+          testDocsCatalog: opts?.testDocsCatalog,
+          runChecks: (draft) =>
+            runVibeWorkspaceChecks(draft, project, globalModel, opts?.testDocsCatalog ?? []),
+          onTurn: (label, response) => opts?.onLlmResponse?.(label, response),
+          onStructuredFailure: (detail) => {
+            llmAttempt += 1;
+            opts?.onStructuredFailure?.(detail);
+          },
+        });
+        llmAttempt += harness.turns;
+        opts?.onLlmResponse?.("harness-done", { turns: harness.turns, done: harness.done });
+        const harnessRaw = draftToAssistantRaw(harness.draft);
+        if (harnessRaw) {
+          harnessUsed = true;
+          raw = harnessRaw;
+          proposal = materializeProposal(raw, project, globalModel, opts?.testDocsCatalog ?? []);
+          if (raw.message && opts?.onMessageDelta) opts.onMessageDelta(raw.message);
+        }
+      } catch {
+        // AI : file harness is best-effort — fall back to one-shot structured JSON.
+      }
+    }
+
+    if (!harnessUsed) {
+      opts?.onPhase?.("structuring");
+      const msgExtractor = opts?.onMessageDelta
+        ? makeMessageExtractor(opts.onMessageDelta)
+        : null;
+      raw = await llmStreamStructured(
+        buildUserPrompt(
+          project,
+          effectiveMessage,
+          history,
+          globalModel,
+          promptOpts,
+          thinking,
+          liveValidation,
+          forceFix,
+        ),
+        assistantResponseSchema,
+        {
+          model: globalModel,
+          ledger,
+          system: buildSystemPrompt(globalModel, project.name),
+          onStructuredFailure: (detail) => {
+            llmAttempt += 1;
+            opts?.onStructuredFailure?.({
+              attempt: llmAttempt,
+              failureKind: detail.kind,
+              error: detail.error,
+            });
+          },
+        },
+        (rawDelta) => msgExtractor?.(rawDelta),
+      );
+      llmAttempt += 1;
+      opts?.onLlmResponse?.(fixErrors ? `retry-${fixAttempt}` : "initial", raw);
+      proposal = materializeProposal(raw, project, globalModel, opts?.testDocsCatalog ?? []);
+    }
+
+    if (!raw) {
+      throw new Error("assistant produced no response");
+    }
+
     let retryCount = 0;
 
     for (let retry = 0; retry < MAX_VALIDATION_RETRIES && proposal; retry++) {

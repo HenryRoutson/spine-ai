@@ -64,6 +64,8 @@
 // AI : TODO (arch-parser-cache) — JsonStore parser/vision cache should use parser_vision_cache_index + fs adapter.
 // AI : TODO (opt-browser-tui) — optional GUI terminal mode (not required). DOM skin of Ink ViewModels
 // AI :   + extracted controller; never Ink-in-browser or a PTY. lib/cli/ink/browser-tui-roadmap.ts.
+// AI : DONE (vibe-coding-harness) — in-memory file workspace + write/run_tests loop (OpenCode/Pi-shaped).
+// AI :   OpenRouter stays server-side; no disk, no shell, no secrets in the workspace. Seed LLM skips harness.
 // AI : DONE (vibe-fewshot-explode) — Example 1c wrapper + flatten; PromptListVsItem warning.
 // AI : DONE (vibe-fewshot-parallel) — Example 5 parallel lanes then memo.
 // AI : DONE (vibe-fewshot-assemble) — greenfield names assemble; Example 4 kept.
