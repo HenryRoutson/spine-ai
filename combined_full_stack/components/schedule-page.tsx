@@ -224,8 +224,8 @@ export function SchedulePage({ simple }: { simple?: boolean } = {}) {
                 <h3 className="text-sm font-semibold">{simple ? "Run this on a schedule" : "New schedule"}</h3>
                 <p className="text-xs text-muted-foreground">
                   {simple
-                    ? `This runs ${schedulingFn.name}. Switch pipelines in the header to schedule a different one.`
-                    : `Choose how often ${schedulingFn.name} should run. Each time, we’ll reuse the files you picked in Inference.`}
+                    ? `This runs ${schedulingFn.name}. Switch functions in the header to schedule a different one.`
+                    : `Choose how often ${schedulingFn.name} should run. Switch functions in the header to schedule a different one.`}
                 </p>
               </div>
             </div>

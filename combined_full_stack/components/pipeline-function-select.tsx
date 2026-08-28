@@ -24,13 +24,14 @@ export function PipelineFunctionSelect({
   return (
     <div className={cn("flex items-center gap-1.5", className)}>
       <span className="hidden shrink-0 text-[10px] font-medium uppercase tracking-wide text-muted-foreground sm:inline">
-        Pipeline
+        Function
       </span>
       <select
         className="h-7 max-w-[12rem] rounded-md border border-border bg-background px-1.5 font-mono text-[11px]"
         value={active}
         onChange={(e) => setActiveFunction(e.target.value as pipeline_function_id)}
-        title={`Pipeline in this project: ${activeName}`}
+        aria-label="Function in this project"
+        title={`Function in this project: ${activeName}`}
         {...spineActionProps("pipeline.function-select")}
       >
         {fns.map((fn) => (

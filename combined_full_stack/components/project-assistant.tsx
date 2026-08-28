@@ -453,7 +453,7 @@ function SimpleProjectProposalPreview({ msg }: { msg: AssistantChatMessage<Proje
         <p className="mb-2 text-xs text-muted-foreground">Name: {p.projectName}</p>
       ) : null}
       {p.targetFunctionName ? (
-        <p className="mb-2 text-xs text-muted-foreground">Pipeline: {p.targetFunctionName}</p>
+        <p className="mb-2 text-xs text-muted-foreground">Function: {p.targetFunctionName}</p>
       ) : null}
       {showModules && p.modules.length > 0 ? (
         <ol className="mb-2 space-y-1">
