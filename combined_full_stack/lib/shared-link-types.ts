@@ -31,6 +31,8 @@ export const DEFAULT_EMBED_OPTIONS: EmbedOptions = {
 };
 
 // AI : hosted HTML wrapper around a share-link backend — company chrome, no database of their own.
+export type hosted_function_theme = "light" | "dark";
+
 export type HostedSiteBrand = {
   companyName: string;
   tagline: string;
@@ -39,6 +41,11 @@ export type HostedSiteBrand = {
   accentColor: string;
   backgroundColor: string;
   textColor: string;
+  // AI : run-panel visualisation — independent of the page chrome so functions can be light on a tinted site.
+  functionTheme: hosted_function_theme;
+  functionBackgroundColor: string;
+  functionTextColor: string;
+  functionAccentColor: string;
 };
 
 export type HostedSiteAuthProvider = "spine" | "custom_supabase";
@@ -67,10 +74,19 @@ export type HostedSitePage = {
 
 export type website_runtime_kind = "html" | "react";
 export type website_pipeline_alias = string & { __brand: "website_pipeline_alias" };
+export type hosted_run_input_visibility = "auto" | "show" | "hide";
+export type hosted_run_output_view = "auto" | "table" | "json" | "metric";
 
 export type WebsitePipelineBinding = {
   alias: website_pipeline_alias;
   projectId: Project["id"];
+  // AI : show/hide the visitor form. hide forces inputEditable and clearInputAfterRun off.
+  visibility: hosted_run_input_visibility;
+  inputEditable: boolean;
+  clearInputAfterRun: boolean;
+  // AI : empty = "Run pipeline". Compact hosted outputs pick table/metric from the result shape.
+  runLabel: string;
+  outputView: hosted_run_output_view;
 };
 
 export type HostedSiteReactFile = {
@@ -102,6 +118,10 @@ export const DEFAULT_HOSTED_SITE_OPTIONS: HostedSiteOptions = {
     accentColor: "#2563eb",
     backgroundColor: "#f8fafc",
     textColor: "#0f172a",
+    functionTheme: "light",
+    functionBackgroundColor: "",
+    functionTextColor: "",
+    functionAccentColor: "",
   },
   customHtml: "",
   customCss: "",

@@ -1,0 +1,5 @@
+[
+  { "id": "e_ada", "name": "Ada Lovelace", "number": 1001 },
+  { "id": "e_alan", "name": "Alan Turing", "number": 1002 },
+  { "id": "e_grace", "name": "Grace Hopper", "number": 1003 }
+]

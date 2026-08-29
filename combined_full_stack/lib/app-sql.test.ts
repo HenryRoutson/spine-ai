@@ -54,6 +54,19 @@ describe("parseAppSql", () => {
   it("rejects join", () => {
     expect(() => parseAppSql("SELECT * FROM a JOIN b ON a.id = b.id")).toThrow()
   })
+
+  it("parses REPLACE FROM INPUT and COUNT(*) FROM INPUT", () => {
+    expect(parseAppSql("REPLACE INTO employee FROM INPUT")).toEqual({
+      kind: "replace_from_input",
+      table: "employee",
+    })
+    expect(parseAppSql("SELECT COUNT(*) FROM INPUT")).toEqual({ kind: "select_count_input" })
+    expect(parseAppSql("SELECT COUNT(*) FROM employee")).toEqual({
+      kind: "select_count",
+      table: "employee",
+      where: undefined,
+    })
+  })
 })
 
 describe("evalSqlExpr", () => {
@@ -96,6 +109,25 @@ describe("execAppSql", () => {
     expect(second).toEqual([{ id: "global", value: 4 }])
     const listed = await execAppSql(scope, "SELECT * FROM shared_number")
     expect(listed).toEqual([{ id: "global", value: 4 }])
+  })
+
+  it("replaces a table from INPUT rows and counts the JSON list", async () => {
+    const scope = "site:site_roster"
+    const roster = [
+      { id: "e_ada", name: "Ada Lovelace", number: 1001 },
+      { id: "e_alan", name: "Alan Turing", number: 1002 },
+    ]
+    const stored = await execAppSql(scope, "REPLACE INTO employee FROM INPUT", { inputRows: roster })
+    expect(stored).toEqual(roster)
+    expect(await execAppSql(scope, "SELECT * FROM employee")).toEqual(roster)
+    expect(await execAppSql(scope, "SELECT COUNT(*) FROM INPUT", { inputRows: roster })).toEqual([{ count: 2 }])
+    expect(await execAppSql(scope, "SELECT COUNT(*) FROM employee")).toEqual([{ count: 2 }])
+    const next = await execAppSql(scope, "REPLACE INTO employee FROM INPUT", {
+      inputRows: [{ id: "e_grace", name: "Grace Hopper", number: 1003 }],
+    })
+    expect(next).toEqual([{ id: "e_grace", name: "Grace Hopper", number: 1003 }])
+    expect(await execAppSql(scope, "SELECT COUNT(*) FROM employee")).toEqual([{ count: 1 }])
+    expect(await execAppSql(scope, "SELECT COUNT(*) FROM INPUT", { inputRows: [] })).toEqual([{ count: 0 }])
   })
 
   it("runs one odd Collatz step as times-three then plus-one", async () => {
@@ -141,5 +173,52 @@ describe("double shared number seed", () => {
     expect(report.pageHtml).toContain("hs-action-row")
     expect(report.pageHtml).toContain("justify-content: center")
     expect(report.pageHtml).not.toContain('class="hs-run-slot"')
+  })
+})
+
+describe("employee roster seeds", () => {
+  it("save pipeline stores JSON rows and hosts two bound run slots", () => {
+    const seed = loadProjectSeed(resolve(SEEDS_DIR, "save_employees.json"))
+    const project = migrateProjectModules(seed.project)
+    expect([...computeInvalid(project.modules, project.models).keys()]).toEqual([])
+    const flat = flattenPipelineModules(project.modules)
+    const sql = flat.find((m) => m.kind === ModuleKind.Sql)
+    expect(sql?.sql).toBe("REPLACE INTO employee FROM INPUT")
+    expect(shouldCheckInputDescription(sql!)).toBe(false)
+    const employee = project.models.find((m) => m.name === "Employee")
+    expect(tableNameForModel(employee!)).toBe("employee")
+    const html = (seed.hostedSite as { customHtml?: string } | undefined)?.customHtml ?? ""
+    expect(html).toContain("{{sql:employee}}")
+    expect(html).toContain("Add a person to the list")
+    expect(html).toContain("Check length")
+    expect(html).toContain("{{run}}")
+    expect(html).toContain("{{run:count}}")
+    expect(html).toContain("hs-split-head")
+    const rosterChunk = html.split('id="roster"')[1] ?? ""
+    expect(rosterChunk.indexOf("</section>")).toBeLessThan(rosterChunk.indexOf("{{sql:employee}}"))
+    expect(html.split("hs-split-heads")[1]?.split("{{run}}")[0]).not.toContain("{{run")
+    const hosted = normalizeHostedSiteOptions(seed.hostedSite as Parameters<typeof normalizeHostedSiteOptions>[0])
+    expect(hosted.pipelineBindings.map((b) => b.alias)).toEqual(["run", "count"])
+    expect(hosted.pipelineBindings.map((b) => b.projectId)).toEqual(["p_save_employees", "p_count_employees"])
+    expect(hosted.pipelineBindings.map((b) => b.visibility)).toEqual(["show", "hide"])
+    expect(hosted.pipelineBindings[0]?.inputEditable).toBe(true)
+    expect(hosted.pipelineBindings[0]?.clearInputAfterRun).toBe(true)
+    expect(hosted.pipelineBindings[0]?.runLabel).toBe("Add person")
+    expect(hosted.pipelineBindings[1]?.runLabel).toBe("Check length")
+    expect(hosted.pipelineBindings.map((b) => b.outputView)).toEqual(["auto", "auto"])
+    const report = compileHostedSiteLooksOk(hosted)
+    expect(report.ok, report.issues.map((i) => `${i.level}:${i.code} ${i.message}`).join("\n")).toBe(true)
+    expect(report.pageHtml).toContain("hs-sql-slot")
+    expect(report.pageHtml).toContain("hs-run-slot")
+  })
+
+  it("count pipeline counts the JSON list with FROM INPUT", () => {
+    const seed = loadProjectSeed(resolve(SEEDS_DIR, "count_employees.json"))
+    const project = migrateProjectModules(seed.project)
+    expect([...computeInvalid(project.modules, project.models).keys()]).toEqual([])
+    const sql = flattenPipelineModules(project.modules).find((m) => m.kind === ModuleKind.Sql)
+    expect(sql?.sql).toBe("SELECT COUNT(*) FROM INPUT")
+    expect(shouldCheckInputDescription(sql!)).toBe(false)
+    expect(project.models.some((m) => m.name === "EmployeeCount")).toBe(true)
   })
 })

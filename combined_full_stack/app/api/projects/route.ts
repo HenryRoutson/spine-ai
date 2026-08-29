@@ -7,6 +7,8 @@ import { allProjectSeeds, blankProject, cloneProject, type ProjectSeed } from "@
 import { ensureBundledSeedDocsForProject, ensureSeedDocs, type Store } from "@/lib/server/store";
 import { publishSharedLink } from "@/lib/server/shared_links";
 import { migrateProjectModules } from "@/lib/server/validity";
+import { normalizeHostedSiteOptions } from "@/lib/hosted-site";
+import { remapHostedSitePipelineBindings } from "@/lib/website-pipelines";
 import { logger } from "@/lib/server/server_logger";
 import type { AuthSession } from "@/lib/server/require_auth";
 import { ModuleKind, type DocId, type ModuleId, type Project, type ProjectId } from "@/lib/server/types";
@@ -37,13 +39,38 @@ async function maybePublishHostedSite(opts: {
 }): Promise<void> {
   const seed = allProjectSeeds().find((s) => s.project.id === (opts.templateId as ProjectId));
   if (!seed?.hostedSite) return;
+  const siteOptions = normalizeHostedSiteOptions(seed.hostedSite);
+  const clonedBoundBySeedId: Partial<Record<string, ProjectId>> = {};
+  let existing = opts.store.projects();
+  for (const binding of siteOptions.pipelineBindings) {
+    if (binding.projectId === seed.project.id || binding.projectId === opts.project.id) continue;
+    const boundSeed = allProjectSeeds().find((s) => s.project.id === binding.projectId);
+    if (!boundSeed) continue;
+    const clonedBound = migrateProjectModules(cloneProject(boundSeed.project, existing));
+    opts.store.saveProject(clonedBound);
+    await ensureBundledSeedDocsForProject(opts.store, clonedBound);
+    clonedBoundBySeedId[binding.projectId] = clonedBound.id;
+    existing = [...existing, clonedBound];
+  }
+  await opts.store.flush();
+  const pipelineBindings = siteOptions.pipelineBindings.length
+    ? remapHostedSitePipelineBindings(
+        seed.project.id,
+        opts.project.id,
+        siteOptions.pipelineBindings,
+        clonedBoundBySeedId,
+      )
+    : siteOptions.pipelineBindings;
   await publishSharedLink({
     ownerId: opts.auth.userId,
     project: opts.project,
     defaultDocsByModule: defaultDocsForHostedSite(opts.project, opts.store, seed),
     store: opts.store,
     kind: "site",
-    siteOptions: seed.hostedSite,
+    siteOptions: {
+      ...siteOptions,
+      pipelineBindings,
+    },
   });
 }
 

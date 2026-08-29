@@ -15,7 +15,10 @@ import { clearWorkspaceClientSession } from "@/lib/clear-workspace-client-sessio
 import { openSharedLinkInWorkspace } from "@/lib/open-shared-in-workspace"
 import { addSharedWithMe } from "@/lib/shared-with-me"
 import { viewerFundsSharedRun } from "@/lib/shared-link-funding"
-import type { SharedLinkPublicView } from "@/lib/shared-link-types"
+import type { HostedSiteBrand, SharedLinkPublicView } from "@/lib/shared-link-types"
+import { DEFAULT_HOSTED_SITE_OPTIONS } from "@/lib/shared-link-types"
+import type { HostedRunInputChrome } from "@/lib/hosted-run-chrome"
+import { HostedFunctionChrome } from "@/components/share/hosted-function-chrome"
 import { MarkdownView } from "@/components/highlight"
 import { cn } from "@/lib/utils"
 import { API_ROUTES } from "@/lib/api-routes"
@@ -29,6 +32,8 @@ export function SharedRunViewer({
   onRunEvent,
   hideViewerMarkdown = false,
   pipelineAlias,
+  brand,
+  inputChrome,
 }: {
   linkId: string
   variant?: "page" | "embed" | "site"
@@ -36,6 +41,8 @@ export function SharedRunViewer({
   onRunEvent?: (event: SharedRunLifecycleEvent) => void
   hideViewerMarkdown?: boolean
   pipelineAlias?: string
+  brand?: HostedSiteBrand
+  inputChrome?: HostedRunInputChrome
 }) {
   const [link, setLink] = useState<SharedLinkPublicView | null>(null)
   const [loadError, setLoadError] = useState<string | null>(null)
@@ -51,7 +58,7 @@ export function SharedRunViewer({
 
   if (loadError) {
     return (
-      <div className="flex min-h-dvh flex-col items-center justify-center gap-3 p-8 text-center">
+      <div className={cn("flex flex-col items-center justify-center gap-3 p-8 text-center", variant === "site" ? "min-h-40" : "min-h-dvh")}>
         <p className="text-sm text-muted-foreground">
           {variant === "embed" ? "Embed not found" : variant === "site" ? "Hosted page not found" : "Shared link not found"}
         </p>
@@ -66,7 +73,7 @@ export function SharedRunViewer({
 
   if (!link) {
     return (
-      <div className="flex min-h-dvh items-center justify-center">
+      <div className={cn("flex items-center justify-center", variant === "site" ? "min-h-24 py-6" : "min-h-dvh")}>
         <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
       </div>
     )
@@ -81,6 +88,8 @@ export function SharedRunViewer({
       onRunEvent={onRunEvent}
       hideViewerMarkdown={hideViewerMarkdown}
       pipelineAlias={pipelineAlias}
+      brand={brand}
+      inputChrome={inputChrome}
     />
   )
 }
@@ -93,6 +102,8 @@ function SharedRunContent({
   onRunEvent,
   hideViewerMarkdown,
   pipelineAlias,
+  brand,
+  inputChrome,
 }: {
   link: SharedLinkPublicView
   linkId: string
@@ -101,6 +112,8 @@ function SharedRunContent({
   onRunEvent?: (event: SharedRunLifecycleEvent) => void
   hideViewerMarkdown: boolean
   pipelineAlias?: string
+  brand?: HostedSiteBrand
+  inputChrome?: HostedRunInputChrome
 }) {
   const { email, isAuthenticated, ready, signOut } = useSupabaseSession()
   const isEmbed = variant === "embed"
@@ -129,10 +142,9 @@ function SharedRunContent({
 
   const insufficientCredit =
     viewerPays && isAuthenticated && balanceCents != null && balanceCents < minRunBalanceCents
+  const functionBrand = brand ?? DEFAULT_HOSTED_SITE_OPTIONS.brand
 
-  return (
-    <DocViewerProvider>
-    <SharedRunDocScopeProvider scope={{ linkId }}>
+  const body = (
     <div className={cn("flex flex-col bg-background text-foreground", isEmbed || isSite ? "min-h-full" : "min-h-dvh")}>
       {!hideBranding && (
       <header className="border-b border-border px-4 py-3">
@@ -236,6 +248,8 @@ function SharedRunContent({
           isAuthenticated={isAuthenticated}
           embedSessionToken={embedSessionToken}
           pipelineAlias={pipelineAlias}
+          compact={isSite}
+          inputChrome={inputChrome}
           insufficientCredit={insufficientCredit}
           onOpenBilling={() => {
             window.location.href = "/"
@@ -247,6 +261,12 @@ function SharedRunContent({
         />
       </main>
     </div>
+  )
+
+  return (
+    <DocViewerProvider>
+    <SharedRunDocScopeProvider scope={{ linkId }}>
+    {isSite ? <HostedFunctionChrome brand={functionBrand}>{body}</HostedFunctionChrome> : body}
     <LazyDocViewer />
     </SharedRunDocScopeProvider>
     </DocViewerProvider>

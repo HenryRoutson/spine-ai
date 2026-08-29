@@ -420,9 +420,6 @@ export async function publishSharedLink(input: PublishSharedLinkInput): Promise<
   assertValidSharedLinkPricing(fundingMode, billingMultiple, flatFeeCents);
   const embedOptions = normalizeEmbedOptions(isEmbed ? input.embedOptions : undefined);
   const siteOptions = normalizeHostedSiteOptions(isSite ? input.siteOptions : undefined);
-  if (isSite && !siteOptions.brand.companyName.trim()) {
-    throw new Error("Hosted page requires a company name");
-  }
 
   const snapshot = projectWithAuthoredModules(migrateProjectModules(structuredClone(input.project)));
   const defaultDocs: SharedLinkDefaultDoc[] = [];
@@ -695,9 +692,6 @@ export async function updateSharedLinkSiteSettings(
     ...patch,
     brand: { ...link.siteOptions.brand, ...patch.brand },
   });
-  if (!next.brand.companyName.trim()) {
-    throw new Error("Hosted page requires a company name");
-  }
   link.siteOptions = next;
   saveLocalLink(link);
   const db = await supabaseForSharedLinks();
@@ -883,7 +877,7 @@ export async function publicLinkViewForAlias(link: StoredSharedLink, alias?: str
     name: snapshot.name,
     modules: snapshot.modules.map(sanitizeModuleForPublic),
     models: snapshot.models,
-    defaultDocs: [] as typeof view.defaultDocs,
+    defaultDocs: view.defaultDocs.filter((d) => snapshot.modules.some((m) => m.id === d.moduleId)),
   }
 }
 

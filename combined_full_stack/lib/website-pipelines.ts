@@ -6,9 +6,12 @@ import type {
   website_pipeline_alias,
   WebsitePipelineBinding,
 } from "@/lib/shared-link-types"
+import { DEFAULT_HOSTED_RUN_INPUT_CHROME, normalizeHostedRunInputChrome } from "@/lib/hosted-run-chrome"
+
+export const UNNAMED_WEBSITE_NAME = "Untitled"
 
 export function websiteDisplayName(site: Pick<SharedLinkRecord, "name" | "siteOptions">): string {
-  return site.siteOptions.brand.companyName.trim() || site.name
+  return site.siteOptions.brand.companyName.trim() || UNNAMED_WEBSITE_NAME
 }
 
 export const DEFAULT_WEBSITE_PIPELINE_ALIAS = "run" as website_pipeline_alias
@@ -51,7 +54,11 @@ export function normalizeWebsitePipelineBindings(raw: unknown): WebsitePipelineB
     }
     usedAliases.add(alias)
     usedProjects.add(projectId)
-    out.push({ alias: alias as website_pipeline_alias, projectId })
+    out.push({
+      alias: alias as website_pipeline_alias,
+      projectId,
+      ...normalizeHostedRunInputChrome(rec),
+    })
   }
   return out
 }
@@ -62,13 +69,27 @@ export function resolveWebsitePipelineBindings(
 ): WebsitePipelineBinding[] {
   const listed = listedWebsitePipelineBindings(bindings)
   if (listed.length === 0) {
-    return [{ alias: DEFAULT_WEBSITE_PIPELINE_ALIAS, projectId: primaryProjectId }]
+    return [{ alias: DEFAULT_WEBSITE_PIPELINE_ALIAS, projectId: primaryProjectId, ...DEFAULT_HOSTED_RUN_INPUT_CHROME }]
   }
   if (listed.some((b) => b.projectId === primaryProjectId)) return listed
   return [
-    { alias: DEFAULT_WEBSITE_PIPELINE_ALIAS, projectId: primaryProjectId },
+    { alias: DEFAULT_WEBSITE_PIPELINE_ALIAS, projectId: primaryProjectId, ...DEFAULT_HOSTED_RUN_INPUT_CHROME },
     ...listed.filter((b) => b.alias !== DEFAULT_WEBSITE_PIPELINE_ALIAS),
   ]
+}
+
+export function remapHostedSitePipelineBindings(
+  seedProjectId: ProjectId,
+  clonedProjectId: ProjectId,
+  bindings: WebsitePipelineBinding[],
+  clonedBoundBySeedId: Partial<Record<string, ProjectId>> = {},
+): WebsitePipelineBinding[] {
+  return resolveWebsitePipelineBindings(seedProjectId, bindings).map((binding) => {
+    const chrome = normalizeHostedRunInputChrome(binding)
+    if (binding.projectId === seedProjectId) return { ...binding, ...chrome, projectId: clonedProjectId }
+    const remapped = clonedBoundBySeedId[binding.projectId]
+    return remapped ? { ...binding, ...chrome, projectId: remapped } : { ...binding, ...chrome }
+  })
 }
 
 // AI : stored attachments only — empty means a Lovable-style page with no pipeline backend.
@@ -86,13 +107,16 @@ export function websiteBoundProjectIds(
 export function bindingsFromProjectIds(
   projectIds: ProjectId[],
   projects: Pick<Project, "id" | "name">[],
+  previous: WebsitePipelineBinding[] = [],
 ): WebsitePipelineBinding[] {
   const unique = [...new Set(projectIds)]
   return unique.map((projectId, i) => {
     const name = projects.find((p) => p.id === projectId)?.name ?? projectId
+    const prev = previous.find((b) => b.projectId === projectId)
     return {
       alias: i === 0 ? DEFAULT_WEBSITE_PIPELINE_ALIAS : websitePipelineAliasFromName(name),
       projectId,
+      ...normalizeHostedRunInputChrome(prev),
     }
   })
 }
@@ -114,7 +138,7 @@ export function hostedSiteOptionsForCreate({
   const hasPipelines = pipelineIds.length > 0
   return {
     brand: {
-      companyName: name,
+      companyName: name.trim(),
       tagline: hasPipelines ? "Run attached pipelines" : "Your product",
     },
     customHtml: hasPipelines ? DEFAULT_HOSTED_SITE_HTML : DEFAULT_HOSTED_SITE_LANDING_HTML,

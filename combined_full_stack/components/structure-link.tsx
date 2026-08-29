@@ -1,6 +1,6 @@
 "use client"
 
-import { useAppShell } from "@/lib/app-shell"
+import { useOptionalAppShell } from "@/lib/app-shell"
 import type { StructureModel, StructureModelId } from "@/lib/types"
 import { modelName } from "@/lib/validity"
 import { cn } from "@/lib/utils"
@@ -17,11 +17,11 @@ export function StructureLink({
   fallback?: string
   className?: string
 }) {
-  const { openStructure } = useAppShell()
+  const shell = useOptionalAppShell()
   const name = structureId ? modelName(models, structureId) : undefined
   const label = name ?? fallback
 
-  if (!structureId || !name) {
+  if (!structureId || !name || !shell) {
     return <span className={className}>{label}</span>
   }
 
@@ -31,13 +31,13 @@ export function StructureLink({
       tabIndex={0}
       onClick={(e) => {
         e.stopPropagation()
-        openStructure(structureId)
+        shell.openStructure(structureId)
       }}
       onKeyDown={(e) => {
         if (e.key !== "Enter" && e.key !== " ") return
         e.preventDefault()
         e.stopPropagation()
-        openStructure(structureId)
+        shell.openStructure(structureId)
       }}
       className={cn(
         "cursor-pointer text-primary underline-offset-2 hover:underline",

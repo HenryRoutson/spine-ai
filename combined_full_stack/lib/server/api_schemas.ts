@@ -738,6 +738,11 @@ export const hostedSiteOptionsSchema = z
         accentColor: hexColorSchema.optional(),
         backgroundColor: hexColorSchema.optional(),
         textColor: hexColorSchema.optional(),
+        functionTheme: z.enum(["light", "dark"]).optional(),
+        // AI : empty = inherit page chrome; otherwise #rgb / #rrggbb.
+        functionBackgroundColor: z.union([z.literal(""), hexColorSchema]).optional(),
+        functionTextColor: z.union([z.literal(""), hexColorSchema]).optional(),
+        functionAccentColor: z.union([z.literal(""), hexColorSchema]).optional(),
       })
       .strict()
       .optional(),
@@ -765,12 +770,18 @@ export const hostedSiteOptionsSchema = z
       )
       .max(8)
       .optional(),
-    pipelineBindings: z
+            pipelineBindings: z
       .array(
         z
           .object({
             alias: z.string().trim().min(1).max(40),
             projectId: projectIdSchema,
+            visibility: z.enum(["auto", "show", "hide"]).optional(),
+            showInput: z.boolean().optional(),
+            inputEditable: z.boolean().optional(),
+            clearInputAfterRun: z.boolean().optional(),
+            runLabel: z.string().max(40).optional(),
+            outputView: z.enum(["auto", "table", "json", "metric"]).optional(),
           })
           .strict(),
       )
@@ -857,13 +868,6 @@ export const createSharedLinkBodySchema = z
         code: z.ZodIssueCode.custom,
         message: "Embed requires at least one allowed origin",
         path: ["allowedOrigins"],
-      });
-    }
-    if (data.kind === "site" && !data.siteOptions?.brand?.companyName?.trim()) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        message: "Hosted page requires a company name",
-        path: ["siteOptions", "brand", "companyName"],
       });
     }
   });

@@ -3,7 +3,7 @@
 // AI : TODO (arch-consumer-run) — own-pipeline-run-panel is the same chrome; one ConsumerRunPanel with funding/download slots.
 // AI : DONE (media-view-A-share) — InferenceRunOutputs here picks up DataViewPanel.
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import {
   AlertTriangle,
   CreditCard,
@@ -17,6 +17,7 @@ import { RunInputsNeededHint } from "@/components/run-with-stop-button"
 import { Input } from "@/components/ui/input"
 import { docsForInputModule } from "@/lib/inference-input"
 import { InferenceInputSlot } from "@/components/inference/inference-input-slot"
+import { inputModuleJsonStructSchema } from "@/lib/inference-json-struct-edit"
 import { InferenceRunOutputs } from "@/components/inference/inference-outputs"
 import {
   ErrorBanner,
@@ -31,6 +32,8 @@ import { fetchSharedDownload } from "@/lib/shared-run-client"
 import { useSharedInferenceRun, type SharedRunLifecycleEvent } from "@/lib/use-shared-inference-run"
 import { sharedLinkRequiresSignIn, viewerFundsSharedRun } from "@/lib/shared-link-funding"
 import { SharedRunDocScopeProvider } from "@/lib/shared-run-doc-scope"
+import { hostedRunAllowsChangeJson, hostedRunIdleButtonLabel, hostedRunShowsInputSlots, DEFAULT_HOSTED_RUN_INPUT_CHROME, type HostedRunInputChrome } from "@/lib/hosted-run-chrome"
+import { RunStatus } from "@/lib/types"
 import type { SharedLinkPublicView } from "@/lib/shared-link-types"
 
 type SharedRunPanelProps = {
@@ -44,6 +47,8 @@ type SharedRunPanelProps = {
   embedSessionToken?: string
   onRunEvent?: (event: SharedRunLifecycleEvent) => void
   pipelineAlias?: string
+  compact?: boolean
+  inputChrome?: HostedRunInputChrome
 }
 
 export function SharedRunPanel({
@@ -57,6 +62,8 @@ export function SharedRunPanel({
   embedSessionToken,
   onRunEvent,
   pipelineAlias,
+  compact = false,
+  inputChrome = DEFAULT_HOSTED_RUN_INPUT_CHROME,
 }: SharedRunPanelProps) {
   const run = useSharedInferenceRun(
     link,
@@ -66,9 +73,31 @@ export function SharedRunPanel({
     embedSessionToken,
     onRunEvent,
     pipelineAlias,
+    inputChrome.visibility === "show",
   )
   const [downloadBusy, setDownloadBusy] = useState(false)
   const [downloadError, setDownloadError] = useState<string | null>(null)
+  const [inputsOpen, setInputsOpen] = useState(false)
+  const [inputEpoch, setInputEpoch] = useState(0)
+  const chrome = inputChrome
+  const chromeArgs = {
+    chrome,
+    inputModuleIds: run.inputModules.map((m) => m.id),
+    defaultDocs: link.defaultDocs,
+    compact,
+  }
+  const showInputSlots =
+    hostedRunShowsInputSlots(chromeArgs) || (compact && inputsOpen && hostedRunAllowsChangeJson(chromeArgs))
+  const allowChangeJson = hostedRunAllowsChangeJson(chromeArgs)
+  const inputLocked = compact && !chrome.inputEditable
+
+  useEffect(() => {
+    if (!chrome.clearInputAfterRun) return
+    if (run.phase !== "done" || !run.run) return
+    if (run.run.status !== RunStatus.Ok) return
+    run.clearInputAssignment()
+    setInputEpoch((n) => n + 1)
+  }, [chrome.clearInputAfterRun, run.phase, run.run?.id, run.run?.status]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleDownloadAll = async () => {
     if (!run.run || !run.jobId || !run.progressToken) return
@@ -116,24 +145,47 @@ export function SharedRunPanel({
         </div>
       )}
 
+      {showInputSlots ? (
       <div className="space-y-2">
-        <p className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
-          pipeline inputs · {run.inputModules.length} slot{run.inputModules.length === 1 ? "" : "s"}
-        </p>
+        {compact ? null : (
+          <p className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
+            pipeline inputs · {run.inputModules.length} slot{run.inputModules.length === 1 ? "" : "s"}
+          </p>
+        )}
         {run.inputModules.map((m) => (
           <InferenceInputSlot
-            key={m.id}
+            key={`${m.id}:${inputEpoch}`}
             variant="upload"
             inputModule={m}
             outModel={run.outModelFor(m)}
-            defaultFilename={run.defaultForModule(m.id)}
+            defaultFilename={chrome.visibility === "show" ? undefined : run.defaultForModule(m.id)}
             docs={docsForInputModule(run.inputDocs, m.id)}
             uploading={run.uploadingModule === m.id}
-            onUpload={(file) => run.handleUpload(m.id, file)}
+            onUpload={(file) => void run.handleUpload(m.id, file)}
             onRemoveDoc={(docId) => run.removeInputDocForModule(m.id, docId)}
+            onClearSlot={() => {
+              for (const d of docsForInputModule(run.inputDocs, m.id)) {
+                run.removeInputDocForModule(m.id, d.id)
+              }
+            }}
+            jsonStruct={inputModuleJsonStructSchema(m, link.models, [])}
+            jsonStructDisabled={run.phase === "running" || inputLocked}
+            simple={compact}
+            jsonStructSource={{
+              docs: run.inputModules.flatMap((mod) => docsForInputModule(run.inputDocs, mod.id)),
+              project: null,
+              addDocContent: async (name, _type, content) => {
+                const file = new File([content], name, { type: "application/json" })
+                const doc = await run.handleUpload(m.id, file)
+                if (!doc) throw new Error("Could not save JSON")
+                return doc
+              },
+            }}
+            onJsonStructAssigned={(doc) => run.setInputDocForModule(m.id, doc)}
           />
         ))}
       </div>
+      ) : null}
 
       {(link.billingMultiple > 1 || link.flatFeeCents > 0) && viewerFunds && (
         <p className="rounded-lg border border-border bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
@@ -190,14 +242,24 @@ export function SharedRunPanel({
           ) : (
             <Zap className="mr-1.5 h-4 w-4" />
           )}
-          {needsSignIn ? "Sign in to run" : run.runButtonLabel}
+          {needsSignIn ? "Sign in to run" : run.phase === "running" || run.pendingHumanReview ? run.runButtonLabel : hostedRunIdleButtonLabel(chrome)}
         </Button>
       )}
       <RunInputsNeededHint
         ready={run.allInputsReady}
         running={run.phase === "running"}
         inputCount={run.inputModules.length}
+        simple={compact}
       />
+      {allowChangeJson ? (
+        <button
+          type="button"
+          className="w-full text-center text-xs text-muted-foreground underline-offset-2 hover:underline"
+          onClick={() => setInputsOpen((v) => !v)}
+        >
+          {inputsOpen ? "Hide JSON" : "Change JSON"}
+        </button>
+      ) : null}
 
       {run.pendingHumanReview && (
         <HumanReviewPanel
@@ -223,7 +285,7 @@ export function SharedRunPanel({
       {(run.phase === "running" || run.phase === "done") && (
         <>
           {run.phase === "done" && run.outputSteps.length > 0 && (
-            <InferenceRunOutputs steps={run.outputSteps} models={link.models} />
+            <InferenceRunOutputs steps={run.outputSteps} models={link.models} compact={compact} outputView={chrome.outputView} />
           )}
 
           {run.phase === "done" && run.run && run.run.status !== "ok" && (
@@ -264,6 +326,12 @@ export function SharedRunPanel({
             />
           )}
 
+          {compact && run.phase === "running" ? (
+            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+              <Loader2 className="h-4 w-4 animate-spin" />
+              Working…
+            </div>
+          ) : compact ? null : (
           <InferenceStepTracePanel
             modules={run.modules}
             phase={run.phase}
@@ -292,6 +360,7 @@ export function SharedRunPanel({
               ) : undefined
             }
           />
+          )}
         </>
       )}
 

@@ -1,0 +1,119 @@
+{
+  "id": "p_count_employees",
+  "name": "Count Employees",
+  "kind": "count-employees",
+  "documentation": "Takes a JSON list of employees and returns { count } via SELECT COUNT(*) FROM INPUT. Counts the list itself, not a JavaScript step.",
+  "models": [
+    {
+      "id": "m_employee",
+      "name": "Employee",
+      "description": "One person on the roster — name plus badge number.",
+      "fields": [
+        {
+          "id": "f_id",
+          "name": "id",
+          "type": "text",
+          "optional": false,
+          "description": "Stable employee id",
+          "relation": { "kind": "pk" },
+          "examples": ["e_ada"]
+        },
+        {
+          "id": "f_name",
+          "name": "name",
+          "type": "text",
+          "optional": false,
+          "description": "Employee full name",
+          "examples": ["Ada Lovelace"]
+        },
+        {
+          "id": "f_number",
+          "name": "number",
+          "type": "int",
+          "optional": false,
+          "description": "Employee number (badge id)",
+          "examples": ["1001"]
+        }
+      ]
+    },
+    {
+      "id": "m_count",
+      "name": "EmployeeCount",
+      "description": "How many employees were in the JSON list.",
+      "fields": [
+        {
+          "id": "f_count",
+          "name": "count",
+          "type": "int",
+          "optional": false,
+          "description": "Length of the employee list",
+          "examples": ["3"]
+        }
+      ]
+    }
+  ],
+  "modules": [
+    {
+      "id": "mod_in",
+      "kind": "input",
+      "label": "Employees JSON",
+      "note": "A JSON array of Employee objects — same shape the save pipeline stores.",
+      "inputType": "json",
+      "inputDescription": "JSON document: a list of employees, each with id, name, and number.",
+      "inputNameContains": "employees",
+      "outStructureId": "m_employee",
+      "outType": { "kind": "list", "item": { "kind": "ref", "modelId": "m_employee" } },
+      "cached": true,
+      "avgMs": 1,
+      "avgCostCents": 0
+    },
+    {
+      "id": "mod_sql",
+      "kind": "sql",
+      "label": "Count list",
+      "note": "COUNT(*) over the previous-step JSON list — not a custom-code step, so it still runs on the public hosted page.",
+      "inputDescription": "JSON list of employees",
+      "inStructureId": "m_employee",
+      "outStructureId": "m_count",
+      "inType": { "kind": "list", "item": { "kind": "ref", "modelId": "m_employee" } },
+      "outType": { "kind": "ref", "modelId": "m_count" },
+      "sql": "SELECT COUNT(*) FROM INPUT",
+      "cached": false,
+      "avgMs": 1,
+      "avgCostCents": 0
+    },
+    {
+      "id": "mod_out",
+      "kind": "output",
+      "label": "Count",
+      "note": "How many employees were in the JSON list",
+      "inputDescription": "EmployeeCount with a count field",
+      "inStructureId": "m_count",
+      "outStructureId": "m_count",
+      "cached": true,
+      "avgMs": 1,
+      "avgCostCents": 0
+    }
+  ],
+  "strategies": [
+    {
+      "id": "s_single",
+      "kind": "single-llm",
+      "name": "Single LLM Call",
+      "enabled": true,
+      "model": "deepseek-v4",
+      "accuracy": 99,
+      "latencyMs": 50,
+      "costCents": 0,
+      "passRate": 99
+    }
+  ],
+  "docs": [
+    {
+      "name": "employees.json",
+      "type": "json",
+      "label": "inference",
+      "file": "employees_roster/employees.json"
+    }
+  ]
+}

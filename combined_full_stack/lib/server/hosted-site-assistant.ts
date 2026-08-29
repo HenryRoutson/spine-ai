@@ -78,9 +78,9 @@ You ONLY change the public webpage: custom HTML, extra CSS, brand colors/copy, s
 You MUST NOT change the pipeline, structures, prompts, code, project Docs, test files, or funding.
 You MUST NOT invent a custom Supabase URL or anon key — that stays a publisher placeholder.
 
-The run form is injected where you place ${HOSTED_SITE_RUN_SLOT}. If the current HTML already has that token, keep exactly one. If the page has no run slot (no pipeline attached yet), do not add one unless they asked for a workspace. You may use {{action}} as the primary button instead (SQL-backed pages).
+The run form is injected where you place ${HOSTED_SITE_RUN_SLOT}. If the current HTML already has that token, keep exactly one. If the page has no run slot (no pipeline attached yet), do not add one unless they asked for a workspace. You may use {{action}} as the primary button instead on SQL-backed pages.
 The sign-in form is injected where you place ${HOSTED_SITE_AUTH_SLOT}. If authEnabled is true, keep exactly one ${HOSTED_SITE_AUTH_SLOT} on the sign-in page.
-Optional widgets (existing runtimes, not new backends): ${HOSTED_SITE_OUTPUT_SLOT} (result viewer), ${HOSTED_SITE_CHATBOT_SLOT} (chat), ${HOSTED_SITE_DOCS_SLOT} (viewer markdown), {{sql:table}} (live SQL rows from the app store), {{action}} (button that runs the bound pipeline), ${HOSTED_SITE_PAY_SLOT} (checkout), ${HOSTED_SITE_TABLE_SLOT} / {{table:ModelName}} (live structure table). Keep {{sql:shared_number}} + {{action}} for a shared counter. Keep those tokens if they are already on the page.
+Optional widgets (existing runtimes, not new backends): ${HOSTED_SITE_OUTPUT_SLOT} (result viewer), ${HOSTED_SITE_CHATBOT_SLOT} (chat), ${HOSTED_SITE_DOCS_SLOT} (viewer markdown), ${HOSTED_SITE_PAY_SLOT} (checkout), ${HOSTED_SITE_TABLE_SLOT} / {{table:ModelName}} (live structure table), {{sql:table}} (live SQL rows from the app store), {{action}} (button that runs the bound pipeline). Keep those tokens if they are already on the page. Keep {{sql:shared_number}} + {{action}} for a shared counter.
 Tokens: {{company}}, {{tagline}}, {{logo}}, {{email}} fill from brand fields. Default nav shows {{email}} as the signed-in account. Scripts, iframes, and event handlers are stripped.
 
 Return a short message for the publisher, then fields:
@@ -184,6 +184,10 @@ export function applyHostedSiteAssistantPatch(
       accentColor: mergeHex(patch.accentColor, base.brand.accentColor),
       backgroundColor: mergeHex(patch.backgroundColor, base.brand.backgroundColor),
       textColor: mergeHex(patch.textColor, base.brand.textColor),
+      functionTheme: base.brand.functionTheme,
+      functionBackgroundColor: base.brand.functionBackgroundColor,
+      functionTextColor: base.brand.functionTextColor,
+      functionAccentColor: base.brand.functionAccentColor,
     },
     customHtml: reactMode
       ? base.customHtml

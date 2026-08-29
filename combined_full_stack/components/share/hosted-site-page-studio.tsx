@@ -10,6 +10,7 @@ import { HostedSiteChrome } from "@/components/share/hosted-site-chrome"
 import { HostedSiteReactPreview } from "@/components/share/hosted-site-react-preview"
 import { HostedSiteSignInCard } from "@/components/share/hosted-site-sign-in"
 import { HostedSiteActionPreview } from "@/components/share/hosted-site-action-button"
+import { HostedFunctionChrome } from "@/components/share/hosted-function-chrome"
 import { HostedSiteSlotWidgets } from "@/components/share/hosted-site-slot-widgets"
 import { SharedLinkPreview } from "@/components/share/shared-link-preview"
 import { WebsitePipelineBindings } from "@/components/share/website-pipeline-bindings"
@@ -141,6 +142,7 @@ export function HostedSitePageStudio({
     viewerMarkdown,
     modules: project.modules,
     hideDocsInRun,
+    brand: value.brand,
   })
   const listedBindings = listedWebsitePipelineBindings(value.pipelineBindings)
   const hasPipelines = listedBindings.length > 0
@@ -152,13 +154,14 @@ export function HostedSitePageStudio({
       const bound = projects.find((p) => p.id === binding.projectId)
       return [
         binding.alias,
-        <SharedLinkPreview
-          key={binding.alias}
-          projectName={bound?.name ?? binding.alias}
-          viewerMarkdown=""
-          modules={bound?.modules ?? []}
-          variant="site"
-        />,
+        <HostedFunctionChrome key={binding.alias} brand={value.brand}>
+          <SharedLinkPreview
+            projectName={bound?.name ?? binding.alias}
+            viewerMarkdown=""
+            modules={bound?.modules ?? []}
+            variant="site"
+          />
+        </HostedFunctionChrome>,
       ]
     }),
   )
@@ -435,6 +438,61 @@ export function HostedSitePageStudio({
                     value={value.brand[key]}
                     onChange={(e) => patchBrand({ [key]: e.target.value })}
                     className="h-8 font-mono text-xs"
+                  />
+                </div>
+              </div>
+            ))}
+            <div className="space-y-1.5 sm:col-span-2">
+              <Label className="text-xs">Function panel</Label>
+              <div className="flex gap-2">
+                {(["light", "dark"] as const).map((theme) => (
+                  <button
+                    key={theme}
+                    type="button"
+                    className={`h-8 rounded-md border px-3 text-xs capitalize ${
+                      value.brand.functionTheme === theme
+                        ? "border-foreground bg-muted font-medium"
+                        : "border-border text-muted-foreground"
+                    }`}
+                    onClick={() => patchBrand({ functionTheme: theme })}
+                  >
+                    {theme}
+                  </button>
+                ))}
+              </div>
+            </div>
+            {(
+              [
+                ["Panel background", "functionBackgroundColor"],
+                ["Panel text", "functionTextColor"],
+                ["Panel accent", "functionAccentColor"],
+              ] as const
+            ).map(([label, key]) => (
+              <div key={label} className="space-y-1.5">
+                <Label className="text-xs">{label}</Label>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="color"
+                    value={htmlColorInputValue(
+                      value.brand[key],
+                      key === "functionBackgroundColor"
+                        ? value.brand.functionTheme === "dark"
+                          ? "#0f172a"
+                          : "#ffffff"
+                        : key === "functionTextColor"
+                          ? value.brand.functionTheme === "dark"
+                            ? "#f8fafc"
+                            : value.brand.textColor
+                          : value.brand.accentColor,
+                    )}
+                    onChange={(e) => patchBrand({ [key]: e.target.value })}
+                    className="h-8 w-8 cursor-pointer rounded border border-border bg-background p-0.5"
+                  />
+                  <Input
+                    value={value.brand[key]}
+                    onChange={(e) => patchBrand({ [key]: e.target.value })}
+                    className="h-8 font-mono text-xs"
+                    placeholder="auto"
                   />
                 </div>
               </div>

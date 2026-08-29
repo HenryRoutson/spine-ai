@@ -2,6 +2,12 @@
 
 export type JsonViewerHumanViewId = "tree" | "table" | "json"
 export type JsonViewerSyntaxThemeId = "app" | "vscode"
+export type JsonViewerChromeTheme = "light" | "dark"
+export type JsonViewerChromeColors = {
+  bg?: string
+  fg?: string
+  accent?: string
+}
 
 export const JSON_VIEWER_HUMAN_VIEWS: readonly {
   id: JsonViewerHumanViewId

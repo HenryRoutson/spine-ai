@@ -9,24 +9,47 @@ import {
   insertWebsitePipelineInCode,
   listedWebsitePipelineBindings,
   normalizeWebsitePipelineBindings,
+  remapHostedSitePipelineBindings,
   resolveWebsitePipelineBindings,
   stripWebsitePipelineFromCode,
+  UNNAMED_WEBSITE_NAME,
   websiteBoundProjectIds,
+  websiteDisplayName,
 } from "@/lib/website-pipelines"
 import type { ProjectId } from "@/lib/types"
 
 const P1 = "p1" as ProjectId
 const P2 = "p2" as ProjectId
 
+const AUTO_CHROME = {
+  visibility: "auto",
+  inputEditable: true,
+  clearInputAfterRun: false,
+  runLabel: "",
+  outputView: "auto",
+} as const
+
 describe("website pipeline bindings", () => {
   it("treats stored empty bindings as no pipelines; viewer still defaults to primary", () => {
     expect(listedWebsitePipelineBindings([])).toEqual([])
     expect(websiteBoundProjectIds(P1, [])).toEqual([])
-    expect(resolveWebsitePipelineBindings(P1, [])).toEqual([{ alias: "run", projectId: P1 }])
+    expect(resolveWebsitePipelineBindings(P1, [])).toEqual([
+      { alias: "run", projectId: P1, ...AUTO_CHROME },
+    ])
+  })
+
+  it("labels an unnamed page Untitled", () => {
+    expect(
+      websiteDisplayName({
+        name: "Untitled Pipeline",
+        siteOptions: normalizeHostedSiteOptions({ brand: { companyName: "" } }),
+      }),
+    ).toBe(UNNAMED_WEBSITE_NAME)
   })
 
   it("mints landing HTML when no pipelines are selected", () => {
-    const none = hostedSiteOptionsForCreate({ name: "Acme", pipelineIds: [], projects: [] })
+    const none = hostedSiteOptionsForCreate({ name: "", pipelineIds: [], projects: [] })
+    expect(none.brand.companyName).toBe("")
     expect(none.pipelineBindings).toEqual([])
     expect(none.customHtml).toBe(DEFAULT_HOSTED_SITE_LANDING_HTML)
     expect(none.customHtml).not.toContain("{{run}}")
@@ -35,7 +58,7 @@ describe("website pipeline bindings", () => {
       pipelineIds: [P1],
       projects: [{ id: P1, name: "Extract" }],
     })
-    expect(withRun.pipelineBindings).toEqual([{ alias: "run", projectId: P1 }])
+    expect(withRun.pipelineBindings).toEqual([{ alias: "run", projectId: P1, ...AUTO_CHROME }])
     expect(withRun.customHtml).toBe(DEFAULT_HOSTED_SITE_HTML)
   })
 
@@ -46,10 +69,27 @@ describe("website pipeline bindings", () => {
       { alias: "invoice", projectId: "p3" },
     ])
     expect(bindings).toEqual([
-      { alias: "run", projectId: P1 },
-      { alias: "invoice", projectId: P2 },
-      { alias: "p3", projectId: "p3" },
+      { alias: "run", projectId: P1, visibility: "auto", inputEditable: true, clearInputAfterRun: false, runLabel: "", outputView: "auto" },
+      { alias: "invoice", projectId: P2, visibility: "auto", inputEditable: true, clearInputAfterRun: false, runLabel: "", outputView: "auto" },
+      { alias: "p3", projectId: "p3", visibility: "auto", inputEditable: true, clearInputAfterRun: false, runLabel: "", outputView: "auto" },
     ])
+  })
+
+  it("coerces hidden pipelines to locked non-clearing chrome", () => {
+    const bindings = normalizeWebsitePipelineBindings([
+      { alias: "run", projectId: P1, showInput: true, clearInputAfterRun: true },
+      { alias: "count", projectId: P2, showInput: false, inputEditable: true, clearInputAfterRun: true },
+    ])
+    expect(bindings[0]).toMatchObject({
+      visibility: "show",
+      inputEditable: true,
+      clearInputAfterRun: true,
+    })
+    expect(bindings[1]).toMatchObject({
+      visibility: "hide",
+      inputEditable: false,
+      clearInputAfterRun: false,
+    })
   })
 
   it("builds bindings from selected project ids", () => {
@@ -58,6 +98,24 @@ describe("website pipeline bindings", () => {
       { id: P2, name: "Invoice OCR" },
     ])
     expect(next.map((b) => b.alias)).toEqual(["run", "invoice-ocr"])
+  })
+
+  it("remaps cloned seed ids onto the published site bindings", () => {
+    const cloned = "p_cloned_save" as ProjectId
+    const clonedCount = "p_cloned_count" as ProjectId
+    const next = remapHostedSitePipelineBindings(
+      "p_save_employees" as ProjectId,
+      cloned,
+      [
+        { alias: "run" as const, projectId: "p_save_employees" as ProjectId },
+        { alias: "count" as const, projectId: "p_count_employees" as ProjectId },
+      ],
+      { p_count_employees: clonedCount },
+    )
+    expect(next).toEqual([
+      { alias: "run", projectId: cloned, visibility: "auto", inputEditable: true, clearInputAfterRun: false, runLabel: "", outputView: "auto" },
+      { alias: "count", projectId: clonedCount, visibility: "auto", inputEditable: true, clearInputAfterRun: false, runLabel: "", outputView: "auto" },
+    ])
   })
 })
 
@@ -110,6 +168,34 @@ describe("named run slots", () => {
     )
     expect(grouped.some((s) => s.kind === "action-row")).toBe(true)
   })
+
+  it("groups adjacent named run slots into a split row", () => {
+    const grouped = groupHostedActionSlots(splitHostedSiteSlots("<h2>Pipelines</h2>{{run}}\n{{run:count}}"))
+    expect(grouped).toEqual([
+      { kind: "html", html: "<h2>Pipelines</h2>" },
+      {
+        kind: "run-row",
+        slots: [
+          { kind: "slot", slot: "run" },
+          { kind: "slot", slot: "run", alias: "count" },
+        ],
+      },
+    ])
+  })
+
+  it("keeps hs-split-heads when grouping adjacent run slots", () => {
+    const grouped = groupHostedActionSlots(
+      splitHostedSiteSlots(
+        '<section class="hs-split-heads"><div class="hs-split-head">Add</div><div class="hs-split-head">Count</div></section>\n{{run}}\n{{run:count}}',
+      ),
+    )
+    const heads = grouped.find((s) => s.kind === "html")
+    expect(heads).toMatchObject({
+      kind: "html",
+      html: '<section class="hs-split-heads"><div class="hs-split-head">Add</div><div class="hs-split-head">Count</div></section>\n',
+    })
+    expect(grouped.some((s) => s.kind === "run-row")).toBe(true)
+  })
 })
 
 describe("html to react conversion", () => {
@@ -157,7 +243,9 @@ describe("hosted site options normalize", () => {
       reactFiles: [{ path: "src/App.tsx", contents: "export default function App(){return null}" }],
     })
     expect(next.runtime).toBe("react")
-    expect(next.pipelineBindings).toEqual([{ alias: "run", projectId: P1 }])
+    expect(next.pipelineBindings).toEqual([
+      { alias: "run", projectId: P1, visibility: "auto", inputEditable: true, clearInputAfterRun: false, runLabel: "", outputView: "auto" },
+    ])
     expect(next.reactFiles[0]?.path).toBe("src/App.tsx")
   })
 })

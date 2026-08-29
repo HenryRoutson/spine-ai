@@ -37,6 +37,31 @@
   --jfa: #666;
 }
 
+body[data-chrome="light"] {
+  --bg: #ffffff;
+  --surface: #f8fafc;
+  --surface-2: #f1f5f9;
+  --border: #e2e8f0;
+  --text: #0f172a;
+  --muted: #64748b;
+  --accent: #2563eb;
+  --accent-fg: #ffffff;
+  --th-bg: #f1f5f9;
+  --th-border: #e2e8f0;
+  --td-stripe: rgba(15, 23, 42, 0.03);
+  --td-hover: rgba(37, 99, 235, 0.08);
+  --jbg: #f8fafc;
+  --jkey: #0369a1;
+  --jstr: #047857;
+  --jnum: #b45309;
+  --jbool: #1d4ed8;
+  --jnull: #64748b;
+  --jdate: #0f766e;
+  --jpunct: #64748b;
+  --jell: #64748b;
+  --jfa: #94a3b8;
+}
+
 /* AI: app theme — matches components/highlight.tsx (pipeline / log JSON output) */
 body[data-syntax-theme="app"] {
   --jkey: oklch(0.65 0.16 230);
@@ -47,6 +72,18 @@ body[data-syntax-theme="app"] {
   --jdate: oklch(0.65 0.16 230);
   --jpunct: oklch(0.65 0.005 264);
   --jell: oklch(0.65 0.005 264);
+}
+
+/* AI : light chrome wins over the dark-first app syntax tokens */
+body[data-chrome="light"][data-syntax-theme="app"] {
+  --jkey: #0369a1;
+  --jstr: #047857;
+  --jnum: #b45309;
+  --jbool: #1d4ed8;
+  --jnull: #64748b;
+  --jdate: #0f766e;
+  --jpunct: #64748b;
+  --jell: #64748b;
 }
 
 html, body { height: 100%; }
@@ -3120,6 +3157,20 @@ function setFullscreenEnabled(on) {
   if (on) document.body.setAttribute('data-fs', '1');
   else document.body.removeAttribute('data-fs');
 }
+function applyChrome(theme, colors) {
+  if (theme === 'light') document.body.setAttribute('data-chrome', 'light');
+  else document.body.removeAttribute('data-chrome');
+  const root = document.documentElement;
+  for (const k of ['--bg', '--surface', '--jbg', '--text', '--accent']) root.style.removeProperty(k);
+  if (!colors || typeof colors !== 'object') return;
+  if (colors.bg) {
+    root.style.setProperty('--bg', colors.bg);
+    root.style.setProperty('--surface', colors.bg);
+    root.style.setProperty('--jbg', colors.bg);
+  }
+  if (colors.fg) root.style.setProperty('--text', colors.fg);
+  if (colors.accent) root.style.setProperty('--accent', colors.accent);
+}
 function parentPostOrigin() {
   try {
     if (!location.origin || location.origin === 'null') return '*';
@@ -3151,6 +3202,7 @@ window.addEventListener('message', (e) => {
     applyDefaultView(readDefaultView(e.data.defaultView));
     applySyntaxTheme(readSyntaxTheme(e.data.syntaxTheme));
     if (typeof e.data.showFullscreen === 'boolean') setFullscreenEnabled(e.data.showFullscreen);
+    applyChrome(e.data.chromeTheme, e.data.chromeColors);
     return;
   }
 
@@ -3170,6 +3222,7 @@ window.addEventListener('message', (e) => {
     applyDefaultView(readDefaultView(e.data.defaultView));
     applySyntaxTheme(readSyntaxTheme(e.data.syntaxTheme));
     setFullscreenEnabled(!!e.data.showFullscreen);
+    applyChrome(e.data.chromeTheme, e.data.chromeColors);
     renderStructurePanel(_currentVal, _currentMode);
     renderRight();
     closeDetail();

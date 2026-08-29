@@ -13,4 +13,5 @@ export {}
 // AI : DONE (app-sql-P0-slots) — {{sql:table}} live rows, {{action}} runs the bound pipeline
 // AI : DONE (app-sql-P0-demo) — Double Shared Number seed: UPDATE … SET value = value * 2
 // AI : DONE (app-sql-P1-collatz) — second hosted button runs one 3n+1 step; ×3 and +1 are separate SQL steps; hosted simple-view trace
+// AI : DONE (app-sql-P2-roster) — two pipelines on one site: REPLACE INTO employee FROM INPUT + SELECT COUNT(*) FROM INPUT; structure JSON editor on public run slots
 

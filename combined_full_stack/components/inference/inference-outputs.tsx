@@ -1,13 +1,65 @@
 "use client"
 
-import { useState } from "react"
-import { AlertTriangle, CheckCircle2 } from "lucide-react"
+import { useEffect, useState } from "react"
+import { createPortal } from "react-dom"
+import { AlertTriangle, CheckCircle2, Maximize2, X } from "lucide-react"
 import { DataViewPanel } from "@/components/data-view-panel"
 import { PopupModal, type PopupPayload } from "@/components/logging/popup-modal"
+import { HTML_POPUP_CHROME } from "@/lib/html-popup"
 import { cn } from "@/lib/utils"
 import { useStatusPalette } from "@/lib/chart-colors"
 import { hasDisplayableStepOutput, isDocReferenceOutputJson } from "@/lib/step-doc"
+import {
+  deriveHostedOutputView,
+  extractHostedMetric,
+  type hosted_resolved_output_view,
+} from "@/lib/hosted-run-chrome"
+import type { hosted_run_output_view } from "@/lib/shared-link-types"
 import type { RunStep, StructureModel } from "@/lib/types"
+
+function prettyHostedJson(json: string): string {
+  try {
+    return JSON.stringify(JSON.parse(json), null, 2)
+  } catch {
+    return json
+  }
+}
+
+// AI : compact hosted fullscreen is pretty JSON text so the visitor can see the SQL result is not JS.
+function CompactHostedJsonModal({
+  json,
+  title,
+  onClose,
+}: {
+  json: string
+  title: string
+  onClose: () => void
+}) {
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose()
+    }
+    window.addEventListener("keydown", onKey)
+    return () => window.removeEventListener("keydown", onKey)
+  }, [onClose])
+  return createPortal(
+    <div className={HTML_POPUP_CHROME.overlay}>
+      <button type="button" aria-label="Close viewer" className={HTML_POPUP_CHROME.backdrop} onClick={onClose} />
+      <div className={HTML_POPUP_CHROME.panel}>
+        <div className={HTML_POPUP_CHROME.header}>
+          <span className={HTML_POPUP_CHROME.title}>{title} · raw JSON</span>
+          <button type="button" onClick={onClose} className={HTML_POPUP_CHROME.close} aria-label="Close viewer">
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+        <pre className="min-h-0 flex-1 overflow-auto bg-white p-6 font-mono text-sm leading-relaxed text-neutral-900">
+          {prettyHostedJson(json)}
+        </pre>
+      </div>
+    </div>,
+    document.body,
+  )
+}
 
 function OutputStepLabel() {
   return (
@@ -17,41 +69,55 @@ function OutputStepLabel() {
   )
 }
 
-function outputStepOutlineClass(isOutputStep: boolean) {
+function outputStepOutlineClass(isOutputStep: boolean, compact = false) {
+  if (compact) return "border-border"
   return isOutputStep ? "border-white/55 ring-1 ring-white/35" : "border-border"
 }
 
 export function InferenceRunOutputs({
   steps,
   models,
+  compact = false,
+  outputView = "auto",
 }: {
   steps: RunStep[]
   models?: StructureModel[]
+  compact?: boolean
+  outputView?: hosted_run_output_view
 }) {
   const [popup, setPopup] = useState<PopupPayload | null>(null)
   return (
     <div className="space-y-3">
-      <p className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">final outputs</p>
+      {compact ? null : (
+        <p className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">final outputs</p>
+      )}
       {steps.map((step, i) => (
         <InferenceStepOutput
           key={step.moduleId}
           step={step}
           expanded={i === steps.length - 1}
           isOutputStep={step.kind === "output"}
+          compact={compact}
           models={models}
+          outputView={outputView}
           onFullscreen={
             step.outputJson
               ? () =>
                   setPopup({
                     json: step.outputJson!,
-                    models,
+                    models: compact ? undefined : models,
                     title: `${step.label} (output)`,
+                    defaultView: "json",
                   })
               : undefined
           }
         />
       ))}
-      {popup && <PopupModal payload={popup} onClose={() => setPopup(null)} />}
+      {popup?.json && compact ? (
+        <CompactHostedJsonModal json={popup.json} title={popup.title} onClose={() => setPopup(null)} />
+      ) : popup ? (
+        <PopupModal payload={popup} onClose={() => setPopup(null)} />
+      ) : null}
     </div>
   )
 }
@@ -60,27 +126,37 @@ function InferenceStepOutput({
   step,
   expanded,
   isOutputStep,
+  compact = false,
   models,
+  outputView = "auto",
   onFullscreen,
 }: {
   step: RunStep
   expanded: boolean
   isOutputStep: boolean
+  compact?: boolean
   models?: StructureModel[]
+  outputView?: hosted_run_output_view
   onFullscreen?: () => void
 }) {
   const ok = step.status === "ok" || step.status === "cached"
   const palette = useStatusPalette()
+  const resolved: hosted_resolved_output_view | null = step.outputJson
+    ? compact
+      ? deriveHostedOutputView({ preference: outputView, json: step.outputJson })
+      : "table"
+    : null
+  const metric = resolved === "metric" && step.outputJson ? extractHostedMetric(step.outputJson) : null
   return (
     <div
       className={cn(
         "relative overflow-hidden rounded-lg border bg-card",
-        outputStepOutlineClass(isOutputStep),
+        outputStepOutlineClass(isOutputStep, compact),
       )}
     >
-      {isOutputStep && (
+      {isOutputStep && !compact ? (
         <span className="absolute bottom-0 left-0 top-0 w-1 bg-white/90 shadow-[2px_0_8px_rgba(255,255,255,0.15)]" aria-hidden />
-      )}
+      ) : null}
       <div className="flex items-center gap-2 border-b border-border px-4 py-2.5">
         {ok ? (
           <CheckCircle2 className="h-4 w-4 shrink-0" style={{ color: palette.ok }} />
@@ -88,19 +164,39 @@ function InferenceStepOutput({
           <AlertTriangle className="h-4 w-4 shrink-0" style={{ color: palette.err }} />
         )}
         <p className="min-w-0 flex-1 truncate text-sm font-medium">{step.label}</p>
-        {isOutputStep && <OutputStepLabel />}
+        {isOutputStep && !compact ? <OutputStepLabel /> : null}
         {step.status === "cached" && (
           <span className="font-mono text-[10px] text-chart-3">cached</span>
         )}
+        {compact && onFullscreen ? (
+          <button
+            type="button"
+            className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded border border-border text-muted-foreground hover:bg-accent hover:text-foreground"
+            title="View full JSON"
+            aria-label="View full JSON"
+            onClick={onFullscreen}
+          >
+            <Maximize2 className="h-3 w-3" />
+          </button>
+        ) : null}
       </div>
-      {step.outputJson ? (
+      {metric ? (
+        <div className="flex flex-col items-center justify-center gap-1 px-4 py-7">
+          {metric.label ? (
+            <p className="text-[10px] font-medium uppercase tracking-[0.16em] text-muted-foreground">{metric.label}</p>
+          ) : null}
+          <p className="text-4xl font-semibold tabular-nums tracking-tight">{metric.text}</p>
+        </div>
+      ) : step.outputJson ? (
         <div className={expanded ? "h-[min(28rem,55vh)]" : "h-[min(16rem,32vh)]"}>
           <DataViewPanel
             json={step.outputJson}
             models={models}
-            defaultView="table"
+            defaultView={resolved === "json" ? "json" : "table"}
+            lockedView={compact ? (resolved === "json" ? "json" : "table") : undefined}
             className="h-full"
-            onFullscreen={onFullscreen}
+            simple={compact}
+            onFullscreen={compact ? undefined : onFullscreen}
           />
         </div>
       ) : (
