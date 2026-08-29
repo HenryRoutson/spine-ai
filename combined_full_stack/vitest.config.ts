@@ -6,7 +6,7 @@ export default defineConfig({
     environment: "node",
     // AI : default suite is offline/unit only — live OpenRouter parity is npm run test:parity
     // AI : (headless run-engine + export, never Next.js / browser UI).
-    include: ["lib/*.test.ts", "lib/cli/**/*.test.ts", "lib/cli/**/*.test.tsx", "lib/server/**/*.test.ts", "lib/core/**/*.test.ts"],
+    include: ["lib/*.test.ts", "lib/cli/**/*.test.ts", "lib/cli/**/*.test.tsx", "lib/server/**/*.test.ts", "lib/core/**/*.test.ts", "lib/spine-js/**/*.test.ts"],
     exclude: [
       "**/node_modules/**",
       "**/pipeline_export_parity.test.ts",

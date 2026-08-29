@@ -8,8 +8,6 @@ import {
   materializeTypeAliases,
   parseStructureHint,
   resolveStructureIdFromModels,
-  structureModelSpecSchema,
-  typeAliasSpecSchema,
   wantsValidationFix,
 } from "./assistant-shared";
 import {
@@ -54,9 +52,16 @@ import { createPipelineModule } from "@/lib/pipeline-module-factory";
 import { migrateModuleSpineTypes, patchSpineOutList } from "./spine_types";
 import { stepEmitsList } from "./type_expr";
 import { uid } from "@/lib/id";
-import { inputTypesAreAllJsonNative, inputTypesForModule, isDocToTextInputType } from "@/lib/inference-input-core";
-import { USER_ADDABLE_MODULE_KINDS, asModuleKind, kindAlwaysEmitsList, stepRequiresNote } from "@/lib/module-kinds";
-import { getConnectAction } from "@/lib/connect-catalog";
+import { inputTypesForModule, isDocToTextInputType } from "@/lib/inference-input-core";
+import { asModuleKind, kindAlwaysEmitsList } from "@/lib/module-kinds";
+import {
+  assistantResponseSchema,
+  type AssistantProposedAction,
+  type PipelineAssistantModelSpec,
+  type PipelineAssistantModulePatchEntry,
+  type PipelineAssistantModuleSpec,
+  type ProjectAssistantDocSpec,
+} from "./pipeline-authoring-schema";
 import { attachAssistantUsage } from "./assistant_billing";
 import { isUnnamedProjectName } from "@/lib/project-assistant-types";
 import { diffStructureModels } from "@/lib/proposal-shape-diff";
@@ -64,7 +69,6 @@ import { catalogHasModel, resolveModelId } from "./model_catalog";
 import {
   DEFAULT_MODEL,
   DocLabel,
-  INPUT_TYPES,
   InputType,
   ModuleKind,
   ChatbotMode,
@@ -88,312 +92,18 @@ import {
   runVibeCodingHarness,
   vibeHarnessEnabled,
 } from "./vibe-coding-harness";
+import { vibeJsAuthoringEnabled } from "./vibe-coding-mode";
+import { compileSpineJs, extractSpineJsSource } from "@/lib/spine-js/compile";
+import { buildSpineJsSystemPrompt, buildSpineJsUserPrompt } from "@/lib/spine-js/prompt";
 import { buildVibeTopologyPromptBlock, formatTopologyRetryErrors, topologyAdvice } from "./vibe-coding-topology";
 
-const MODULE_KINDS = USER_ADDABLE_MODULE_KINDS;
-
-const INPUT_TYPE_VALUES = INPUT_TYPES.map((t) => t.value);
-
-const assembleBindingsSchema = z.record(
-  z.string(),
-  z.discriminatedUnion("kind", [
-    z.object({ kind: z.literal("spine") }),
-    z.object({ kind: z.literal("state"), label: z.string() }),
-    z.object({
-      kind: z.literal("path"),
-      from: z.union([z.literal("spine"), z.object({ label: z.string() })]),
-      path: z.string(),
-    }),
-  ]),
-);
-
-// AI : moduleSpecSchema nested forkBranches; materialize lane modules via expandModuleSpecs.
-const moduleSpecSchema = z
-  .object({
-    kind: z.enum(MODULE_KINDS),
-    label: z.string(),
-    note: z.string().optional(),
-    structureIn: z
-      .string()
-      .optional()
-      .describe(
-        "Structure name the step reads — combine: pipeline-state structure from an earlier step (required, not list[...])",
-      ),
-    structureOut: z
-      .string()
-      .optional()
-      .describe("Emitted structure — list[Name] for input/llm/custom-code list emit; item name only for llm-batch/example-select/chunk (those always emit list[item])"),
-    inputType: z
-      .enum(INPUT_TYPE_VALUES as [string, ...string[]])
-      .optional()
-      .describe("input steps: upload type; on combine-only specs: applies to auto-inserted side Document input"),
-    inputNameContains: z
-      .string()
-      .optional()
-      .describe("filename substring for this input slot — on combine-only specs: applies to auto-inserted side input"),
-    inputDescription: z.string().optional(),
-    checkInputDescription: z.boolean().optional(),
-    prompt: z.string().optional(),
-    chatbotMode: z.enum(["single", "until-exit"]).optional(),
-    maxTurns: z.number().int().min(1).max(200).optional(),
-    code: z
-      .string()
-      .optional()
-      .describe("custom-code only — TypeScript arrow expression e.g. (rows) => rows.map(...)"),
-    model: z.string().optional(),
-    inputMinCount: z.number().int().min(1).optional(),
-    assembleBindings: assembleBindingsSchema
-      .optional()
-      .describe(
-        "assemble only — field → spine | { kind: state, label } | { kind: path, from: spine|{label}, path: dotted }",
-      ),
-    // AI : parallel — author-time fixed branches; structureOut names resolve against project models
-    parallelBranches: z
-      .array(
-        z.object({
-          field: z.string(),
-          prompt: z.string(),
-          structureOut: z.string(),
-          model: z.string().optional(),
-          note: z.string().optional(),
-        }),
-      )
-      .max(32)
-      .optional()
-      .describe("parallel only — each branch: product field name, prompt, and structureOut model name"),
-    forkJoin: z
-      .enum(["product", "assemble", "merge"])
-      .optional()
-      .describe("fork only — product (auto field per lane), assemble (bindings), or merge"),
-    forkBranches: z
-      .array(
-        z.object({
-          label: z.string(),
-          modules: z.array(z.any()).max(50),
-        }),
-      )
-      .min(1)
-      .max(12)
-      .optional()
-      .describe("fork / if-else — linear lanes; if-else is Then then Else (Else may be empty)"),
-    ifCondition: z
-      .discriminatedUnion("kind", [
-        z.object({ kind: z.literal("path"), path: z.string() }),
-        z.object({ kind: z.literal("equals"), path: z.string(), value: z.unknown() }),
-      ])
-      .optional()
-      .describe("if-else only — bool spine path, or equals path + JSON value"),
-    n8nNodeType: z
-      .string()
-      .optional()
-      .describe("n8n only — catalog id e.g. piece.set or n8n-nodes-base.set (list_pieces)"),
-    n8nParameters: z
-      .record(z.string(), z.unknown())
-      .optional()
-      .describe("n8n only — piece params matching the auto-generated form"),
-    n8nCode: z.string().optional().describe("n8n only — optional Code-node JS override"),
-    connectActionId: z
-      .string()
-      .optional()
-      .describe("connect only — catalog id from list_connect_actions e.g. slack.postMessage"),
-    connectParameters: z
-      .record(z.string(), z.unknown())
-      .optional()
-      .describe("connect only — params matching the action props"),
-    sql: z
-      .string()
-      .optional()
-      .describe("sql steps only — SELECT / UPDATE / INSERT against the hosted app SQL store"),
-    sqlSeedRows: z
-      .array(z.record(z.string(), z.unknown()))
-      .max(64)
-      .optional()
-      .describe("sql steps — rows inserted when the table is empty"),
-  })
-  .superRefine((spec, ctx) => {
-    if (stepRequiresNote(asModuleKind(spec.kind)) && !spec.note?.trim()) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        message: "note is required for input, combine, assemble, parallel, and llm steps",
-        path: ["note"],
-      });
-    }
-    if (spec.kind === ModuleKind.Input && spec.structureOut?.trim()) {
-      const hint = parseStructureHint(spec.structureOut);
-      const jsonNative =
-        spec.inputType != null && inputTypesAreAllJsonNative([spec.inputType as InputType]);
-      if (hint && !jsonNative && hint.name.toLowerCase() !== "document") {
-        ctx.addIssue({
-          code: z.ZodIssueCode.custom,
-          message:
-            "non-JSON input steps must structureOut Document or list[Document] — typed parsing belongs in a later llm/custom-code step",
-          path: ["structureOut"],
-        });
-      }
-    }
-    if (spec.kind === ModuleKind.LlmBatch && spec.structureIn?.trim()) {
-      const inHint = parseStructureHint(spec.structureIn);
-      if (inHint?.isList) {
-        ctx.addIssue({
-          code: z.ZodIssueCode.custom,
-          message: "llm-batch structureIn is the list ITEM type (e.g. Document), not list[Document]",
-          path: ["structureIn"],
-        });
-      }
-    }
-    if (spec.kind === ModuleKind.Combine) {
-      if (!spec.structureIn?.trim()) {
-        ctx.addIssue({
-          code: z.ZodIssueCode.custom,
-          message:
-            "combine requires structureIn — pipeline-state structure from an earlier step (not list[...])",
-          path: ["structureIn"],
-        });
-      }
-      const inHint = parseStructureHint(spec.structureIn);
-      if (inHint?.isList) {
-        ctx.addIssue({
-          code: z.ZodIssueCode.custom,
-          message: "combine structureIn is the state structure name (e.g. TableRow), not list[TableRow]",
-          path: ["structureIn"],
-        });
-      }
-    }
-    if (spec.kind === ModuleKind.Assemble && !spec.assembleBindings) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        message: "assemble requires assembleBindings",
-        path: ["assembleBindings"],
-      });
-    }
-    if (spec.kind === ModuleKind.Fork) {
-      if (!spec.forkBranches || spec.forkBranches.length < 2) {
-        ctx.addIssue({
-          code: z.ZodIssueCode.custom,
-          message: "fork requires forkBranches (2–12 linear lanes)",
-          path: ["forkBranches"],
-        });
-      }
-    }
-    if (spec.kind === ModuleKind.IfElse) {
-      if (!spec.ifCondition?.path?.trim()) {
-        ctx.addIssue({
-          code: z.ZodIssueCode.custom,
-          message: "if-else requires ifCondition.path on the spine",
-          path: ["ifCondition"],
-        });
-      }
-    }
-    if (spec.kind === ModuleKind.Connect) {
-      if (!spec.connectActionId?.trim()) {
-        ctx.addIssue({
-          code: z.ZodIssueCode.custom,
-          message: "connect requires connectActionId from list_connect_actions",
-          path: ["connectActionId"],
-        });
-      } else if (!getConnectAction(spec.connectActionId)) {
-        ctx.addIssue({
-          code: z.ZodIssueCode.custom,
-          message: `unknown connect action "${spec.connectActionId}" — use list_connect_actions`,
-          path: ["connectActionId"],
-        });
-      }
-    }
-  });
-
-// AI : patch entry — only the fields the agent wants to change; matched by 0-based index in current pipeline.
-const modulePatchEntrySchema = z.object({
-  index: z.number().int(),
-  label: z.string().optional(),
-  note: z.string().optional(),
-  structureIn: z.string().optional(),
-  structureOut: z.string().optional(),
-  inputType: z.enum(INPUT_TYPE_VALUES as [string, ...string[]]).optional(),
-  inputNameContains: z.string().optional(),
-  inputDescription: z.string().optional(),
-  checkInputDescription: z.boolean().optional(),
-  prompt: z.string().optional(),
-  code: z.string().optional(),
-  model: z.string().optional(),
-  inputMinCount: z.number().int().min(1).optional(),
-  assembleBindings: assembleBindingsSchema.optional(),
-  ifCondition: z
-    .discriminatedUnion("kind", [
-      z.object({ kind: z.literal("path"), path: z.string() }),
-      z.object({ kind: z.literal("equals"), path: z.string(), value: z.unknown() }),
-    ])
-    .optional(),
-  n8nNodeType: z.string().optional(),
-  n8nParameters: z.record(z.string(), z.unknown()).optional(),
-  connectActionId: z.string().optional(),
-  connectParameters: z.record(z.string(), z.unknown()).optional(),
-  sql: z.string().optional(),
-  sqlSeedRows: z.array(z.record(z.string(), z.unknown())).max(64).optional(),
-});
-
-const modelSpecSchema = structureModelSpecSchema;
-
-const ASSISTANT_DOC_TYPES = [InputType.Text, InputType.Markdown, InputType.Latex, InputType.Json] as const satisfies readonly InputType[];
-// AI : TODO (media-view-A-types) — assistant-created docs stay text/json; binary clips are uploaded or ingested, not authored as content strings.
-
-const docSpecSchema = z.object({
-  name: z.string(),
-  type: z.enum(ASSISTANT_DOC_TYPES),
-  content: z.string().max(32_000),
-  label: z.enum([DocLabel.Inference, DocLabel.Training]).optional(),
-});
-
-const proposedActionSchema = z.discriminatedUnion("type", [
-  z.object({
-    type: z.literal("run_inference"),
-    // AI : omit docs → client uses current / default inference assignment.
-  }),
-  z.object({
-    type: z.literal("run_test"),
-    testDocName: z.string().min(1).max(256).optional(),
-  }),
-]);
-
-const assistantResponseSchema = z.object({
-  message: z.string().describe(
-    "Short user-facing proposal summary — present/future tense ('I'll add…'), never past tense as if already applied. User must Approve first.",
-  ),
-  // AI : full replacement wins when non-null; use modulePatch for targeted edits to 1–3 steps.
-  modules: z
-    .array(moduleSpecSchema)
-    .nullable()
-    .describe("FULL pipeline replacement when restructuring; null when using modulePatch or no pipeline change (prefer modulePatch for small edits to existing steps)"),
-  modulePatch: z
-    .array(modulePatchEntrySchema)
-    .nullable()
-    .describe("Targeted edits by 0-based step index — null when modules is non-null or on validation-fix retries"),
-  models: z
-    .array(modelSpecSchema)
-    .nullable()
-    .describe("FULL structure models array when changing schemas; null when unchanged"),
-  typeAliases: z.array(typeAliasSpecSchema).nullable(),
-  docs: z.array(docSpecSchema).nullable(),
-  // AI : full replacement markdown for project.documentation when pipeline/models change.
-  documentationUpdate: z.string().max(48_000).nullable(),
-  // AI : rename only when project is still "Untitled Pipeline" — server enforces.
-  projectNameUpdate: z.string().max(120).nullable(),
-  // AI : named pipeline for these modules — a new name adds a function and leaves the others unchanged.
-  targetFunctionName: z
-    .string()
-    .max(80)
-    .nullish()
-    .describe(
-      "Name of the function (pipeline) these modules belong to. Null = the currently active function. A new name adds a function without replacing the others.",
-    ),
-  // AI : client runs these after approve — never claim finished in this turn.
-  proposedActions: z.array(proposedActionSchema).max(3).nullish(),
-});
-
-export type PipelineAssistantModuleSpec = z.infer<typeof moduleSpecSchema>;
-export type PipelineAssistantModulePatchEntry = z.infer<typeof modulePatchEntrySchema>;
-export type PipelineAssistantModelSpec = z.infer<typeof modelSpecSchema>;
-export type ProjectAssistantDocSpec = z.infer<typeof docSpecSchema>;
-export type AssistantProposedAction = z.infer<typeof proposedActionSchema>;
+export type {
+  AssistantProposedAction,
+  PipelineAssistantModelSpec,
+  PipelineAssistantModulePatchEntry,
+  PipelineAssistantModuleSpec,
+  ProjectAssistantDocSpec,
+};
 
 export type PipelineAssistantProposal = {
   modules: PipelineModule[];
@@ -1214,6 +924,73 @@ async function tryVibeFileHarness(args: {
   return { raw: harnessRaw, proposal, turns: harness.turns };
 }
 
+async function tryJsDirectAuthoring(args: {
+  project: Project;
+  task: string;
+  thinking: string;
+  extraPrompt: string;
+  globalModel: ModelId;
+  ledger: UsageLedger;
+  testDocsCatalog: AssistantTestDocCatalogEntry[];
+  fixErrors?: string;
+  onDelta?: (delta: string) => void;
+  onStructuredFailure?: (detail: { attempt: number; failureKind: string; error: string }) => void;
+}): Promise<{
+  raw: z.infer<typeof assistantResponseSchema>;
+  proposal: PipelineAssistantProposal;
+} | null> {
+  let text: string;
+  try {
+    text = await llmStreamString(
+      buildSpineJsUserPrompt({
+        task: args.task,
+        thinking: args.thinking,
+        extra: args.extraPrompt,
+        fixErrors: args.fixErrors,
+      }),
+      {
+        model: args.globalModel,
+        ledger: args.ledger,
+        system: buildSpineJsSystemPrompt(),
+        maxTokens: VIBE_THINKING_MAX_TOKENS,
+        onStructuredFailure: (detail) => {
+          args.onStructuredFailure?.({
+            attempt: detail.attempt,
+            failureKind: detail.kind,
+            error: detail.error,
+          });
+        },
+      },
+      args.onDelta ?? (() => {}),
+    );
+  } catch {
+    return null;
+  }
+  let source: string;
+  try {
+    source = extractSpineJsSource(text);
+  } catch (err) {
+    args.onStructuredFailure?.({
+      attempt: 1,
+      failureKind: "json_parse",
+      error: (err as Error).message,
+    });
+    return null;
+  }
+  const compiled = compileSpineJs(source);
+  if (!compiled.ok) {
+    args.onStructuredFailure?.({
+      attempt: 1,
+      failureKind: "schema",
+      error: compiled.errors.join("; "),
+    });
+    return null;
+  }
+  const proposal = materializeProposal(compiled.raw, args.project, args.globalModel, args.testDocsCatalog);
+  if (!proposal) return null;
+  return { raw: compiled.raw, proposal };
+}
+
 export async function proposePipelineChange(
   project: Project,
   message: string,
@@ -1320,6 +1097,7 @@ export async function proposePipelineChange(
     let raw: z.infer<typeof assistantResponseSchema> | undefined;
     let proposal: PipelineAssistantProposal | null = null;
     let harnessUsed = false;
+    let jsUsed = false;
     const catalog = opts?.testDocsCatalog ?? [];
     const extraHarnessPrompt = [
       buildVibeTopologyPromptBlock(),
@@ -1365,7 +1143,37 @@ export async function proposePipelineChange(
       }
     }
 
-    if (!harnessUsed) {
+    if (!harnessUsed && vibeJsAuthoringEnabled()) {
+      opts?.onPhase?.("coding");
+      try {
+        const hit = await tryJsDirectAuthoring({
+          project,
+          task: effectiveMessage,
+          thinking,
+          extraPrompt: extraHarnessPrompt,
+          globalModel,
+          ledger,
+          testDocsCatalog: catalog,
+          fixErrors: fixErrors ?? undefined,
+          onDelta: opts?.onMessageDelta,
+          onStructuredFailure: (detail) => {
+            llmAttempt += 1;
+            opts?.onStructuredFailure?.(detail);
+          },
+        });
+        if (hit) {
+          jsUsed = true;
+          raw = hit.raw;
+          proposal = hit.proposal;
+          llmAttempt += 1;
+          opts?.onLlmResponse?.("js-authoring", { sourceChars: raw.message.length });
+        }
+      } catch {
+        // AI : JS miss — few-shot JSON still runs.
+      }
+    }
+
+    if (!harnessUsed && !jsUsed) {
       opts?.onPhase?.("structuring");
       const msgExtractor = opts?.onMessageDelta
         ? makeMessageExtractor(opts.onMessageDelta)
@@ -1442,7 +1250,6 @@ export async function proposePipelineChange(
       fixErrors = validationErrors;
       opts?.onValidationFailed?.(retryCount, validationErrors);
       opts?.onPhase?.("retrying");
-      // AI : retry must show the failed proposal in context — blank landing projects stay empty otherwise.
       const retryProject: Project = {
         ...project,
         modules: proposal.modules,
@@ -1450,6 +1257,29 @@ export async function proposePipelineChange(
         typeAliases: proposal.typeAliases ?? [],
         documentation: proposal.documentation,
       };
+      if (jsUsed) {
+        const hit = await tryJsDirectAuthoring({
+          project: retryProject,
+          task: effectiveMessage,
+          thinking,
+          extraPrompt: extraHarnessPrompt,
+          globalModel,
+          ledger,
+          testDocsCatalog: catalog,
+          fixErrors,
+          onDelta: opts?.onMessageDelta,
+          onStructuredFailure: (detail) => {
+            llmAttempt += 1;
+            opts?.onStructuredFailure?.(detail);
+          },
+        });
+        if (!hit) break;
+        raw = hit.raw;
+        proposal = hit.proposal;
+        llmAttempt += 1;
+        opts?.onLlmResponse?.(`retry-${retryCount}`, raw);
+        continue;
+      }
       raw = await llmStructured(
         buildUserPrompt(
           retryProject,

@@ -1,6 +1,8 @@
 // AI : deterministic seed LLM replies — shared by server provider + OpenAI-compatible mock HTTP.
 // AI : Schema-aware fill from prompt context so UI (schema-first) and exports (schema-last) match.
 import { matchVibeExample, seedHarnessWriteTools } from "../vibe-coding-examples";
+import { isSpineJsAuthoringPrompt } from "@/lib/spine-js/compile";
+import { payloadToSpineJs } from "@/lib/spine-js/payload-to-js";
 
 export type JsonSchemaNode = {
   type?: string | string[];
@@ -329,7 +331,7 @@ function seedVibeHarnessReply(prompt: string): string | null {
   const payload = example
     ? example.payload
     : seedNotesProposalPayload(named || "Notes", named, /\bUntitled Pipeline\b/.test(prompt));
-  const wrotePipeline = /wrote pipeline\.json/i.test(prompt);
+  const wrotePipeline = /wrote pipeline\.json/i.test(prompt) || /wrote pipeline\.js/i.test(prompt);
   const ranTests = /\$ run_tests\b/i.test(prompt);
   const passed = /^PASS\b/m.test(prompt);
   if (wrotePipeline && (passed || ranTests)) {
@@ -344,6 +346,17 @@ function seedVibeHarnessReply(prompt: string): string | null {
   });
 }
 
+function seedSpineJsReply(prompt: string): string | null {
+  if (!isSpineJsAuthoringPrompt(prompt)) return null;
+  const userRequest = extractUserRequest(prompt);
+  const named = seedNamedFunctionFromPrompt(userRequest);
+  const example = named ? null : matchVibeExample(userRequest) ?? matchVibeExample(prompt);
+  const payload = example
+    ? example.payload
+    : seedNotesProposalPayload(named || "Notes", named, /\bUntitled Pipeline\b/.test(prompt));
+  return payloadToSpineJs(payload);
+}
+
 /** Deterministic chat completion body for a single prompt. */
 export function seedLlmReply(prompt: string, jsonMode = true): string {
   const assistant = seedProjectAssistantReply(prompt);
@@ -352,6 +365,8 @@ export function seedLlmReply(prompt: string, jsonMode = true): string {
   if (observe) return observe;
   const harness = seedVibeHarnessReply(prompt);
   if (harness) return harness;
+  const js = seedSpineJsReply(prompt);
+  if (js) return js;
   const schema = extractJsonSchemaFromPrompt(prompt);
   const context = extractContextFromPrompt(prompt);
   if (schema && !schemaIsEmpty(schema)) {

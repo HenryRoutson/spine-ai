@@ -1,5 +1,7 @@
 // AI : few-shot Example 1–5 as a catalog — seed + A/B score the same payloads the JSON prompt already teaches.
 import { buildFewShotPromptBlock } from "./assistant-prompt"
+import { vibeJsAuthoringEnabled } from "./vibe-coding-mode"
+import { payloadToSpineJs } from "@/lib/spine-js/payload-to-js"
 
 export type VibeExampleTopology = "batch-map" | "explode" | "split-join" | "combine" | "assemble" | "fork"
 
@@ -169,14 +171,18 @@ export function seedHarnessWriteTools(payload: VibeExamplePayload): Array<{
   content: string
 }> {
   const tools: Array<{ tool: "write_file"; path: string; content: string }> = []
-  for (const model of payload.models) {
-    const name =
-      model && typeof model === "object" && "name" in model && typeof (model as { name: unknown }).name === "string"
-        ? (model as { name: string }).name
-        : "Model"
-    tools.push({ tool: "write_file", path: structureFileName(name), content: pretty(model) })
+  if (vibeJsAuthoringEnabled()) {
+    tools.push({ tool: "write_file", path: "pipeline.js", content: payloadToSpineJs(payload) })
+  } else {
+    for (const model of payload.models) {
+      const name =
+        model && typeof model === "object" && "name" in model && typeof (model as { name: unknown }).name === "string"
+          ? (model as { name: string }).name
+          : "Model"
+      tools.push({ tool: "write_file", path: structureFileName(name), content: pretty(model) })
+    }
+    tools.push({ tool: "write_file", path: "pipeline.json", content: pretty(payload.modules) })
   }
-  tools.push({ tool: "write_file", path: "pipeline.json", content: pretty(payload.modules) })
   for (const doc of payload.docs ?? []) {
     const base = doc.name.trim().replace(/^\/+/, "").split("/").pop() ?? "sample.txt"
     const file = base.replace(/[^A-Za-z0-9._-]/g, "_") || "sample.txt"
