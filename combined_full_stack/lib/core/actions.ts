@@ -1,4 +1,9 @@
 // AI : actions as data — same ids feed CLI flags, MCP tools, and the React-named session methods.
+// AI : TODO (spine-in-spine-bootstrap-S3-actions) — hosted guest UI clicks data-spine-id and runs
+// AI :   SESSION_ACTIONS here. Do not add REST wrappers. First ids: addProject, openProject,
+// AI :   plus parity structure.add-model / structure.add-field / pipeline.add-step / assistant.send.
+// AI : TODO (spine-in-spine-bootstrap-S9-parity) — every guest button id must already be a PARITY_ROWS
+// AI :   id; add the runner here before adding a hosted button.
 
 import { z } from "zod"
 import type { SpineSession } from "@/lib/core/session"

@@ -7,7 +7,9 @@ import {
   BUILDER_AREAS,
   CONSUMER_AREAS,
   defaultWindowForArea,
+  guiDefaultWorkspaceWindow,
   isBuildStep,
+  isAccountWindow,
   windowToArea,
   type AppArea,
   type VibeObserveTab,
@@ -15,9 +17,11 @@ import {
 import { openLlmProvidersSettings, scrollToSettingsSection } from "@/lib/settings-nav"
 import type { SharedRunDocScope } from "@/lib/shared-run-doc-scope"
 import type { SharedLinkRecord } from "@/lib/shared-link-types"
-import type { DocId, StructureModelId } from "@/lib/types"
+import type { DocId, ModuleId, StructureModelId } from "@/lib/types"
 import { AppWindowId as AppWindow } from "@/lib/app-window-id"
 import { readHideDeveloperTools } from "@/lib/developer-tools-settings"
+import { writeBuildSurfacePreference } from "@/lib/build-surface-persist"
+import { BuildSurface } from "@/lib/build-surface"
 import {
   clearEditingWebsiteSession,
   readEditingWebsiteSession,
@@ -57,6 +61,9 @@ interface AppShellState {
   focusStructureId: StructureModelId | null
   openStructure: (structureId?: StructureModelId) => void
   clearFocusStructure: () => void
+  focusModuleId: ModuleId | null
+  openPipeline: (moduleId?: ModuleId) => void
+  clearFocusModule: () => void
   activeSharedLinkId: string | null
   openSharedRun: (linkId: string) => void
   clearSharedRun: () => void
@@ -72,6 +79,7 @@ interface AppShellState {
   editingWebsite: SharedLinkRecord | null
   openWebsiteEditor: (link: SharedLinkRecord) => void
   clearWebsiteEditor: () => void
+  patchEditingWebsite: (link: SharedLinkRecord) => void
   // AI : website workspace sub-page — page studio, frontend code, or backend peek. Never pipeline DAG tabs.
   websiteSurface: website_workspace_surface
   setWebsiteSurface: (surface: website_workspace_surface) => void
@@ -80,16 +88,22 @@ interface AppShellState {
 const AppShellContext = createContext<AppShellState | null>(null)
 
 export function AppShellProvider({ children }: { children: ReactNode }) {
-  // AI : vibe-first — skip Structure when developer tools are hidden.
-  // AI : TODO (vibe) — persist last Build surface (Vibe vs editors) across reloads.
-  const [activeWindow, setActiveWindow] = useState<WindowId>(() =>
-    readHideDeveloperTools() ? AppWindow.Vibe : AppWindow.Structure,
-  )
+  // AI : Simplified lands on Inference; full lands on Structure. GUI never opens the Vibe window.
+  const [activeWindow, setActiveWindowState] = useState<WindowId>(() => {
+    return guiDefaultWorkspaceWindow(readHideDeveloperTools(), false)
+  })
+  const setActiveWindow = useCallback((window: WindowId) => {
+    // AI : GUI has no Data tab — Backend is TUI/deep-link only; Structures owns SQL + rows.
+    const next = window === AppWindow.Backend ? AppWindow.Structure : window
+    setActiveWindowState(next)
+    if (!isAccountWindow(next) && next !== AppWindow.Vibe) writeBuildSurfacePreference(BuildSurface.Editors)
+  }, [])
   const [focusDocId, setFocusDocId] = useState<DocId | null>(null)
   const [focusRunId, setFocusRunId] = useState<string | null>(null)
   const [focusRunAnchor, setFocusRunAnchor] = useState<LoggingFocusAnchor | null>(null)
   const [vibeObserveTab, setVibeObserveTab] = useState<VibeObserveTab>(AppWindow.Inference)
   const [focusStructureId, setFocusStructureId] = useState<StructureModelId | null>(null)
+  const [focusModuleId, setFocusModuleId] = useState<ModuleId | null>(null)
   const [activeSharedLinkId, setActiveSharedLinkId] = useState<string | null>(null)
   const [sharedRunDocScope, setSharedRunDocScope] = useState<SharedRunDocScope | null>(null)
   const [pendingLlmProvidersOpen, setPendingLlmProvidersOpen] = useState(false)
@@ -103,19 +117,13 @@ export function AppShellProvider({ children }: { children: ReactNode }) {
     setEditingWebsite(saved)
     setWebsiteSurface("page")
     setVibeObserveTab(AppWindow.Share)
-    setActiveWindow(AppWindow.Vibe)
+    setActiveWindow(AppWindow.Share)
   }, [])
 
   const openSharedRun = useCallback((linkId: string) => {
     setActiveSharedLinkId(linkId)
-    // AI : Vibe hosts Share — stay on the surface (vibe-first also bounces editors away).
-    if (activeWindow === AppWindow.Vibe || readHideDeveloperTools()) {
-      setVibeObserveTab(AppWindow.Share)
-      if (activeWindow !== AppWindow.Vibe) setActiveWindow(AppWindow.Vibe)
-      return
-    }
     setActiveWindow(AppWindow.Share)
-  }, [activeWindow])
+  }, [])
 
   const clearSharedRun = useCallback(() => setActiveSharedLinkId(null), [])
 
@@ -134,10 +142,12 @@ export function AppShellProvider({ children }: { children: ReactNode }) {
       setFocusRunId(focus.runId ?? null)
       setFocusRunAnchor(focus.anchor ?? null)
     }
-    // AI : Vibe already hosts Logging — don't leave the surface (vibe-first also bounces editors away).
-    if (activeWindow === AppWindow.Vibe || readHideDeveloperTools()) {
+    if (readHideDeveloperTools()) {
+      setActiveWindow(AppWindow.Inference)
+      return
+    }
+    if (activeWindow === AppWindow.Vibe) {
       setVibeObserveTab(AppWindow.Logging)
-      if (activeWindow !== AppWindow.Vibe) setActiveWindow(AppWindow.Vibe)
       return
     }
     setActiveWindow(AppWindow.Logging)
@@ -155,11 +165,18 @@ export function AppShellProvider({ children }: { children: ReactNode }) {
 
   const clearFocusStructure = useCallback(() => setFocusStructureId(null), [])
 
+  const openPipeline = useCallback((moduleId?: ModuleId) => {
+    setFocusModuleId(moduleId ?? null)
+    setActiveWindow(AppWindow.Pipeline)
+  }, [])
+
+  const clearFocusModule = useCallback(() => setFocusModuleId(null), [])
+
   const clearPendingLlmProvidersOpen = useCallback(() => setPendingLlmProvidersOpen(false), [])
 
   const openTesting = useCallback((testDocName?: string) => {
     setFocusTestDocName(testDocName ?? null)
-    setActiveWindow(AppWindow.Testing)
+    setActiveWindow(readHideDeveloperTools() ? AppWindow.Pipeline : AppWindow.Testing)
   }, [])
 
   const clearFocusTestDoc = useCallback(() => setFocusTestDocName(null), [])
@@ -169,13 +186,18 @@ export function AppShellProvider({ children }: { children: ReactNode }) {
     setEditingWebsite(link)
     setWebsiteSurface("page")
     setVibeObserveTab(AppWindow.Share)
-    setActiveWindow(AppWindow.Vibe)
+    setActiveWindow(AppWindow.Share)
   }, [])
 
   const clearWebsiteEditor = useCallback(() => {
     clearEditingWebsiteSession()
     setEditingWebsite(null)
     setWebsiteSurface("page")
+  }, [])
+
+  const patchEditingWebsite = useCallback((link: SharedLinkRecord) => {
+    writeEditingWebsiteSession(link)
+    setEditingWebsite(link)
   }, [])
 
   const openSecrets = useCallback(() => {
@@ -220,6 +242,9 @@ export function AppShellProvider({ children }: { children: ReactNode }) {
         focusStructureId,
         openStructure,
         clearFocusStructure,
+        focusModuleId,
+        openPipeline,
+        clearFocusModule,
         activeSharedLinkId,
         openSharedRun,
         clearSharedRun,
@@ -235,6 +260,7 @@ export function AppShellProvider({ children }: { children: ReactNode }) {
         editingWebsite,
         openWebsiteEditor,
         clearWebsiteEditor,
+        patchEditingWebsite,
         websiteSurface,
         setWebsiteSurface,
       }}

@@ -3,7 +3,7 @@ import { isVibeWindow } from "@/lib/app-nav-config"
 import { APP_PRIMARY_SECTION_NAV, AppPrimarySection } from "@/lib/app-primary-section-labels"
 
 // AI : Build L0 sub-decision — Vibe (agent) vs Build (visual editors); share one selector.
-// AI : On a website, Editors is page code (or backend peek when developer tools are hidden), not Structure.
+// AI : On a website, Editors is page code (or Run when developer tools are hidden), not Structure.
 export enum BuildSurface {
   Vibe = "vibe",
   Editors = "editors",
@@ -14,7 +14,8 @@ export function resolveBuildSurface(activeWindow: AppWindowIdType): BuildSurface
 }
 
 export function windowForBuildSurface(surface: BuildSurface): AppWindowIdType {
-  return surface === BuildSurface.Vibe ? AppWindowId.Vibe : AppWindowId.Structure
+  // AI : GUI no longer lands on Vibe — Simplified keeps the agent dock; Inference is the default run surface.
+  return surface === BuildSurface.Vibe ? AppWindowId.Inference : AppWindowId.Structure
 }
 
 export const BUILD_SURFACE_NAV: Record<

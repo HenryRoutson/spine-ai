@@ -4,6 +4,8 @@ export const HOSTED_SITE_OUTPUT_SLOT = "{{output}}"
 export const HOSTED_SITE_CHATBOT_SLOT = "{{chatbot}}"
 export const HOSTED_SITE_DOCS_SLOT = "{{docs}}"
 export const HOSTED_SITE_ACTION_SLOT = "{{action}}"
+export const HOSTED_SITE_PAY_SLOT = "{{pay}}"
+export const HOSTED_SITE_TABLE_SLOT = "{{table}}"
 
 export type hosted_action_alias = string
 export type hosted_action_trigger = "double" | "collatz"
@@ -16,7 +18,13 @@ export function hostedActionTrigger(alias?: hosted_action_alias): hosted_action_
   return alias === "collatz" ? "collatz" : "double"
 }
 
-export type hosted_site_widget_slot = "run" | "auth" | "output" | "chatbot" | "docs" | "sql" | "action"
+// AI : TODO (spine-in-spine-bootstrap-S4-dag) — parse {{slot:<widget>}} like {{table:Model}}
+// AI :   (pipeline-dag | type-expr | step-trace | code). Do not add a second slot tokenizer.
+// AI : TODO (spine-in-spine-full-F4-widgets) — full also needs vibe | structure | pipeline | testing |
+// AI :   inference | documents | logging | share — each wraps the existing panel component.
+// AI : TODO (spine-in-spine-bootstrap-S3-actions) — no new token required: hosted buttons use
+// AI :   data-spine-id (SPINE_ACTION_ATTR) and dispatch SESSION_ACTIONS. Wire the click in the viewer.
+export type hosted_site_widget_slot = "run" | "auth" | "output" | "chatbot" | "docs" | "sql" | "action" | "pay" | "table"
 
 export const HOSTED_SITE_SLOT_CLASS: Record<hosted_site_widget_slot, string> = {
   run: "hs-run-slot",
@@ -26,6 +34,8 @@ export const HOSTED_SITE_SLOT_CLASS: Record<hosted_site_widget_slot, string> = {
   docs: "hs-docs-slot",
   sql: "hs-sql-slot",
   action: "hs-action-slot",
+  pay: "hs-pay-slot",
+  table: "hs-table-slot",
 }
 
 export const HOSTED_SITE_SLOT_TOKEN: Record<hosted_site_widget_slot, string> = {
@@ -36,6 +46,8 @@ export const HOSTED_SITE_SLOT_TOKEN: Record<hosted_site_widget_slot, string> = {
   docs: HOSTED_SITE_DOCS_SLOT,
   sql: "{{sql}}",
   action: HOSTED_SITE_ACTION_SLOT,
+  pay: HOSTED_SITE_PAY_SLOT,
+  table: HOSTED_SITE_TABLE_SLOT,
 }
 
 export const HOSTED_SITE_IGNORED_SLOT_SELECTOR = Object.values(HOSTED_SITE_SLOT_CLASS)
@@ -43,7 +55,7 @@ export const HOSTED_SITE_IGNORED_SLOT_SELECTOR = Object.values(HOSTED_SITE_SLOT_
   .join(", ")
 
 const SLOT_SPLIT_RE =
-  /(\{\{(?:run(?::[a-z0-9_-]+)?|auth|output|chatbot|docs|sql(?::[a-z0-9_]+)?|action(?::[a-z0-9_-]+)?)\}\})/g
+  /(\{\{(?:run(?::[a-z0-9_-]+)?|table(?::[A-Za-z][A-Za-z0-9_]*)?|auth|output|chatbot|docs|pay|sql(?::[a-z0-9_]+)?|action(?::[a-z0-9_-]+)?)\}\})/g
 
 const TOKEN_TO_SLOT: Record<string, hosted_site_widget_slot> = {
   [HOSTED_SITE_RUN_SLOT]: "run",
@@ -52,11 +64,14 @@ const TOKEN_TO_SLOT: Record<string, hosted_site_widget_slot> = {
   [HOSTED_SITE_CHATBOT_SLOT]: "chatbot",
   [HOSTED_SITE_DOCS_SLOT]: "docs",
   [HOSTED_SITE_ACTION_SLOT]: "action",
+  [HOSTED_SITE_PAY_SLOT]: "pay",
+  [HOSTED_SITE_TABLE_SLOT]: "table",
 }
 
 const RUN_ALIAS_RE = /^\{\{run:([a-z0-9_-]+)\}\}$/
 const SQL_TABLE_RE = /^\{\{sql:([a-z0-9_]+)\}\}$/
 const ACTION_ALIAS_RE = /^\{\{action:([a-z0-9_-]+)\}\}$/
+const TABLE_ALIAS_RE = /^\{\{table:([A-Za-z][A-Za-z0-9_]*)\}\}$/
 
 export type HostedSiteHtmlSegment =
   | { kind: "html"; html: string }
@@ -92,6 +107,11 @@ export function splitHostedSiteSlots(html: string): HostedSiteHtmlSegment[] {
     const action = part.match(ACTION_ALIAS_RE)
     if (action?.[1]) {
       segments.push({ kind: "slot", slot: "action", alias: action[1] })
+      continue
+    }
+    const tableNamed = part.match(TABLE_ALIAS_RE)
+    if (tableNamed?.[1]) {
+      segments.push({ kind: "slot", slot: "table", alias: tableNamed[1] })
       continue
     }
     const slot = TOKEN_TO_SLOT[part]

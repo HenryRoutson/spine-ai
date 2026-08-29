@@ -36,6 +36,7 @@ export function HostedSiteChrome({
   runByAlias,
   sqlByTable,
   actionByAlias,
+  tableByAlias,
   editable = false,
 }: {
   options: HostedSiteOptions
@@ -47,6 +48,7 @@ export function HostedSiteChrome({
   runByAlias?: Record<string, ReactNode>
   sqlByTable?: Record<string, ReactNode>
   actionByAlias?: Record<string, ReactNode>
+  tableByAlias?: Record<string, ReactNode>
   editable?: boolean
 }) {
   const compiled = useMemo(() => {
@@ -86,6 +88,15 @@ export function HostedSiteChrome({
       return slots?.action ?? (
         <div className="rounded-md border border-dashed border-border px-3 py-4 text-center text-[11px] text-muted-foreground">
           Action · {key}
+        </div>
+      )
+    }
+    if (slot === "table") {
+      const key = alias || ""
+      if (key && tableByAlias?.[key]) return tableByAlias[key]
+      return (
+        <div className="rounded-md border border-dashed border-border px-3 py-4 text-center text-[11px] text-muted-foreground">
+          Table · {key || "structure"}
         </div>
       )
     }

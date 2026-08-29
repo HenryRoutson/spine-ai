@@ -15,6 +15,7 @@ import {
   type InputDocsAssignment,
 } from "@/lib/inference-input";
 import { pipelineScheduleRunNotes, scheduleDocsToByModule } from "@/lib/schedule-types";
+import { projectForFunction } from "@/lib/pipeline-functions";
 import { PipelinePausedError } from "@/lib/server/run_checkpoint";
 import { runPipeline } from "@/lib/server/run_engine";
 import { computeRunFingerprintForRequest } from "@/lib/server/run_fingerprint";
@@ -54,8 +55,12 @@ async function failSchedule(
 export async function queueScheduledRun(row: ClaimedSchedule): Promise<QueueScheduleRunResult> {
   const ownerId: user_id_string = row.ownerId;
   const store = await openStoreForUser(ownerId);
-  const project = store.project(row.projectId);
-  if (!project) return failSchedule(row, HTTP.NOT_FOUND, "project missing");
+  const stored = store.project(row.projectId);
+  if (!stored) return failSchedule(row, HTTP.NOT_FOUND, "project missing");
+  const project = projectForFunction(stored, row.functionId);
+  if (!project) {
+    return failSchedule(row, HTTP.NOT_FOUND, "scheduled function is missing from this project");
+  }
 
   const inputModules = orderedInputModules(project.modules);
   const namesById = snapshotDocNamesById(store);
@@ -148,6 +153,7 @@ export async function queueScheduledRun(row: ClaimedSchedule): Promise<QueueSche
           fingerprint,
           fingerprintInputDocIds,
           cacheOwnerId: ownerId,
+          projectOverride: project,
           runMeta: {
             source: RunSource.Schedule,
             scheduleId: row.id,

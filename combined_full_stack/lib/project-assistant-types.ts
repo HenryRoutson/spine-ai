@@ -26,6 +26,8 @@ export type ProjectProposal = {
   docs: ProjectDocSpec[]
   documentation: string
   projectName?: string
+  // AI : named pipeline to write modules onto — a new name adds a function and leaves the others alone.
+  targetFunctionName?: string
   proposedActions?: AssistantProposedAction[]
   // AI : snapshot of live project at proposal time — review diffs stay correct after Approve.
   reviewFrom?: {
@@ -43,6 +45,7 @@ export type ProjectProposal = {
     documentation: boolean
     name?: boolean
     actions?: boolean
+    function?: boolean
   }
 }
 

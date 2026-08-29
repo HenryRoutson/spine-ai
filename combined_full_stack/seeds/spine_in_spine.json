@@ -1,0 +1,511 @@
+{
+  "id": "p_spine_in_spine",
+  "name": "Spine in Spine",
+  "kind": "spine-platform",
+  "models": [
+    {
+      "id": "m_field_def",
+      "name": "FieldDef",
+      "description": "One typed column on a table",
+      "fields": [
+        {
+          "id": "f_field_name",
+          "name": "name",
+          "type": "text",
+          "optional": false,
+          "description": "Column name"
+        },
+        {
+          "id": "f_field_type",
+          "name": "type_name",
+          "type": "text",
+          "optional": false,
+          "description": "text | int | float | bool"
+        },
+        {
+          "id": "f_field_opt",
+          "name": "optional",
+          "type": "bool",
+          "optional": false,
+          "description": "Nullable column"
+        },
+        {
+          "id": "f_field_desc",
+          "name": "description",
+          "type": "text",
+          "optional": false,
+          "description": "What the column stores"
+        }
+      ]
+    },
+    {
+      "id": "m_table_def",
+      "name": "TableDef",
+      "description": "A database table compiled from a structure model",
+      "fields": [
+        {
+          "id": "f_table_name",
+          "name": "name",
+          "type": "text",
+          "optional": false,
+          "description": "Table name"
+        },
+        {
+          "id": "f_table_desc",
+          "name": "description",
+          "type": "text",
+          "optional": false,
+          "description": "What a row means"
+        },
+        {
+          "id": "f_table_fields",
+          "name": "fields",
+          "type": "list[model]",
+          "optional": false,
+          "description": "Columns",
+          "ref": "m_field_def"
+        }
+      ]
+    },
+    {
+      "id": "m_pipeline_def",
+      "name": "PipelineDef",
+      "description": "A typed pipeline a website can bind to",
+      "fields": [
+        {
+          "id": "f_pipe_name",
+          "name": "name",
+          "type": "text",
+          "optional": false,
+          "description": "Pipeline name"
+        },
+        {
+          "id": "f_pipe_in",
+          "name": "input_table",
+          "type": "text",
+          "optional": false,
+          "description": "Structure that feeds this pipeline"
+        },
+        {
+          "id": "f_pipe_out",
+          "name": "output_table",
+          "type": "text",
+          "optional": false,
+          "description": "Structure this pipeline emits"
+        },
+        {
+          "id": "f_pipe_steps",
+          "name": "steps",
+          "type": "list[text]",
+          "optional": false,
+          "description": "Visible run steps"
+        }
+      ]
+    },
+    {
+      "id": "m_page_def",
+      "name": "PageDef",
+      "description": "A hosted HTML page with run and table slots",
+      "fields": [
+        {
+          "id": "f_page_path",
+          "name": "path",
+          "type": "text",
+          "optional": false,
+          "description": "Page path"
+        },
+        {
+          "id": "f_page_headline",
+          "name": "headline",
+          "type": "text",
+          "optional": false,
+          "description": "Hero headline"
+        },
+        {
+          "id": "f_page_body",
+          "name": "body",
+          "type": "text",
+          "optional": false,
+          "description": "Supporting copy"
+        }
+      ]
+    },
+    {
+      "id": "m_app_blueprint",
+      "name": "AppBlueprint",
+      "description": "Describe an app — tables, pipelines, pages — then compile it",
+      "fields": [
+        {
+          "id": "f_app_name",
+          "name": "app_name",
+          "type": "text",
+          "optional": false,
+          "description": "Product name"
+        },
+        {
+          "id": "f_app_tagline",
+          "name": "tagline",
+          "type": "text",
+          "optional": false,
+          "description": "One-line pitch"
+        },
+        {
+          "id": "f_app_audience",
+          "name": "audience",
+          "type": "text",
+          "optional": false,
+          "description": "Who it is for"
+        },
+        {
+          "id": "f_app_tables",
+          "name": "tables",
+          "type": "list[model]",
+          "optional": false,
+          "description": "Database tables",
+          "ref": "m_table_def"
+        },
+        {
+          "id": "f_app_pipelines",
+          "name": "pipelines",
+          "type": "list[model]",
+          "optional": false,
+          "description": "Typed pipelines",
+          "ref": "m_pipeline_def"
+        },
+        {
+          "id": "f_app_pages",
+          "name": "pages",
+          "type": "list[model]",
+          "optional": false,
+          "description": "Hosted pages",
+          "ref": "m_page_def"
+        }
+      ]
+    },
+    {
+      "id": "m_schema_pack",
+      "name": "SchemaPack",
+      "description": "Compiled SQL plus the blueprint tables, pipelines, and pages",
+      "fields": [
+        {
+          "id": "f_pack_name",
+          "name": "app_name",
+          "type": "text",
+          "optional": false,
+          "description": "Product name"
+        },
+        {
+          "id": "f_pack_tagline",
+          "name": "tagline",
+          "type": "text",
+          "optional": false,
+          "description": "One-line pitch"
+        },
+        {
+          "id": "f_pack_audience",
+          "name": "audience",
+          "type": "text",
+          "optional": false,
+          "description": "Who it is for"
+        },
+        {
+          "id": "f_pack_sql",
+          "name": "sql_schema",
+          "type": "text",
+          "optional": false,
+          "description": "CREATE TABLE statements"
+        },
+        {
+          "id": "f_pack_tables",
+          "name": "tables",
+          "type": "list[model]",
+          "optional": false,
+          "description": "Database tables",
+          "ref": "m_table_def"
+        },
+        {
+          "id": "f_pack_pipelines",
+          "name": "pipelines",
+          "type": "list[model]",
+          "optional": false,
+          "description": "Typed pipelines",
+          "ref": "m_pipeline_def"
+        },
+        {
+          "id": "f_pack_pages",
+          "name": "pages",
+          "type": "list[model]",
+          "optional": false,
+          "description": "Hosted pages",
+          "ref": "m_page_def"
+        }
+      ]
+    },
+    {
+      "id": "m_port_wire",
+      "name": "TypedPortWire",
+      "description": "A type-checked connection from a table to a pipeline",
+      "fields": [
+        {
+          "id": "f_wire_table",
+          "name": "table_name",
+          "type": "text",
+          "optional": false,
+          "description": "Structure / table name"
+        },
+        {
+          "id": "f_wire_pipe",
+          "name": "pipeline_name",
+          "type": "text",
+          "optional": false,
+          "description": "Pipeline name"
+        },
+        {
+          "id": "f_wire_status",
+          "name": "status",
+          "type": "text",
+          "optional": false,
+          "description": "exact | unwired"
+        }
+      ]
+    },
+    {
+      "id": "m_spine_app",
+      "name": "SpineApp",
+      "description": "Compiled website HTML, upload form, schema, and share copy",
+      "fields": [
+        {
+          "id": "f_out_name",
+          "name": "app_name",
+          "type": "text",
+          "optional": false,
+          "description": "Product name"
+        },
+        {
+          "id": "f_out_tagline",
+          "name": "tagline",
+          "type": "text",
+          "optional": false,
+          "description": "One-line pitch"
+        },
+        {
+          "id": "f_out_sql",
+          "name": "sql_schema",
+          "type": "text",
+          "optional": false,
+          "description": "CREATE TABLE statements"
+        },
+        {
+          "id": "f_out_html",
+          "name": "website_html",
+          "type": "text",
+          "optional": false,
+          "description": "Hosted HTML with {{run}} {{table}} {{pay}}"
+        },
+        {
+          "id": "f_out_upload",
+          "name": "upload_form_html",
+          "type": "text",
+          "optional": false,
+          "description": "Auto-generated file inputs"
+        },
+        {
+          "id": "f_out_share",
+          "name": "share_copy",
+          "type": "text",
+          "optional": false,
+          "description": "One-click share blurb"
+        },
+        {
+          "id": "f_out_ports",
+          "name": "typed_ports",
+          "type": "list[model]",
+          "optional": false,
+          "description": "Typed table → pipeline wires",
+          "ref": "m_port_wire"
+        }
+      ]
+    }
+  ],
+  "modules": [
+    {
+      "id": "mod_blueprint_in",
+      "kind": "input",
+      "label": "App blueprint",
+      "inputType": "json",
+      "inputNameContains": "blueprint",
+      "inputDescription": "JSON AppBlueprint — tables, pipelines, and pages to compile",
+      "outStructureId": "m_app_blueprint",
+      "cached": true,
+      "avgMs": 40,
+      "avgCostCents": 0,
+      "note": "Feed a typed app description. Compile steps stay LLM-free.",
+      "outType": {
+        "kind": "ref",
+        "modelId": "m_app_blueprint"
+      }
+    },
+    {
+      "id": "mod_compile_schema",
+      "kind": "custom-code",
+      "label": "Compile schema",
+      "inputDescription": "AppBlueprint JSON — compile CREATE TABLE statements",
+      "inStructureId": "m_app_blueprint",
+      "outStructureId": "m_schema_pack",
+      "cached": true,
+      "avgMs": 8,
+      "avgCostCents": 0,
+      "note": "Must stay byte-equal to SPINE_SCHEMA_COMPILE_TS.",
+      "fallbackList": [
+        {
+          "typescript": "(input) => {\n  const blueprint = input && typeof input === \"object\" ? input : {};\n  const tables = Array.isArray(blueprint.tables) ? blueprint.tables : [];\n  const pipelines = Array.isArray(blueprint.pipelines) ? blueprint.pipelines : [];\n  const pages = Array.isArray(blueprint.pages) ? blueprint.pages : [];\n  const sql = tables.map((table) => {\n    const cols = (Array.isArray(table.fields) ? table.fields : []).map((field) => {\n      const sqlType = field.type_name === \"int\" || field.type_name === \"bool\" ? \"INTEGER\"\n        : field.type_name === \"float\" ? \"REAL\" : \"TEXT\";\n      const nulls = field.optional ? \"\" : \" NOT NULL\";\n      return \"  \" + String(field.name) + \" \" + sqlType + nulls;\n    });\n    const body = [\"  id TEXT PRIMARY KEY\"].concat(cols).join(\",\\n\");\n    return \"CREATE TABLE \" + String(table.name || \"table\").toLowerCase() + \" (\\n\" + body + \"\\n);\";\n  }).join(\"\\n\\n\");\n  return {\n    app_name: String(blueprint.app_name || \"Untitled app\"),\n    tagline: String(blueprint.tagline || \"\"),\n    audience: String(blueprint.audience || \"\"),\n    sql_schema: sql || \"-- no tables\",\n    tables,\n    pipelines,\n    pages,\n  };\n}"
+        }
+      ],
+      "inType": {
+        "kind": "ref",
+        "modelId": "m_app_blueprint"
+      },
+      "outType": {
+        "kind": "ref",
+        "modelId": "m_schema_pack"
+      }
+    },
+    {
+      "id": "mod_compile_website",
+      "kind": "custom-code",
+      "label": "Compile website",
+      "inputDescription": "SchemaPack — compile hosted HTML, upload form, and share copy",
+      "inStructureId": "m_schema_pack",
+      "outStructureId": "m_spine_app",
+      "cached": true,
+      "avgMs": 8,
+      "avgCostCents": 0,
+      "note": "Must stay byte-equal to SPINE_WEBSITE_COMPILE_TS.",
+      "fallbackList": [
+        {
+          "typescript": "(pack) => {\n  const schema = pack && typeof pack === \"object\" ? pack : {};\n  const appName = String(schema.app_name || \"Untitled app\");\n  const tagline = String(schema.tagline || \"\");\n  const tables = Array.isArray(schema.tables) ? schema.tables : [];\n  const pipelines = Array.isArray(schema.pipelines) ? schema.pipelines : [];\n  const pages = Array.isArray(schema.pages) ? schema.pages : [];\n  const firstTable = tables[0] && tables[0].name ? String(tables[0].name) : \"\";\n  const tableSlot = firstTable ? \"{{table:\" + firstTable + \"}}\" : \"\";\n  const pageHtml = pages.map((page) => {\n    return \"<section class=\\\"hs-feature\\\"><h2>\" + String(page.headline || page.path || \"Page\")\n      + \"</h2><p>\" + String(page.body || \"\") + \"</p></section>\";\n  }).join(\"\\n\");\n  const website_html = [\n    \"<nav class=\\\"hs-nav\\\"><span class=\\\"hs-nav-name\\\">\" + appName + \"</span></nav>\",\n    \"<header class=\\\"hs-hero\\\"><p class=\\\"hs-kicker\\\">Vibe coding platform</p>\",\n    \"<h1 class=\\\"hs-title\\\">\" + tagline + \"</h1>\",\n    \"<p class=\\\"hs-lede\\\">Typed pipelines, a hosted page, and a shared backend.</p></header>\",\n    pageHtml,\n    \"<section class=\\\"hs-run\\\" id=\\\"run\\\">{{run}}</section>\",\n    tableSlot ? \"<section class=\\\"hs-table\\\" id=\\\"data\\\">\" + tableSlot + \"</section>\" : \"\",\n    \"<section class=\\\"hs-output\\\" id=\\\"output\\\">{{output}}</section>\",\n    \"<section class=\\\"hs-pay\\\" id=\\\"pay\\\">{{pay}}</section>\",\n  ].filter(Boolean).join(\"\\n\");\n  const upload_form_html = pipelines.map((pipe) => {\n    return \"<label>\" + String(pipe.name) + \" (\" + String(pipe.input_table) + \")<input type=\\\"file\\\" /></label>\";\n  }).join(\"\\n\") || \"<p>No pipeline uploads</p>\";\n  const typed_ports = pipelines.map((pipe) => ({\n    table_name: String(pipe.input_table || \"\"),\n    pipeline_name: String(pipe.name || \"\"),\n    status: pipe.input_table ? \"exact\" : \"unwired\",\n  }));\n  const share_copy = \"Share \" + appName + \" — website + pipeline + API in one click.\";\n  return {\n    app_name: appName,\n    tagline,\n    sql_schema: String(schema.sql_schema || \"\"),\n    website_html,\n    upload_form_html,\n    share_copy,\n    typed_ports,\n  };\n}"
+        }
+      ],
+      "inType": {
+        "kind": "ref",
+        "modelId": "m_schema_pack"
+      },
+      "outType": {
+        "kind": "ref",
+        "modelId": "m_spine_app"
+      }
+    },
+    {
+      "id": "mod_spine_out",
+      "kind": "output",
+      "label": "Spine app",
+      "inputDescription": "Compiled SpineApp — schema, website, uploads, typed ports",
+      "inStructureId": "m_spine_app",
+      "outStructureId": "m_spine_app",
+      "cached": true,
+      "avgMs": 20,
+      "avgCostCents": 0,
+      "note": "The vibe-coded website plus the typed backend in one object.",
+      "inType": {
+        "kind": "ref",
+        "modelId": "m_spine_app"
+      },
+      "outType": {
+        "kind": "ref",
+        "modelId": "m_spine_app"
+      }
+    }
+  ],
+  "strategies": [
+    {
+      "id": "s_spine_single",
+      "kind": "single-llm",
+      "name": "Single LLM Call",
+      "enabled": true,
+      "model": "deepseek-v4",
+      "accuracy": 90,
+      "latencyMs": 400,
+      "costCents": 0,
+      "passRate": 100
+    },
+    {
+      "id": "s_spine_agent",
+      "kind": "claude-code",
+      "name": "Agent (Frontier)",
+      "enabled": true,
+      "model": "deepseek-v4",
+      "accuracy": 94,
+      "latencyMs": 800,
+      "costCents": 0,
+      "passRate": 100
+    },
+    {
+      "id": "s_spine_cheap",
+      "kind": "cheap-agent",
+      "name": "Agent (Cheap Model)",
+      "enabled": true,
+      "model": "deepseek-v4",
+      "accuracy": 90,
+      "latencyMs": 600,
+      "costCents": 0,
+      "passRate": 100
+    }
+  ],
+  "docs": [
+    {
+      "name": "blueprint.json",
+      "type": "json",
+      "label": "inference",
+      "file": "spine_in_spine/blueprint.json"
+    },
+    {
+      "name": "spine_in_spine_inference.json",
+      "type": "json",
+      "label": "inference",
+      "file": "spine_in_spine/spine_in_spine_inference.json"
+    },
+    {
+      "name": "spine_in_spine_testing.json",
+      "type": "json",
+      "label": "training",
+      "file": "spine_in_spine/spine_in_spine_testing.json"
+    }
+  ],
+  "expectedOutputs": [
+    {
+      "stepLabel": "Compile schema",
+      "file": "spine_in_spine/expected/compile_schema.json"
+    },
+    {
+      "stepLabel": "Compile website",
+      "file": "spine_in_spine/expected/compile_website.json"
+    },
+    {
+      "stepLabel": "Spine app",
+      "file": "spine_in_spine/expected/spine_app.json"
+    }
+  ],
+  "inferencePresets": [
+    {
+      "name": "Compile Spine",
+      "description": "Compile the Spine platform blueprint into schema + hosted website.",
+      "inputs": {
+        "App blueprint": "blueprint.json"
+      },
+      "expectedOutputs": [
+        {
+          "stepLabel": "Compile schema",
+          "file": "spine_in_spine/expected/compile_schema.json"
+        },
+        {
+          "stepLabel": "Compile website",
+          "file": "spine_in_spine/expected/compile_website.json"
+        },
+        {
+          "stepLabel": "Spine app",
+          "file": "spine_in_spine/expected/spine_app.json"
+        }
+      ]
+    }
+  ]
+}

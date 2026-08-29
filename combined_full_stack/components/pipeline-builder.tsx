@@ -2,6 +2,10 @@
 
 // AI : parity ids — pipeline.add-step pipeline.move-step pipeline.validate
 // AI : TODO refactor — only extract shared pipeline chrome if a third layout consumer appears (Logging already uses PipelineCanvas).
+// AI : TODO (spine-in-spine-bootstrap-S4-dag) — guest Functions page mounts PipelineCanvas as
+// AI :   {{slot:pipeline-dag}} + {{table:PipelineStep}}. Do not clone this file into HTML strings.
+// AI :   Step CRUD is SESSION_ACTIONS (pipeline.add-step / move-step), not a new form.
+// AI : TODO (spine-in-spine-full-F4-widgets) — full track mounts this panel as {{slot:pipeline}}.
 import { useEffect, useMemo, useState, type ReactNode } from "react"
 import {
   Plus,
@@ -83,6 +87,7 @@ import { FETCH_CREDENTIALS } from "@/lib/api-client"
 import { PipelineExportDialog } from "@/components/pipeline-export-dialog"
 import { ResizableSplit } from "@/components/resizable-split"
 import { InspectorCollapsibleSection } from "@/components/inspector-collapsible-section"
+import { useAppShell } from "@/lib/app-shell"
 import {
   PIPELINE_INSPECTOR_MAX,
   PIPELINE_INSPECTOR_MIN,
@@ -107,10 +112,23 @@ export function PipelineBuilder() {
   } = useStore()
   const [selectedId, setSelectedId] = useState<string>(modules[0]?.id ?? "")
   const [copied, setCopied] = useState(false)
+  const { focusModuleId, clearFocusModule } = useAppShell()
   useRerenderOnEvent(LOGGING_SETTINGS_CHANGED_EVENT)
   const savedInspectorWidth = usePipelineInspectorWidth()
   const [inspectorWidth, setInspectorWidth] = useState(readPipelineInspectorWidth)
   useEffect(() => setInspectorWidth(savedInspectorWidth), [savedInspectorWidth])
+
+  useEffect(() => {
+    if (!focusModuleId) return
+    if (!findPipelineModule(modules, focusModuleId)) return
+    setSelectedId(focusModuleId)
+    clearFocusModule()
+  }, [focusModuleId, modules, clearFocusModule])
+
+  useEffect(() => {
+    if (findPipelineModule(modules, selectedId)) return
+    setSelectedId(modules[0]?.id ?? "")
+  }, [modules, selectedId])
 
   // AI : same ViewModels as CLI/TUI — invalid badges must not drift from toPipelineView / toValidationView.
   const snap = useMemo(

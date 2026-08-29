@@ -9,7 +9,7 @@ export {}
 // P0 — Independent lists + bindings on siteOptions
 // ---------------------------------------------------------------------------
 // AI : DONE (websites-m2m-P0-picker) — /pipelines and /websites entry URLs; picker tabs Pipelines | Websites
-// AI : DONE (websites-m2m-P0-bindings) — HostedSiteOptions.pipelineBindings; empty = link.projectId only
+// AI : DONE (websites-m2m-P0-bindings) — HostedSiteOptions.pipelineBindings; empty = no pipelines (Lovable page). Viewer still defaults empty → primary for old {{run}} HTML.
 // AI : DONE (websites-m2m-P0-hydrate) — open website hydrates ShareSiteForm for that site_ id
 // AI : DONE (websites-m2m-P0-slots) — {{run:alias}} parsed; {{run}} still the primary pipeline
 
@@ -18,7 +18,7 @@ export {}
 // ---------------------------------------------------------------------------
 // AI : DONE (websites-m2m-P1-vibe) — website vibe = page studio full-width; pipeline Share is link + websites list
 // AI : DONE (websites-m2m-P1-runtime) — public /site/{id} resolves alias → bound pipeline run
-// AI : DONE (websites-m2m-P1-workspace) — website chrome is Website • name; Building = page code, not pipeline DAG
+// AI : DONE (websites-m2m-P1-workspace) — website chrome is Lovable (chat + preview + bindings). Inference/Schedule/Structures only after opening a bound pipeline.
 
 // ---------------------------------------------------------------------------
 // P2 — HTML | React switch

@@ -77,6 +77,18 @@ import {
   type StructureModelId,
   type TypeAlias,
 } from "./types";
+import { blankPipelineModules, functionsOnProject, functionsPromptSummary } from "@/lib/pipeline-functions";
+import { flattenPipelineModules, syncForkModules } from "@/lib/fork-pipeline";
+import { tryCompileCustomCodeEntry } from "@/lib/custom_code";
+import { customCodeEntriesForModule } from "@/lib/custom_code_entries";
+import { lintPipeline } from "./pipeline_lint";
+import { VIBE_THINKING_MAX_TOKENS, coerceVibePipelineModules, type VibeWorkspaceDraft } from "./vibe-coding-workspace";
+import {
+  harnessDraftHasPipelineWork,
+  runVibeCodingHarness,
+  vibeHarnessEnabled,
+} from "./vibe-coding-harness";
+import { buildVibeTopologyPromptBlock, formatTopologyRetryErrors, topologyAdvice } from "./vibe-coding-topology";
 
 const MODULE_KINDS = USER_ADDABLE_MODULE_KINDS;
 
@@ -365,6 +377,14 @@ const assistantResponseSchema = z.object({
   documentationUpdate: z.string().max(48_000).nullable(),
   // AI : rename only when project is still "Untitled Pipeline" — server enforces.
   projectNameUpdate: z.string().max(120).nullable(),
+  // AI : named pipeline for these modules — a new name adds a function and leaves the others unchanged.
+  targetFunctionName: z
+    .string()
+    .max(80)
+    .nullish()
+    .describe(
+      "Name of the function (pipeline) these modules belong to. Null = the currently active function. A new name adds a function without replacing the others.",
+    ),
   // AI : client runs these after approve — never claim finished in this turn.
   proposedActions: z.array(proposedActionSchema).max(3).nullish(),
 });
@@ -382,6 +402,7 @@ export type PipelineAssistantProposal = {
   docs: ProjectAssistantDocSpec[];
   documentation: string;
   projectName?: string;
+  targetFunctionName?: string;
   proposedActions?: AssistantProposedAction[];
   changed: {
     modules: boolean;
@@ -391,6 +412,7 @@ export type PipelineAssistantProposal = {
     documentation: boolean;
     name?: boolean;
     actions?: boolean;
+    function?: boolean;
   };
 };
 
@@ -420,7 +442,7 @@ export type PipelineAssistantOpts = {
   // AI : injected after observe-tool planning; not set by callers.
   observeToolResults?: string;
   onThinkingDelta?: (delta: string) => void;
-  onPhase?: (phase: "thinking" | "observing" | "structuring" | "retrying") => void;
+  onPhase?: (phase: "thinking" | "observing" | "coding" | "structuring" | "retrying") => void;
   onThinkingDone?: (text: string) => void;
   // AI : streams the assistant message text as it arrives during the structuring phase.
   onMessageDelta?: (delta: string) => void;
@@ -632,6 +654,27 @@ function wireAssembleSpineIn(modules: PipelineModule[]): PipelineModule[] {
   });
 }
 
+// AI : llm after fork defaults inStructureId to models[0] — consume the auto-derived fork product instead.
+function wireForkProductSpineIn(modules: PipelineModule[]): PipelineModule[] {
+  return modules.map((m, i) => {
+    const prev = i > 0 ? modules[i - 1] : undefined;
+    if (!prev || prev.kind !== ModuleKind.Fork) return m;
+    if (
+      m.kind === ModuleKind.Fork ||
+      m.kind === ModuleKind.Assemble ||
+      m.kind === ModuleKind.Input ||
+      m.kind === ModuleKind.IfElse ||
+      m.kind === ModuleKind.Parallel
+    ) {
+      return m;
+    }
+    const prevOut = prev.outStructureId;
+    if (!prevOut || m.inStructureId === prevOut) return m;
+    // AI : drop stale inType so migrate re-derives from the fork product, not models[0].
+    return migrateModuleSpineTypes({ ...m, inStructureId: prevOut, inType: undefined });
+  });
+}
+
 // AI : quoted llm-batch is followed by auto Link Quotes — state["Extract …"] should read the linked list.
 function wireAssembleQuoteLabels(modules: PipelineModule[]): PipelineModule[] {
   return modules.map((m) => {
@@ -759,8 +802,10 @@ function buildThinkingSystemPrompt(hasValidationErrors: boolean): string {
 
 ${hasValidationErrors
     ? "The live project has pipeline validation errors — diagnose each listed mismatch (structure name vs list[structure] cardinality). Plan exact structureOut/list[...] fixes per step. Do not propose a greenfield architecture."
-    : "Reason step-by-step: (1) structures needed, (2) series-parallel spine with single vs list at each hop, (3) many same-kind files → list[Document] + llm-batch (NOT one llm), (4) two different doc kinds: process first on spine, then either combine (raw side upload immediately before combine) OR assemble after both are parsed — never a third upload, (5) independent mixed-kind sub-pipelines that share one input → Fork (lanes + join), not Parallel (LLM-only) and not serialize, (6) synthetic test docs. Flag where validation would fail if list-ness is wrong."}
-Plain text only — no JSON, no markdown headings. Be concise (roughly 150–300 words).`;
+    : `First line MUST be: TOPOLOGY: batch-map | explode | split-join | combine | assemble | fork
+${buildVibeTopologyPromptBlock()}
+Then reason thoroughly: (1) structures needed, (2) series-parallel spine with single vs list at each hop, (3) many same-kind files → list[Document] + llm-batch (NOT one llm), (4) two different doc kinds: process first on spine, then either combine (raw side upload immediately before combine) OR assemble after both are parsed — never a third upload, (5) independent mixed-kind sub-pipelines that share one input → Fork (lanes + join; lane structureIn is Document), not Parallel (LLM-only) and not serialize, (6) synthetic test docs. Flag where validation would fail if list-ness is wrong.`}
+Budget real reasoning — do not rush. Plain text only after the TOPOLOGY line — no JSON, no markdown headings.`;
 }
 
 function buildThinkingUserPrompt(
@@ -808,13 +853,17 @@ function buildThinkingUserPrompt(
   return `Project: ${project.name} (${project.kind})
 Default model: ${globalModel}
 ${historyBlock}${surfaceBlock}${validationBlock}${uiBlock}${testDocsBlock}${recentRunsBlock}${lastFailedBlock}
+${functionsPromptSummary(project)}
 Structure models:
 ${modelsBlock}
 
 Current pipeline (${project.modules.length} steps):
 ${stepsBlock}
 
-User request: ${resolveAssistantUserMessage(project, message, history)}`;
+${buildVibeTopologyPromptBlock()}
+
+User request: ${resolveAssistantUserMessage(project, message, history)}
+First line of your reply: TOPOLOGY: <name>`;
 }
 
 function buildSystemPrompt(globalModel: ModelId, projectName: string): string {
@@ -885,6 +934,7 @@ export function materializeProposal(
     trimmedNameUpdate !== project.name;
   const proposedActions = (raw.proposedActions ?? []).filter(Boolean);
   const hasActions = proposedActions.length > 0;
+  const targetFunctionName = raw.targetFunctionName?.trim() || undefined;
   if (
     !hasPipelineChange &&
     !hasModelChange &&
@@ -898,7 +948,7 @@ export function materializeProposal(
   }
 
   const aliasNames = collectTypeAliasNames(project.typeAliases ?? [], raw.typeAliases);
-  const models = materializeModels(raw.models, project.models, aliasNames);
+  let models = materializeModels(raw.models, project.models, aliasNames);
   const modelsReallyChanged = hasModelChange && diffStructureModels(project.models, models).length > 0;
   if (
     !hasPipelineChange &&
@@ -915,13 +965,23 @@ export function materializeProposal(
     raw.typeAliases !== null
       ? stripBuiltinTypeAliases(materializeTypeAliases(raw.typeAliases, project.typeAliases ?? [], models))
       : (project.typeAliases ?? []);
+  const named = targetFunctionName
+    ? functionsOnProject(project).find((fn) => fn.name.toLowerCase() === targetFunctionName.toLowerCase())
+    : undefined;
+  const baseModules = named
+    ? named.modules
+    : targetFunctionName
+      ? hasPipelineRewrite
+        ? []
+        : blankPipelineModules()
+      : project.modules;
   let modules: PipelineModule[];
   if (hasPipelineRewrite) {
-    modules = expandModuleSpecs(raw.modules ?? [], models, globalModel, project.modules);
+    modules = expandModuleSpecs(raw.modules ?? [], models, globalModel, baseModules);
   } else if (hasPipelinePatch) {
-    modules = applyModulePatches(project.modules, raw.modulePatch!, models);
+    modules = applyModulePatches(baseModules, raw.modulePatch!, models);
   } else {
-    modules = project.modules;
+    modules = baseModules.length ? baseModules : project.modules;
   }
   const docs = materializeDocs(raw.docs);
   const shouldAlign = docs.length > 0 || inputsNeedStandInAlign(modules, alignDocs);
@@ -932,7 +992,9 @@ export function materializeProposal(
     modules = syncManagedPipelineSteps(modules, models, globalModel) ?? modules;
   }
   if (hasPipelineChange) {
-    modules = wireAssembleQuoteLabels(wireAssembleSpineIn(modules));
+    const forkSynced = syncForkModules(modules, models, typeAliases);
+    modules = wireAssembleQuoteLabels(wireAssembleSpineIn(wireForkProductSpineIn(forkSynced.modules)));
+    models = forkSynced.models;
   }
   return {
     modules: modules ?? [],
@@ -950,8 +1012,10 @@ export function materializeProposal(
       documentation: hasDocumentationChange,
       name: hasNameChange,
       actions: hasActions,
+      function: Boolean(targetFunctionName),
     },
     ...(hasNameChange ? { projectName: trimmedNameUpdate } : {}),
+    ...(targetFunctionName ? { targetFunctionName } : {}),
     ...(hasActions ? { proposedActions } : {}),
   };
 }
@@ -1013,6 +1077,143 @@ function makeMessageExtractor(onMessageDelta: (delta: string) => void): (rawDelt
   };
 }
 
+function parseAssistantDraft(draft: VibeWorkspaceDraft): {
+  raw: z.infer<typeof assistantResponseSchema> | null;
+  schemaErrors: string[];
+} {
+  if (draft.errors.length) return { raw: null, schemaErrors: [] };
+  const parsed = assistantResponseSchema.safeParse({
+    message: draft.message || "I'll update the project.",
+    modules: draft.modules,
+    modulePatch: null,
+    models: draft.models,
+    typeAliases: draft.typeAliases,
+    docs: draft.docs,
+    documentationUpdate: draft.documentationUpdate,
+    projectNameUpdate: draft.projectNameUpdate,
+    targetFunctionName: draft.targetFunctionName,
+    proposedActions: draft.proposedActions,
+  });
+  if (parsed.success) return { raw: parsed.data, schemaErrors: [] };
+  return {
+    raw: null,
+    schemaErrors: parsed.error.issues
+      .slice(0, 12)
+      .map((i) => `${i.path.length ? i.path.join(".") : "root"}: ${i.message}`),
+  };
+}
+
+function draftToAssistantRaw(draft: VibeWorkspaceDraft): z.infer<typeof assistantResponseSchema> | null {
+  return parseAssistantDraft(draft).raw;
+}
+
+export function runVibeWorkspaceChecks(
+  draft: VibeWorkspaceDraft,
+  project: Project,
+  globalModel: ModelId,
+  testDocsCatalog: AssistantTestDocCatalogEntry[],
+  task?: string,
+): string {
+  if (draft.errors.length) {
+    return `FAIL parse\n${draft.errors.map((e) => `- ${e}`).join("\n")}`;
+  }
+  const parsed = parseAssistantDraft(draft);
+  if (!parsed.raw) {
+    const details = parsed.schemaErrors.length
+      ? parsed.schemaErrors.map((e) => `- ${e}`).join("\n")
+      : "- pipeline.json / structures/*.json / aliases.json do not match the assistant schema";
+    return `FAIL schema\n${details}\nFix: non-JSON inputs structureOut Document or list[Document]; llm-batch structureIn is the item name (Document), not list[Document].`;
+  }
+  const raw = parsed.raw;
+  const proposal = materializeProposal(raw, project, globalModel, testDocsCatalog);
+  if (!proposal) {
+    return "PASS (no project file changes — Q&A only). Write message.md if the user should see a reply.";
+  }
+  const validation = formatPipelineValidationErrors(
+    proposal.modules,
+    proposal.models,
+    proposal.typeAliases ?? [],
+  );
+  const compileErrors: string[] = [];
+  for (const m of flattenPipelineModules(proposal.modules)) {
+    for (const entry of customCodeEntriesForModule(m)) {
+      const err = tryCompileCustomCodeEntry(entry);
+      if (err) compileErrors.push(`${m.label}: ${err}`);
+    }
+  }
+  const lint = lintPipeline(
+    {
+      ...project,
+      modules: proposal.modules,
+      models: proposal.models,
+      typeAliases: proposal.typeAliases,
+    },
+    { includeExport: false },
+  );
+  const lintErrors = lint.lints.filter((l) => l.severity === "error");
+  const ok = !validation && compileErrors.length === 0 && lintErrors.length === 0;
+  const kinds = flattenPipelineModules(proposal.modules).map((m) => m.kind);
+  const topoHints = task ? topologyAdvice(task, kinds) : [];
+  const lines = [ok && !topoHints.length ? "PASS" : topoHints.length && ok ? "FAIL topology" : "FAIL"];
+  if (validation) lines.push("I/O:", validation.trim());
+  if (compileErrors.length) lines.push("custom-code:", ...compileErrors.map((e) => `- ${e}`));
+  if (lintErrors.length) {
+    lines.push(
+      "lint:",
+      ...lintErrors.map((l) => `- ${l.stepLabel ?? l.structureName ?? l.code}: ${l.message}`),
+    );
+  }
+  if (topoHints.length) {
+    lines.push("topology:", ...topoHints.map((h) => `- ${h}`));
+  }
+  if (ok && !topoHints.length) lines.push("I/O valid, custom-code compiled, lint clean.");
+  else if (topoHints.length) {
+    lines.push("Fix: rewrite pipeline.json from examples/few-shot.md for this TOPOLOGY — do not patch a wrong spine.");
+  }
+  return lines.join("\n");
+}
+
+async function tryVibeFileHarness(args: {
+  project: Project;
+  task: string;
+  thinking: string;
+  extraPrompt: string;
+  globalModel: ModelId;
+  ledger: UsageLedger;
+  testDocsCatalog: AssistantTestDocCatalogEntry[];
+  onTurn?: (label: string, response: unknown) => void;
+  onStructuredFailure?: (detail: { attempt: number; failureKind: string; error: string }) => void;
+}): Promise<{
+  raw: z.infer<typeof assistantResponseSchema>;
+  proposal: PipelineAssistantProposal;
+  turns: number;
+} | null> {
+  const harness = await runVibeCodingHarness({
+    project: args.project,
+    task: args.task,
+    thinking: args.thinking,
+    extraPrompt: args.extraPrompt,
+    globalModel: args.globalModel,
+    ledger: args.ledger,
+    testDocsCatalog: args.testDocsCatalog,
+    runChecks: (draft) =>
+      runVibeWorkspaceChecks(draft, args.project, args.globalModel, args.testDocsCatalog, args.task),
+    onTurn: args.onTurn,
+    onStructuredFailure: args.onStructuredFailure,
+  });
+  let draft = harness.draft;
+  let harnessRaw = draftToAssistantRaw(draft);
+  if (!harnessRaw && Array.isArray(draft.modules)) {
+    draft = { ...draft, modules: coerceVibePipelineModules(draft.modules) };
+    harnessRaw = draftToAssistantRaw(draft);
+  }
+  if (!harnessRaw) return null;
+  const proposal = materializeProposal(harnessRaw, args.project, args.globalModel, args.testDocsCatalog);
+  // AI : empty / Q&A / stub Input+Output file loops must not replace the JSON few-shot path.
+  if (!proposal || !harnessDraftHasPipelineWork(draft)) return null;
+  return { raw: harnessRaw, proposal, turns: harness.turns };
+}
+
 export async function proposePipelineChange(
   project: Project,
   message: string,
@@ -1037,7 +1238,7 @@ export async function proposePipelineChange(
   let thinking = "";
   let llmAttempt = 0;
   try {
-    if (!fixErrors && !forceFix) {
+    if (!fixErrors) {
       opts?.onPhase?.("thinking");
       thinking = await llmStreamString(
         buildThinkingUserPrompt(
@@ -1056,7 +1257,7 @@ export async function proposePipelineChange(
           model: globalModel,
           ledger,
           system: buildThinkingSystemPrompt(!!liveValidation),
-          maxTokens: 1024,
+          maxTokens: VIBE_THINKING_MAX_TOKENS,
         },
         (delta) => opts?.onThinkingDelta?.(delta),
       );
@@ -1108,10 +1309,6 @@ export async function proposePipelineChange(
       }
     }
 
-    opts?.onPhase?.("structuring");
-    const msgExtractor = opts?.onMessageDelta
-      ? makeMessageExtractor(opts.onMessageDelta)
-      : null;
     const promptOpts: PipelineAssistantOpts = {
       ...opts,
       fixValidationErrors: fixErrors,
@@ -1119,45 +1316,125 @@ export async function proposePipelineChange(
       uiContext,
       observeToolResults,
     };
-    let raw = await llmStreamStructured(
-      buildUserPrompt(
-        project,
-        effectiveMessage,
-        history,
-        globalModel,
-        promptOpts,
-        thinking,
-        liveValidation,
-        forceFix,
-      ),
-      assistantResponseSchema,
-      {
-        model: globalModel,
-        ledger,
-        system: buildSystemPrompt(globalModel, project.name),
-        onStructuredFailure: (detail) => {
-          llmAttempt += 1;
-          opts?.onStructuredFailure?.({
-            attempt: llmAttempt,
-            failureKind: detail.kind,
-            error: detail.error,
-          });
-        },
-      },
-      (rawDelta) => msgExtractor?.(rawDelta),
-    );
-    llmAttempt += 1;
-    opts?.onLlmResponse?.(fixErrors ? `retry-${fixAttempt}` : "initial", raw);
 
-    let proposal = materializeProposal(raw, project, globalModel, opts?.testDocsCatalog ?? []);
+    let raw: z.infer<typeof assistantResponseSchema> | undefined;
+    let proposal: PipelineAssistantProposal | null = null;
+    let harnessUsed = false;
+    const catalog = opts?.testDocsCatalog ?? [];
+    const extraHarnessPrompt = [
+      buildVibeTopologyPromptBlock(),
+      buildHumanSurfacePromptBlock(opts?.humanSurface),
+      buildUiContextPromptBlock(uiContext),
+      formatValidationBlock(
+        liveValidation,
+        "Current pipeline validation errors (fix when changing the pipeline):",
+      ),
+      observeToolResults?.trim() ?? "",
+    ]
+      .filter((b) => b.trim())
+      .join("\n");
+
+    // AI : SPINE_VIBE_HARNESS=1 turns the file loop on; miss falls back to few-shot JSON.
+    if (!fixErrors && vibeHarnessEnabled()) {
+      opts?.onPhase?.("coding");
+      try {
+        const hit = await tryVibeFileHarness({
+          project,
+          task: effectiveMessage,
+          thinking,
+          extraPrompt: extraHarnessPrompt,
+          globalModel,
+          ledger,
+          testDocsCatalog: catalog,
+          onTurn: (label, response) => opts?.onLlmResponse?.(label, response),
+          onStructuredFailure: (detail) => {
+            llmAttempt += 1;
+            opts?.onStructuredFailure?.(detail);
+          },
+        });
+        if (hit) {
+          harnessUsed = true;
+          raw = hit.raw;
+          proposal = hit.proposal;
+          llmAttempt += hit.turns;
+          opts?.onLlmResponse?.("harness-done", { turns: hit.turns });
+          if (raw.message && opts?.onMessageDelta) opts.onMessageDelta(raw.message);
+        }
+      } catch {
+        // AI : harness miss — few-shot JSON still runs so the flag cannot ship an empty reply.
+      }
+    }
+
+    if (!harnessUsed) {
+      opts?.onPhase?.("structuring");
+      const msgExtractor = opts?.onMessageDelta
+        ? makeMessageExtractor(opts.onMessageDelta)
+        : null;
+      try {
+        raw = await llmStreamStructured(
+          buildUserPrompt(
+            project,
+            effectiveMessage,
+            history,
+            globalModel,
+            promptOpts,
+            thinking,
+            liveValidation,
+            forceFix,
+          ),
+          assistantResponseSchema,
+          {
+            model: globalModel,
+            ledger,
+            system: buildSystemPrompt(globalModel, project.name),
+            onStructuredFailure: (detail) => {
+              llmAttempt += 1;
+              opts?.onStructuredFailure?.({
+                attempt: llmAttempt,
+                failureKind: detail.kind,
+                error: detail.error,
+              });
+            },
+          },
+          (rawDelta) => msgExtractor?.(rawDelta),
+        );
+        llmAttempt += 1;
+        opts?.onLlmResponse?.(fixErrors ? `retry-${fixAttempt}` : "initial", raw);
+        proposal = materializeProposal(raw, project, globalModel, catalog);
+      } catch (err) {
+        // AI : JSON fallback after a file-loop miss must not 500 — the live KYC run threw here.
+        raw = {
+          message: `I couldn't produce a valid pipeline JSON (${(err as Error).message.slice(0, 240)}). Try the request again.`,
+          modules: null,
+          modulePatch: null,
+          models: null,
+          typeAliases: null,
+          docs: null,
+          documentationUpdate: null,
+          projectNameUpdate: null,
+          targetFunctionName: null,
+          proposedActions: null,
+        };
+        proposal = null;
+      }
+    }
+
+    if (!raw) {
+      throw new Error("assistant produced no response");
+    }
+
     let retryCount = 0;
 
     for (let retry = 0; retry < MAX_VALIDATION_RETRIES && proposal; retry++) {
-      const validationErrors = formatPipelineValidationErrors(
+      const ioErrors = formatPipelineValidationErrors(
         proposal.modules,
         proposal.models,
         proposal.typeAliases ?? [],
       );
+      const kinds = flattenPipelineModules(proposal.modules).map((m) => m.kind);
+      const validationErrors = [ioErrors.trim(), formatTopologyRetryErrors(effectiveMessage, kinds)]
+        .filter(Boolean)
+        .join("\n\n");
       if (!validationErrors) break;
 
       retryCount += 1;
@@ -1206,7 +1483,7 @@ export async function proposePipelineChange(
       );
       llmAttempt += 1;
       opts?.onLlmResponse?.(`retry-${retryCount}`, raw);
-      proposal = materializeProposal(raw, retryProject, globalModel, opts?.testDocsCatalog ?? []);
+      proposal = materializeProposal(raw, retryProject, globalModel, catalog);
     }
 
     const invalidCount = proposal

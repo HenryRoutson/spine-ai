@@ -18,6 +18,9 @@
 // AI :   for local mutations. React keeps hydration, debounce save, billing caches (parity.md §8.5).
 // AI : TODO (arch-gui-viewmodels) — React pipeline/docs panels should consume toPipelineView /
 // AI :   toDocsView so CLI and GUI cannot drift (parity.md §8.5).
+// AI : TODO (spine-in-spine-bootstrap) — guest UI on host engine; do not merge useStore into the guest.
+// AI :   Steps: lib/server/spine-in-spine-bootstrap-roadmap.ts (grep TODO (spine-in-spine-bootstrap).
+// AI :   Simple vs full vs OSS LoC: lib/server/spine-in-spine-dogfood-roadmap.ts
 // AI : DONE (allow-pipeline-non-linear-fork) — series-parallel Fork step (nested linear lanes + join).
 // AI :   Not React Flow. See lib/server/fork-roadmap.ts. Linear spine + Parallel/Combine/Assemble stay.
 // AI : TODO (arch-module-union) — PipelineModule is a god object; discriminated union per ModuleKind.
@@ -64,6 +67,9 @@
 // AI : TODO (arch-parser-cache) — JsonStore parser/vision cache should use parser_vision_cache_index + fs adapter.
 // AI : TODO (opt-browser-tui) — optional GUI terminal mode (not required). DOM skin of Ink ViewModels
 // AI :   + extracted controller; never Ink-in-browser or a PTY. lib/cli/ink/browser-tui-roadmap.ts.
+// AI : DONE (vibe-coding-harness) — in-memory file workspace + write/run_tests loop (OpenCode/Pi-shaped).
+// AI :   SPINE_VIBE_HARNESS=1 turns it on (harness first, JSON fallback). Unset/0 = few-shot JSON only.
+// AI :   OpenRouter stays server-side; no disk, no shell, no secrets in the workspace.
 // AI : DONE (vibe-fewshot-explode) — Example 1c wrapper + flatten; PromptListVsItem warning.
 // AI : DONE (vibe-fewshot-parallel) — Example 5 parallel lanes then memo.
 // AI : DONE (vibe-fewshot-assemble) — greenfield names assemble; Example 4 kept.

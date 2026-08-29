@@ -8,6 +8,7 @@ import { HostedSiteActionPreview } from "@/components/share/hosted-site-action-b
 import { HostedSiteSqlPreview } from "@/components/share/hosted-site-sql-widget"
 import { Chat, ChatBubble, ChatBubbleAvatar, ChatBubbleContent, ChatInput, ChatList, ChatMessage } from "@/components/ui/chat"
 import { HostedFunctionChrome } from "@/components/share/hosted-function-chrome"
+import { HostedPaySlot } from "@/components/platform/hosted-pay-slot"
 import type { hosted_site_widget_slot } from "@/lib/hosted-site-slots"
 import type { HostedSiteBrand } from "@/lib/shared-link-types"
 import type { PipelineModule } from "@/lib/types"
@@ -15,18 +16,24 @@ import type { ReactNode } from "react"
 
 const OUTPUT_PREVIEW_JSON = '{"preview":"Run output appears here"}'
 
+// AI : TODO (spine-in-spine-bootstrap-S5-user-run) — {{run:active-user-project}} must run the HOST
+// AI :   engine on session.snapshot.activeProjectId (the selected user Project), not the meta
+// AI :   "Compile schema" pipeline on seeds/spine_in_spine.json. Reuse SharedLinkPreview; do not
+// AI :   reimplement run_engine. Alias plumbing: lib/website-pipelines.ts.
 export function HostedSiteSlotWidgets({
   projectName,
   viewerMarkdown,
   modules,
   hideDocsInRun,
   brand,
+  paySlot,
 }: {
   projectName: string
   viewerMarkdown: string
   modules: PipelineModule[]
   hideDocsInRun: boolean
   brand?: HostedSiteBrand
+  paySlot?: ReactNode
 }): Partial<Record<hosted_site_widget_slot, ReactNode>> {
   const runPreview = (
     <SharedLinkPreview
@@ -55,6 +62,7 @@ export function HostedSiteSlotWidgets({
     ),
     sql: <HostedSiteSqlPreview table="shared_number" />,
     action: <HostedSiteActionPreview />,
+    pay: paySlot ?? <HostedPaySlot companyName={projectName} />,
   }
 }
 

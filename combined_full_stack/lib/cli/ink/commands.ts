@@ -107,7 +107,8 @@ const TAB_COMMANDS: TuiCommand[] = TUI_TABS.map((tab) => ({
   id: `tab-${tab}` as const,
   key: TUI_TAB_HOTKEY[tab],
   aliases: [tab, ...Object.entries(TUI_TAB_ALIASES).flatMap(([alias, mapped]) => (mapped === tab ? [alias] : []))],
-  label: `Go to ${tab}`,
+  // AI : id stays "backend"; the pipeline is compute — this tab is tables & rows.
+  label: tab === "backend" ? "Go to data" : `Go to ${tab}`,
   hint: `Switch tab`,
 }))
 

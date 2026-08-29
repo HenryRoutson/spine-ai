@@ -1,5 +1,5 @@
 import type { cron_expr_string, iana_timezone_string } from "@/lib/cron-expr"
-import type { DocId, ModelId, ModuleId, PipelineScheduleId, ProjectId } from "./types"
+import type { DocId, ModelId, ModuleId, PipelineScheduleId, ProjectId, pipeline_function_id } from "./types"
 
 export type { PipelineScheduleId }
 
@@ -23,6 +23,7 @@ export type PipelineScheduleRecord = {
   lastError?: string
   runCount: number
   createdAt: number
+  functionId: pipeline_function_id
 }
 
 export type PipelineScheduleRuntime = {

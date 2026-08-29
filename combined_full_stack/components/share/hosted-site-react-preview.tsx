@@ -8,6 +8,7 @@ import { API_ROUTES } from "@/lib/api-routes"
 import { JSON_HEADERS } from "@/lib/api-client"
 import type { HostedSiteOptions } from "@/lib/shared-link-types"
 import { DEFAULT_WEBSITE_PIPELINE_ALIAS } from "@/lib/website-pipelines"
+import type { hosted_site_widget_slot } from "@/lib/hosted-site-slots"
 
 function HostRunPipeline({
   alias,
@@ -26,6 +27,32 @@ function HostRunPipeline({
       )}
     </div>
   )
+}
+
+function HostSlot({
+  slot,
+  tableByAlias,
+  slots,
+}: {
+  slot: string
+  tableByAlias?: Record<string, ReactNode>
+  slots?: Partial<Record<hosted_site_widget_slot, ReactNode>>
+}) {
+  if (slot.startsWith("table:")) {
+    const name = slot.slice("table:".length)
+    return (
+      <>
+        {tableByAlias?.[name] ?? (
+          <div className="rounded-md border border-dashed border-border px-3 py-4 text-center text-[11px] text-muted-foreground">
+            Table · {name || "structure"}
+          </div>
+        )}
+      </>
+    )
+  }
+  const named = slot as hosted_site_widget_slot
+  if (slots?.[named]) return <>{slots[named]}</>
+  return <div data-spine-slot={slot} />
 }
 
 class ReactPreviewErrorBoundary extends Component<
@@ -57,11 +84,15 @@ class ReactPreviewErrorBoundary extends Component<
 export function HostedSiteReactPreview({
   options,
   runByAlias,
+  tableByAlias,
+  slots,
   bundle: bundleProp,
   compileError: compileErrorProp,
 }: {
   options: HostedSiteOptions
   runByAlias?: Record<string, ReactNode>
+  tableByAlias?: Record<string, ReactNode>
+  slots?: Partial<Record<hosted_site_widget_slot, ReactNode>>
   bundle?: hosted_site_react_bundle | null
   compileError?: string | null
 }) {
@@ -119,11 +150,14 @@ export function HostedSiteReactPreview({
     if (!bundle) return { App: null, error: null }
     try {
       const Run = (props: { alias: string }) => <HostRunPipeline alias={props.alias} runByAlias={runByAlias} />
-      return { App: instantiateHostedSiteReactApp(bundle, Run), error: null }
+      const Slot = (props: { slot: string }) => (
+        <HostSlot slot={props.slot} tableByAlias={tableByAlias} slots={slots} />
+      )
+      return { App: instantiateHostedSiteReactApp(bundle, Run, Slot), error: null }
     } catch (err) {
       return { App: null, error: (err as Error).message }
     }
-  }, [bundle, runByAlias])
+  }, [bundle, runByAlias, tableByAlias, slots])
 
   const PreviewApp = mounted.App
   return (

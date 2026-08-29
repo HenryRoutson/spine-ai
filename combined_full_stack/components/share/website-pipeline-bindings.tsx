@@ -18,10 +18,14 @@ import { readAccountStateCache } from "@/lib/project-state-cache"
 import type { Project, ProjectId } from "@/lib/types"
 import type { HostedSiteOptions, hosted_run_input_visibility, hosted_run_output_view } from "@/lib/shared-link-types"
 import { normalizeHostedRunInputChrome } from "@/lib/hosted-run-chrome"
+import { guiDefaultWorkspaceWindow } from "@/lib/app-nav-config"
+import { useOptionalAppShell } from "@/lib/app-shell"
+import { useHideDeveloperTools } from "@/lib/developer-tools-settings"
+import { useOptionalStore } from "@/lib/store"
 import {
   bindingsFromProjectIds,
   insertWebsitePipelineInCode,
-  resolveWebsitePipelineBindings,
+  listedWebsitePipelineBindings,
   stripWebsitePipelineFromCode,
   websiteBoundProjectIds,
 } from "@/lib/website-pipelines"
@@ -39,9 +43,13 @@ export function WebsitePipelineBindings({
   onChange: (next: HostedSiteOptions) => void
   className?: string
 }) {
+  const store = useOptionalStore()
+  const shell = useOptionalAppShell()
+  const hideDeveloperTools = useHideDeveloperTools()
+  const canOpenBackend = Boolean(shell?.editingWebsite && store)
   const linked = useMemo(
-    () => resolveWebsitePipelineBindings(primaryProjectId, options.pipelineBindings),
-    [primaryProjectId, options.pipelineBindings],
+    () => listedWebsitePipelineBindings(options.pipelineBindings),
+    [options.pipelineBindings],
   )
   const linkedIds = useMemo(
     () => websiteBoundProjectIds(primaryProjectId, options.pipelineBindings),
@@ -58,10 +66,12 @@ export function WebsitePipelineBindings({
   }, [projects])
   const available = catalog.filter((p) => !linkedIds.includes(p.id))
 
-  function add(projectId: ProjectId) {
+  function add(projectId: ProjectId, extra?: Pick<Project, "id" | "name">) {
     if (linkedIds.includes(projectId)) return
+    const nextCatalog =
+      extra && !catalog.some((p) => p.id === extra.id) ? [...catalog, extra] : catalog
     const nextIds = [...linkedIds, projectId]
-    const pipelineBindings = bindingsFromProjectIds(nextIds, catalog, options.pipelineBindings)
+    const pipelineBindings = bindingsFromProjectIds(nextIds, nextCatalog, options.pipelineBindings)
     const added = pipelineBindings.find((b) => b.projectId === projectId)
     if (!added) return
     onChange(insertWebsitePipelineInCode({ ...options, pipelineBindings }, added.alias))
@@ -71,20 +81,12 @@ export function WebsitePipelineBindings({
     const binding = linked.find((b) => b.projectId === projectId)
     if (!binding) return
     const name = catalog.find((p) => p.id === projectId)?.name ?? binding.alias
-    const last = linkedIds.length === 1
     const ok = window.confirm(
-      last
-        ? `Remove ${name} from the page code? The website still needs this pipeline attached — only the widget is deleted.`
-        : `Remove ${name} from this website? This also deletes its widget from the page code.`,
+      `Remove ${name} from this website? This also deletes its widget from the page code.`,
     )
     if (!ok) return
     const stripped = stripWebsitePipelineFromCode(options, binding.alias)
-    if (last) {
-      onChange(stripped)
-      return
-    }
     const nextIds = linkedIds.filter((id) => id !== projectId)
-    if (!nextIds.includes(primaryProjectId)) nextIds.unshift(primaryProjectId)
     onChange({ ...stripped, pipelineBindings: bindingsFromProjectIds(nextIds, catalog, options.pipelineBindings) })
   }
 
@@ -106,16 +108,32 @@ export function WebsitePipelineBindings({
     })
   }
 
+  async function addNewPipeline() {
+    if (!store) return
+    const created = await store.addProject({ open: false })
+    add(created.id, { id: created.id, name: created.name })
+  }
+
+  function openBackend(projectId: ProjectId) {
+    if (!shell || !store) return
+    // AI : Click through a bound pipeline to the backend workspace (Inference / Schedule / Structures).
+    shell.clearWebsiteEditor()
+    if (projectId !== store.project.id) store.setActiveProjectId(projectId)
+    shell.setActiveWindow(guiDefaultWorkspaceWindow(hideDeveloperTools, false))
+  }
+
   return (
     <div className={cn("space-y-1.5", className)}>
       <p className="text-xs font-medium">Pipelines on this website</p>
       <p className="text-[10px] text-muted-foreground">
-        Add a pipeline to drop a run widget into the page. Delete removes the widget from the code.
+        Optional backends. Add a pipeline for a run widget. Open it to edit — this page stays the frontend.
       </p>
       <div className="flex flex-wrap items-center gap-1.5">
+        {linked.length === 0 ? (
+          <span className="font-mono text-[11px] text-muted-foreground">No pipelines yet</span>
+        ) : null}
         {linked.map((binding) => {
           const name = catalog.find((p) => p.id === binding.projectId)?.name ?? binding.alias
-          const primary = binding.projectId === primaryProjectId
           return (
             <span
               key={binding.projectId}
@@ -123,7 +141,19 @@ export function WebsitePipelineBindings({
             >
               <span className="inline-flex h-6 max-w-full items-center gap-1">
               <GitBranch className="h-3 w-3 shrink-0 text-muted-foreground" />
-              <span className="truncate">{name}</span>
+              {canOpenBackend ? (
+                <button
+                  type="button"
+                  className="truncate hover:text-foreground"
+                  title="Open this pipeline to edit the backend"
+                  onClick={() => openBackend(binding.projectId)}
+                  {...spineActionProps("website.open-backend")}
+                >
+                  {name}
+                </button>
+              ) : (
+                <span className="truncate">{name}</span>
+              )}
               <span className="text-[10px] text-muted-foreground">{binding.alias}</span>
               <DeleteButton
                 type="button"
@@ -131,7 +161,7 @@ export function WebsitePipelineBindings({
                 size="icon"
                 className="h-7 w-7 shrink-0"
                 label={`Remove ${name} from this website`}
-                title={primary ? "Removes the widget from the page code" : "Unattach and remove from the page code"}
+                title="Unattach and remove from the page code"
                 onClick={() => remove(binding.projectId)}
                 {...spineActionProps("website.remove-pipeline")}
               >
@@ -235,6 +265,11 @@ export function WebsitePipelineBindings({
             </DropdownMenuGroup>
             <DropdownMenuSeparator />
             <DropdownMenuGroup>
+              {store ? (
+                <DropdownMenuItem className="font-mono text-xs" onClick={() => void addNewPipeline()}>
+                  New pipeline
+                </DropdownMenuItem>
+              ) : null}
               {available.map((p) => (
                 <DropdownMenuItem
                   key={p.id}
@@ -244,7 +279,7 @@ export function WebsitePipelineBindings({
                   {p.name}
                 </DropdownMenuItem>
               ))}
-              {available.length === 0 ? (
+              {available.length === 0 && !store ? (
                 <DropdownMenuItem disabled className="font-mono text-[11px] text-muted-foreground">
                   {catalog.length === 0
                     ? "No pipelines yet"

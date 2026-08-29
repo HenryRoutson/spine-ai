@@ -42,12 +42,16 @@ export function htmlSiteToReactFiles(options: HostedSiteOptions): HostedSiteReac
     if (seg.slot === "run") return `{ kind: "run", alias: ${jsString(alias)} }`
     if (seg.slot === "sql") return `{ kind: "sql", table: ${jsString(seg.alias ?? "")} }`
     if (seg.slot === "action") return `{ kind: "action", alias: ${jsString(alias)} }`
+    if (seg.slot === "table") {
+      return `{ kind: "slot", slot: ${jsString(seg.alias ? `table:${seg.alias}` : "table")} }`
+    }
     return `{ kind: "slot", slot: ${jsString(seg.slot)} }`
   })
   return [
     {
       path: "src/App.tsx",
       contents: `import { RunPipeline } from "./components/RunPipeline"
+import { HostedSlot } from "./components/HostedSlot"
 
 const parts = [
   ${parts.join(",\n  ")}
@@ -63,7 +67,7 @@ export default function App() {
         if (part.kind === "run") return <RunPipeline key={i} alias={part.alias} />
         if (part.kind === "sql") return <div key={i} data-spine-sql={part.table} />
         if (part.kind === "action") return <div key={i} data-spine-action={part.alias} />
-        return <div key={i} data-spine-slot={part.slot} />
+        return <HostedSlot key={i} slot={part.slot} />
       })}
     </div>
   )
@@ -96,6 +100,13 @@ createRoot(document.getElementById("root")!).render(
       Pipeline: {alias}
     </div>
   )
+}
+`,
+    },
+    {
+      path: "src/components/HostedSlot.tsx",
+      contents: `export function HostedSlot({ slot }: { slot: string }) {
+  return <div data-spine-slot={slot} />
 }
 `,
     },

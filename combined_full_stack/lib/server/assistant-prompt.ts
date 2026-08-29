@@ -19,6 +19,8 @@ import { fieldToTypeExpr, stepEmitsList } from "./type_expr";
 import type { ModuleKind, PipelineModule, StructureModel } from "./types";
 import { customCodeEntriesForModule } from "@/lib/custom_code_entries";
 import { listConnectActions } from "@/lib/connect-catalog";
+import { activeFunction, functionsPromptSummary } from "@/lib/pipeline-functions";
+import { buildVibeTopologyPromptBlock } from "./vibe-coding-topology";
 
 function structureName(models: StructureModel[], id: string | undefined): string | undefined {
   if (!id) return undefined;
@@ -141,6 +143,7 @@ Validation error messages and how to fix them:
 - "combine output Foo has no field for the side input" — structureOut needs a document field (or a field whose ref matches the previous step). Do not put a parsed model in the side slot unless that model is what the previous step emits. If both documents are already parsed, use assemble instead of combine.
 - "prior pipeline state is dropped on the spine" — a second input appeared after processing without a join. Use combine (raw side Document immediately before combine) or assemble (zip two parsed outputs). Never add a third upload named "… Document".
 - "input expects Foo, upstream emits Bar" on assemble — assemble is not a linear hop; omit structureIn and set assembleBindings (spine + state["Label"]). Do not copy combine's structureIn onto assemble.
+- "Topology mismatch" — I/O may already be valid; rebuild using the named topology (batch-map / explode / split-join / combine / assemble / fork). Receipts need llm-batch; many rows/file need wrapper+flatten; policy+expenses need combine; resumes+job need assemble; independent extracts need fork with lane structureIn Document.
 
 Before returning modules, mentally verify spineExpects/spineEmits on each adjacent pair in the current pipeline JSON.`;
 }
@@ -425,7 +428,11 @@ export function isGreenfieldProject(project: Project): boolean {
 /** AI : one user-message shape for landing + in-app greenfield design — keep in sync with buildFewShotPromptBlock. */
 export function buildGreenfieldPipelineUserMessage(task: string): string {
   const trimmed = task.trim();
-  return `Design a complete Spine pipeline to automate this task. Include input step(s), processing (llm / llm-batch / transform / custom-code / combine / assemble / fork as needed), and output step(s). Name structures clearly. Walk the series-parallel spine before returning modules — adjacent steps must match single vs list types. Use combine (not one giant llm) when two different RAW document kinds must merge (side file immediately before combine). Use assemble (Example 4) when both kinds are already parsed — never input → code → second input (that drops spine state). Use fork with product join (Example 5, not one mega-llm) when independent extractions share one input — one lane per extract. Do not emit new parallel steps; Fork covers LLM-only and mixed-kind lanes. Use llm-batch for one output object PER input item; many rows per file need a wrapper + flatten (Example 1c).
+  return `Design a complete Spine pipeline to automate this task. Include input step(s), processing (llm / llm-batch / transform / custom-code / combine / assemble / fork as needed), and output step(s). Name structures clearly. Walk the series-parallel spine before returning modules — adjacent steps must match single vs list types.
+
+${buildVibeTopologyPromptBlock()}
+
+Use combine (not one giant llm) when two different RAW document kinds must merge (side file immediately before combine). Use assemble (Example 4) when both kinds are already parsed — never input → code → second input (that drops spine state). Use fork with product join (Example 5, not one mega-llm) when independent extractions share one input — one lane per extract; each lane llm structureIn is Document. Do not emit new parallel steps; Fork covers LLM-only and mixed-kind lanes. Use llm-batch for one output object PER input item; many rows per file need a wrapper + flatten (Example 1c).
 
 If the goal is a spreadsheet/CSV/Excel of extracted rows, end at list[Row] → output — do NOT add custom-code that folds rows into a CSV string (lists are already CSV/XLSX-exportable in the UI).
 
@@ -923,9 +930,9 @@ Do NOT one llm with ExtractedData {risks, parties, dates}. Do NOT write {risks} 
   "modules": [
     { "kind": "input", "label": "Contract", "note": "One contract file.", "structureOut": "Document", "inputType": "text", "inputDescription": "Contract text" },
     { "kind": "fork", "label": "Extract Lanes", "note": "Independent LLM branches on the same contract.", "forkJoin": "product", "forkBranches": [
-      { "label": "Risks", "modules": [{ "kind": "llm", "label": "Extract Risks", "note": "Risk quotes", "structureOut": "list[Risk]", "prompt": "Extract each risk as a quote.", "inputDescription": "Contract text" }] },
-      { "label": "Parties", "modules": [{ "kind": "llm", "label": "Extract Parties", "note": "Party quotes", "structureOut": "list[Party]", "prompt": "Extract each party as a quote.", "inputDescription": "Contract text" }] },
-      { "label": "Dates", "modules": [{ "kind": "llm", "label": "Extract Dates", "note": "Date quotes", "structureOut": "list[KeyDate]", "prompt": "Extract each key date as a quote.", "inputDescription": "Contract text" }] }
+      { "label": "Risks", "modules": [{ "kind": "llm", "label": "Extract Risks", "note": "Risk quotes", "structureIn": "Document", "structureOut": "list[Risk]", "prompt": "Extract each risk as a quote.", "inputDescription": "Contract Document" }] },
+      { "label": "Parties", "modules": [{ "kind": "llm", "label": "Extract Parties", "note": "Party quotes", "structureIn": "Document", "structureOut": "list[Party]", "prompt": "Extract each party as a quote.", "inputDescription": "Contract Document" }] },
+      { "label": "Dates", "modules": [{ "kind": "llm", "label": "Extract Dates", "note": "Date quotes", "structureIn": "Document", "structureOut": "list[KeyDate]", "prompt": "Extract each key date as a quote.", "inputDescription": "Contract Document" }] }
     ]},
     { "kind": "llm", "label": "Write Memo", "note": "Memo from the fork product.", "structureOut": "DiligenceMemo", "prompt": "Write a one-paragraph diligence memo from the extracted risks, parties, and dates.", "inputDescription": "Fork product" },
     { "kind": "output", "label": "Memo Out", "structureIn": "DiligenceMemo", "structureOut": "DiligenceMemo", "inputDescription": "Memo" }
@@ -954,16 +961,27 @@ Key patterns all examples demonstrate:
 - Do not add user models that duplicate Document (content + filename).`;
 }
 
+export function buildProjectFunctionsPromptBlock(): string {
+  return `Functions (named pipelines in one project):
+- Structures (models) are SHARED by every function. When you add types, return the full models array.
+- Each function is a separate pipeline (modules). The active function's steps are listed as "Current pipeline". Other functions are listed by name — do not replace them unless the user asked.
+- To ADD another pipeline and keep the current one: set targetFunctionName to a new short name (e.g. "Summarize") and modules to that function's FULL step list. modulePatch MUST be null. Never overwrite Main / the active function when the user asked for a second or another function.
+- To EDIT an existing named function: set targetFunctionName to that exact name. Prefer a FULL modules replacement when it is not the active function (modulePatch indexes are for the target function's steps).
+- To edit only the currently active function: set targetFunctionName to null (or that function's name) and change modules/modulePatch as usual.
+- Set targetFunctionName to null when you are not adding or retargeting a function.`;
+}
+
 export function buildProjectAssistantSystemPrompt(globalModel: ModelId, projectName: string): string {
   return `You are the Agent for "Spine" — a series-parallel document-processing IDE with structure models, a step pipeline, and a document store for inference.
 
 You can propose changes to ALL of the following in one response:
-1. Structure models (pydantic schemas for LLM I/O)
+1. Structure models (pydantic schemas for LLM I/O) — shared by every function in the project
 2. Reusable type aliases (Python-style types referenced by struct fields)
-3. Pipeline steps (series-parallel processing graph)
+3. Pipeline steps for one named function (series-parallel processing graph)
 4. Project documentation (markdown — keeps the Docs tab accurate as the pipeline evolves)
 5. Test documents (text/json files linked to this project for inference)
 6. Project name (only when the project is still unnamed — see Project naming rules)
+7. A new named function (set targetFunctionName) so a second pipeline does not replace the first
 
 ${buildAgentControlParityPromptBlock()}
 
@@ -980,6 +998,8 @@ ${buildInputTypesPromptBlock()}
 
 ${buildStructureRulesPromptBlock()}
 
+${buildProjectFunctionsPromptBlock()}
+
 ${buildAssistantStructuredResponsePromptBlock()}
 
 ${buildPipelineRulesPromptBlock(globalModel)}
@@ -991,6 +1011,8 @@ ${buildProjectDocumentationRulesPromptBlock()}
 ${buildDocumentRulesPromptBlock()}
 
 ${buildProjectNameRulesPromptBlock(projectName)}
+
+${buildVibeTopologyPromptBlock()}
 
 ${buildFewShotPromptBlock()}
 
@@ -1075,15 +1097,19 @@ export function buildProjectContextBlock(
   const unnamedNote = isUnnamedProjectName(project.name)
     ? ` (unnamed — you may set projectNameUpdate when proposing changes)\n`
     : "\n"
+  const activeFn = activeFunction(project)
   return `${docsBlock}Project: ${project.name} (${project.kind})${unnamedNote}Default model: ${globalModel}
 ${historyBlock}
+${functionsPromptSummary(project)}
+Active function: ${activeFn.name}
+
 Current type aliases (${project.typeAliases?.length ?? 0}):
 ${typeAliasesJson}
 
 Current structure models (${project.models.length}):
 ${modelsJson}
 
-Current pipeline (${project.modules.length} steps):
+Current pipeline (${activeFn.name}, ${project.modules.length} steps):
 ${modulesJson}
 ${extras ?? ""}`;
 }

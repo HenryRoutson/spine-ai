@@ -1,0 +1,6 @@
+{
+  "description": "Compile Spine described as an AppBlueprint — LLM-free custom-code.",
+  "inputs": {
+    "App blueprint": "blueprint.json"
+  }
+}

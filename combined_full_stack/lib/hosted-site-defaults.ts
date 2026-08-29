@@ -1,6 +1,48 @@
 import { HOSTED_SITE_AUTH_SLOT, HOSTED_SITE_RUN_SLOT } from "@/lib/hosted-site-slots"
 
 // AI : default public page — product chrome around {{run}}, good enough to vibe-code Spine-in-Spine from.
+// AI : TODO (spine-in-spine-full-F2-css) — add a "spine-full" token theme that matches AppShell
+// AI :   (globals.css + app-chrome-header). Simple track keeps these marketing hs-* styles.
+// AI :   Pixel chrome-only screenshots first (nav + window header) before full-page diffs.
+// AI : Lovable-style page with no run widget — attach a pipeline later to insert {{run}}.
+export const DEFAULT_HOSTED_SITE_LANDING_HTML = `<nav class="hs-nav">
+  <div class="hs-nav-brand">
+    {{logo}}
+    <span class="hs-nav-name">{{company}}</span>
+  </div>
+  <div class="hs-nav-links">
+    <a class="hs-nav-link" href="#top">Home</a>
+    <span class="hs-nav-account">{{email}}</span>
+  </div>
+</nav>
+<header class="hs-hero" id="top">
+  <p class="hs-kicker">Your product</p>
+  <h1 class="hs-title">{{company}}</h1>
+  <p class="hs-lede">{{tagline}}</p>
+</header>
+<section class="hs-features" aria-label="Product">
+  <article class="hs-feature">
+    <p class="hs-feature-kicker">01</p>
+    <h2>Start with the page</h2>
+    <p>Describe the product in chat. Layout, copy, and brand are yours — no pipeline required.</p>
+  </article>
+  <article class="hs-feature">
+    <p class="hs-feature-kicker">02</p>
+    <h2>Add a pipeline when you need it</h2>
+    <p>Attach a typed run later. The page stays a real website either way.</p>
+  </article>
+  <article class="hs-feature">
+    <p class="hs-feature-kicker">03</p>
+    <h2>Hosted for you</h2>
+    <p>We host the page. You vibe the HTML. Sign-in and pay slots stay available when you want them.</p>
+  </article>
+</section>
+<footer class="hs-footer">
+  <span>{{company}}</span>
+  <span class="hs-footer-meta">Hosted website</span>
+</footer>
+`
+
 export const DEFAULT_HOSTED_SITE_HTML = `<nav class="hs-nav">
   <div class="hs-nav-brand">
     {{logo}}

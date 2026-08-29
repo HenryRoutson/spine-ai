@@ -1,5 +1,12 @@
 "use client"
 
+// AI : TODO (spine-in-spine-bootstrap-S3-actions) — capture data-spine-id clicks on hosted HTML and
+// AI :   dispatch SESSION_ACTIONS (zod parse of nearest form). Same ids as GUI/TUI/MCP.
+// AI : TODO (spine-in-spine-bootstrap-S4-dag) — mount {{slot:pipeline-dag}} / type-expr / step-trace /
+// AI :   code as HostedSlot widgets wrapping existing components (see roadmap S4).
+// AI : TODO (spine-in-spine-bootstrap-S8-site) — spine_in_spine seed HostedSiteOptions.pages[] render
+// AI :   here; nav links are hosted pages, not AppWindowId.
+
 import { useMemo } from "react"
 import { SharedRunViewer } from "@/components/shared-run-viewer"
 import { HostedSiteAccountBar, HostedSiteSignInCard } from "@/components/share/hosted-site-sign-in"
@@ -17,7 +24,8 @@ import { useSupabaseSession } from "@/lib/use-supabase-session"
 import { hostedActionButtonLabel } from "@/lib/hosted-site-slots"
 import { APP_SQL_CHANGED_EVENT } from "@/lib/app-sql"
 import { resolveWebsitePipelineBindings } from "@/lib/website-pipelines"
-import type { ProjectId } from "@/lib/types"
+import { hostedTableSlotsForProject } from "@/components/platform/hosted-table-slot"
+import type { Project, ProjectId, StructureModel } from "@/lib/types"
 import type { ReactNode } from "react"
 import type { SharedRunLifecycleEvent } from "@/lib/use-shared-inference-run"
 
@@ -28,6 +36,8 @@ export function HostedSiteViewer({
   projectId,
   reactBundle,
   reactCompileError,
+  models = [],
+  structureRows,
 }: {
   linkId: string
   siteOptions?: HostedSiteOptions | null
@@ -35,6 +45,8 @@ export function HostedSiteViewer({
   projectId: ProjectId
   reactBundle?: hosted_site_react_bundle | null
   reactCompileError?: string | null
+  models?: StructureModel[]
+  structureRows?: Project["structureRows"]
 }) {
   const options = normalizeHostedSiteOptions(siteOptions ?? DEFAULT_HOSTED_SITE_OPTIONS)
   const { email, isAuthenticated, signOut } = useSupabaseSession()
@@ -105,6 +117,10 @@ export function HostedSiteViewer({
     }
     return map
   }, [bindings, hasDocsSlot, linkId, options.brand])
+  const tableByAlias = useMemo(
+    () => hostedTableSlotsForProject({ id: projectId, models, structureRows }),
+    [projectId, models, structureRows],
+  )
 
   const accountBar =
     options.auth.enabled && isAuthenticated && email ? (
@@ -151,6 +167,8 @@ export function HostedSiteViewer({
         <HostedSiteReactPreview
           options={options}
           runByAlias={{ ...runByAlias, run: runSlot }}
+          tableByAlias={tableByAlias}
+          slots={widgets}
           bundle={reactBundle}
           compileError={reactCompileError}
         />
@@ -168,6 +186,7 @@ export function HostedSiteViewer({
       runByAlias={{ ...runByAlias, run: runSlot }}
       sqlByTable={sqlByTable}
       actionByAlias={actionByAlias}
+      tableByAlias={tableByAlias}
     />
   )
 }
