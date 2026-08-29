@@ -286,7 +286,8 @@ export function pipelineToDag(modules: PipelineModule[], opts?: PipelineDagOpts)
   const { indeg } = degreeMaps([...edges.values()])
   for (const id of nodes.keys()) {
     const n = nodes.get(id)
-    if (!n || n.kind === "start" || n.kind === "trigger") continue
+    // AI : End is a sink — do not wire Start→End here or mermaid draws a line through every node
+    if (!n || n.kind === "start" || n.kind === "trigger" || n.kind === "end") continue
     if ((indeg.get(id) ?? 0) === 0) {
       pushEdge(edges, { source: DAG_START_ID, target: id, kind: "spine" })
     }

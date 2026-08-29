@@ -37,6 +37,7 @@ describe("pipeline DAG IR", () => {
         expect.objectContaining({ source: "out", target: DAG_END_ID }),
       ]),
     )
+    expect(dag.edges.some((e) => e.source === DAG_START_ID && e.target === DAG_END_ID)).toBe(false)
   })
 
   it("fans Then/Else out of an if-else and joins at the if node", () => {
