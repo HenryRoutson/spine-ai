@@ -75,6 +75,18 @@ function quoteExtractRaw(): AssistantResponseRaw {
   }
 }
 
+function persistBatchPlaceholderRaw(): AssistantResponseRaw {
+  const raw = persistBatchRaw()
+  return {
+    ...raw,
+    modules: (raw.modules ?? []).map((m) =>
+      m.kind === "sql"
+        ? { ...m, sql: "INSERT INTO persist_row (vendor) VALUES (?, ?)" }
+        : m,
+    ),
+  }
+}
+
 function persistBatchRaw(): AssistantResponseRaw {
   return {
     message: "I'll extract a vendor row per file and persist each with schema-derived SQL.",
@@ -298,6 +310,41 @@ describe("schema-driven quoting and SQL", () => {
     const parsed = JSON.parse(sqlStep?.outputJson ?? "null") as unknown[]
     expect(Array.isArray(parsed)).toBe(true)
     expect(parsed).toHaveLength(1)
+
+    const rows = await listAppSqlRows(appSqlScopeForProject(project.id), "persist_row")
+    expect(rows).toHaveLength(1)
+    expect(String(rows[0]!.vendor)).toContain("Acme Corp")
+  })
+
+  it("omits placeholder INSERT after extract and INSERTs each row from the structure", async () => {
+    const project = projectFromRaw(persistBatchPlaceholderRaw())
+    const sqlMod = flattenPipelineModules(project.modules).find((m) => m.kind === "sql")
+    expect(sqlMod?.sql?.trim() ?? "").toBe("")
+    expect(sqlMod?.outType?.kind).toBe("list")
+
+    const run = await runWithSource(project, SOURCE)
+    expect(run.status).toBe(RunStatus.Ok)
+    const sqlStep = run.steps.find((s) => s.kind === "sql")
+    expect(sqlStep?.inputPreview).toMatch(/^INSERT INTO persist_row /)
+    expect(sqlStep?.inputPreview).not.toContain("?")
+    expect(sqlStep?.inputPreview).toContain("Acme Corp billed 42 on Tuesday")
+
+    const rows = await listAppSqlRows(appSqlScopeForProject(project.id), "persist_row")
+    expect(rows).toHaveLength(1)
+    expect(String(rows[0]!.vendor)).toContain("Acme Corp")
+  })
+
+  it("derives INSERT at run time when a saved sql step still has placeholder binds", async () => {
+    const project = projectFromRaw(persistBatchRaw())
+    const sqlMod = flattenPipelineModules(project.modules).find((m) => m.kind === "sql")
+    expect(sqlMod).toBeTruthy()
+    sqlMod!.sql = "INSERT INTO persist_row (vendor) VALUES (?, ?)"
+
+    const run = await runWithSource(project, SOURCE)
+    expect(run.status).toBe(RunStatus.Ok)
+    const sqlStep = run.steps.find((s) => s.kind === "sql")
+    expect(sqlStep?.inputPreview).toMatch(/^INSERT INTO persist_row /)
+    expect(sqlStep?.inputPreview).not.toContain("?")
 
     const rows = await listAppSqlRows(appSqlScopeForProject(project.id), "persist_row")
     expect(rows).toHaveLength(1)

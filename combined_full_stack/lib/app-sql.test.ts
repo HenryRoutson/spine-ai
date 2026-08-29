@@ -1,6 +1,6 @@
 import { describe, expect, it, beforeEach } from "vitest"
 import { resolve } from "node:path"
-import { evalSqlExpr, parseAppSql, sqlWhereMatches, tableNameForModel } from "@/lib/app-sql"
+import { evalSqlExpr, parseAppSql, sqlIsRunnableAppSql, sqlWhereMatches, tableNameForModel } from "@/lib/app-sql"
 import { execAppSql, resetAppSqlForTests } from "@/lib/server/app_sql"
 import { loadProjectSeed, SEEDS_DIR } from "@/lib/server/seed"
 import { shouldCheckInputDescription } from "@/lib/server/input_description_check"
@@ -38,6 +38,15 @@ describe("parseAppSql", () => {
       columns: ["id", "value"],
       values: ["global", 1],
     })
+  })
+
+  it("treats placeholder INSERT as not runnable", () => {
+    expect(sqlIsRunnableAppSql("INSERT INTO invoice_row (vendor, amount, excerpt) VALUES (?, ?, ?)")).toBe(false)
+    expect(sqlIsRunnableAppSql("INSERT INTO persist_row (vendor) VALUES ($1)")).toBe(false)
+    expect(sqlIsRunnableAppSql("INSERT INTO persist_row (vendor) VALUES ('Acme')")).toBe(true)
+    expect(sqlIsRunnableAppSql("SELECT * FROM persist_row")).toBe(true)
+    expect(sqlIsRunnableAppSql("")).toBe(false)
+    expect(sqlIsRunnableAppSql(undefined)).toBe(false)
   })
 
   it("parses modulo parity", () => {

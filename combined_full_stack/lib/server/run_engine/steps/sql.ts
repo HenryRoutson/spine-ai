@@ -1,6 +1,6 @@
 import { ModuleKind, type PipelineModule } from "../../types"
 import { pkFieldOf } from "@/lib/sql-id-types"
-import { sqlSeedRowsOf, tableNameForModel } from "@/lib/app-sql"
+import { sqlIsRunnableAppSql, sqlSeedRowsOf, tableNameForModel } from "@/lib/app-sql"
 import {
   defaultSelectSqlForModule,
   derivedInsertSqls,
@@ -25,10 +25,13 @@ export async function execSqlStep(m: PipelineModule, ctx: RunCtx, log: RunLogger
   const prevValue = ctx.prevModuleId ? ctx.outputs.get(ctx.prevModuleId) : undefined
   const out = modelById(ctx.project.models, m.outStructureId)
   const sqls: string[] = []
-  if (m.sql?.trim()) {
-    sqls.push(m.sql.trim())
+  // AI : empty or unbound INSERT after an extract → fill from the previous row(s), not placeholders.
+  if (sqlIsRunnableAppSql(m.sql)) {
+    sqls.push(m.sql!.trim())
   } else if (shouldDeriveInsertSql(prev, m) && out && prevValue != null) {
     sqls.push(...derivedInsertSqls(out, prevValue))
+  } else if (m.sql?.trim()) {
+    sqls.push(m.sql.trim())
   }
   if (!sqls.length) {
     const select = defaultSelectSqlForModule(m, ctx.project.models)

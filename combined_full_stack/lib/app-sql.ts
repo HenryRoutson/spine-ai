@@ -311,6 +311,18 @@ export function parseAppSql(sql: string): ParsedAppSql {
   return new Parser(tokenize(trimmed)).parse()
 }
 
+// AI : live vibe often writes INSERT … VALUES (?, ?) — our dialect has no binds, so that is not runnable.
+export function sqlIsRunnableAppSql(sql: string | undefined): boolean {
+  const trimmed = sql?.trim() ?? ""
+  if (!trimmed) return false
+  try {
+    parseAppSql(trimmed)
+    return true
+  } catch {
+    return false
+  }
+}
+
 function asNumber(value: unknown, col: string): number {
   if (typeof value === "number" && Number.isFinite(value)) return value
   if (typeof value === "string" && value.trim() !== "" && Number.isFinite(Number(value))) return Number(value)
