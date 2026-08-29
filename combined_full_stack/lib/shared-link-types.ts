@@ -1,5 +1,8 @@
 // AI : client-safe shared-link DTOs — keep in sync with lib/server/shared_links.ts.
 import { RunSource, type DocId, type ModelId, type ModuleId, type InputType, type Project, type SharedLinkFundingMode, type SharedLinkId } from "./types";
+import type { HostedSiteActionBinding } from "@/lib/hosted-site-actions";
+
+export type { HostedSiteActionBinding };
 
 export type SharedLinkDefaultDoc = {
   moduleId: ModuleId;
@@ -89,6 +92,8 @@ export type HostedSiteOptions = {
   pages: HostedSitePage[];
   // AI : empty = the share link's projectId is the only pipeline (legacy 1:1).
   pipelineBindings: WebsitePipelineBinding[];
+  // AI : {{action:alias}} buttons — label / trigger JSON / SQL table. Empty = humanize(alias).
+  actions: HostedSiteActionBinding[];
   runtime: website_runtime_kind;
   reactFiles: HostedSiteReactFile[];
 };
@@ -110,6 +115,7 @@ export const DEFAULT_HOSTED_SITE_OPTIONS: HostedSiteOptions = {
   authHtml: "",
   pages: [],
   pipelineBindings: [],
+  actions: [],
   runtime: "html",
   reactFiles: [],
 };

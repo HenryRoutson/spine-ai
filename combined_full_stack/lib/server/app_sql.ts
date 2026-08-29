@@ -111,6 +111,23 @@ async function dbList(scope: string, table: string): Promise<sql_row[] | null> {
   }))
 }
 
+async function dbDelete(scope: string, table: string, rowId: string): Promise<boolean> {
+  if (testMode) return false
+  const db = await createAdminClient()
+  if (!db) return false
+  const { error } = await db
+    .from("app_sql_rows")
+    .delete()
+    .eq("scope", scope)
+    .eq("table_name", table)
+    .eq("row_id", rowId)
+  if (error) {
+    if (!isMissingSchemaError(error)) log.warn(`delete failed`, { error: error.message })
+    return false
+  }
+  return true
+}
+
 async function dbUpsert(scope: string, table: string, rowId: string, data: sql_row): Promise<boolean> {
   if (testMode) return false
   const db = await createAdminClient()
@@ -147,6 +164,19 @@ export async function listAppSqlRows(scope: app_sql_scope | string, table: strin
     return fromDb
   }
   return [...memTable(scope, table).values()].map((row) => ({ ...row }))
+}
+
+export async function deleteAppSqlRow(
+  scope: app_sql_scope | string,
+  table: string,
+  row: sql_row,
+  pkField = "id",
+): Promise<sql_row> {
+  const id = rowIdOf(row, pkField)
+  memTable(scope, table).delete(id)
+  const ok = await dbDelete(scope, table, id)
+  if (!ok) persistFile()
+  return row
 }
 
 export async function upsertAppSqlRow(
@@ -197,6 +227,12 @@ export async function execAppSql(
       row[col] = stmt.values[i] ?? null
     })
     return [await upsertAppSqlRow(scope, stmt.table, row, pkField)]
+  }
+  if (stmt.kind === "delete") {
+    await ensureAppSqlSeed(scope, stmt.table, opts?.seedRows ?? [], pkField)
+    const rows = (await listAppSqlRows(scope, stmt.table)).filter((row) => sqlWhereMatches(row, stmt.where))
+    for (const row of rows) await deleteAppSqlRow(scope, stmt.table, row, pkField)
+    return rows
   }
   await ensureAppSqlSeed(scope, stmt.table, opts?.seedRows ?? [], pkField)
   let rows = (await listAppSqlRows(scope, stmt.table)).filter((row) => sqlWhereMatches(row, stmt.where))

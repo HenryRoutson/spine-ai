@@ -16,7 +16,8 @@ export type SqlExpr =
   | { kind: "col"; name: string }
   | { kind: "binary"; op: sql_binary_op; left: SqlExpr; right: SqlExpr }
 
-export type SqlWhere = { field: string; value: SqlLit }
+export type SqlPred = { field: string; value: SqlLit }
+export type SqlWhere = SqlPred[]
 
 export type ParsedAppSql =
   | { kind: "select"; table: string; columns: "*" | string[]; where?: SqlWhere }
@@ -28,6 +29,7 @@ export type ParsedAppSql =
       returning: boolean
     }
   | { kind: "insert"; table: string; columns: string[]; values: SqlLit[] }
+  | { kind: "delete"; table: string; where?: SqlWhere }
 
 export const APP_SQL_CHANGED_EVENT = "spine-app-sql-changed"
 
@@ -53,6 +55,7 @@ const KEYWORDS = new Set([
   "select",
   "update",
   "insert",
+  "delete",
   "into",
   "from",
   "set",
@@ -183,11 +186,12 @@ class Parser {
   parseWhere(): SqlWhere | undefined {
     if (!this.identKeyword("where")) return undefined
     this.eatKeyword("where")
-    const field = this.eatIdent()
-    this.eatPunct("=")
-    const value = this.eatLit()
-    if (this.identKeyword("and")) throw new Error("AND in WHERE is not supported in this slice")
-    return { field, value }
+    const parts: SqlPred[] = [{ field: this.eatIdent(), value: (this.eatPunct("="), this.eatLit()) }]
+    while (this.identKeyword("and")) {
+      this.eatKeyword("and")
+      parts.push({ field: this.eatIdent(), value: (this.eatPunct("="), this.eatLit()) })
+    }
+    return parts
   }
 
   parseExpr(): SqlExpr {
@@ -234,7 +238,8 @@ class Parser {
     if (this.identKeyword("select")) return this.parseSelect()
     if (this.identKeyword("update")) return this.parseUpdate()
     if (this.identKeyword("insert")) return this.parseInsert()
-    throw new Error("SQL must be SELECT, UPDATE, or INSERT")
+    if (this.identKeyword("delete")) return this.parseDelete()
+    throw new Error("SQL must be SELECT, UPDATE, INSERT, or DELETE")
   }
 
   private parseSelect(): ParsedAppSql {
@@ -303,6 +308,15 @@ class Parser {
     if (columns.length !== values.length) throw new Error("INSERT column/value count mismatch")
     return { kind: "insert", table, columns, values }
   }
+
+  private parseDelete(): ParsedAppSql {
+    this.eatKeyword("delete")
+    this.eatKeyword("from")
+    const table = this.eatIdent()
+    const where = this.parseWhere()
+    if (this.peek()) throw new Error("unexpected tokens after DELETE")
+    return { kind: "delete", table, where }
+  }
 }
 
 export function parseAppSql(sql: string): ParsedAppSql {
@@ -330,13 +344,17 @@ export function evalSqlExpr(expr: SqlExpr, row: Record<string, unknown>): unknow
   return left / right
 }
 
-export function sqlWhereMatches(row: Record<string, unknown>, where?: SqlWhere): boolean {
-  if (!where) return true
-  const got = row[where.field]
-  if (typeof where.value === "number" || typeof got === "number") {
-    return Number(got) === Number(where.value)
+function sqlPredMatches(row: Record<string, unknown>, pred: SqlPred): boolean {
+  const got = row[pred.field]
+  if (typeof pred.value === "number" || typeof got === "number") {
+    return Number(got) === Number(pred.value)
   }
-  return String(got ?? "") === String(where.value ?? "")
+  return String(got ?? "") === String(pred.value ?? "")
+}
+
+export function sqlWhereMatches(row: Record<string, unknown>, where?: SqlWhere): boolean {
+  if (!where || where.length === 0) return true
+  return where.every((pred) => sqlPredMatches(row, pred))
 }
 
 export function projectSqlColumns(

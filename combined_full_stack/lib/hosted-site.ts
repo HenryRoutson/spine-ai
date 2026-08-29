@@ -11,6 +11,7 @@ import {
 import { stampHostedSiteHsIds } from "@/lib/hosted-site-select"
 import { normalizeHostedSiteReactFiles } from "@/lib/hosted-site-react"
 import { normalizeWebsitePipelineBindings } from "@/lib/website-pipelines"
+import { normalizeHostedSiteActions } from "@/lib/hosted-site-actions"
 import type {
   HostedSiteAuth,
   HostedSiteAuthProvider,
@@ -476,6 +477,7 @@ export function normalizeHostedSiteOptions(raw: unknown): HostedSiteOptions {
     authHtml: typeof o.authHtml === "string" ? o.authHtml.slice(0, 50_000) : "",
     pages: normalizeHostedSitePages(o.pages),
     pipelineBindings: normalizeWebsitePipelineBindings(o.pipelineBindings),
+    actions: normalizeHostedSiteActions(o.actions),
     runtime: o.runtime === "react" ? "react" : "html",
     reactFiles: normalizeHostedSiteReactFiles(o.reactFiles),
   }
@@ -517,6 +519,10 @@ export function keepConcurrentHostedSiteEdits(
     authHtml: keep(received.authHtml, sent.authHtml, latest.authHtml),
     pages: samePages(received.pages, sent.pages) ? latest.pages : received.pages,
     pipelineBindings: sameBindings ? latest.pipelineBindings : received.pipelineBindings,
+    actions: received.actions.length === sent.actions.length &&
+      received.actions.every((a, i) => a.alias === sent.actions[i]?.alias && a.label === sent.actions[i]?.label)
+      ? latest.actions
+      : received.actions,
     runtime: keep(received.runtime, sent.runtime, latest.runtime),
     reactFiles: sameReact ? latest.reactFiles : received.reactFiles,
   }

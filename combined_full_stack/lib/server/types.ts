@@ -985,7 +985,7 @@ export const MODULE_META: Record<ModuleKind, { label: string; description: strin
   [ModuleKind.Sql]: {
     label: "SQL",
     description:
-      "Read or write the hosted app’s SQL tables (from your structures). Demo: UPDATE shared_number SET value = value * 2.",
+      "Read or write the hosted app’s SQL tables (from your structures). SELECT / UPDATE / INSERT / DELETE. Host the page with {{sql:table}} and {{action:alias}}.",
   },
   [ModuleKind.N8n]: {
     label: "Transform piece",
