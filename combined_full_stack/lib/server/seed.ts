@@ -51,6 +51,8 @@ const AUTHORED_MODULE_KINDS = [
   "parallel",
   "fork",
   "if-else",
+  "case",
+  "control-join",
   "combine",
   "chunk",
   "merge",
@@ -249,6 +251,7 @@ const SeedFileSchema = z.object({
           z.object({
             id: z.string(),
             label: z.string(),
+            match: z.string().optional(),
             modules: z.array(z.any()),
           }),
         )

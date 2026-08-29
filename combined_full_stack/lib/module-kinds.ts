@@ -15,6 +15,8 @@ export const USER_ADDABLE_MODULE_KINDS = [
   "parallel",
   "fork",
   "if-else",
+  "case",
+  "control-join",
   "combine",
   "custom-code",
   "assert",
@@ -41,6 +43,10 @@ const ADDABLE_KIND_ALIASES: Record<string, UserAddableModuleKind> = {
   if: "if-else",
   cond: "if-else",
   router: "if-else",
+  switch: "case",
+  match: "case",
+  join: "control-join",
+  "xor-join": "control-join",
 }
 
 export function parseUserAddableKind(raw: string): UserAddableModuleKind | undefined {
@@ -70,7 +76,7 @@ export function asModuleKind(kind: UserAddableModuleKind): ModuleKind {
 // AI : output/assert/human-review use inStructureId as the spine passthrough contract.
 // AI : Chatbot is NOT passthrough — in=ChatbotPrompt, out=ChatbotResult.
 export function usesPassthroughStructure(kind: ModuleKind): boolean {
-  return kind === ModuleKind.Output || kind === ModuleKind.Assert || kind === ModuleKind.HumanReview
+  return kind === ModuleKind.Output || kind === ModuleKind.Assert || kind === ModuleKind.HumanReview || kind === ModuleKind.ControlJoin
 }
 
 // AI : llm + llm-batch share prompt/model fields across UI and server validity.
@@ -100,6 +106,8 @@ export function stepRequiresNote(kind: ModuleKind): boolean {
     kind === ModuleKind.Parallel ||
     kind === ModuleKind.Fork ||
     kind === ModuleKind.IfElse ||
+    kind === ModuleKind.Case ||
+    kind === ModuleKind.ControlJoin ||
     isLlmKind(kind)
   )
 }

@@ -27,11 +27,14 @@ import {
   flattenPipelineModules,
   isForkKind,
   isIfElseKind,
+  isCaseKind,
+  isExclusiveKind,
   isNestedLaneKind,
   makeEmptyForkBranch,
   pipelineHasFork,
 } from "@/lib/fork-pipeline"
 import { formatIfCondition } from "@/lib/if-else-pipeline"
+import { isDefaultCaseMatch } from "@/lib/case-pipeline"
 import { formatModuleSpineOut } from "@/lib/spine-type"
 import { forkJoinCaption } from "@/lib/fork-join-caption"
 import { isAutoQuoteStep } from "@/lib/quote-steps"
@@ -240,7 +243,7 @@ function SegmentRow({
   }
 
   if (seg.kind === "fork") {
-    const { fork, index, branches } = seg
+    const { fork, index, branches, join } = seg
     const forkIssue = invalidForModule(invalid ?? new Map(), fork.id)
     const forkInvalid = forkIssue && forkIssue.kind !== "io-mismatch" && forkIssue.kind !== "cardinality-mismatch"
     const forkIoLinked = stepIoMismatchLinked(fork.id, modules, invalid)
@@ -261,7 +264,9 @@ function SegmentRow({
     const forkChromeBad = !!forkInvalid || forkIoLinked || childProblems > 0 || forkStatus === "error"
     const forkWarnings = warnings?.get(fork.id) ?? []
     function laneProblem(branch: (typeof branches)[number], laneIndex: number): boolean {
-      const allowEmpty = isIfElseKind(fork.kind) && laneIndex === 1
+      const allowEmpty =
+        (isIfElseKind(fork.kind) && laneIndex === 1) ||
+        (isCaseKind(fork.kind) && isDefaultCaseMatch(fork.forkBranches?.[laneIndex]?.match))
       if (branch.modules.length === 0) return !allowEmpty
       const ids = flattenPipelineModules(branch.modules).map((m) => m.id)
       return ids.some((id) => {
@@ -269,7 +274,11 @@ function SegmentRow({
         return stepStatus?.get(id) === "error"
       })
     }
-    const canAddLane = editMode && !!onPatchFork && isForkKind(fork.kind) && branches.length < FORK_MAX_BRANCHES
+    const canAddLane =
+      editMode &&
+      !!onPatchFork &&
+      (isForkKind(fork.kind) || isCaseKind(fork.kind)) &&
+      branches.length < FORK_MAX_BRANCHES
     const colTemplate = [
       ...branches.map((b) =>
         flattenPipelineModules(b.modules).some((m) => isNestedLaneKind(m.kind))
@@ -307,14 +316,18 @@ function SegmentRow({
                 <>
                   <StructureLink models={models} structureId={fork.inStructureId} fallback="pipeline" />
                   <span className="text-muted-foreground/60"> → </span>
-                  {isIfElseKind(fork.kind) ? (
+                  {isExclusiveKind(fork.kind) ? (
                     <span>{formatModuleSpineOut(fork, models)}</span>
                   ) : (
                     <StructureLink models={models} structureId={fork.outStructureId} />
                   )}
                   <span className="text-muted-foreground/60">
                     {" "}
-                    · {isIfElseKind(fork.kind) ? formatIfCondition(fork.ifCondition) : joinCaption.title}
+                    · {isIfElseKind(fork.kind)
+                      ? formatIfCondition(fork.ifCondition)
+                      : isCaseKind(fork.kind)
+                        ? `case ${fork.ifCondition?.path || "path"}`
+                        : joinCaption.title}
                   </span>
                 </>
               }
@@ -335,7 +348,9 @@ function SegmentRow({
             {branches.map((b, i) => {
               const empty = b.modules.length === 0
               const problem = laneProblem(b, i)
-              const emptyElseOk = isIfElseKind(fork.kind) && i === 1 && empty
+              const emptyDefaultOk =
+                (isIfElseKind(fork.kind) && i === 1 && empty) ||
+                (isCaseKind(fork.kind) && empty && isDefaultCaseMatch(fork.forkBranches?.[i]?.match))
               return (
                 <div
                   key={b.id}
@@ -347,23 +362,29 @@ function SegmentRow({
                 >
                   <div className="mb-1 flex items-center gap-1.5">
                     <p className={cn("font-mono text-[10px] uppercase tracking-wide", problem ? "text-destructive" : "text-muted-foreground")}>
-                      {b.label}
+                      {isCaseKind(fork.kind)
+                        ? isDefaultCaseMatch(fork.forkBranches?.[i]?.match)
+                          ? `${b.label} · default`
+                          : `${b.label} · ${fork.forkBranches?.[i]?.match || "match"}`
+                        : b.label}
                     </p>
-                    {empty && !emptyElseOk && (
+                    {empty && !emptyDefaultOk && (
                       <span className="font-mono text-[9px] text-destructive">empty</span>
                     )}
-                    {emptyElseOk && (
+                    {emptyDefaultOk && (
                       <span className="font-mono text-[9px] text-muted-foreground">passthrough</span>
                     )}
                     {problem && !empty && <AlertTriangle className="h-3 w-3 text-destructive" />}
                   </div>
                   {editMode &&
                     renderInsertAfter?.(0, { forkId: fork.id, branchId: b.id, blocked: false })}
-                  {empty && !emptyElseOk && (
+                  {empty && !emptyDefaultOk && (
                     <p className="mt-2 font-mono text-[10px] text-destructive">Add a step to this lane.</p>
                   )}
-                  {emptyElseOk && (
-                    <p className="mt-2 font-mono text-[10px] text-muted-foreground">Empty Else keeps the previous spine.</p>
+                  {emptyDefaultOk && (
+                    <p className="mt-2 font-mono text-[10px] text-muted-foreground">
+                      Empty {isIfElseKind(fork.kind) ? "Else" : "default"} keeps the previous spine.
+                    </p>
                   )}
                   {b.segments.map((inner) => (
                     <SegmentRow
@@ -394,7 +415,9 @@ function SegmentRow({
                   onPatchFork?.(fork.id, {
                     forkBranches: [
                       ...(fork.forkBranches ?? []),
-                      makeEmptyForkBranch(`Lane ${String.fromCharCode(65 + branches.length)}`),
+                      isCaseKind(fork.kind)
+                        ? { ...makeEmptyForkBranch(`Arm ${branches.length + 1}`), match: `arm_${branches.length + 1}` }
+                        : makeEmptyForkBranch(`Lane ${String.fromCharCode(65 + branches.length)}`),
                     ],
                   })
                 }
@@ -411,11 +434,27 @@ function SegmentRow({
               onSelect={() => onSelect?.(fork.id)}
             />
           )}
-          {isIfElseKind(fork.kind) && (
+          {isExclusiveKind(fork.kind) && join && (
+            <button
+              type="button"
+              onClick={() => onSelect?.(join.id)}
+              className={cn(
+                "mt-3 w-full rounded-md border border-dashed px-2.5 py-2 text-left transition-colors",
+                selectedId === join.id ? "border-primary bg-primary/5" : "border-chart-4/50 bg-background/60 hover:border-chart-4",
+                stepStatus?.get(join.id) === "skipped" && "opacity-60",
+              )}
+            >
+              <p className="font-mono text-[10px] uppercase tracking-wide text-muted-foreground">
+                join · continue spine as {formatModuleSpineOut(fork, models)}
+              </p>
+              <p className="mt-0.5 font-mono text-[10px] text-muted-foreground">
+                Taken arm only. Without this node, exclusive paths are sinks.
+              </p>
+            </button>
+          )}
+          {isExclusiveKind(fork.kind) && !join && (
             <p className="mt-3 rounded-md border border-dashed border-chart-4/50 bg-background/60 px-2.5 py-2 font-mono text-[10px] text-muted-foreground">
-              if {formatIfCondition(fork.ifCondition)} → Then, else Else (optional)
-              {" · join "}
-              {formatModuleSpineOut(fork, models)}
+              exclusive — only the taken arm runs. Add a Join after this box to continue the spine.
             </p>
           )}
         </div>
@@ -1082,6 +1121,7 @@ function statusBorder(status?: RunStepStatus): string | undefined {
   if (status === "error") return "border-destructive/70 bg-destructive/5"
   if (status === "cached") return "border-chart-3/50 bg-chart-3/5"
   if (status === "ok") return "border-primary/40"
+  if (status === "skipped") return "border-dashed border-muted-foreground/40 bg-muted/20 opacity-60"
   return undefined
 }
 
@@ -1136,5 +1176,8 @@ function RunStatusIcon({ status }: { status?: RunStepStatus }) {
   const palette = useStatusPalette()
   if (status === "cached") return <Zap className="h-3.5 w-3.5 shrink-0 text-chart-3" />
   if (status === "error") return <AlertTriangle className="h-3.5 w-3.5 shrink-0" style={{ color: palette.err }} />
+  if (status === "skipped") {
+    return <span className="shrink-0 font-mono text-[9px] uppercase tracking-wide text-muted-foreground">skip</span>
+  }
   return <ChevronRight className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
 }

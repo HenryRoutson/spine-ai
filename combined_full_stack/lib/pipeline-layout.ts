@@ -4,7 +4,8 @@ import type { PipelineModule } from "@/lib/types"
 import { isLlmKind } from "@/lib/module-kinds"
 import { isAutoQuoteStep } from "@/lib/quote-steps"
 import { isAutoDocToTextStep, isAutoStructureParseStep, isInputManagedFollower } from "@/lib/structure-parse-steps"
-import { forkBranchesOf, isNestedLaneKind, locatePipelineModule } from "@/lib/fork-pipeline"
+import { forkBranchesOf, isExclusiveKind, isNestedLaneKind, locatePipelineModule } from "@/lib/fork-pipeline"
+import { followingControlJoin } from "@/lib/exclusive-control"
 
 export type ForkLaneSegment = {
   id: string
@@ -16,7 +17,7 @@ export type ForkLaneSegment = {
 export type PipelineSegment =
   | { kind: "step"; module: PipelineModule; index: number }
   | { kind: "combine"; combine: PipelineModule; input: PipelineModule; convert?: PipelineModule; parse?: PipelineModule; index: number }
-  | { kind: "fork"; fork: PipelineModule; index: number; branches: ForkLaneSegment[] }
+  | { kind: "fork"; fork: PipelineModule; index: number; branches: ForkLaneSegment[]; join?: PipelineModule }
 
 export type PipelineInsertLoc = {
   forkId: string
@@ -70,10 +71,13 @@ export function segmentPipeline(
       segments.push({ kind: "combine", combine: m, input: g.input, parse: g.parse, convert: g.convert, index: i })
     } else if (!inGroup.has(m.id)) {
       if (isNestedLaneKind(m.kind) && !nestedForkAsStep) {
+        const join = isExclusiveKind(m.kind) ? followingControlJoin(modules, i) : undefined
+        if (join) inGroup.add(join.id)
         segments.push({
           kind: "fork",
           fork: m,
           index: i,
+          join,
           branches: forkBranchesOf(m).map((b) => ({
             id: b.id,
             label: b.label,
@@ -121,6 +125,7 @@ export function insertBeforeIndex(seg: PipelineSegment): number {
 }
 
 export function insertAfterIndex(seg: PipelineSegment): number {
+  if (seg.kind === "fork" && seg.join) return seg.index + 2
   return seg.index + 1
 }
 
@@ -130,7 +135,7 @@ export function modulesInSegment(seg: PipelineSegment): PipelineModule[] {
     return [seg.input, ...(seg.convert ? [seg.convert] : []), ...(seg.parse ? [seg.parse] : []), seg.combine]
   }
   if (seg.kind === "fork") {
-    return [seg.fork, ...seg.branches.flatMap((b) => b.segments.flatMap(modulesInSegment))]
+    return [seg.fork, ...(seg.join ? [seg.join] : []), ...seg.branches.flatMap((b) => b.segments.flatMap(modulesInSegment))]
   }
   return [seg.module]
 }

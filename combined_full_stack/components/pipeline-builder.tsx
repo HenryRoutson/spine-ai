@@ -204,7 +204,7 @@ export function PipelineBuilder() {
         derivedModels = synced.models
         return synced.module
       }
-      if (updated.kind === ModuleKind.IfElse) {
+      if (updated.kind === ModuleKind.IfElse || updated.kind === ModuleKind.Case) {
         const synced = deriveIfElseStepTypes(updated, prev, derivedModels)
         derivedModels = synced.models
         return synced.module

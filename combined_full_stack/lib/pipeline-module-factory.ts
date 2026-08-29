@@ -25,6 +25,7 @@ import { uid } from "@/lib/id"
 import { isLlmKind, kindAlwaysEmitsList, stepRequiresNote, usesPassthroughStructure } from "@/lib/module-kinds"
 import { defaultForkBranches } from "@/lib/fork-pipeline"
 import { defaultIfCondition, padIfElseBranches } from "@/lib/if-else-pipeline"
+import { defaultCaseBranches, defaultCaseCondition, padCaseBranches } from "@/lib/case-pipeline"
 import { migrateModuleSpineTypes, patchSpineOutList } from "@/lib/server/spine_types"
 import type { TypeExpr } from "@/lib/server/type_expr"
 
@@ -94,14 +95,14 @@ export function createPipelineModule(
   const defaultModel = models[0]?.id
   const outStructureId = isChatbot
     ? BUILTIN_CHATBOT_RESULT_ID
-    : kind === ModuleKind.Assemble || kind === ModuleKind.Parallel || kind === ModuleKind.Fork || kind === ModuleKind.IfElse
+    : kind === ModuleKind.Assemble || kind === ModuleKind.Parallel || kind === ModuleKind.Fork || kind === ModuleKind.IfElse || kind === ModuleKind.Case || kind === ModuleKind.ControlJoin
       ? opts.outStructureId
       : usesPassthroughStructure(kind)
         ? opts.outStructureId ?? opts.inStructureId ?? defaultModel
         : opts.outStructureId ?? defaultModel
   const inStructureId = isChatbot
     ? BUILTIN_CHATBOT_PROMPT_ID
-    : kind === ModuleKind.Assemble || kind === ModuleKind.Parallel || kind === ModuleKind.Fork || kind === ModuleKind.IfElse
+    : kind === ModuleKind.Assemble || kind === ModuleKind.Parallel || kind === ModuleKind.Fork || kind === ModuleKind.IfElse || kind === ModuleKind.Case || kind === ModuleKind.ControlJoin
       ? opts.inStructureId
       : kind !== ModuleKind.Input
         ? opts.inStructureId ?? defaultModel
@@ -143,9 +144,16 @@ export function createPipelineModule(
         ? (opts.forkBranches ?? defaultForkBranches())
         : kind === ModuleKind.IfElse
           ? padIfElseBranches(opts.forkBranches)
-          : undefined,
+          : kind === ModuleKind.Case
+            ? padCaseBranches(opts.forkBranches ?? defaultCaseBranches())
+            : undefined,
     forkJoin: kind === ModuleKind.Fork ? (opts.forkJoin ?? "product") : undefined,
-    ifCondition: kind === ModuleKind.IfElse ? (opts.ifCondition ?? defaultIfCondition()) : undefined,
+    ifCondition:
+      kind === ModuleKind.IfElse
+        ? (opts.ifCondition ?? defaultIfCondition())
+        : kind === ModuleKind.Case
+          ? (opts.ifCondition ?? defaultCaseCondition())
+          : undefined,
     prompt: isLlm
       ? opts.prompt ?? (kind === ModuleKind.ExampleSelect ? DEFAULT_EXAMPLE_SELECT_PROMPT : "")
       : undefined,

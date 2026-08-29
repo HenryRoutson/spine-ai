@@ -5,7 +5,7 @@ import { AlertTriangle } from "lucide-react"
 import { layoutPipelineDag } from "@/lib/pipeline-dag-layout"
 import { pipelineToDag, type PipelineDagEdgeKind } from "@/lib/pipeline-dag"
 import { KindIcon, PipelineNode } from "@/lib/module-ui"
-import { isIfElseKind, isNestedLaneKind } from "@/lib/fork-pipeline"
+import { isExclusiveKind, isNestedLaneKind } from "@/lib/fork-pipeline"
 import { MODULE_META, type ModuleId, type PipelineModule, type RunStepStatus, type StructureModel } from "@/lib/types"
 import { cn } from "@/lib/utils"
 import { invalidForModule, type InvalidMap } from "@/lib/validity"
@@ -23,7 +23,7 @@ type PipelineDagGraphProps = {
 }
 
 function edgeStroke(kind: PipelineDagEdgeKind): string {
-  if (kind === "then" || kind === "else" || kind === "lane") return "color-mix(in oklab, var(--chart-4) 55%, var(--border))"
+  if (kind === "then" || kind === "else" || kind === "lane" || kind === "case") return "color-mix(in oklab, var(--chart-4) 55%, var(--border))"
   if (kind === "side-input" || kind === "trigger") return "var(--muted-foreground)"
   return "var(--border)"
 }
@@ -122,6 +122,7 @@ export function PipelineDagGraph({
                 !selected && !forkish && m.kind !== "output" && "border-border hover:border-muted-foreground/40",
                 issue && "border-destructive/70 bg-destructive/5",
                 status === "error" && "border-destructive/70 bg-destructive/5",
+                status === "skipped" && "opacity-40",
               )}
               style={{ left: n.x, top: n.y, width: n.width, height: n.height }}
             >
@@ -129,7 +130,7 @@ export function PipelineDagGraph({
               <span className="min-w-0 flex-1">
                 <span className="block truncate text-sm font-medium leading-snug">{m.label}</span>
                 <span className="block truncate font-mono text-[10px] leading-snug text-muted-foreground">
-                  {isIfElseKind(m.kind)
+                  {isExclusiveKind(m.kind)
                     ? `${n.label.replace(`${m.label}: `, "")} · ${formatModuleSpineOut(m, models)}`
                     : MODULE_META[m.kind].label}
                 </span>

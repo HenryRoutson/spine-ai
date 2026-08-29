@@ -59,16 +59,39 @@ describe("pipeline export dispatch", () => {
     expect(generatePipelineSourceRust(project)).toMatch(/async fn step_/);
   });
 
-  it("emits bool-path if/else in ts export", () => {
-    const m = stubModule(ModuleKind.IfElse)
-    m.ifCondition = { kind: IfConditionKind.Path, path: "is_legal" }
+  it("emits case match in ts export and stops the spine without Join", () => {
+    const m = stubModule(ModuleKind.Case)
+    m.ifCondition = { kind: IfConditionKind.Path, path: "status" }
     m.forkBranches = [
-      { id: "t", label: "Then", modules: [{ ...stubModule(ModuleKind.Output), id: "mod_then" as ModuleId, label: "High" }] },
-      { id: "e", label: "Else", modules: [] },
+      { id: "a", label: "Legal", match: "legal", modules: [{ ...stubModule(ModuleKind.Output), id: "mod_legal" as ModuleId, label: "LegalOut" }] },
+      { id: "b", label: "Default", match: "_", modules: [] },
     ]
-    const ctx = { m, project: stubProject(m), inType: "Route", outType: "Route" }
-    expect(emitStepBody("ts", ctx)).toMatch(/is_legal.*=== true/)
-    expect(generatePipelineSourceTs(ctx.project)).toMatch(/if \(/)
+    const ctx = { m, project: stubProject(m), inType: "Ticket", outType: "Ticket" }
+    expect(emitStepBody("ts", ctx)).toMatch(/__key === "legal"/)
+    const src = generatePipelineSourceTs(ctx.project)
+    expect(src).toMatch(/__disc === "legal"/)
+    expect(src).not.toMatch(/control-join/)
+  })
+
+  it("emits Join as identity and continues after exclusive", () => {
+    const cse = stubModule(ModuleKind.Case)
+    cse.id = "mod_case" as ModuleId
+    cse.ifCondition = { kind: IfConditionKind.Path, path: "status" }
+    cse.forkBranches = [
+      { id: "a", label: "Legal", match: "legal", modules: [] },
+      { id: "b", label: "Default", match: "_", modules: [] },
+    ]
+    const join = stubModule(ModuleKind.ControlJoin)
+    join.id = "mod_join" as ModuleId
+    join.note = "continue"
+    const out = stubModule(ModuleKind.Output)
+    out.id = "mod_out" as ModuleId
+    out.label = "AfterJoin"
+    const project = stubProject(cse)
+    project.modules = [cse, join, out]
+    expect(emitStepBody("ts", { m: join, project, inType: "Ticket", outType: "Ticket" })).toMatch(/return input/)
+    const src = generatePipelineSourceTs(project)
+    expect(src).toMatch(/AfterJoin/)
   })
 
   it("fork merge join uses mergeFold on lane outputs", () => {

@@ -39,7 +39,7 @@ describe("pipeline DAG IR", () => {
     )
   })
 
-  it("fans Then/Else out of an if-else and joins at the if node", () => {
+  it("fans Then/Else out of an if-else without an implicit join", () => {
     const modules = [
       step({ id: "in", kind: ModuleKind.Input, label: "In" }),
       step({
@@ -57,12 +57,14 @@ describe("pipeline DAG IR", () => {
     expect(pipelineDagIsAcyclic(dag)).toBe(true)
     expect(dag.edges).toEqual(
       expect.arrayContaining([
-        expect.objectContaining({ source: "in", target: "t1", kind: "then", label: "Then" }),
-        expect.objectContaining({ source: "t1", target: "ife", kind: "then" }),
-        expect.objectContaining({ source: "in", target: "e1", kind: "else", label: "Else" }),
-        expect.objectContaining({ source: "e1", target: "ife", kind: "else" }),
+        expect.objectContaining({ source: "in", target: "ife", kind: "spine" }),
+        expect.objectContaining({ source: "ife", target: "t1", kind: "then", label: "Then" }),
+        expect.objectContaining({ source: "ife", target: "e1", kind: "else", label: "Else" }),
+        expect.objectContaining({ source: "t1", target: DAG_END_ID }),
+        expect.objectContaining({ source: "e1", target: DAG_END_ID }),
       ]),
     )
+    expect(dag.edges.some((e) => e.target === "ife" && e.kind !== "spine")).toBe(false)
     const laid = layoutPipelineDag(dag)
     expect(laid.width).toBeGreaterThan(80)
     expect(laid.height).toBeGreaterThan(80)
@@ -73,7 +75,7 @@ describe("pipeline DAG IR", () => {
     expect(chart).toContain("-->")
   })
 
-  it("keeps empty Else as a skip-edge to the join", () => {
+  it("keeps empty Else as a skip-edge to End when there is no Join", () => {
     const modules = [
       step({ id: "in", kind: ModuleKind.Input, label: "In" }),
       step({
@@ -90,8 +92,60 @@ describe("pipeline DAG IR", () => {
     const dag = pipelineToDag(modules)
     expect(dag.edges).toEqual(
       expect.arrayContaining([
-        expect.objectContaining({ source: "in", target: "ife", kind: "else" }),
-        expect.objectContaining({ source: "t1", target: "ife", kind: "then" }),
+        expect.objectContaining({ source: "in", target: "ife", kind: "spine" }),
+        expect.objectContaining({ source: "ife", target: "t1", kind: "then" }),
+        expect.objectContaining({ source: "ife", target: DAG_END_ID, kind: "else" }),
+        expect.objectContaining({ source: "t1", target: DAG_END_ID }),
+      ]),
+    )
+  })
+
+  it("joins exclusive arms at an optional Join node", () => {
+    const modules = [
+      step({ id: "in", kind: ModuleKind.Input, label: "In" }),
+      step({
+        id: "ife",
+        kind: ModuleKind.IfElse,
+        label: "Route",
+        ifCondition: { kind: IfConditionKind.Path, path: "ok" },
+        forkBranches: [
+          { id: "t", label: "Then", modules: [step({ id: "t1", kind: ModuleKind.N8n, label: "Legal" })] },
+          { id: "e", label: "Else", modules: [step({ id: "e1", kind: ModuleKind.N8n, label: "Billing" })] },
+        ],
+      }),
+      step({ id: "join", kind: ModuleKind.ControlJoin, label: "Join", note: "continue" }),
+      step({ id: "out", kind: ModuleKind.Output, label: "Out" }),
+    ]
+    const dag = pipelineToDag(modules)
+    expect(pipelineDagIsAcyclic(dag)).toBe(true)
+    expect(dag.edges).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ source: "t1", target: "join", kind: "then" }),
+        expect.objectContaining({ source: "e1", target: "join", kind: "else" }),
+        expect.objectContaining({ source: "join", target: "out", kind: "spine" }),
+      ]),
+    )
+  })
+
+  it("fans case arms from the split node", () => {
+    const modules = [
+      step({ id: "in", kind: ModuleKind.Input, label: "In" }),
+      step({
+        id: "cse",
+        kind: ModuleKind.Case,
+        label: "Route",
+        ifCondition: { kind: IfConditionKind.Path, path: "status" },
+        forkBranches: [
+          { id: "a", label: "Legal", match: "legal", modules: [step({ id: "a1", kind: ModuleKind.N8n, label: "Legal" })] },
+          { id: "b", label: "Default", match: "_", modules: [step({ id: "b1", kind: ModuleKind.N8n, label: "Other" })] },
+        ],
+      }),
+    ]
+    const dag = pipelineToDag(modules)
+    expect(dag.edges).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ source: "cse", target: "a1", kind: "case", label: "legal" }),
+        expect.objectContaining({ source: "cse", target: "b1", kind: "case" }),
       ]),
     )
   })

@@ -2,8 +2,13 @@ import { invariant } from "@/lib/assert";
 import { isLlmKind, usesPassthroughStructure } from "@/lib/module-kinds";
 import { compactPreview } from "@/lib/text-preview";
 import { labelAsStateKey } from "../pipeline_state";
-import { forkBranchesOf, isIfElseKind } from "@/lib/fork-pipeline";
-import { evalIfCondition, ifElseBranch, ifThenBranch } from "@/lib/if-else-pipeline";
+import { forkBranchesOf, flattenPipelineModules } from "@/lib/fork-pipeline";
+import {
+  exclusiveContinues,
+  isExclusiveKind,
+  pickExclusiveBranch,
+  skippedExclusiveModules,
+} from "@/lib/exclusive-control";
 import { inputTypeLabel } from "../../inference-input";
 import { serializeCtx, resolveStepInputForCheck, requireLinearInput } from "./context";
 import { assertInputMatchesDescription, InputDescriptionRejectedError, shouldCheckInputDescription } from "../input_description_check";
@@ -156,11 +161,10 @@ export async function runLinearStepsFrom(
             );
             ctx.prevModuleId = forkPrev;
           }
-          if (isIfElseKind(m.kind)) {
+          if (isExclusiveKind(m.kind)) {
             const forkPrev = ctx.prevModuleId;
             const inputData = requireLinearInput(m, ctx);
-            const takeThen = evalIfCondition(m.ifCondition, inputData);
-            const branch = takeThen ? ifThenBranch(m) : ifElseBranch(m);
+            const branch = pickExclusiveBranch(m, inputData);
             if (branch?.modules.length) {
               const laneStatus = await runLinearStepsFrom(
                 {
@@ -172,7 +176,20 @@ export async function runLinearStepsFrom(
                 },
                 0,
               );
-              if (laneStatus === "error") throw new Error(`if/else lane "${branch.label}" failed`);
+              if (laneStatus === "error") throw new Error(`exclusive lane "${branch.label}" failed`);
+            }
+            for (const skipped of skippedExclusiveModules(m, branch)) {
+              if (steps.some((s) => s.moduleId === skipped.id)) continue;
+              steps.push({
+                moduleId: skipped.id,
+                kind: skipped.kind,
+                label: skipped.label,
+                status: RunStepStatus.Skipped,
+                ms: 0,
+                costCents: 0,
+                inputPreview: `not taken — ${m.label}`,
+                outputPreview: "skipped",
+              });
             }
             ctx.prevModuleId = forkPrev;
           }
@@ -448,6 +465,24 @@ export async function runLinearStepsFrom(
     if (status === "error") {
       log.warn(`pipeline aborted after error`, { failedModule: m.id, stepsCompleted: steps.length });
       return "error";
+    }
+    if (isExclusiveKind(m.kind) && !exclusiveContinues(modules, i)) {
+      for (let j = i + 1; j < modules.length; j++) {
+        for (const skipped of flattenPipelineModules([modules[j]!])) {
+          if (steps.some((s) => s.moduleId === skipped.id)) continue;
+          steps.push({
+            moduleId: skipped.id,
+            kind: skipped.kind,
+            label: skipped.label,
+            status: RunStepStatus.Skipped,
+            ms: 0,
+            costCents: 0,
+            inputPreview: "spine after if/case without Join",
+            outputPreview: "skipped",
+          });
+        }
+      }
+      return "ok";
     }
   }
   return "ok";

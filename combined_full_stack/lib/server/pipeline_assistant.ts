@@ -158,17 +158,18 @@ const moduleSpecSchema = z
       .array(
         z.object({
           label: z.string(),
+          match: z.string().optional().describe("case only — exact match; empty/_/*/default is the fallback arm"),
           modules: z.array(z.any()).max(50),
         }),
       )
       .min(1)
       .max(12)
       .optional()
-      .describe("fork / if-else — linear lanes; if-else is Then then Else (Else may be empty)"),
+      .describe("fork / if-else / case — linear lanes; if-else is Then then Else; case arms set match"),
     ifCondition: ifConditionSchema
       .optional()
       .describe(
-        "if-else only — bool spine path. Compute comparisons in custom-code / Python.",
+        "if-else: bool spine path. case: scalar match path. Compute comparisons in custom-code / Python.",
       ),
     n8nNodeType: z
       .string()
@@ -253,11 +254,14 @@ const moduleSpecSchema = z
         });
       }
     }
-    if (spec.kind === ModuleKind.IfElse) {
+    if (spec.kind === ModuleKind.IfElse || spec.kind === ModuleKind.Case) {
       if (!spec.ifCondition?.path?.trim()) {
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
-          message: "if-else requires ifCondition.path on the spine",
+          message:
+            spec.kind === ModuleKind.Case
+              ? "case requires ifCondition.path on the spine"
+              : "if-else requires ifCondition.path on the spine",
           path: ["ifCondition"],
         });
       }
@@ -467,10 +471,11 @@ function makeModuleFromSpec(
       : undefined;
 
   const forkBranches =
-    spec.kind === ModuleKind.Fork || spec.kind === ModuleKind.IfElse
+    spec.kind === ModuleKind.Fork || spec.kind === ModuleKind.IfElse || spec.kind === ModuleKind.Case
       ? (spec.forkBranches ?? []).map((b) => ({
           id: uid("fbr_"),
           label: b.label,
+          match: spec.kind === ModuleKind.Case ? b.match : undefined,
           modules: expandModuleSpecs(
             (Array.isArray(b.modules) ? b.modules : []) as PipelineAssistantModuleSpec[],
             models,
@@ -494,12 +499,14 @@ function makeModuleFromSpec(
         spec.kind !== ModuleKind.Assemble &&
         spec.kind !== ModuleKind.Parallel &&
         spec.kind !== ModuleKind.Fork &&
-        spec.kind !== ModuleKind.IfElse
+        spec.kind !== ModuleKind.IfElse &&
+        spec.kind !== ModuleKind.Case &&
+        spec.kind !== ModuleKind.ControlJoin
           ? inId
           : undefined,
-      // AI : assemble/parallel/fork/if-else without structureOut → auto-derive on sync
+      // AI : assemble/parallel/fork/if-else/case without structureOut → auto-derive on sync
       outStructureId:
-        (spec.kind === ModuleKind.Assemble || spec.kind === ModuleKind.Parallel || spec.kind === ModuleKind.Fork || spec.kind === ModuleKind.IfElse) &&
+        (spec.kind === ModuleKind.Assemble || spec.kind === ModuleKind.Parallel || spec.kind === ModuleKind.Fork || spec.kind === ModuleKind.IfElse || spec.kind === ModuleKind.Case || spec.kind === ModuleKind.ControlJoin) &&
         !outHint
           ? undefined
           : outId,
@@ -520,7 +527,7 @@ function makeModuleFromSpec(
       forkJoin: spec.kind === ModuleKind.Fork ? (spec.forkJoin ?? "product") : undefined,
       forkBranches,
       ifCondition:
-        spec.kind === ModuleKind.IfElse && spec.ifCondition
+        (spec.kind === ModuleKind.IfElse || spec.kind === ModuleKind.Case) && spec.ifCondition
           ? parseIfCondition("path", spec.ifCondition.path)
           : undefined,
       n8nNodeType: spec.kind === "n8n" ? spec.n8nNodeType : undefined,

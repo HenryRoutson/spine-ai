@@ -264,5 +264,7 @@ describe("if/else step", () => {
     const chart = derivePipelineMermaid(project.modules, project.models)
     expect(chart).toContain("Then")
     expect(chart).toContain("Else")
+    expect(project.modules.some((m) => m.kind === ModuleKind.ControlJoin)).toBe(false)
+    expect([...computeInvalid(project.modules, project.models).values()].flat()).toHaveLength(0)
   })
 })

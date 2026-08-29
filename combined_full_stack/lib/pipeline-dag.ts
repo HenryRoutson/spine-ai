@@ -5,10 +5,11 @@ import { combineGroupAt } from "@/lib/pipeline-layout"
 import {
   flattenPipelineModules,
   forkBranchesOf,
+  isExclusiveKind,
   isIfElseKind,
   isNestedLaneKind,
 } from "@/lib/fork-pipeline"
-import { formatIfCondition } from "@/lib/if-condition"
+import { followingControlJoin, formatExclusiveCondition, exclusiveLaneKindLabel } from "@/lib/exclusive-control"
 import type { PipelineModule } from "@/lib/types"
 
 export const DAG_START_ID = "__start"
@@ -47,7 +48,7 @@ export type PipelineDagOpts = {
   triggers?: PipelineTrigger[]
 }
 
-export type PipelineDagEdgeKind = "spine" | "then" | "else" | "lane" | "side-input" | "trigger"
+export type PipelineDagEdgeKind = "spine" | "then" | "else" | "case" | "lane" | "side-input" | "trigger"
 
 export type PipelineDagNodeKind = "start" | "end" | "step" | "trigger"
 
@@ -104,9 +105,10 @@ function edgeKey(e: Pick<PipelineDagEdge, "source" | "target" | "kind">): EdgeKe
   return `${e.source}\0${e.target}\0${e.kind}`
 }
 
-function laneEdgeKind(isIf: boolean, index: number): PipelineDagEdgeKind {
-  if (!isIf) return "lane"
-  return index === 0 ? "then" : "else"
+function laneEdgeKind(m: PipelineModule, index: number): PipelineDagEdgeKind {
+  if (isIfElseKind(m.kind)) return index === 0 ? "then" : "else"
+  if (isExclusiveKind(m.kind)) return "case"
+  return "lane"
 }
 
 function addStepNode(nodes: Map<string, PipelineDagNode>, m: PipelineModule): void {
@@ -114,7 +116,7 @@ function addStepNode(nodes: Map<string, PipelineDagNode>, m: PipelineModule): vo
   nodes.set(m.id, {
     id: m.id,
     kind: "step",
-    label: isIfElseKind(m.kind) ? `${m.label}: ${formatIfCondition(m.ifCondition)}` : m.label,
+    label: isExclusiveKind(m.kind) ? `${m.label}: ${formatExclusiveCondition(m)}` : m.label,
     module: m,
   })
 }
@@ -183,21 +185,37 @@ function walkLinear(
 
     addStepNode(nodes, m)
     if (isNestedLaneKind(m.kind)) {
-      const isIf = isIfElseKind(m.kind)
+      const exclusive = isExclusiveKind(m.kind)
+      const join = exclusive ? followingControlJoin(modules, i) : undefined
+      if (exclusive) emit(pred, m.id, "spine")
       const branches = forkBranchesOf(m)
       for (let bi = 0; bi < branches.length; bi++) {
         const b = branches[bi]!
-        const kind = laneEdgeKind(isIf, bi)
-        const label = isIf ? (bi === 0 ? "Then" : "Else") : b.label.trim() || `lane ${bi + 1}`
+        const kind = laneEdgeKind(m, bi)
+        const label = exclusiveLaneKindLabel(m, bi, b)
+        const from = exclusive ? m.id : pred
         if (!b.modules.length) {
-          emit(pred, m.id, kind, label)
+          if (join) pushEdge(edges, { source: from, target: join.id, kind, label })
+          else if (exclusive) pushEdge(edges, { source: from, target: DAG_END_ID, kind, label })
+          else emit(pred, m.id, kind, label)
+          usedFirst = true
           continue
         }
-        const last = walkLinear(b.modules, pred, nodes, edges, { kind, label })
-        pushEdge(edges, { source: last, target: m.id, kind, label })
+        const last = walkLinear(b.modules, from, nodes, edges, exclusive ? { kind, label } : { kind, label })
+        if (join) {
+          addStepNode(nodes, join)
+          pushEdge(edges, { source: last, target: join.id, kind, label })
+        } else if (!exclusive) {
+          pushEdge(edges, { source: last, target: m.id, kind, label })
+        }
         usedFirst = true
       }
-      pred = m.id
+      if (join) {
+        pred = join.id
+        i += 1
+      } else {
+        pred = m.id
+      }
       continue
     }
 

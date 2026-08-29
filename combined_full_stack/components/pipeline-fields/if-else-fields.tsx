@@ -33,7 +33,8 @@ export function IfElseModuleFields({ selected, edit, onUpdate }: IfElseModuleFie
       </PipelineField>
       <p className="font-mono text-[10px] leading-relaxed text-muted-foreground">
         Then runs when the field is true. Else is optional — empty means passthrough of the previous spine.
-        Then and Else may emit different types; the join is their union.
+        Then and Else may emit different types; add a Join after this box to continue the spine as their union.
+        Without Join, only the taken arm runs.
       </p>
     </>
   )
