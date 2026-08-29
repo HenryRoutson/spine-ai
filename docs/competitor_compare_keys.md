@@ -124,7 +124,9 @@ The harness env var `REPLIT_MCP_ACCESS_TOKEN` is an unofficial Bearer to the sam
    ```bash
    python3 scripts/competitor_compare.py check
    python3 scripts/competitor_compare.py record --platforms base44,spine --prompt-id kyc
-   ```
+```
+
+`BASE44_API_KEY` authenticates REST (`api_key` header on `GET/POST /api/apps`). Official vibe create (`create_base44_app`) is MCP OAuth at `https://app.base44.com/mcp/` — a static key is not a Bearer token there. If MCP returns 401, the harness still POSTs a blank app so the compare folder has an editor URL.
 
 `check` prints `READY` / `NEED` per platform without printing full secrets. Platforms without a secret are skipped; the other columns still write to `competitor_runs/<timestamp>/compare.html`.
 

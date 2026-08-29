@@ -27,7 +27,8 @@ JsonDict = dict[str, Any]
 
 LOVABLE_API = "https://api.lovable.dev"
 REPLIT_MCP = "https://replit-mcp.com/server/mcp"
-BASE44_MCP = "https://app.base44.com/mcp"
+BASE44_MCP = "https://app.base44.com/mcp/"
+BASE44_API = "https://app.base44.com/api"
 
 
 @dataclass(frozen=True)
@@ -225,17 +226,59 @@ def _run_base44(
         extra: JsonDict = {}
         if project_name:
             extra["name"] = project_name
-        return mcp_create(
-            platform="base44",
-            url=BASE44_MCP,
-            token=key,
-            prompt=prompt,
-            wait_seconds=wait_seconds,
-            tool_names=("create_base44_app", "create_app", "createApp"),
-            extra_args=extra,
-        )
+        try:
+            return mcp_create(
+                platform="base44",
+                url=BASE44_MCP,
+                token=key,
+                prompt=prompt,
+                wait_seconds=wait_seconds,
+                tool_names=("create_base44_app", "create_app", "createApp"),
+                extra_args=extra,
+            )
+        except HttpError as exc:
+            # AI : MCP is OAuth; the stored account key still works on REST as api_key.
+            if exc.status in {401, 403}:
+                return _base44_rest_create(prompt, key, project_name, mcp_error=str(exc))
+            raise
     status = _base44_status(env)
     return PlatformResult("base44", False, status.method, skipped=True, error=status.hint)
+
+
+def _base44_rest_create(prompt: str, key: str, project_name: str, *, mcp_error: str) -> PlatformResult:
+    name = (project_name or "spine-compare")[:80]
+    created, _ = json_request(
+        "POST",
+        f"{BASE44_API}/apps",
+        headers={"api_key": key},
+        body={
+            "name": name,
+            "user_description": prompt[:4000],
+            "is_managed_source_code": False,
+            "public_settings": "public_without_login",
+        },
+        timeout=60,
+    )
+    if not isinstance(created, dict) or not created.get("id"):
+        raise RuntimeError(f"Base44 REST create missing id: {created!r}")
+    app_id = str(created["id"])
+    slug = str(created.get("slug") or app_id)
+    editor_url = f"https://app.base44.com/apps/{app_id}"
+    transcript = (
+        "REST created a blank Base44 app (CLI-style POST /api/apps). "
+        "Vibe chat did not run: MCP https://app.base44.com/mcp/ is OAuth-only "
+        f"and rejected BASE44_API_KEY ({mcp_error[:240]})."
+    )
+    return PlatformResult(
+        platform="base44",
+        ok=False,
+        method="rest_scaffold",
+        editor_url=editor_url,
+        preview_url=None,
+        transcript=transcript,
+        error="Base44 vibe MCP needs OAuth; API key only scaffolds a blank app",
+        extra={"app_id": app_id, "slug": slug, "name": created.get("name")},
+    )
 
 
 def _run_spine(prompt: str, wait_seconds: int, env: dict[str, str], project_name: str) -> PlatformResult:

@@ -9,9 +9,13 @@ import urllib.request
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
-from urllib.parse import urlencode
+from urllib.parse import urlencode, urljoin
 
 JsonDict = dict[str, Any]
+BROWSER_UA = (
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+    "(KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36"
+)
 
 
 class HttpError(RuntimeError):
@@ -30,12 +34,14 @@ def json_request(
     body: JsonDict | None = None,
     query: dict[str, str] | None = None,
     timeout: int = 60,
+    _hops: int = 0,
 ) -> tuple[Any, dict[str, str]]:
     if query:
         url = url + ("&" if "?" in url else "?") + urlencode(query)
     data = None if body is None else json.dumps(body).encode("utf-8")
     req = urllib.request.Request(url, data=data, method=method.upper())
     req.add_header("Accept", "application/json, text/event-stream")
+    req.add_header("User-Agent", BROWSER_UA)
     if body is not None:
         req.add_header("Content-Type", "application/json")
     for key, value in (headers or {}).items():
@@ -48,6 +54,11 @@ def json_request(
             parsed = _parse_body(raw, resp_headers.get("content-type", ""))
             return parsed, resp_headers
     except urllib.error.HTTPError as exc:
+        loc = exc.headers.get("Location")
+        if exc.code in {301, 302, 307, 308} and loc:
+            nxt = urljoin(url, loc)
+            if nxt != url and _hops < 3:
+                return json_request(method, nxt, headers=headers, body=body, timeout=timeout, _hops=_hops + 1)
         raw = exc.read().decode("utf-8", errors="replace") if exc.fp else ""
         raise HttpError(exc.code, raw, url) from exc
 
