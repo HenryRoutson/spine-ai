@@ -8,6 +8,7 @@ import { ensureBundledSeedDocsForProject, ensureSeedDocs, type Store } from "@/l
 import { publishSharedLink } from "@/lib/server/shared_links";
 import { migrateProjectModules } from "@/lib/server/validity";
 import { logger } from "@/lib/server/server_logger";
+import { remapWebsiteProjectId } from "@/lib/website-pipelines";
 import type { AuthSession } from "@/lib/server/require_auth";
 import { ModuleKind, type DocId, type ModuleId, type Project, type ProjectId } from "@/lib/server/types";
 
@@ -29,22 +30,25 @@ function defaultDocsForHostedSite(
   return out;
 }
 
-async function maybePublishHostedSite(opts: {
+async function maybePublishHostedSites(opts: {
   auth: AuthSession;
   store: Store;
   project: Project;
   templateId: string;
 }): Promise<void> {
   const seed = allProjectSeeds().find((s) => s.project.id === (opts.templateId as ProjectId));
-  if (!seed?.hostedSite) return;
-  await publishSharedLink({
-    ownerId: opts.auth.userId,
-    project: opts.project,
-    defaultDocsByModule: defaultDocsForHostedSite(opts.project, opts.store, seed),
-    store: opts.store,
-    kind: "site",
-    siteOptions: seed.hostedSite,
-  });
+  if (!seed?.hostedSites.length) return;
+  const defaultDocsByModule = defaultDocsForHostedSite(opts.project, opts.store, seed);
+  for (const site of seed.hostedSites) {
+    await publishSharedLink({
+      ownerId: opts.auth.userId,
+      project: opts.project,
+      defaultDocsByModule,
+      store: opts.store,
+      kind: "site",
+      siteOptions: remapWebsiteProjectId(site, seed.project.id, opts.project.id),
+    });
+  }
 }
 
 // AI : blank project, numbered clone of a template, or numbered clone of an existing project.
@@ -83,10 +87,10 @@ export async function POST(req: NextRequest) {
   } catch (err) {
     return storeAuthError(err);
   }
-  // AI : hosted SQL demos mint a public site_ link so the cloned app is immediately shareable.
+  // AI : example pipeline seeds mint their hosted pages, remapped onto the clone (two skins share one pipeline).
   if (body.templateId) {
     try {
-      await maybePublishHostedSite({ auth, store, project, templateId: body.templateId });
+      await maybePublishHostedSites({ auth, store, project, templateId: body.templateId });
     } catch (err) {
       apiLog.warn("hosted site auto-publish failed", { projectId: project.id, err: String(err) });
     }

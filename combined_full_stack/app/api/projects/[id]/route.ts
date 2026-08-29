@@ -1,6 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { apiError, requireAuthStore, storeAuthError } from "@/lib/server/api_context";
-import { parseProjectId, parseRequestJson, projectPatchSchema } from "@/lib/server/api_schemas";
+import { parseProjectId, parseRequestJson, projectPatchSchema, deleteProjectBodySchema } from "@/lib/server/api_schemas";
 import { HTTP, unknownProject } from "@/lib/server/api-errors";
 import { logger } from "@/lib/server/server_logger";
 import { resolveStoreProject } from "@/lib/server/store";
@@ -9,6 +9,10 @@ import { mergeStrategyConfigPatch } from "@/lib/server/strategies";
 import { normalizeStructureModels } from "@/lib/server/type_expr";
 import { recordActivityEvents } from "@/lib/server/user_activity";
 import { teamProjectWriteError } from "@/lib/server/teams";
+import {
+  applyPipelineDeleteToOwnerWebsites,
+  websitesDependingOnPipeline,
+} from "@/lib/server/pipeline-website-dependents";
 import type { user_id_string } from "@/lib/server/require_auth";
 import type { PipelineModule, Project } from "@/lib/server/types";
 
@@ -119,10 +123,10 @@ export async function PUT(req: NextRequest, ctx: { params: Promise<{ id: string 
   return NextResponse.json({ ok: true });
 }
 
-export async function DELETE(_req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
+export async function DELETE(req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
   const authCtx = await requireAuthStore("write");
   if (authCtx instanceof NextResponse) return authCtx;
-  const { store } = authCtx;
+  const { store, auth } = authCtx;
 
   const { id: rawId } = await ctx.params;
   const projectId = parseProjectId(rawId);
@@ -140,12 +144,39 @@ export async function DELETE(_req: NextRequest, ctx: { params: Promise<{ id: str
   const project = store.project(projectId)!;
   const writeErr = teamProjectWriteError(project);
   if (writeErr) return apiError(writeErr, HTTP.FORBIDDEN);
+
+  const parsed = await parseRequestJson(req, deleteProjectBodySchema, {});
+  if ("validationError" in parsed) return apiError(parsed.validationError, HTTP.BAD_REQUEST);
+
+  const dependents = await websitesDependingOnPipeline(auth.userId, projectId);
+  if (dependents.length > 0 && !parsed.websiteAction) {
+    return NextResponse.json(
+      {
+        error: "This pipeline is used by websites",
+        code: "websites_depend",
+        sites: dependents,
+      },
+      { status: HTTP.CONFLICT },
+    );
+  }
+  if (dependents.length > 0 && parsed.websiteAction) {
+    await applyPipelineDeleteToOwnerWebsites({
+      ownerId: auth.userId,
+      projectId,
+      websiteAction: parsed.websiteAction,
+    });
+  }
+
   store.deleteProject(projectId);
-  apiLog.info(`DELETE /api/projects`, { projectId });
+  apiLog.info(`DELETE /api/projects`, {
+    projectId,
+    websiteAction: parsed.websiteAction ?? null,
+    websiteCount: dependents.length,
+  });
   try {
     await store.flush();
   } catch (err) {
     return storeAuthError(err);
   }
-  return NextResponse.json({ ok: true });
+  return NextResponse.json({ ok: true, sites: dependents });
 }

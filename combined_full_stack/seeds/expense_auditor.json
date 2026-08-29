@@ -275,5 +275,45 @@
       "label": "inference",
       "file": "expense_auditor/expense_report.md"
     }
+  ],
+  "hostedSites": [
+    {
+      "brand": {
+        "companyName": "Ledgerly",
+        "tagline": "Policy first. Receipts second.",
+        "primaryColor": "#0f2744",
+        "accentColor": "#c4a35a",
+        "backgroundColor": "#0b1726",
+        "textColor": "#e8eef6"
+      },
+      "customCss": ".hs-root { font-family: Georgia, \"Iowan Old Style\", serif; }\n.hs-hero-cta, .hs-nav-cta { border-radius: 0.2rem; }\n.hs-kicker { letter-spacing: 0.22em; }\n.hs-feature { background: color-mix(in srgb, #0f2744 70%, #fff); }",
+      "kicker": "Enterprise expense audit",
+      "lede": "Finance teams drop a policy PDF and a report. Ledgerly flags over-limit lines with the cited rule.",
+      "cta": "Audit this report",
+      "features": [
+        { "kicker": "01", "title": "Policy limits", "body": "Category caps and approval rules stay structured — not a chat summary." },
+        { "kicker": "02", "title": "Exception queue", "body": "Non-compliant lines come back as a typed list your AP desk can close." },
+        { "kicker": "03", "title": "One engine", "body": "Spendly is the same pipeline in a different brand. Re-skin, do not rebuild." }
+      ]
+    },
+    {
+      "brand": {
+        "companyName": "Spendly",
+        "tagline": "Receipts in. Policy out.",
+        "primaryColor": "#e24a2d",
+        "accentColor": "#0f766e",
+        "backgroundColor": "#fff7ed",
+        "textColor": "#3f1f14"
+      },
+      "customCss": ".hs-hero { text-align: left; max-width: 42rem; margin: 0 auto 0 0; padding-left: 1.5rem; }\n.hs-title, .hs-lede { margin-left: 0; margin-right: 0; }\n.hs-hero-cta { border-radius: 0.7rem; }\n.hs-feature { border-radius: 1.35rem; }",
+      "kicker": "Employee-friendly audit",
+      "lede": "Same expense auditor as Ledgerly — friendlier copy and color for the people who actually file reports.",
+      "cta": "Check my receipts",
+      "features": [
+        { "kicker": "01", "title": "Same pipeline", "body": "Clone both skins and they share one Expense Report Auditor backend." },
+        { "kicker": "02", "title": "Different brand", "body": "Colors, type, and CTA change. The typed steps do not." },
+        { "kicker": "03", "title": "Rebrand, don't fork", "body": "A website is a skin over pipelines. Attach the same run to as many pages as you need." }
+      ]
+    }
   ]
 }

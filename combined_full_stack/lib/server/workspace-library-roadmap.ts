@@ -10,6 +10,7 @@ export {}
 // ---------------------------------------------------------------------------
 // AI : DONE (lib-share-P0-shelf) — LibraryShelf is the generic picker chrome
 // AI : DONE (lib-share-P0-website-templates) — seeds with hostedSite show under Websites → Example templates
+// AI : DONE (lib-share-P0-example-sites) — legal / expense (two skins) / homework / bank / bug / procurement hosted pages
 // AI : DONE (lib-share-P0-double) — Double / 3n+1 is two functions over shared_number, cloneable as a website
 // AI : DONE (lib-share-P0-mkt-site-row) — marketplace.kind = pipeline | website (snapshot + siteOptions)
 

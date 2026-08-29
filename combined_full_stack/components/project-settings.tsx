@@ -7,6 +7,13 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Switch } from "@/components/ui/switch"
 import { timeAgo } from "@/lib/time-ago"
+import { API_ROUTES } from "@/lib/api-routes"
+import { apiJson } from "@/lib/api-client"
+import { isSiteLinkId } from "@/lib/hosted-site"
+import type { SharedLinkRecord } from "@/lib/shared-link-types"
+import type { pipeline_website_delete_action } from "@/lib/website-pipelines"
+import { websitesUsingProject } from "@/lib/website-pipelines"
+import { PipelineWebsiteDeleteChoices } from "@/components/pipeline-website-delete-choices"
 
 export function ProjectSettings() {
   const { project, patchProject, deleteProject } = useStore()
@@ -14,6 +21,8 @@ export function ProjectSettings() {
   const [deleting, setDeleting] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [langfuseConfigured, setLangfuseConfigured] = useState<boolean | null>(null)
+  const [websiteAction, setWebsiteAction] = useState<pipeline_website_delete_action>("unbind")
+  const [dependentSites, setDependentSites] = useState<ReturnType<typeof websitesUsingProject>>([])
 
   const nameMatches = confirmName.trim() === project.name
   const canDelete = nameMatches && !project.teamReadOnly && !deleting
@@ -25,12 +34,32 @@ export function ProjectSettings() {
       .catch(() => setLangfuseConfigured(false))
   }, [])
 
+  useEffect(() => {
+    let cancelled = false
+    void apiJson<{ links: SharedLinkRecord[] }>(API_ROUTES.sharedLinks)
+      .then((body) => {
+        if (cancelled) return
+        const sites = (body.links ?? []).filter((link) => isSiteLinkId(link.id) && !link.revoked)
+        setDependentSites(websitesUsingProject(sites, project.id))
+        setWebsiteAction("unbind")
+      })
+      .catch(() => {
+        if (!cancelled) setDependentSites([])
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [project.id])
+
   async function handleDelete() {
     if (!canDelete) return
     setDeleting(true)
     setError(null)
     try {
-      await deleteProject(project.id)
+      await deleteProject(
+        project.id,
+        dependentSites.length > 0 ? { websiteAction } : undefined,
+      )
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to delete project")
       setDeleting(false)
@@ -119,6 +148,14 @@ export function ProjectSettings() {
               </p>
             ) : (
               <>
+                {dependentSites.length > 0 ? (
+                  <PipelineWebsiteDeleteChoices
+                    pipelineName={project.name}
+                    sites={dependentSites}
+                    action={websiteAction}
+                    onChange={setWebsiteAction}
+                  />
+                ) : null}
                 <label className="block space-y-1.5">
                   <span className="text-xs text-muted-foreground">
                     Type <span className="font-medium text-foreground">{project.name}</span> to confirm
@@ -145,7 +182,11 @@ export function ProjectSettings() {
                   onClick={() => void handleDelete()}
                 >
                   {deleting ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : null}
-                  Delete this project
+                  {dependentSites.length > 0
+                    ? websiteAction === "delete"
+                      ? "Delete this project and its websites"
+                      : "Delete this project, keep websites"
+                    : "Delete this project"}
                 </Button>
               </>
             )}

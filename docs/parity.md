@@ -593,6 +593,8 @@ Grep an id (example): `rg 'project.add' combined_full_stack docs mcp_tool`.
 | `project.browse-all` | All projects… | Ink: ↑↓ in project pane; spine session list | GET /api/projects + GET /api/state | get_project after session list | session.projects / openProject |
 | `project.rename` | Rename project | Ink: press r | PUT /api/projects/:id name | session_action id=project.rename | session.renameProject(id, name) |
 | `project.delete` | Delete project | Ink: press x | DELETE /api/projects/:id | session_action id=project.delete | session.deleteProject(id) |
+| `project.delete-keep-websites` | Keep websites | no TUI [N] | DELETE /api/projects/:id websiteAction=unbind | not in MCP [N] | unbindProjectFromWebsite |
+| `project.delete-with-websites` | Delete websites too | no TUI [N] | DELETE /api/projects/:id websiteAction=delete | not in MCP [N] | revokeSharedLink for bound site_ rows |
 | `project.open` | Open | Ink: enter on selected project / session open | GET /api/state?projectId= | session_action id=project.open | session.openProject(id) |
 | `project.clone` | Clone project | spine session clone [id] | POST /api/projects (clone body) | session_action id=project.clone | session.cloneProject(id) |
 | `project.clone-template` | Clone (template) | spine session import-seed --file <id> | GET /api/project-templates then POST /api/projects | import_seed | session.cloneFromTemplate / ingestProject |

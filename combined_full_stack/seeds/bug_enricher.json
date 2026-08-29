@@ -171,5 +171,23 @@
       "label": "inference",
       "file": "bug_enricher/app_logs_snippet.md"
     }
-  ]
+  ],
+  "hostedSite": {
+    "brand": {
+      "companyName": "Triagebay",
+      "tagline": "User report plus logs, ready for eng.",
+      "primaryColor": "#111827",
+      "accentColor": "#7c3aed",
+      "backgroundColor": "#f5f3ff",
+      "textColor": "#1e1b4b"
+    },
+    "kicker": "Bug enricher",
+    "lede": "Paste the ticket and a log excerpt. Triagebay returns repro steps, severity, and a likely component.",
+    "cta": "Enrich this ticket",
+    "features": [
+      { "kicker": "01", "title": "Report + logs", "body": "Two inputs, one typed finding — not a pile of free text." },
+      { "kicker": "02", "title": "Actionable output", "body": "Severity and component land as fields your board already understands." },
+      { "kicker": "03", "title": "Eng portal", "body": "This website runs the Bug Report Enricher pipeline." }
+    ]
+  }
 }

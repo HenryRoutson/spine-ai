@@ -358,5 +358,23 @@
       "label": "inference",
       "file": "procurement_match/vendor_invoice.md"
     }
-  ]
+  ],
+  "hostedSite": {
+    "brand": {
+      "companyName": "Matchline",
+      "tagline": "PO, delivery, invoice — one three-way match.",
+      "primaryColor": "#0f766e",
+      "accentColor": "#ea580c",
+      "backgroundColor": "#f0fdfa",
+      "textColor": "#134e4a"
+    },
+    "kicker": "Procurement match",
+    "lede": "Upload the purchase order, delivery note, and vendor invoice. Matchline cites every mismatch.",
+    "cta": "Run three-way match",
+    "features": [
+      { "kicker": "01", "title": "Three documents", "body": "Each source stays a typed input so a missing delivery line is obvious." },
+      { "kicker": "02", "title": "Cited mismatches", "body": "The output names the PO line, the note, and the invoice together." },
+      { "kicker": "03", "title": "AP front door", "body": "This site is a skin on Procurement Three-Way Match." }
+    ]
+  }
 }

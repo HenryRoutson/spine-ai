@@ -54,6 +54,7 @@ import {
   readApiErrorBody,
 } from "@/lib/api-client"
 import { API_ROUTES } from "@/lib/api-routes"
+import type { pipeline_website_delete_action } from "@/lib/website-pipelines"
 import { migrateProjectModules } from "@/lib/quote-steps"
 import { authoredPipelineModules, syncManagedPipelineSteps } from "@/lib/structure-parse-steps"
 import { functionsOnProject } from "@/lib/pipeline-functions"
@@ -266,6 +267,8 @@ interface ServerState {
   modelOptions: ModelOptionPublic[]
 }
 
+export type DeleteProjectOpts = { websiteAction?: pipeline_website_delete_action }
+
 interface StoreState {
   projects: Project[]
   activeProjectId: string
@@ -275,7 +278,7 @@ interface StoreState {
   cloneProject: (projectId: string, opts?: ProjectCreateOpts) => Promise<Project>
   resyncExamples: () => Promise<number>
   renameProject: (id: string, name: string) => void
-  deleteProject: (id: string) => Promise<void>
+  deleteProject: (id: string, opts?: DeleteProjectOpts) => Promise<void>
   project: Project
   // shortcuts that read/write the active project
   models: StructureModel[]
@@ -354,7 +357,7 @@ export interface ProjectPickerStoreState {
   ingestCreatedProject: (project: Project) => void
   resyncExamples: () => Promise<number>
   renameProject: (id: string, name: string) => void
-  deleteProject: (id: string) => Promise<void>
+  deleteProject: (id: string, opts?: DeleteProjectOpts) => Promise<void>
   openProject: (id: ProjectId) => void
   prefetchProject: (id: string) => void
   saveError: string | null
@@ -1269,7 +1272,7 @@ export function StoreProvider({
   )
 
   const deleteProject = useCallback(
-    (id: string): Promise<void> => {
+    (id: string, opts?: DeleteProjectOpts): Promise<void> => {
       // AI : drop stale prefetches and debounced saves so a project switch cannot resurrect this row.
       const pendingCreated = createdProjectsRef.current.get(id)
       deletedProjectIdsRef.current.add(id)
@@ -1330,7 +1333,11 @@ export function StoreProvider({
 
       // AI : resolve immediately so the picker can clone again — prod DELETE latency used to apply the
       // AI : removal later and wipe clones that landed in between.
-      void apiJson<{ ok: true }>(API_ROUTES.project(id), { method: "DELETE" }).catch((err) => {
+      void apiJson<{ ok: true }>(API_ROUTES.project(id), {
+        method: "DELETE",
+        headers: JSON_HEADERS,
+        body: JSON.stringify(opts?.websiteAction ? { websiteAction: opts.websiteAction } : {}),
+      }).catch((err) => {
         deletedProjectIdsRef.current.delete(id)
         if (pendingCreated) createdProjectsRef.current.set(id, pendingCreated)
         const restored = pendingCreated ?? removed

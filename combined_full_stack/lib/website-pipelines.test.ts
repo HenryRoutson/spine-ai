@@ -8,14 +8,19 @@ import {
   hostedSiteOptionsForCreate,
   insertWebsitePipelineInCode,
   listedWebsitePipelineBindings,
+  nextPrimaryProjectIdAfterUnbind,
   normalizeWebsitePipelineBindings,
+  remapWebsiteProjectId,
   resolveWebsitePipelineBindings,
   stripWebsitePipelineFromCode,
+  unbindProjectFromWebsite,
   nullableProjectId,
   pageOnlyProjectStub,
-  remapWebsiteProjectId,
   websiteBoundProjectIds,
+  websiteUsesProject,
+  websitesUsingProject,
 } from "@/lib/website-pipelines"
+import type { SharedLinkRecord } from "@/lib/shared-link-types"
 import type { ProjectId } from "@/lib/types"
 
 const P1 = "p1" as ProjectId
@@ -38,6 +43,46 @@ describe("website pipeline bindings", () => {
     const next = remapWebsiteProjectId(options, P1, P2)
     expect(next.pipelineBindings).toEqual([{ alias: "run", projectId: P2, functionId: "fn_double" }])
     expect(remapWebsiteProjectId(options, null, P2).pipelineBindings[0]?.projectId).toBe(P1)
+  })
+
+  it("lists websites that bind or host a pipeline", () => {
+    const bound = {
+      id: "site_a" as SharedLinkRecord["id"],
+      name: "fallback",
+      projectId: P2,
+      siteOptions: normalizeHostedSiteOptions({
+        brand: { companyName: "CounselDesk" },
+        pipelineBindings: [{ alias: "run", projectId: P1 }],
+      }),
+    }
+    const hostedOnly = {
+      id: "site_b" as SharedLinkRecord["id"],
+      name: "Shared Number",
+      projectId: P1,
+      siteOptions: normalizeHostedSiteOptions({ brand: { companyName: "" } }),
+    }
+    expect(websiteUsesProject(bound, P1)).toBe(true)
+    expect(websiteUsesProject(hostedOnly, P1)).toBe(true)
+    expect(websiteUsesProject(bound, P2)).toBe(true)
+    expect(websitesUsingProject([bound, hostedOnly], P1).map((s) => s.name)).toEqual(["CounselDesk", "Shared Number"])
+  })
+
+  it("unbinds a pipeline from site HTML and remaining primary id", () => {
+    const options = normalizeHostedSiteOptions({
+      customHtml: "<h1>Hi</h1>{{run}}<hr>{{run:invoice}}",
+      pipelineBindings: [
+        { alias: "run", projectId: P1 },
+        { alias: "invoice", projectId: P2 },
+      ],
+    })
+    const next = unbindProjectFromWebsite(options, P1)
+    expect(next.customHtml).not.toContain("{{run}}")
+    expect(next.customHtml).toContain("{{run:invoice}}")
+    expect(next.pipelineBindings).toEqual([{ alias: "invoice", projectId: P2 }])
+    expect(nextPrimaryProjectIdAfterUnbind(P1, next, P1)).toBe(P2)
+    expect(nextPrimaryProjectIdAfterUnbind(P2, next, P1)).toBe(P2)
+    const empty = unbindProjectFromWebsite(next, P2)
+    expect(nextPrimaryProjectIdAfterUnbind(P2, empty, P2)).toBeNull()
   })
 
   it("treats stored empty bindings as no pipelines at runtime", () => {
@@ -220,6 +265,9 @@ export default function App() { return <RunPipeline alias="invoice" /> }
     expect(next.customHtml).not.toContain("{{run:invoice}}")
     expect(next.reactFiles[0]?.contents).toContain('alias: "run"')
     expect(next.reactFiles[0]?.contents).not.toContain("invoice")
+    const droppedPrimary = stripWebsitePipelineFromCode(options, "run")
+    expect(droppedPrimary.customHtml).toContain("{{run:invoice}}")
+    expect(droppedPrimary.customHtml).not.toMatch(/\{\{run\}\}/)
   })
 
   it("inserts a named run widget into HTML and App.tsx", () => {

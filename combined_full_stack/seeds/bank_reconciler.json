@@ -275,5 +275,23 @@
       "label": "inference",
       "file": "bank_reconciler/open_invoices.md"
     }
-  ]
+  ],
+  "hostedSite": {
+    "brand": {
+      "companyName": "Clearbooks",
+      "tagline": "Statement lines meet open invoices.",
+      "primaryColor": "#14532d",
+      "accentColor": "#0ea5e9",
+      "backgroundColor": "#f0fdf4",
+      "textColor": "#14532d"
+    },
+    "kicker": "Bank reconciliation",
+    "lede": "Drop a statement and the invoice list. Clearbooks matches what it can and explains the rest.",
+    "cta": "Reconcile now",
+    "features": [
+      { "kicker": "01", "title": "Line matching", "body": "Amounts and dates stay structured so unmatched rows are real exceptions." },
+      { "kicker": "02", "title": "Explained leftovers", "body": "Unmatched statement lines come back with a reason, not a silent skip." },
+      { "kicker": "03", "title": "Ops skin", "body": "This page is a product wrapper around Bank Statement Reconciler." }
+    ]
+  }
 }

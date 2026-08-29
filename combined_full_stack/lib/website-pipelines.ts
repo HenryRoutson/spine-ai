@@ -40,6 +40,53 @@ export function remapWebsiteProjectId(
   }
 }
 
+export type pipeline_website_delete_action = "delete" | "unbind"
+
+export type website_dependent = {
+  id: SharedLinkRecord["id"]
+  name: string
+}
+
+export function websiteUsesProject(
+  site: Pick<SharedLinkRecord, "projectId" | "siteOptions">,
+  projectId: ProjectId,
+): boolean {
+  if (site.projectId === projectId) return true
+  return listedWebsitePipelineBindings(site.siteOptions.pipelineBindings).some((b) => b.projectId === projectId)
+}
+
+export function websitesUsingProject(
+  sites: Pick<SharedLinkRecord, "id" | "name" | "projectId" | "siteOptions">[],
+  projectId: ProjectId,
+): website_dependent[] {
+  return sites
+    .filter((site) => websiteUsesProject(site, projectId))
+    .map((site) => ({ id: site.id, name: websiteDisplayName(site) }))
+}
+
+export function unbindProjectFromWebsite(options: HostedSiteOptions, projectId: ProjectId): HostedSiteOptions {
+  const listed = listedWebsitePipelineBindings(options.pipelineBindings)
+  const removed = listed.filter((b) => b.projectId === projectId)
+  if (removed.length === 0) return options
+  let next = options
+  for (const binding of removed) {
+    next = stripWebsitePipelineFromCode(next, binding.alias)
+  }
+  return {
+    ...next,
+    pipelineBindings: listed.filter((b) => b.projectId !== projectId),
+  }
+}
+
+export function nextPrimaryProjectIdAfterUnbind(
+  current: ProjectId | null,
+  unboundOptions: HostedSiteOptions,
+  removedId: ProjectId,
+): ProjectId | null {
+  if (current && current !== removedId) return current
+  return listedWebsitePipelineBindings(unboundOptions.pipelineBindings)[0]?.projectId ?? null
+}
+
 // AI : websites are not pipelines — never inherit "Untitled Pipeline" as the page title.
 export function websiteNameForCreate(suggested: string): string {
   const trimmed = suggested.trim()
@@ -169,6 +216,8 @@ function htmlRunToken(alias: string): string {
 }
 
 function stripHtmlRunToken(html: string, alias: string): string {
+  // AI : "{{run}}" is a prefix of "{{run:alias}}" — never split/replaceAll the bare token as a substring.
+  if (alias === DEFAULT_WEBSITE_PIPELINE_ALIAS) return html.replace(/\{\{run\}\}/g, "")
   return html.split(htmlRunToken(alias)).join("")
 }
 

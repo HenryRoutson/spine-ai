@@ -315,5 +315,23 @@
       "label": "training",
       "file": "legal/company_legal_evaluation_testing.json"
     }
-  ]
+  ],
+  "hostedSite": {
+    "brand": {
+      "companyName": "CounselDesk",
+      "tagline": "Atomic rules. Cited compliance.",
+      "primaryColor": "#1b2a4a",
+      "accentColor": "#b08d57",
+      "backgroundColor": "#f4efe6",
+      "textColor": "#1a1714"
+    },
+    "kicker": "Company legal evaluation",
+    "lede": "Upload the statute pack and the company record. CounselDesk breaks obligations into atomic rules and scores each one.",
+    "cta": "Run evaluation",
+    "features": [
+      { "kicker": "01", "title": "Atomic rules", "body": "The requirements document is split into single obligations before any scoring call." },
+      { "kicker": "02", "title": "Cited evidence", "body": "Each finding points back to the company filing so counsel can verify, not re-read." },
+      { "kicker": "03", "title": "Same pipeline", "body": "This page is a skin. The typed DAG underneath is Company Legal Evaluation." }
+    ]
+  }
 }
