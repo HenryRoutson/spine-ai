@@ -3,10 +3,11 @@ import { flattenPipelineModules } from "@/lib/fork-pipeline"
 import { inputTypesForModule } from "@/lib/inference-input-core"
 import { inputTypeLabel } from "@/lib/inference-input-core"
 import { escapeHtml } from "@/lib/standalone-html"
-import { ModuleKind, type PipelineModule } from "@/lib/types"
+import { ModuleKind, type ModuleId, type PipelineModule } from "@/lib/types"
 
 export type upload_field_spec = {
   label: string
+  moduleId: ModuleId
   accept: string
   inputTypes: string
   multiple: boolean
@@ -39,6 +40,7 @@ export function uploadFieldsFromPipeline(modules: PipelineModule[]): upload_fiel
       const typeLabels = types.map((t) => inputTypeLabel(t)).join(", ")
       return {
         label: m.label,
+        moduleId: m.id,
         accept: acceptForTypes(types),
         inputTypes: typeLabels || "Any file",
         multiple: (m.inputMinCount ?? 1) > 1,
@@ -46,7 +48,12 @@ export function uploadFieldsFromPipeline(modules: PipelineModule[]): upload_fiel
     })
 }
 
-export function generateUploadFormHtml(modules: PipelineModule[], alias?: string): string {
+export function hostedSiteLinkIdFromPath(pathname: string): string | null {
+  const m = pathname.match(/\/(?:site|run|embed)\/([^/]+)/)
+  return m?.[1] ?? null
+}
+
+export function generateUploadFormHtml(modules: PipelineModule[], alias?: string, linkId?: string): string {
   const fields = uploadFieldsFromPipeline(modules)
   if (!fields.length) {
     return `<div class="hs-upload-form">
@@ -55,18 +62,19 @@ export function generateUploadFormHtml(modules: PipelineModule[], alias?: string
   }
 
   const runAlias = alias ? ` data-alias="${escapeHtml(alias)}"` : ""
+  const linkAttr = linkId ? ` data-link-id="${escapeHtml(linkId)}"` : ""
   const fieldHtml = fields
     .map(
       (f) => `<div class="hs-upload-field">
-  <label class="hs-upload-label" for="upload-${escapeHtml(f.label)}">${escapeHtml(f.label)}</label>
+  <label class="hs-upload-label" for="upload-${escapeHtml(f.moduleId)}">${escapeHtml(f.label)}</label>
   <span class="hs-upload-hint">${escapeHtml(f.inputTypes)}</span>
-  <input type="file" id="upload-${escapeHtml(f.label)}" class="hs-upload-input" data-label="${escapeHtml(f.label)}" accept="${escapeHtml(f.accept)}"${f.multiple ? " multiple" : ""} />
+  <input type="file" id="upload-${escapeHtml(f.moduleId)}" class="hs-upload-input" data-label="${escapeHtml(f.label)}" data-module-id="${escapeHtml(f.moduleId)}" accept="${escapeHtml(f.accept)}"${f.multiple ? " multiple" : ""} />
   <span class="hs-upload-filename" data-label="${escapeHtml(f.label)}">No file selected</span>
 </div>`,
     )
     .join("\n")
 
-  return `<div class="hs-upload-form"${runAlias}>
+  return `<div class="hs-upload-form"${runAlias}${linkAttr}>
   ${fieldHtml}
   <button type="button" class="hs-upload-run">Run pipeline</button>
   <span class="hs-upload-status"></span>
@@ -89,33 +97,83 @@ export function generateUploadFormHtml(modules: PipelineModule[], alias?: string
 </style>
 <script>
 (function() {
-  const form = document.currentScript?.previousElementSibling?.previousElementSibling;
+  const form = document.currentScript && document.currentScript.previousElementSibling && document.currentScript.previousElementSibling.previousElementSibling;
   if (!form || !form.classList.contains('hs-upload-form')) return;
   form.querySelectorAll('.hs-upload-input').forEach(function(input) {
     input.addEventListener('change', function() {
       const label = input.dataset.label;
       const nameEl = form.querySelector('.hs-upload-filename[data-label="' + label + '"]');
-      if (nameEl) nameEl.textContent = input.files?.[0]?.name ?? 'No file selected';
+      if (!nameEl) return;
+      const files = input.files;
+      if (!files || !files.length) { nameEl.textContent = 'No file selected'; return; }
+      nameEl.textContent = files.length === 1 ? files[0].name : (files.length + ' files');
     });
   });
   const runBtn = form.querySelector('.hs-upload-run');
   const statusEl = form.querySelector('.hs-upload-status');
+  function setStatus(text, cls) {
+    if (!statusEl) return;
+    statusEl.textContent = text;
+    statusEl.className = 'hs-upload-status ' + cls;
+  }
   if (runBtn) {
     runBtn.addEventListener('click', function() {
-      statusEl.textContent = 'Upload form ready — connect to pipeline run endpoint';
-      statusEl.className = 'hs-upload-status ok';
-      window.parent.postMessage({ type: 'hs-upload-ready', alias: form.dataset.alias || 'run' }, '*');
+      const linkId = form.dataset.linkId || (location.pathname.match(/\\/(?:site|run|embed)\\/([^/]+)/) || [])[1];
+      if (!linkId) { setStatus('missing site id', 'err'); return; }
+      runBtn.disabled = true;
+      setStatus('Uploading…', 'run');
+      const byModule = {};
+      const inputs = Array.from(form.querySelectorAll('.hs-upload-input'));
+      Promise.resolve().then(async function() {
+        for (const input of inputs) {
+          const moduleId = input.dataset.moduleId;
+          if (!moduleId || !input.files || !input.files.length) continue;
+          const ids = [];
+          for (const file of input.files) {
+            const fd = new FormData();
+            fd.append('file', file);
+            fd.append('moduleId', moduleId);
+            const res = await fetch('/api/shared-links/' + encodeURIComponent(linkId) + '/docs', { method: 'POST', body: fd, credentials: 'same-origin' });
+            const data = await res.json().catch(function() { return {}; });
+            if (!res.ok) throw new Error(data.error || data.message || ('upload failed (' + res.status + ')'));
+            ids.push(data.id);
+          }
+          byModule[moduleId] = ids;
+        }
+        if (!Object.keys(byModule).length) throw new Error('choose a file first');
+        setStatus('Running…', 'run');
+        const alias = form.dataset.alias;
+        const body = { inputDocsByModule: byModule };
+        if (alias) body.pipelineAlias = alias;
+        const runRes = await fetch('/api/shared-links/' + encodeURIComponent(linkId) + '/run', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'same-origin',
+          body: JSON.stringify(body),
+        });
+        const runData = await runRes.json().catch(function() { return {}; });
+        if (!runRes.ok) throw new Error(runData.error || runData.message || ('run failed (' + runRes.status + ')'));
+        setStatus('Run started', 'ok');
+        window.parent.postMessage({ type: 'hs-upload-run', alias: alias || 'run', runId: runData.id || runData.runId }, '*');
+      }).catch(function(err) {
+        setStatus(String(err && err.message ? err.message : err), 'err');
+      }).finally(function() {
+        runBtn.disabled = false;
+      });
     });
   }
 })();
 </script>`
 }
 
-export function injectUploadFormIntoRunSlot(html: string, modules: PipelineModule[]): string {
-  const form = generateUploadFormHtml(modules)
-  const slotClass = "hs-run-slot"
+export function injectHtmlIntoHostedSlot(html: string, slotClass: string, inner: string): string {
   if (html.includes(`class="${slotClass}"`)) {
-    return html.replace(new RegExp(`(<div class="${slotClass}"[^>]*>)`), `$1\n${form}\n`)
+    return html.replace(new RegExp(`(<div class="${slotClass}"[^>]*>)`), `$1\n${inner}\n`)
   }
-  return html + `\n<div class="${slotClass}">\n${form}\n</div>`
+  return `${html}\n<div class="${slotClass}">\n${inner}\n</div>`
+}
+
+export function injectUploadFormIntoRunSlot(html: string, modules: PipelineModule[], linkId?: string): string {
+  const form = generateUploadFormHtml(modules, undefined, linkId)
+  return injectHtmlIntoHostedSlot(html, "hs-run-slot", form)
 }

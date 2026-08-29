@@ -57,6 +57,7 @@ describe("hosted site UI vibe agent prompts", () => {
     expect(system).toContain(HOSTED_SITE_OUTPUT_SLOT)
     expect(system).toContain(HOSTED_SITE_CHATBOT_SLOT)
     expect(system).toContain(HOSTED_SITE_DOCS_SLOT)
+    expect(system).toMatch(/quote/i)
   })
 
   it("sends page HTML plus a short app summary, not docs/prompts/code", () => {
@@ -93,6 +94,7 @@ describe("hosted site UI vibe agent prompts", () => {
       reactFilePatches: null,
     })
     expect(next.customHtml).toContain(HOSTED_SITE_RUN_SLOT)
+    expect(next.customHtml).toContain(HOSTED_SITE_DOCS_SLOT)
     expect(next.brand.companyName).toBe("Northwind")
   })
 

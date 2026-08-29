@@ -7,6 +7,7 @@ import {
   DEFAULT_HOSTED_SITE_HTML,
   expandHexColor,
   HOSTED_SITE_AUTH_SLOT,
+  HOSTED_SITE_DOCS_SLOT,
   HOSTED_SITE_RUN_SLOT,
   htmlColorInputValue,
   isSafeLogoUrl,
@@ -69,10 +70,12 @@ describe("hosted site wrapper", () => {
     expect(filled).toContain("Invoices")
     expect(filled).toContain("you@company.com")
     expect(filled).toContain("hs-nav-account")
+    expect(filled).toContain(HOSTED_SITE_DOCS_SLOT)
     expect(filled).not.toMatch(/href="#signin"/)
     const parts = compileHostedSiteHtml({ ...DEFAULT_HOSTED_SITE_OPTIONS, brand, customHtml: DEFAULT_HOSTED_SITE_HTML })
     expect(parts.before).toContain("Acme")
     expect(parts.before).not.toContain(HOSTED_SITE_RUN_SLOT)
+    expect(parts.segments.some((s) => s.kind === "slot" && s.slot === "docs")).toBe(true)
     expect(parts.after).toContain("</section>")
   })
 

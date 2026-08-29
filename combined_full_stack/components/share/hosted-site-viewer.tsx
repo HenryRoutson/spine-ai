@@ -24,6 +24,7 @@ import { useSupabaseSession } from "@/lib/use-supabase-session"
 import { hostedActionButtonLabel } from "@/lib/hosted-site-slots"
 import { resolveWebsitePipelineBindings } from "@/lib/website-pipelines"
 import { hostedTableSlotsForProject } from "@/components/platform/hosted-table-slot"
+import { HostedSiteDocsUpload } from "@/components/share/hosted-site-docs-upload"
 import type { Project, ProjectId, StructureModel } from "@/lib/types"
 import type { ReactNode } from "react"
 
@@ -60,6 +61,7 @@ export function HostedSiteViewer({
     modules: [],
     hideDocsInRun: hasDocsSlot,
   })
+  const docsSlot = <HostedSiteDocsUpload linkId={linkId} viewerMarkdown={viewerMarkdown} />
   const bindings = resolveWebsitePipelineBindings(projectId, options.pipelineBindings)
   const compiled = useMemo(() => compileHostedSiteHtml(options), [options])
   const sqlByTable = useMemo(() => {
@@ -97,13 +99,14 @@ export function HostedSiteViewer({
           linkId={linkId}
           variant="site"
           hideViewerMarkdown={hasDocsSlot}
+          hideInputSlots={hasDocsSlot}
           pipelineAlias={binding.alias}
         />
       )
     }
     if (!map.run) {
       map.run = (
-        <SharedRunViewer linkId={linkId} variant="site" hideViewerMarkdown={hasDocsSlot} />
+        <SharedRunViewer linkId={linkId} variant="site" hideViewerMarkdown={hasDocsSlot} hideInputSlots={hasDocsSlot} />
       )
     }
     return map
@@ -159,7 +162,7 @@ export function HostedSiteViewer({
           options={options}
           runByAlias={{ ...runByAlias, run: runSlot }}
           tableByAlias={tableByAlias}
-          slots={widgets}
+          slots={{ ...widgets, docs: docsSlot }}
           bundle={reactBundle}
           compileError={reactCompileError}
         />
@@ -172,6 +175,7 @@ export function HostedSiteViewer({
       options={options}
       slots={{
         ...widgets,
+        docs: docsSlot,
         run: runSlot,
       }}
       runByAlias={{ ...runByAlias, run: runSlot }}

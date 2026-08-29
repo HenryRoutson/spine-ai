@@ -83,6 +83,50 @@ export function findQuote(quote: string, source: string, docId: DocId): QuoteMat
   return { text: source.slice(start, end), docId, start, end, exact: false, score: Math.max(0, best.score) };
 }
 
+export type quote_source = { docId: DocId; text: string }
+
+export function findQuoteInSources(quote: string, sources: quote_source[]): QuoteMatch {
+  let best: QuoteMatch | null = null
+  for (const s of sources) {
+    if (!s.text) continue
+    const m = findQuote(quote, s.text, s.docId)
+    if (m.exact) return m
+    if (!best || m.score > best.score) best = m
+  }
+  return (
+    best ?? {
+      text: quote,
+      docId: (sources[0]?.docId ?? ("none" as DocId)),
+      start: 0,
+      end: 0,
+      exact: false,
+      score: 0,
+    }
+  )
+}
+
+export function quoteSourcesFromRun(ctx: {
+  store: { docs(): { id: DocId }[]; docContent(id: DocId): string | undefined }
+  inputByModule: Map<string, DocId[]>
+  sourceText: string
+  sourceDocId: DocId
+}): quote_source[] {
+  const seen = new Set<string>()
+  const out: quote_source[] = []
+  const add = (id: DocId, text?: string) => {
+    if (seen.has(id)) return
+    const content = text ?? ctx.store.docContent(id)
+    if (typeof content !== "string" || !content) return
+    seen.add(id)
+    out.push({ docId: id, text: content })
+  }
+  for (const ids of ctx.inputByModule.values()) {
+    for (const id of ids) add(id)
+  }
+  if (ctx.sourceText) add(ctx.sourceDocId, ctx.sourceText)
+  return out
+}
+
 // AI : convert quote fields declared on this model (incl. nested refs) from LLM strings → linked spans.
 export function resolveQuotesInRecord(
   value: unknown,
@@ -107,11 +151,21 @@ export function resolveQuotesValue(
   docId: DocId,
   isList: boolean,
 ): unknown {
+  return resolveQuotesValueFromSources(value, model, models, [{ docId, text: sourceText }], isList)
+}
+
+export function resolveQuotesValueFromSources(
+  value: unknown,
+  model: StructureModel,
+  models: StructureModel[],
+  sources: quote_source[],
+  isList: boolean,
+): unknown {
   const link = (verbatim: string): LinkedQuoteValue => {
-    const m = findQuote(verbatim, sourceText, docId);
-    return { text: m.text, quote: { doc_id: m.docId, start: m.start, end: m.end } };
-  };
-  return resolveQuotesForModel(value, model, models, link, isList);
+    const m = findQuoteInSources(verbatim, sources)
+    return { text: m.text, quote: { doc_id: m.docId, start: m.start, end: m.end } }
+  }
+  return resolveQuotesForModel(value, model, models, link, isList)
 }
 
 // AI : canonical export link for a saved quote — the doc CONTENT HASH + index range survive

@@ -28,6 +28,7 @@ export function SharedRunViewer({
   embedSessionToken,
   onRunEvent,
   hideViewerMarkdown = false,
+  hideInputSlots = false,
   pipelineAlias,
 }: {
   linkId: string
@@ -35,6 +36,7 @@ export function SharedRunViewer({
   embedSessionToken?: string
   onRunEvent?: (event: SharedRunLifecycleEvent) => void
   hideViewerMarkdown?: boolean
+  hideInputSlots?: boolean
   pipelineAlias?: string
 }) {
   const [link, setLink] = useState<SharedLinkPublicView | null>(null)
@@ -80,6 +82,7 @@ export function SharedRunViewer({
       embedSessionToken={embedSessionToken}
       onRunEvent={onRunEvent}
       hideViewerMarkdown={hideViewerMarkdown}
+      hideInputSlots={hideInputSlots}
       pipelineAlias={pipelineAlias}
     />
   )
@@ -92,6 +95,7 @@ function SharedRunContent({
   embedSessionToken,
   onRunEvent,
   hideViewerMarkdown,
+  hideInputSlots,
   pipelineAlias,
 }: {
   link: SharedLinkPublicView
@@ -100,6 +104,7 @@ function SharedRunContent({
   embedSessionToken?: string
   onRunEvent?: (event: SharedRunLifecycleEvent) => void
   hideViewerMarkdown: boolean
+  hideInputSlots: boolean
   pipelineAlias?: string
 }) {
   const { email, isAuthenticated, ready, signOut } = useSupabaseSession()
@@ -236,6 +241,7 @@ function SharedRunContent({
           isAuthenticated={isAuthenticated}
           embedSessionToken={embedSessionToken}
           pipelineAlias={pipelineAlias}
+          hideInputSlots={hideInputSlots}
           insufficientCredit={insufficientCredit}
           onOpenBilling={() => {
             window.location.href = "/"

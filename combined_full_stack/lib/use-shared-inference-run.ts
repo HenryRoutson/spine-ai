@@ -1,7 +1,7 @@
 "use client"
 
 // AI : shared-link inference — mirrors useInferenceRun but uploads docs instead of the store picker.
-import { useCallback, useMemo, useRef, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import {
   docsForInputModule,
   isMultiDocInputModule,
@@ -25,6 +25,7 @@ import { sharedLinkRequiresSignIn } from "@/lib/shared-link-funding"
 import { cacheUploadFileText, fetchSharedRunDocText } from "@/lib/shared-run-doc-cache"
 import { pipelineFinalOutputSteps } from "@/lib/step-doc"
 import { buildChatbotResult } from "@/lib/chatbot-step"
+import { dispatchHostedSiteDocsUploaded, HS_DOCS_UPLOADED_EVENT, type hs_docs_uploaded_detail } from "@/lib/hosted-site-docs-events"
 
 import { RunPhase } from "@/lib/run-phase"
 
@@ -101,6 +102,22 @@ export function useSharedInferenceRun(
     },
     [linkId, inputModules],
   )
+
+  useEffect(() => {
+    function onUploaded(event: Event) {
+      const detail = (event as CustomEvent<hs_docs_uploaded_detail>).detail
+      if (!detail || detail.linkId !== linkId) return
+      setInputDocs((prev) => {
+        const cur = docsForInputModule(prev, detail.moduleId)
+        const mod = inputModules.find((m) => m.id === detail.moduleId)
+        const merged = [...cur.filter((d) => !detail.docs.some((n) => n.id === d.id)), ...detail.docs]
+        const next = mod && isMultiDocInputModule(mod) ? merged : detail.docs
+        return { ...prev, [detail.moduleId]: next }
+      })
+    }
+    window.addEventListener(HS_DOCS_UPLOADED_EVENT, onUploaded)
+    return () => window.removeEventListener(HS_DOCS_UPLOADED_EVENT, onUploaded)
+  }, [linkId, inputModules])
 
   const removeInputDocForModule = useCallback((moduleId: ModuleId, docId: DocId) => {
     setInputDocs((prev) => {

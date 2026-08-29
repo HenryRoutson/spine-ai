@@ -54,6 +54,16 @@ describe("hosted upload UI", () => {
     expect(html).toContain("Run pipeline")
   })
 
+  it("posts uploads to the shared-link docs + run APIs", () => {
+    const html = generateUploadFormHtml(modules, undefined, "site_abc")
+    expect(html).toContain('data-module-id="mod_in"')
+    expect(html).toContain('data-link-id="site_abc"')
+    expect(html).toContain("/api/shared-links/")
+    expect(html).toContain("/docs")
+    expect(html).toContain("/run")
+    expect(html).toContain("inputDocsByModule")
+  })
+
   it("injects into a run slot that already has progress chrome", () => {
     const html = injectUploadFormIntoRunSlot(
       `<div class="hs-run-slot">\n${generateStepProgressHtml(modules)}\n</div>`,

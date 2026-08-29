@@ -57,7 +57,7 @@ export function buildHostedSiteAssistantSystemPrompt(runtime: website_runtime_ki
 
 The default page is a signed-in workspace. Do not add a sign-in screen unless the publisher explicitly asks.
 
-You edit the Vite + React project: src/App.tsx, src/index.css, and files under src/. Keep <RunPipeline alias="…" /> for each bound pipeline (default alias "run") when those widgets are already on the page. Do not add a run widget unless they asked for a workspace. Keep <HostedSlot slot="…" /> for pay / table / output widgets. You may also use data-spine-sql and data-spine-action placeholders from {{sql:table}} / {{action}}.
+You edit the Vite + React project: src/App.tsx, src/index.css, and files under src/. Keep <RunPipeline alias="…" /> for each bound pipeline (default alias "run") when those widgets are already on the page. Do not add a run widget unless they asked for a workspace. Keep <HostedSlot slot="…" /> for pay / table / output widgets. You may also use data-spine-sql and data-spine-action placeholders from {{sql:table}} / {{action}}. Keep <HostedSlot slot="docs" /> when the page already has a file-upload widget so visitors can add documents the pipeline quotes from.
 You MUST NOT change the pipeline, structures, prompts, project Docs, test files, or funding.
 You MUST NOT invent a custom Supabase URL or anon key.
 
@@ -80,7 +80,7 @@ You MUST NOT invent a custom Supabase URL or anon key — that stays a publisher
 
 The run form is injected where you place ${HOSTED_SITE_RUN_SLOT}. If the current HTML already has that token, keep exactly one. If the page has no run slot (no pipeline attached yet), do not add one unless they asked for a workspace. You may use {{action}} as the primary button instead (SQL-backed pages).
 The sign-in form is injected where you place ${HOSTED_SITE_AUTH_SLOT}. If authEnabled is true, keep exactly one ${HOSTED_SITE_AUTH_SLOT} on the sign-in page.
-Optional widgets (existing runtimes, not new backends): ${HOSTED_SITE_OUTPUT_SLOT} (result viewer), ${HOSTED_SITE_CHATBOT_SLOT} (chat), ${HOSTED_SITE_DOCS_SLOT} (viewer markdown), {{sql:table}} (live SQL rows from the app store), {{action}} (button that runs the bound pipeline), ${HOSTED_SITE_PAY_SLOT} (checkout), ${HOSTED_SITE_TABLE_SLOT} / {{table:ModelName}} (live structure table). Keep {{sql:shared_number}} + {{action}} for a shared counter. Keep those tokens if they are already on the page.
+Optional widgets (existing runtimes, not new backends): ${HOSTED_SITE_OUTPUT_SLOT} (result viewer), ${HOSTED_SITE_CHATBOT_SLOT} (chat), ${HOSTED_SITE_DOCS_SLOT} (file upload — visitors add documents the pipeline can quote from; optional markdown above the form), {{sql:table}} (live SQL rows from the app store), {{action}} (button that runs the bound pipeline), ${HOSTED_SITE_PAY_SLOT} (checkout), ${HOSTED_SITE_TABLE_SLOT} / {{table:ModelName}} (live structure table). Keep {{sql:shared_number}} + {{action}} for a shared counter. Keep those tokens if they are already on the page.
 Tokens: {{company}}, {{tagline}}, {{logo}}, {{email}} fill from brand fields. Default nav shows {{email}} as the signed-in account. Scripts, iframes, and event handlers are stripped.
 
 Return a short message for the publisher, then fields:
@@ -137,6 +137,14 @@ function ensureRunSlot(html: string, keep: boolean): string {
   return `${html.trim()}\n<section class="hs-run">\n${HOSTED_SITE_RUN_SLOT}\n</section>\n`
 }
 
+function ensureDocsSlot(html: string, keep: boolean): string {
+  if (!keep || html.includes(HOSTED_SITE_DOCS_SLOT)) return html
+  if (html.includes(HOSTED_SITE_RUN_SLOT)) {
+    return html.replace(HOSTED_SITE_RUN_SLOT, `${HOSTED_SITE_DOCS_SLOT}\n${HOSTED_SITE_RUN_SLOT}`)
+  }
+  return `${html.trim()}\n<section class="hs-docs">\n${HOSTED_SITE_DOCS_SLOT}\n</section>\n`
+}
+
 function ensureAuthSlot(html: string): string {
   if (html.includes(HOSTED_SITE_AUTH_SLOT)) return html
   return `${html.trim()}\n<section class="hs-auth">\n${HOSTED_SITE_AUTH_SLOT}\n</section>\n`
@@ -174,6 +182,7 @@ export function applyHostedSiteAssistantPatch(
   const keepRun =
     listedWebsitePipelineBindings(base.pipelineBindings).length > 0 ||
     base.customHtml.includes(HOSTED_SITE_RUN_SLOT)
+  const keepDocs = base.customHtml.includes(HOSTED_SITE_DOCS_SLOT)
   return normalizeHostedSiteOptions({
     ...base,
     brand: {
@@ -188,7 +197,7 @@ export function applyHostedSiteAssistantPatch(
     customHtml: reactMode
       ? base.customHtml
       : patch.customHtml != null
-        ? ensureRunSlot(patch.customHtml, keepRun)
+        ? ensureDocsSlot(ensureRunSlot(patch.customHtml, keepRun), keepDocs)
         : base.customHtml || (keepRun ? DEFAULT_HOSTED_SITE_HTML : DEFAULT_HOSTED_SITE_LANDING_HTML),
     customCss: reactMode ? base.customCss : patch.customCss != null ? patch.customCss : base.customCss,
     hideSpineFooter: patch.hideSpineFooter ?? base.hideSpineFooter,

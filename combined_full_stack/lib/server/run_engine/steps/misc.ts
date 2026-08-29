@@ -4,7 +4,7 @@ import { assertEntriesForModule } from "@/lib/assert_steps";
 import { ClientStepPendingError, HumanReviewPendingError } from "../../run_checkpoint";
 import { wrapListForOutputStructure, unwrapListFieldFromStructure } from "../../structure";
 import { documentContentFrom, documentDocIdFrom, documentFilenameFrom, documentValueFrom } from "../../document_value";
-import { collectQuotes, resolveQuotesValue } from "../../quotation";
+import { collectQuotes, quoteSourcesFromRun, resolveQuotesValueFromSources } from "../../quotation";
 import { stepEmits } from "../../validity";
 import { FieldType } from "../../types";
 import type { PipelineModule, StructureModelId } from "../../types";
@@ -119,25 +119,28 @@ export async function execQuoteStep(m: PipelineModule, ctx: RunCtx, log: RunLogg
   const { project } = ctx;
   const out = modelById(project.models, m.outStructureId);
   if (!out) throw new Error(`quote step ${m.id} has no output structure`);
-  if (!ctx.sourceText) {
-    throw new Error(`quote step ${m.id} needs source text from an upstream input step`);
+  const sources = quoteSourcesFromRun(ctx);
+  if (!sources.length) {
+    throw new Error(`quote step ${m.id} needs source text from an uploaded document`);
   }
   const data = requireLinearInput(m, ctx);
   const isList = stepEmitsList(m) || Array.isArray(data);
   log.info(`quote step`, {
     moduleId: m.id,
     sourceDocId: ctx.sourceDocId,
-    sourceChars: ctx.sourceText.length,
+    sourceDocs: sources.length,
+    sourceChars: sources.reduce((n, s) => n + s.text.length, 0),
     isList,
   });
-  const value = resolveQuotesValue(data, out, project.models, ctx.sourceText, ctx.sourceDocId, isList);
+  const value = resolveQuotesValueFromSources(data, out, project.models, sources, isList);
   const linked = collectQuotes(value, [], out, project.models, isList).length;
   const rawJson = JSON.stringify(data, null, 2);
+  const previewSources = sources.map((s) => sourceDocumentBlock(s.text, s.docId)).join("\n\n");
   return {
     value,
-    preview: `linked ${linked} quote(s) → ${ctx.sourceDocId}`,
+    preview: `linked ${linked} quote(s) → ${sources.map((s) => s.docId).join(", ")}`,
     json: JSON.stringify(value, null, 2),
-    inputPreview: `${sourceDocumentBlock(ctx.sourceText, ctx.sourceDocId)}\n\n── RAW EXTRACTS ──\n${rawJson}`,
+    inputPreview: `${previewSources}\n\n── RAW EXTRACTS ──\n${rawJson}`,
     docId: ctx.sourceDocId,
   };
 }

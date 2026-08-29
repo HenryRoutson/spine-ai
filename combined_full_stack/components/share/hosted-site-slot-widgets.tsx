@@ -6,6 +6,7 @@ import { MarkdownView } from "@/components/highlight"
 import { SharedLinkPreview } from "@/components/share/shared-link-preview"
 import { HostedSiteActionPreview } from "@/components/share/hosted-site-action-button"
 import { HostedSiteSqlPreview } from "@/components/share/hosted-site-sql-widget"
+import { HostedSiteDocsUploadPreview } from "@/components/share/hosted-site-docs-upload"
 import { Chat, ChatBubble, ChatBubbleAvatar, ChatBubbleContent, ChatInput, ChatList, ChatMessage } from "@/components/ui/chat"
 import { HostedPaySlot } from "@/components/platform/hosted-pay-slot"
 import type { hosted_site_widget_slot } from "@/lib/hosted-site-slots"
@@ -45,9 +46,10 @@ export function HostedSiteSlotWidgets({
     docs: viewerMarkdown.trim() ? (
       <div className="bg-background px-4 py-3">
         <MarkdownView md={viewerMarkdown} />
+        <HostedSiteDocsUploadPreview />
       </div>
     ) : (
-      <p className="px-4 py-3 text-xs text-muted-foreground">Viewer docs appear here</p>
+      <HostedSiteDocsUploadPreview />
     ),
     sql: <HostedSiteSqlPreview table="shared_number" />,
     action: <HostedSiteActionPreview />,

@@ -1,4 +1,4 @@
-import { HOSTED_SITE_AUTH_SLOT, HOSTED_SITE_RUN_SLOT } from "@/lib/hosted-site-slots"
+import { HOSTED_SITE_AUTH_SLOT, HOSTED_SITE_DOCS_SLOT, HOSTED_SITE_RUN_SLOT } from "@/lib/hosted-site-slots"
 
 // AI : default public page — product chrome around {{run}}, good enough to vibe-code Spine-in-Spine from.
 // AI : TODO (spine-in-spine-full-F2-css) — add a "spine-full" token theme that matches AppShell
@@ -80,8 +80,9 @@ export const DEFAULT_HOSTED_SITE_HTML = `<nav class="hs-nav">
   <div class="hs-workspace-head">
     <p class="hs-kicker">Live workspace</p>
     <h2 class="hs-workspace-title">Run {{company}}</h2>
-    <p class="hs-lede hs-lede-tight">Drop files in, run, and read the result in place.</p>
+    <p class="hs-lede hs-lede-tight">Upload files, run, and read the result in place.</p>
   </div>
+${HOSTED_SITE_DOCS_SLOT}
 ${HOSTED_SITE_RUN_SLOT}
 </section>
 <footer class="hs-footer">
@@ -107,8 +108,9 @@ export const DEFAULT_HOSTED_SITE_WORKSPACE_HTML = `<section class="hs-run" id="r
   <div class="hs-workspace-head">
     <p class="hs-kicker">Live workspace</p>
     <h2 class="hs-workspace-title">Run {{company}}</h2>
-    <p class="hs-lede hs-lede-tight">Drop files in, run, and read the result in place.</p>
+    <p class="hs-lede hs-lede-tight">Upload files, run, and read the result in place.</p>
   </div>
+${HOSTED_SITE_DOCS_SLOT}
 ${HOSTED_SITE_RUN_SLOT}
 </section>
 `

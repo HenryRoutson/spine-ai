@@ -12,7 +12,7 @@ import {
 import { HOSTED_SITE_SLOT_CLASS, hostedSiteHasPrimarySlot, type hosted_site_widget_slot } from "@/lib/hosted-site-slots"
 import type { HostedSiteOptions } from "@/lib/shared-link-types"
 import { escapeHtml } from "@/lib/standalone-html"
-import { generateUploadFormHtml } from "@/lib/hosted-site-upload-ui"
+import { generateUploadFormHtml, injectHtmlIntoHostedSlot } from "@/lib/hosted-site-upload-ui"
 import { generateStepProgressHtml } from "@/lib/hosted-site-progress"
 import type { Project } from "@/lib/types"
 
@@ -53,6 +53,7 @@ function slotExportComment(slot: hosted_site_widget_slot): string {
   if (slot === "action") return "<!-- pipeline action button mounts here -->"
   if (slot === "pay") return "<!-- checkout / pay widget mounts here -->"
   if (slot === "table") return "<!-- live structure table mounts here -->"
+  if (slot === "docs") return "<!-- visitor file upload — pipelines quote from these documents -->"
   return "<!-- viewer markdown mounts here -->"
 }
 
@@ -130,12 +131,18 @@ export function generateHostedSiteExportFiles(project: Project, siteOptions?: un
 }
 
 function injectRunSlotWidgets(html: string, modules: Project["modules"]): string {
-  // AI : inject progress + upload together so a filled run slot still gets both widgets.
+  // AI : {{docs}} owns the upload form so export HTML can quote visitor files; {{run}} keeps progress.
   const progress = generateStepProgressHtml(modules)
   const form = generateUploadFormHtml(modules)
-  const inner = [progress, form].filter(Boolean).join("\n")
-  if (html.includes('class="hs-run-slot"')) {
-    return html.replace(/(<div class="hs-run-slot"[^>]*>)/, `$1\n${inner}\n`)
+  const docsClass = HOSTED_SITE_SLOT_CLASS.docs
+  const runClass = HOSTED_SITE_SLOT_CLASS.run
+  if (html.includes(`class="${docsClass}"`)) {
+    let out = injectHtmlIntoHostedSlot(html, docsClass, form)
+    if (out.includes(`class="${runClass}"`)) {
+      out = injectHtmlIntoHostedSlot(out, runClass, progress)
+    }
+    return out
   }
-  return `${html}\n<div class="hs-run-slot">\n${inner}\n</div>`
+  const inner = [progress, form].filter(Boolean).join("\n")
+  return injectHtmlIntoHostedSlot(html, runClass, inner)
 }

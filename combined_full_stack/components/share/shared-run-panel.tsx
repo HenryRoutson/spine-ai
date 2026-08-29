@@ -44,6 +44,7 @@ type SharedRunPanelProps = {
   embedSessionToken?: string
   onRunEvent?: (event: SharedRunLifecycleEvent) => void
   pipelineAlias?: string
+  hideInputSlots?: boolean
 }
 
 export function SharedRunPanel({
@@ -57,6 +58,7 @@ export function SharedRunPanel({
   embedSessionToken,
   onRunEvent,
   pipelineAlias,
+  hideInputSlots = false,
 }: SharedRunPanelProps) {
   const run = useSharedInferenceRun(
     link,
@@ -116,6 +118,7 @@ export function SharedRunPanel({
         </div>
       )}
 
+      {hideInputSlots ? null : (
       <div className="space-y-2">
         <p className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
           pipeline inputs · {run.inputModules.length} slot{run.inputModules.length === 1 ? "" : "s"}
@@ -134,6 +137,7 @@ export function SharedRunPanel({
           />
         ))}
       </div>
+      )}
 
       {(link.billingMultiple > 1 || link.flatFeeCents > 0) && viewerFunds && (
         <p className="rounded-lg border border-border bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
