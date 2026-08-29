@@ -12,8 +12,7 @@ export {}
 // AI :   LANDING_DEMO_PROXY_SECRET; never sign with SUPABASE_SERVICE_ROLE_KEY.
 // AI : DONE (jank-redirect-decode) — sanitize_redirect.ts decodes once; rejects %2e%2e, control
 // AI :   chars, leftover encoding, and protocol-relative / traversal after decode.
-// AI : TODO (jank-cors-app-origin) — landing_demo_cors.ts lists spine-ai.dev + auto-pipeline.dev
-// AI :   but not spine-ai-app.dev (the live app host used by landing CSP / proxy).
+// AI : DONE (jank-cors-app-origin) — landing_demo_cors.ts allows spine-ai-app.dev (live app host).
 // AI : TODO (jank-shared-run-abuse) — rate_limit_config shared_run is IP-bucketed (5/10m);
 // AI :   rotation still drains sharer_pays credits. Pair with CAPTCHA / spend caps.
 // AI : TODO (jank-pyodide-cdn) — custom_code.ts loads Pyodide from jsDelivr; pin SRI or self-host.
