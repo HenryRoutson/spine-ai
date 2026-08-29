@@ -3,6 +3,7 @@
 // AI : TODO (spec) — test verdict expiry (~7d) in Supabase keyed on testContentSig + pipelineSig; revert restores cached pass/fail.
 // AI : TODO (spec) — confusion matrices / field group-by mapping in test compare UI (spec § testing).
 
+import { shouldCheckInputDescription } from "@/lib/input-description-gate"
 import { parseExpectFailure, testExpectFailureReason, testExpectsInputCompatFailure, testExpectsStepFailure, testOutcomePassed } from "@/lib/test-expect-failure"
 import { applySchemaDefaults, jsonSchemaToFormRoot } from "@/lib/schema-form"
 import { stepOutputJsonSchema } from "@/lib/step-json-schema"
@@ -328,11 +329,7 @@ export function resolveTestRunInputs(
 export type TestStepResult = RunTestStepResult
 export type TestStepStatus = TestStepResult["status"]
 
-// AI : per-step input guard — same rule as run engine (lib/server/input_description_check.ts).
-function stepChecksInputDescription(m: Pick<PipelineModule, "inputDescription" | "checkInputDescription">): boolean {
-  if (!m.inputDescription?.trim()) return false
-  return m.checkInputDescription !== false
-}
+// AI : per-step input guard — same rule as run engine (lib/input-description-gate.ts).
 
 function orderTestResultsByPipeline(results: TestStepResult[], modules: PipelineModule[]): TestStepResult[] {
   const byKey = new Map(results.map((r) => [labelAsStateKey(r.label), r]))
@@ -360,7 +357,7 @@ export function mergeInputDescriptionChecks(
 ): TestStepResult[] {
   const byKey = new Map(results.map((r) => [labelAsStateKey(r.label), { ...r }]))
   for (const m of project.modules) {
-    if (!stepChecksInputDescription(m)) continue
+    if (!shouldCheckInputDescription(m)) continue
     const key = labelAsStateKey(m.label)
     const step = run.steps.find((s) => labelAsStateKey(s.label) === key)
     const check = step?.inputDescriptionCheck

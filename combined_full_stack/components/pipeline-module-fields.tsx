@@ -11,6 +11,7 @@ import { AUTO_DOC_TO_TEXT_EXPLAINER, AUTO_STRUCTURE_PARSE_EXPLAINER, isAutoDocTo
 import { inputModuleNeedsOcr, upstreamInputModule } from "@/lib/inference-input"
 import { isExampleSelectKind } from "@/lib/example-select"
 import { isLlmKind, isMergeModuleKind, usesPassthroughStructure } from "@/lib/module-kinds"
+import { inputDescriptionLlmOptInOnly, shouldCheckInputDescription } from "@/lib/input-description-gate"
 import { flattenPipelineModules, forkJoinOf, forkJoinScopeModules, locatePipelineModule } from "@/lib/fork-pipeline"
 import { formatModuleSpineIn, formatModuleSpineOut } from "@/lib/spine-type"
 import { MODULE_META, ModuleKind, DOC_PARSE_MODES, docParseModeForModule, type PipelineModule, type StructureModel, type TypeAlias } from "@/lib/types"
@@ -314,17 +315,25 @@ export function PipelineModuleFields({
       {edit && selected.inputDescription?.trim() ? (
         <PipelineField
           label="Validate input"
-          hint="LLM input check before this step runs — billed to your account"
+          hint={
+            inputDescriptionLlmOptInOnly(selected.kind)
+              ? "Off unless you opt in — if/case/join and custom-code already type-check locally"
+              : "LLM input check before this step runs — billed to your account"
+          }
         >
           <div className="flex items-center gap-2.5">
             <Switch
-              checked={selected.checkInputDescription !== false}
+              checked={shouldCheckInputDescription(selected)}
               onCheckedChange={(checked) =>
-                onUpdate!({ checkInputDescription: checked ? undefined : false })
+                onUpdate!({
+                  checkInputDescription: inputDescriptionLlmOptInOnly(selected.kind)
+                    ? checked ? true : undefined
+                    : checked ? undefined : false,
+                })
               }
             />
             <span className="font-mono text-[10px] text-muted-foreground">
-              {selected.checkInputDescription !== false
+              {shouldCheckInputDescription(selected)
                 ? "On — rejects mismatched input before processing"
                 : "Off — description stored only, no LLM check"}
             </span>
@@ -332,9 +341,7 @@ export function PipelineModuleFields({
         </PipelineField>
       ) : !edit && selected.inputDescription?.trim() ? (
         <PipelineField label="Validate input">
-          <StaticValue>
-            {selected.checkInputDescription !== false ? "On" : "Off"}
-          </StaticValue>
+          <StaticValue>{shouldCheckInputDescription(selected) ? "On" : "Off"}</StaticValue>
         </PipelineField>
       ) : null}
 

@@ -102,5 +102,30 @@
       "passRate": 80
     }
   ],
-  "docs": []
+  "docs": [
+    {
+      "name": "urgent_true.json",
+      "type": "json",
+      "label": "inference",
+      "file": "urgent_ticket/urgent_true.json"
+    },
+    {
+      "name": "urgent_false.json",
+      "type": "json",
+      "label": "inference",
+      "file": "urgent_ticket/urgent_false.json"
+    }
+  ],
+  "inferencePresets": [
+    {
+      "name": "Urgent page",
+      "description": "urgent true — Then/Page Oncall. Else/Enqueue is skipped. No Join: spine stops.",
+      "inputs": { "Ticket": "urgent_true.json" }
+    },
+    {
+      "name": "Queue ticket",
+      "description": "urgent false — Else/Enqueue. Then/Page Oncall is skipped.",
+      "inputs": { "Ticket": "urgent_false.json" }
+    }
+  ]
 }

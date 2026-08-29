@@ -132,5 +132,19 @@
       "passRate": 80
     }
   ],
-  "docs": []
+  "docs": [
+    {
+      "name": "status_legal.json",
+      "type": "json",
+      "label": "inference",
+      "file": "status_route/status_legal.json"
+    }
+  ],
+  "inferencePresets": [
+    {
+      "name": "Legal desk",
+      "description": "status legal — Legal Desk runs; Billing and Default arms are skipped.",
+      "inputs": { "Ticket": "status_legal.json" }
+    }
+  ]
 }
