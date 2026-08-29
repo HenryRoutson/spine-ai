@@ -589,6 +589,14 @@ export function Logging({
                                 <Zap className="h-2.5 w-2.5" /> cached
                               </Badge>
                             )}
+                            {step.status === "skipped" && (
+                              <Badge
+                                variant="outline"
+                                className="gap-1 border-muted-foreground/40 font-mono text-[10px] text-muted-foreground"
+                              >
+                                skipped
+                              </Badge>
+                            )}
                             {step.model && (
                               <span className="font-mono text-[10px] text-muted-foreground">{step.model}</span>
                             )}

@@ -68,7 +68,6 @@ import {
   InputType,
   ModuleKind,
   ChatbotMode,
-  IfConditionKind,
   type ModelId,
   type ModuleId,
   type PipelineModule,
@@ -78,6 +77,7 @@ import {
   type TypeAlias,
 } from "./types";
 import { blankPipelineModules, functionsOnProject, functionsPromptSummary } from "@/lib/pipeline-functions";
+import { ifConditionSchema, parseIfCondition } from "@/lib/if-condition";
 import { flattenPipelineModules, syncForkModules } from "@/lib/fork-pipeline";
 import { tryCompileCustomCodeEntry } from "@/lib/custom_code";
 import { customCodeEntriesForModule } from "@/lib/custom_code_entries";
@@ -169,20 +169,19 @@ const moduleSpecSchema = z
       .array(
         z.object({
           label: z.string(),
+          match: z.string().optional().describe("case only — exact match; empty/_/*/default is the fallback arm"),
           modules: z.array(z.any()).max(50),
         }),
       )
       .min(1)
       .max(12)
       .optional()
-      .describe("fork / if-else — linear lanes; if-else is Then then Else (Else may be empty)"),
-    ifCondition: z
-      .discriminatedUnion("kind", [
-        z.object({ kind: z.literal("path"), path: z.string() }),
-        z.object({ kind: z.literal("equals"), path: z.string(), value: z.unknown() }),
-      ])
+      .describe("fork / if-else / case — linear lanes; if-else is Then then Else; case arms set match"),
+    ifCondition: ifConditionSchema
       .optional()
-      .describe("if-else only — bool spine path, or equals path + JSON value"),
+      .describe(
+        "if-else: bool spine path. case: scalar match path. Compute comparisons in custom-code / Python.",
+      ),
     n8nNodeType: z
       .string()
       .optional()
@@ -275,11 +274,14 @@ const moduleSpecSchema = z
         });
       }
     }
-    if (spec.kind === ModuleKind.IfElse) {
+    if (spec.kind === ModuleKind.IfElse || spec.kind === ModuleKind.Case) {
       if (!spec.ifCondition?.path?.trim()) {
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
-          message: "if-else requires ifCondition.path on the spine",
+          message:
+            spec.kind === ModuleKind.Case
+              ? "case requires ifCondition.path on the spine"
+              : "if-else requires ifCondition.path on the spine",
           path: ["ifCondition"],
         });
       }
@@ -317,12 +319,7 @@ const modulePatchEntrySchema = z.object({
   model: z.string().optional(),
   inputMinCount: z.number().int().min(1).optional(),
   assembleBindings: assembleBindingsSchema.optional(),
-  ifCondition: z
-    .discriminatedUnion("kind", [
-      z.object({ kind: z.literal("path"), path: z.string() }),
-      z.object({ kind: z.literal("equals"), path: z.string(), value: z.unknown() }),
-    ])
-    .optional(),
+  ifCondition: ifConditionSchema.optional(),
   n8nNodeType: z.string().optional(),
   n8nParameters: z.record(z.string(), z.unknown()).optional(),
   connectActionId: z.string().optional(),
@@ -496,10 +493,11 @@ function makeModuleFromSpec(
       : undefined;
 
   const forkBranches =
-    spec.kind === ModuleKind.Fork || spec.kind === ModuleKind.IfElse
+    spec.kind === ModuleKind.Fork || spec.kind === ModuleKind.IfElse || spec.kind === ModuleKind.Case
       ? (spec.forkBranches ?? []).map((b) => ({
           id: uid("fbr_"),
           label: b.label,
+          match: spec.kind === ModuleKind.Case ? b.match : undefined,
           modules: expandModuleSpecs(
             (Array.isArray(b.modules) ? b.modules : []) as PipelineAssistantModuleSpec[],
             models,
@@ -523,12 +521,14 @@ function makeModuleFromSpec(
         spec.kind !== ModuleKind.Assemble &&
         spec.kind !== ModuleKind.Parallel &&
         spec.kind !== ModuleKind.Fork &&
-        spec.kind !== ModuleKind.IfElse
+        spec.kind !== ModuleKind.IfElse &&
+        spec.kind !== ModuleKind.Case &&
+        spec.kind !== ModuleKind.ControlJoin
           ? inId
           : undefined,
-      // AI : assemble/parallel/fork/if-else without structureOut → auto-derive on sync
+      // AI : assemble/parallel/fork/if-else/case without structureOut → auto-derive on sync
       outStructureId:
-        (spec.kind === ModuleKind.Assemble || spec.kind === ModuleKind.Parallel || spec.kind === ModuleKind.Fork || spec.kind === ModuleKind.IfElse) &&
+        (spec.kind === ModuleKind.Assemble || spec.kind === ModuleKind.Parallel || spec.kind === ModuleKind.Fork || spec.kind === ModuleKind.IfElse || spec.kind === ModuleKind.Case || spec.kind === ModuleKind.ControlJoin) &&
         !outHint
           ? undefined
           : outId,
@@ -549,10 +549,8 @@ function makeModuleFromSpec(
       forkJoin: spec.kind === ModuleKind.Fork ? (spec.forkJoin ?? "product") : undefined,
       forkBranches,
       ifCondition:
-        spec.kind === ModuleKind.IfElse && spec.ifCondition
-          ? spec.ifCondition.kind === "equals"
-            ? { kind: IfConditionKind.Equals, path: spec.ifCondition.path, value: spec.ifCondition.value }
-            : { kind: IfConditionKind.Path, path: spec.ifCondition.path }
+        (spec.kind === ModuleKind.IfElse || spec.kind === ModuleKind.Case) && spec.ifCondition
+          ? parseIfCondition("path", spec.ifCondition.path)
           : undefined,
       n8nNodeType: spec.kind === "n8n" ? spec.n8nNodeType : undefined,
       n8nParameters: spec.kind === "n8n" ? spec.n8nParameters : undefined,

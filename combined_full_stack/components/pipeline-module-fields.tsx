@@ -11,6 +11,7 @@ import { AUTO_DOC_TO_TEXT_EXPLAINER, AUTO_STRUCTURE_PARSE_EXPLAINER, isAutoDocTo
 import { inputModuleNeedsOcr, upstreamInputModule } from "@/lib/inference-input"
 import { isExampleSelectKind } from "@/lib/example-select"
 import { isLlmKind, isMergeModuleKind, usesPassthroughStructure } from "@/lib/module-kinds"
+import { inputDescriptionLlmOptInOnly, shouldCheckInputDescription } from "@/lib/input-description-gate"
 import { flattenPipelineModules, forkJoinOf, forkJoinScopeModules, locatePipelineModule } from "@/lib/fork-pipeline"
 import { formatModuleSpineIn, formatModuleSpineOut } from "@/lib/spine-type"
 import { MODULE_META, ModuleKind, DOC_PARSE_MODES, docParseModeForModule, type PipelineModule, type StructureModel, type TypeAlias } from "@/lib/types"
@@ -47,6 +48,8 @@ import { AssembleModuleFields } from "@/components/pipeline-fields/assemble-fiel
 import { ParallelModuleFields } from "@/components/pipeline-fields/parallel-fields"
 import { ForkModuleFields } from "@/components/pipeline-fields/fork-fields"
 import { IfElseModuleFields } from "@/components/pipeline-fields/if-else-fields"
+import { CaseModuleFields } from "@/components/pipeline-fields/case-fields"
+import { ControlJoinModuleFields } from "@/components/pipeline-fields/control-join-fields"
 import { ExampleSelectModuleFields } from "@/components/pipeline-fields/example-select-fields"
 import { WebhookModuleFields } from "@/components/pipeline-fields/webhook-fields"
 import { SqlModuleFields } from "@/components/pipeline-fields/sql-fields"
@@ -313,17 +316,25 @@ export function PipelineModuleFields({
       {edit && selected.inputDescription?.trim() ? (
         <PipelineField
           label="Validate input"
-          hint="LLM input check before this step runs — billed to your account"
+          hint={
+            inputDescriptionLlmOptInOnly(selected.kind)
+              ? "Off unless you opt in — if/case/join and custom-code already type-check locally"
+              : "LLM input check before this step runs — billed to your account"
+          }
         >
           <div className="flex items-center gap-2.5">
             <Switch
-              checked={selected.checkInputDescription !== false}
+              checked={shouldCheckInputDescription(selected)}
               onCheckedChange={(checked) =>
-                onUpdate!({ checkInputDescription: checked ? undefined : false })
+                onUpdate!({
+                  checkInputDescription: inputDescriptionLlmOptInOnly(selected.kind)
+                    ? checked ? true : undefined
+                    : checked ? undefined : false,
+                })
               }
             />
             <span className="font-mono text-[10px] text-muted-foreground">
-              {selected.checkInputDescription !== false
+              {shouldCheckInputDescription(selected)
                 ? "On — rejects mismatched input before processing"
                 : "Off — description stored only, no LLM check"}
             </span>
@@ -331,9 +342,7 @@ export function PipelineModuleFields({
         </PipelineField>
       ) : !edit && selected.inputDescription?.trim() ? (
         <PipelineField label="Validate input">
-          <StaticValue>
-            {selected.checkInputDescription !== false ? "On" : "Off"}
-          </StaticValue>
+          <StaticValue>{shouldCheckInputDescription(selected) ? "On" : "Off"}</StaticValue>
         </PipelineField>
       ) : null}
 
@@ -343,6 +352,8 @@ export function PipelineModuleFields({
         selected.kind === ModuleKind.Parallel ||
         selected.kind === ModuleKind.Fork ||
         selected.kind === ModuleKind.IfElse ||
+        selected.kind === ModuleKind.Case ||
+        selected.kind === ModuleKind.ControlJoin ||
         isLlmKind(selected.kind)) && (
         <PipelineField
           label="Annotation / purpose"
@@ -384,7 +395,7 @@ export function PipelineModuleFields({
         />
       )}
 
-      {selected.kind !== ModuleKind.Input && selected.kind !== ModuleKind.Chatbot && selected.kind !== ModuleKind.Fork && selected.kind !== ModuleKind.IfElse && (
+      {selected.kind !== ModuleKind.Input && selected.kind !== ModuleKind.Chatbot && selected.kind !== ModuleKind.Fork && selected.kind !== ModuleKind.IfElse && selected.kind !== ModuleKind.Case && selected.kind !== ModuleKind.ControlJoin && (
         <PipelineField
           label={usesPassthroughStructure(selected.kind) ? "Structure to materialize" : "Input model"}
           hint={
@@ -432,7 +443,10 @@ export function PipelineModuleFields({
         selected.kind !== ModuleKind.Chatbot &&
         selected.kind !== ModuleKind.Assemble &&
         selected.kind !== ModuleKind.Parallel &&
-        selected.kind !== ModuleKind.Fork && (
+        selected.kind !== ModuleKind.Fork &&
+        selected.kind !== ModuleKind.IfElse &&
+        selected.kind !== ModuleKind.Case &&
+        selected.kind !== ModuleKind.ControlJoin && (
         <PipelineField
           label="Output model"
           hint={invalid?.kind === InvalidKind.NoOutput ? "required — step must emit a structure" : undefined}
@@ -476,6 +490,12 @@ export function PipelineModuleFields({
       {selected.kind === ModuleKind.IfElse && (
         <IfElseModuleFields selected={selected} edit={!!edit} onUpdate={onUpdate} />
       )}
+
+      {selected.kind === ModuleKind.Case && (
+        <CaseModuleFields selected={selected} edit={!!edit} onUpdate={onUpdate} />
+      )}
+
+      {selected.kind === ModuleKind.ControlJoin && <ControlJoinModuleFields />}
 
       {selected.kind === ModuleKind.Fork && forkJoinOf(selected) === "assemble" && (
         <AssembleModuleFields

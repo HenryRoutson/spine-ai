@@ -17,7 +17,6 @@ import { functionsOnProject, activeFunction } from "@/lib/pipeline-functions"
 import {
   ChatbotMode,
   DocLabel,
-  IfConditionKind,
   InputType,
   ModuleKind,
   type ModelId,
@@ -127,9 +126,8 @@ function serializeModule(m: PipelineModule, models: StructureModel[]): Record<st
     }))
   }
   if (m.kind === ModuleKind.IfElse) {
-    if (m.ifCondition?.kind === IfConditionKind.Equals) {
-      spec.ifCondition = { kind: "equals", path: m.ifCondition.path, value: m.ifCondition.value }
-    } else if (m.ifCondition?.path) {
+    // AI : Equals predicates were removed; vibe export is path-only bool control flow.
+    if (m.ifCondition?.path) {
       spec.ifCondition = { kind: "path", path: m.ifCondition.path }
     }
     spec.forkBranches = (m.forkBranches ?? []).map((b) => ({

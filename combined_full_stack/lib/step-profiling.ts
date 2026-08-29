@@ -45,6 +45,7 @@ export function buildStepProfiles(runs: PipelineRun[], stepOrder: RunStep[]): St
     for (const run of runs) {
       const step = run.steps.find((s) => s.moduleId === ref.moduleId)
       if (!step) continue
+      if (step.status === "skipped") continue
       samples.push({
         ms: step.ms,
         costCents: step.costCents,

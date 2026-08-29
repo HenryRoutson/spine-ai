@@ -50,7 +50,8 @@ export function hostedPipelineArithPreview(
   action: hosted_action_kind,
   n: number,
 ): hosted_pipeline_step[] {
-  const row: Record<string, unknown> = { id: "global", value: n, odd: n % 2 }
+  // AI : if/else is bool-path only — collatz vs double and odd vs even are bools on this synthetic spine.
+  const row: Record<string, unknown> = { id: "global", value: n, odd: n % 2 === 1 }
   const steps: hosted_pipeline_step[] = []
   walk(modules, action, row, steps)
   return steps
@@ -64,7 +65,7 @@ function walk(
 ): void {
   for (const m of modules) {
     if (isIfElse(m)) {
-      const spine = { ...row, action }
+      const spine = { ...row, action, collatz: action === "collatz" }
       let takeThen = false
       try {
         takeThen = evalIfCondition(m.ifCondition, spine)
@@ -86,6 +87,8 @@ function walk(
     } catch {
       continue
     }
+    // AI : Odd? SQL writes value % 2 as 0/1; if/else on odd needs a bool.
+    if (typeof row.odd === "number") row.odd = row.odd === 1
     const valueExpr = parsed.set.find((s) => s.field === "value")?.expr
     if (!valueExpr) continue
     const from = parseHostedNumber(before.value)

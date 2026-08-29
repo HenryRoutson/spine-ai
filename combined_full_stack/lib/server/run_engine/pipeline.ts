@@ -11,7 +11,14 @@ import {
   orderedInputModules,
 } from "../../inference-input";
 import { unknownProject } from "../api-errors";
-import { flattenPipelineModules, findPipelineModule, forkBranchesOf, isIfElseKind, laneLastModule, locatePipelineModule } from "@/lib/fork-pipeline";
+import { flattenPipelineModules, findPipelineModule, forkBranchesOf, laneLastModule, locatePipelineModule } from "@/lib/fork-pipeline";
+import {
+  appendSkippedExclusiveArms,
+  appendSkippedSpineAfter,
+  exclusiveContinues,
+  isExclusiveKind,
+  pickExclusiveBranch,
+} from "@/lib/exclusive-control";
 import { dataDir } from "../config";
 import { fileWriteHelper } from "../file_write_helper";
 import { collectLogsDuring, withStepModuleContext } from "../job_log_sink";
@@ -56,6 +63,7 @@ import { loadWebhookSecretEnv } from "../user_secrets";
 import { missingRequiredSecretsError } from "../secret_preflight";
 import { createWriteLive } from "./live";
 import { runLinearStepsFrom } from "./linear";
+import { requireLinearInput } from "./context";
 import { execForkJoin } from "./steps/fork";
 import { execIfElseJoin } from "./steps/if_else";
 import { buildAssertResult, buildClientResult, buildHumanReviewResult, buildChatbotResult, buildLlmClientResult, failedStepResult } from "./results";
@@ -489,8 +497,11 @@ export async function resumeRunPipeline(
       loc.index + 1,
     )
     const forkPrev = locatePipelineModule(project.modules, loc.parentFork.id)?.predecessor?.id
-    if (isIfElseKind(loc.parentFork.kind)) {
+    if (isExclusiveKind(loc.parentFork.kind)) {
       ctx.prevModuleId = forkPrev
+      const inputData = requireLinearInput(loc.parentFork, ctx)
+      const branch = pickExclusiveBranch(loc.parentFork, inputData)
+      appendSkippedExclusiveArms(steps, loc.parentFork, branch)
       const join = await execIfElseJoin(loc.parentFork, ctx, log)
       ctx.outputs.set(loc.parentFork.id, join.value)
       ctx.byLabel[loc.parentFork.label.trim()] = join.value
@@ -522,7 +533,11 @@ export async function resumeRunPipeline(
     }
     const forkLoc = locatePipelineModule(project.modules, loc.parentFork.id)
     if (forkLoc) {
-      await runLinearStepsFrom({ ...linearParams, modules: forkLoc.siblings }, forkLoc.index + 1)
+      if (isExclusiveKind(loc.parentFork.kind) && !exclusiveContinues(forkLoc.siblings, forkLoc.index)) {
+        appendSkippedSpineAfter(steps, forkLoc.siblings, forkLoc.index)
+      } else {
+        await runLinearStepsFrom({ ...linearParams, modules: forkLoc.siblings }, forkLoc.index + 1)
+      }
     }
   } else {
     await runLinearStepsFrom({ ...linearParams, modules: loc?.siblings ?? project.modules }, (loc?.index ?? checkpoint.stepIndex) + 1)

@@ -16,6 +16,14 @@
           "optional": false,
           "description": "Which hosted button ran — double or collatz",
           "examples": ["double"]
+        },
+        {
+          "id": "f_collatz",
+          "name": "collatz",
+          "type": "bool",
+          "optional": false,
+          "description": "True when the 3n+1 button ran; false for Double",
+          "examples": ["false"]
         }
       ]
     },
@@ -44,10 +52,10 @@
         {
           "id": "f_odd",
           "name": "odd",
-          "type": "int",
+          "type": "bool",
           "optional": true,
-          "description": "1 when value is odd, 0 when even — recomputed by the Collatz Odd? step",
-          "examples": ["1"]
+          "description": "True when value is odd — recomputed by the Collatz Odd? step then coerced to bool",
+          "examples": ["true"]
         }
       ]
     }
@@ -59,7 +67,7 @@
       "label": "Trigger",
       "note": "JSON ping so the hosted button can run with a default file",
       "inputType": "json",
-      "inputDescription": "Tiny JSON ping to start the run",
+      "inputDescription": "Tiny JSON ping with action and collatz bool",
       "inputNameContains": "trigger",
       "outStructureId": "m_trigger",
       "cached": true,
@@ -71,14 +79,14 @@
       "kind": "if-else",
       "label": "Collatz?",
       "note": "Then = one 3n+1 step. Else = double.",
-      "inputDescription": "Trigger with action double or collatz",
+      "inputDescription": "Trigger with collatz bool",
       "checkInputDescription": false,
       "inStructureId": "m_trigger",
       "outStructureId": "m_number",
       "cached": true,
       "avgMs": 1,
       "avgCostCents": 0,
-      "ifCondition": { "kind": "equals", "path": "action", "value": "collatz" },
+      "ifCondition": { "kind": "path", "path": "collatz" },
       "forkBranches": [
         {
           "id": "fbr_collatz",
@@ -93,7 +101,7 @@
               "inStructureId": "m_trigger",
               "outStructureId": "m_number",
               "sql": "SELECT * FROM shared_number WHERE id = 'global'",
-              "sqlSeedRows": [{ "id": "global", "value": 1, "odd": 1 }],
+              "sqlSeedRows": [{ "id": "global", "value": 1, "odd": true }],
               "cached": false,
               "avgMs": 400,
               "avgCostCents": 0
@@ -107,24 +115,36 @@
               "inStructureId": "m_number",
               "outStructureId": "m_number",
               "sql": "UPDATE shared_number SET odd = value % 2 WHERE id = 'global' RETURNING *",
-              "sqlSeedRows": [{ "id": "global", "value": 1, "odd": 1 }],
+              "sqlSeedRows": [{ "id": "global", "value": 1, "odd": true }],
               "cached": false,
               "avgMs": 550,
               "avgCostCents": 0
+            },
+            {
+              "id": "mod_odd_bool",
+              "kind": "custom-code",
+              "label": "Odd bool",
+              "note": "SQL % 2 is 0/1 — if/else needs a bool spine field",
+              "inputDescription": "SharedNumber after Odd? SQL",
+              "inStructureId": "m_number",
+              "outStructureId": "m_number",
+              "fallbackList": [
+                { "typescript": "(r)=>({...r,odd:r.odd===1||r.odd===true})" }
+              ]
             },
             {
               "id": "mod_odd_if",
               "kind": "if-else",
               "label": "3n or n/2",
               "note": "Odd → times three, then plus one. Even → divide by two.",
-              "inputDescription": "SharedNumber with odd 0 or 1",
+              "inputDescription": "SharedNumber with odd bool",
               "checkInputDescription": false,
               "inStructureId": "m_number",
               "outStructureId": "m_number",
               "cached": true,
               "avgMs": 1,
               "avgCostCents": 0,
-              "ifCondition": { "kind": "equals", "path": "odd", "value": 1 },
+              "ifCondition": { "kind": "path", "path": "odd" },
               "forkBranches": [
                 {
                   "id": "fbr_odd",
@@ -139,7 +159,7 @@
                       "inStructureId": "m_number",
                       "outStructureId": "m_number",
                       "sql": "UPDATE shared_number SET value = value * 3 WHERE id = 'global' RETURNING *",
-                      "sqlSeedRows": [{ "id": "global", "value": 1, "odd": 1 }],
+                      "sqlSeedRows": [{ "id": "global", "value": 1, "odd": true }],
                       "cached": false,
                       "avgMs": 1100,
                       "avgCostCents": 0
@@ -153,7 +173,7 @@
                       "inStructureId": "m_number",
                       "outStructureId": "m_number",
                       "sql": "UPDATE shared_number SET value = value + 1 WHERE id = 'global' RETURNING *",
-                      "sqlSeedRows": [{ "id": "global", "value": 1, "odd": 1 }],
+                      "sqlSeedRows": [{ "id": "global", "value": 1, "odd": true }],
                       "cached": false,
                       "avgMs": 1100,
                       "avgCostCents": 0
@@ -173,7 +193,7 @@
                       "inStructureId": "m_number",
                       "outStructureId": "m_number",
                       "sql": "UPDATE shared_number SET value = value / 2 WHERE id = 'global' RETURNING *",
-                      "sqlSeedRows": [{ "id": "global", "value": 1, "odd": 1 }],
+                      "sqlSeedRows": [{ "id": "global", "value": 1, "odd": true }],
                       "cached": false,
                       "avgMs": 1100,
                       "avgCostCents": 0
@@ -197,7 +217,7 @@
               "inStructureId": "m_trigger",
               "outStructureId": "m_number",
               "sql": "UPDATE shared_number SET value = value * 2 WHERE id = 'global' RETURNING *",
-              "sqlSeedRows": [{ "id": "global", "value": 1, "odd": 1 }],
+              "sqlSeedRows": [{ "id": "global", "value": 1, "odd": true }],
               "cached": false,
               "avgMs": 450,
               "avgCostCents": 0
@@ -205,6 +225,18 @@
           ]
         }
       ]
+    },
+    {
+      "id": "mod_join",
+      "kind": "control-join",
+      "label": "Join",
+      "note": "Continue to output after Collatz or Double — both arms emit SharedNumber",
+      "inputDescription": "SharedNumber from the taken arm",
+      "inStructureId": "m_number",
+      "outStructureId": "m_number",
+      "cached": true,
+      "avgMs": 1,
+      "avgCostCents": 0
     },
     {
       "id": "mod_out",

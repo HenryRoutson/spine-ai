@@ -19,6 +19,7 @@ import {
 } from "@/lib/server/types";
 import { MAX_ASSISTANT_MESSAGE_CHARS } from "./assistant-route";
 import { MAX_VIEWER_MARKDOWN_CHARS } from "@/lib/share-viewer-markdown";
+import { ifConditionSchema } from "@/lib/if-condition";
 import {
   MAX_UI_CONTEXT_FIELD_PATH_CHARS,
   MAX_UI_CONTEXT_ITEMS,
@@ -319,18 +320,14 @@ const pipelineModulePatchSchema = z
           .object({
             id: z.string().max(128),
             label: z.string().max(200),
+            match: z.string().max(200).optional(),
             modules: z.array(z.any()).max(200),
           })
           .strict(),
       )
       .max(12)
       .optional(),
-    ifCondition: z
-      .discriminatedUnion("kind", [
-        z.object({ kind: z.literal("path"), path: z.string().max(512) }).strict(),
-        z.object({ kind: z.literal("equals"), path: z.string().max(512), value: z.unknown() }).strict(),
-      ])
-      .optional(),
+    ifCondition: ifConditionSchema.optional(),
     // AI : example-select — allowlisted on PUT so .strict() does not reject builder saves
     exampleContextLabel: z.string().max(200).optional(),
     exampleContextField: z.string().max(512).optional(),

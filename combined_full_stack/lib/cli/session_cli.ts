@@ -3,7 +3,8 @@
 
 import { readFileSync } from "node:fs"
 import { basename } from "node:path"
-import { DocLabel, IfConditionKind, InputType, type IfCondition } from "@/lib/types"
+import { DocLabel, InputType, type IfCondition } from "@/lib/types"
+import { parseIfCondition } from "@/lib/if-condition"
 import {
   toAgentView,
   toBillingView,
@@ -59,7 +60,7 @@ Usage:
   spine session remove-field --model <Name> --name <field>
   spine session add-alias --name <Name> --expr <TypeExpr> [--params A,B]
   spine session add-step --kind <llm|input|fork|if-else|...> [--label <Label>] [--fork-id <id>] [--branch-id <id|Then|Else>]
-  spine session patch-step --id <id|label> [--label] [--prompt] [--note] [--if-path <field>] [--if-kind path|equals] [--if-value <json>]
+  spine session patch-step --id <id|label> [--label] [--prompt] [--note] [--if-path <bool field>]
   spine session assign-structure --id <id|label> --model <Name>
   spine session remove-step --id <id|label>
   spine session move-step --id <id|label> --at <index>
@@ -285,19 +286,7 @@ async function runSessionCommandInner(
     if (note) patch.note = note
     const ifPath = flagString(flags, "if-path")
     if (ifPath) {
-      const equals = flagString(flags, "if-kind") === "equals"
-      let value: unknown = true
-      const raw = flagString(flags, "if-value")
-      if (equals && raw) {
-        try {
-          value = JSON.parse(raw) as unknown
-        } catch {
-          value = raw
-        }
-      }
-      patch.ifCondition = equals
-        ? { kind: IfConditionKind.Equals, path: ifPath, value }
-        : { kind: IfConditionKind.Path, path: ifPath }
+      patch.ifCondition = parseIfCondition("path", ifPath)
     }
     const step = patchStep(session, id, patch)
     return ok("session patch-step", { step: { id: step.id, label: step.label, kind: step.kind } })

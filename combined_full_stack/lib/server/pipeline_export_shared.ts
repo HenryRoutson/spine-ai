@@ -9,9 +9,11 @@ import { webhookStepUsesPipelineState } from "@/lib/webhook-step";
 import { quoteFieldPaths } from "./quote_schema";
 import { BUILTIN_DOCUMENT_ID, withSharedModels } from "./builtin_models";
 import { labelAsStateKey } from "./pipeline_state";
-import { forkBranchesOf, forkJoinOf, forkProductField, laneLastModule, locatePipelineModule, flattenPipelineModules } from "@/lib/fork-pipeline";
+import { forkBranchesOf, forkJoinOf, forkProductField, isExclusiveKind, laneLastModule, locatePipelineModule, flattenPipelineModules } from "@/lib/fork-pipeline";
 import { ifElseBranch, ifThenBranch } from "@/lib/if-else-pipeline";
-import { FieldType, IfConditionKind, ModuleKind } from "./types";
+import { isDefaultCaseMatch } from "@/lib/case-pipeline";
+import { followingControlJoin } from "@/lib/exclusive-control";
+import { FieldType, ModuleKind } from "./types";
 import { migrateProjectModules } from "./validity";
 import {
   fieldToTypeExpr,
@@ -1250,17 +1252,17 @@ function exportDotPathTs(root: string, path: string): string {
 function ifConditionExportTs(m: PipelineModule, root: string): string {
   const path = m.ifCondition?.path.trim() ?? "";
   const access = exportDotPathTs(root, path);
-  if (m.ifCondition?.kind === IfConditionKind.Equals) return `${access} === ${JSON.stringify(m.ifCondition.value)}`;
   return `${access} === true`;
 }
 
 function ifConditionExportPy(m: PipelineModule, root: string): string {
   const parts = JSON.stringify((m.ifCondition?.path.trim() ?? "").split(".").map((p) => p.trim()).filter(Boolean));
   const walk = `_cur = ${root}\nfor _p in ${parts}:\n    _cur = _cur.get(_p) if isinstance(_cur, dict) else getattr(_cur, _p, None)`;
-  if (m.ifCondition?.kind === IfConditionKind.Equals) {
-    return `${walk}\n_cond = _cur == ${JSON.stringify(m.ifCondition.value)}`;
-  }
   return `${walk}\n_cond = _cur is True`;
+}
+
+function ifConditionPathWire(m: PipelineModule): string {
+  return m.ifCondition?.path.trim() ?? "";
 }
 
 function ifElseStateExprTs(m: PipelineModule, thenSide: boolean): string {
@@ -1318,6 +1320,108 @@ export function generateIfElseStepBodyRust(m: PipelineModule, _project: Project,
   ]
     .filter(Boolean)
     .join("\n");
+}
+
+function exclusiveLaneStateTs(branch?: { modules: PipelineModule[] }): string {
+  const last = branch ? laneLastModule(branch) : undefined;
+  return last ? `state[${JSON.stringify(last.label.trim())}]` : "input";
+}
+
+function exclusiveLaneStatePy(branch?: { modules: PipelineModule[] }): string {
+  const last = branch ? laneLastModule(branch) : undefined;
+  return last ? `state.get(${JSON.stringify(last.label.trim())})` : "input";
+}
+
+function exclusiveLaneLast(branch?: { modules: PipelineModule[] }): PipelineModule | undefined {
+  return branch ? laneLastModule(branch) : undefined;
+}
+
+export function generateCaseStepBodyTs(m: PipelineModule, _project: Project, outTs: string): string {
+  const access = exportDotPathTs("input", ifConditionPathWire(m));
+  const branches = forkBranchesOf(m);
+  const lines = [`const __key = String(${access} ?? "");`];
+  for (const b of branches.filter((arm) => !isDefaultCaseMatch(arm.match))) {
+    lines.push(
+      `if (__key === ${JSON.stringify((b.match ?? "").trim())}) return (${exclusiveLaneStateTs(b)}) as ${outTs};`,
+    );
+  }
+  const fallback = branches.find((arm) => isDefaultCaseMatch(arm.match));
+  lines.push(`return (${exclusiveLaneStateTs(fallback)}) as ${outTs};`);
+  return lines.join("\n");
+}
+
+export function generateCaseStepBodyPy(m: PipelineModule, _project: Project, outPy: string): string {
+  const branches = forkBranchesOf(m);
+  const lines = caseDiscriminantExportPy(m, "input").split("\n");
+  for (const b of branches.filter((arm) => !isDefaultCaseMatch(arm.match))) {
+    lines.push(`if _disc == ${JSON.stringify((b.match ?? "").trim())}:`);
+    lines.push(`    return cast(${outPy}, ${exclusiveLaneStatePy(b)})`);
+  }
+  const fallback = branches.find((arm) => isDefaultCaseMatch(arm.match));
+  lines.push(`return cast(${outPy}, ${exclusiveLaneStatePy(fallback)})`);
+  return lines.join("\n");
+}
+
+export function generateCaseStepBodyGo(m: PipelineModule, _project: Project, _outGo: string): string {
+  const lines = [exportComment("//", "case — orchestrator ran the chosen arm; pick last output or passthrough")];
+  for (const b of forkBranchesOf(m)) {
+    const last = exclusiveLaneLast(b);
+    if (!last) continue;
+    lines.push(
+      `if v, ok := state[${JSON.stringify(last.label.trim())}]; ok && v != nil { return v, nil }`,
+    );
+  }
+  lines.push("return input, nil");
+  return lines.join("\n");
+}
+
+export function generateCaseStepBodyRust(m: PipelineModule, _project: Project, outRust: string): string {
+  const lines = [exportComment("//", "case — orchestrator ran the chosen arm; pick last output or passthrough")];
+  for (const b of forkBranchesOf(m)) {
+    const last = exclusiveLaneLast(b);
+    if (!last) continue;
+    lines.push(
+      `if let Some(v) = state.get(${JSON.stringify(last.label.trim())}) { let out: ${outRust} = serde_json::from_value(v.clone())?; return Ok(out); }`,
+    );
+  }
+  lines.push(`let out: ${outRust} = serde_json::from_value(serde_json::to_value(&input)?)?;`);
+  lines.push("Ok(out)");
+  return lines.join("\n");
+}
+
+export function generateControlJoinStepBodyTs(_m: PipelineModule, _project: Project, outTs: string): string {
+  return `return input as ${outTs};`;
+}
+
+export function generateControlJoinStepBodyPy(_m: PipelineModule, _project: Project, outPy: string): string {
+  return `return cast(${outPy}, input)`;
+}
+
+export function generateControlJoinStepBodyGo(_m: PipelineModule, _project: Project, _outGo: string): string {
+  return "return input, nil";
+}
+
+export function generateControlJoinStepBodyRust(_m: PipelineModule, _project: Project, _outRust: string): string {
+  return "Ok(input)";
+}
+
+function caseDiscriminantExportPy(m: PipelineModule, root: string): string {
+  const parts = JSON.stringify(
+    (m.ifCondition?.path.trim() ?? "")
+      .split(".")
+      .map((p) => p.trim())
+      .filter(Boolean),
+  );
+  return [
+    `_cur = ${root}`,
+    `for _p in ${parts}:`,
+    `    _cur = _cur.get(_p) if isinstance(_cur, dict) else getattr(_cur, _p, None)`,
+    `_disc = "true" if _cur is True else "false" if _cur is False else "" if _cur is None else str(_cur)`,
+  ].join("\n");
+}
+
+function caseDiscriminantExportTs(root: string, path: string): string {
+  return `String(${exportDotPathTs(root, path)} ?? "")`;
 }
 
 export function generateAssembleStepBodyRust(m: PipelineModule, project: Project, outRust: string): string {
@@ -1599,7 +1703,8 @@ function emitTsOrchestratorWalk(
   indent: string,
 ): string[] {
   const lines: string[] = [];
-  for (const m of modules) {
+  for (let wi = 0; wi < modules.length; wi++) {
+    const m = modules[wi]!;
     const i = indexById.get(m.id) ?? 0;
     const fn = stepFnName(m, i);
     const label = labelAsStateKey(m.label);
@@ -1632,24 +1737,53 @@ function emitTsOrchestratorWalk(
       lines.push(`${indent}}`, "");
       continue;
     }
-    if (m.kind === ModuleKind.IfElse) {
-      const thenB = ifThenBranch(m);
-      const elseB = ifElseBranch(m);
-      const cond = ifConditionExportTs(m, "__ifIn");
-      lines.push(`${indent}// ${i + 1}. ${m.label} (if/else)`);
+    if (isExclusiveKind(m.kind)) {
+      lines.push(`${indent}// ${i + 1}. ${m.label} (${m.kind})`);
       lines.push(`${indent}{`);
       lines.push(`${indent}  const __ifIn = spine;`);
-      lines.push(`${indent}  if (${cond}) {`);
-      lines.push(`${indent}    let spine: unknown = __ifIn;`);
-      if (thenB?.modules.length) {
-        lines.push(...emitTsOrchestratorWalk(thenB.modules, project, stepFnName, indexById, multi, indent + "    "));
+      if (m.kind === ModuleKind.IfElse) {
+        const thenB = ifThenBranch(m);
+        const elseB = ifElseBranch(m);
+        lines.push(`${indent}  if (${ifConditionExportTs(m, "__ifIn")}) {`);
+        lines.push(`${indent}    let spine: unknown = __ifIn;`);
+        if (thenB?.modules.length) {
+          lines.push(...emitTsOrchestratorWalk(thenB.modules, project, stepFnName, indexById, multi, indent + "    "));
+        }
+        lines.push(`${indent}  } else {`);
+        lines.push(`${indent}    let spine: unknown = __ifIn;`);
+        if (elseB?.modules.length) {
+          lines.push(...emitTsOrchestratorWalk(elseB.modules, project, stepFnName, indexById, multi, indent + "    "));
+        }
+        lines.push(`${indent}  }`);
+      } else {
+        const matches = forkBranchesOf(m).filter((b) => !isDefaultCaseMatch(b.match));
+        const fallback = forkBranchesOf(m).find((b) => isDefaultCaseMatch(b.match));
+        lines.push(`${indent}  const __disc = ${caseDiscriminantExportTs("__ifIn", ifConditionPathWire(m))};`);
+        if (matches.length === 0) {
+          lines.push(`${indent}  {`);
+          lines.push(`${indent}    let spine: unknown = __ifIn;`);
+          if (fallback?.modules.length) {
+            lines.push(...emitTsOrchestratorWalk(fallback.modules, project, stepFnName, indexById, multi, indent + "    "));
+          }
+          lines.push(`${indent}  }`);
+        } else {
+          for (let ai = 0; ai < matches.length; ai++) {
+            const b = matches[ai]!;
+            const head = ai === 0 ? "if" : "} else if";
+            lines.push(`${indent}  ${head} (__disc === ${JSON.stringify((b.match ?? "").trim())}) {`);
+            lines.push(`${indent}    let spine: unknown = __ifIn;`);
+            if (b.modules.length) {
+              lines.push(...emitTsOrchestratorWalk(b.modules, project, stepFnName, indexById, multi, indent + "    "));
+            }
+          }
+          lines.push(`${indent}  } else {`);
+          lines.push(`${indent}    let spine: unknown = __ifIn;`);
+          if (fallback?.modules.length) {
+            lines.push(...emitTsOrchestratorWalk(fallback.modules, project, stepFnName, indexById, multi, indent + "    "));
+          }
+          lines.push(`${indent}  }`);
+        }
       }
-      lines.push(`${indent}  } else {`);
-      lines.push(`${indent}    let spine: unknown = __ifIn;`);
-      if (elseB?.modules.length) {
-        lines.push(...emitTsOrchestratorWalk(elseB.modules, project, stepFnName, indexById, multi, indent + "    "));
-      }
-      lines.push(`${indent}  }`);
       lines.push(`${indent}  spine = __ifIn;`);
       lines.push(`${indent}  ${orchestratorInvokeLine(m, fn, "ts", !multi, inTs).trim()}`);
       if (label) {
@@ -1659,6 +1793,7 @@ function emitTsOrchestratorWalk(
         );
       }
       lines.push(`${indent}}`, "");
+      if (!followingControlJoin(modules, wi)) break;
       continue;
     }
     lines.push(`${indent}// ${i + 1}. ${m.label}`);
@@ -1758,7 +1893,8 @@ function emitPyOrchestratorWalk(
   indent: string,
 ): string[] {
   const lines: string[] = [];
-  for (const m of modules) {
+  for (let wi = 0; wi < modules.length; wi++) {
+    const m = modules[wi]!;
     const i = indexById.get(m.id) ?? 0;
     const fn = stepFnName(m, i);
     const label = labelAsStateKey(m.label);
@@ -1786,25 +1922,56 @@ function emitPyOrchestratorWalk(
       lines.push("");
       continue;
     }
-    if (m.kind === ModuleKind.IfElse) {
-      const thenB = ifThenBranch(m);
-      const elseB = ifElseBranch(m);
-      lines.push(`${indent}# ${i + 1}. ${m.label} (if/else)`);
+    if (isExclusiveKind(m.kind)) {
+      lines.push(`${indent}# ${i + 1}. ${m.label} (${m.kind})`);
       lines.push(`${indent}__if_in = spine`);
-      lines.push(
-        ...ifConditionExportPy(m, "__if_in")
-          .split("\n")
-          .map((l) => `${indent}${l}`),
-      );
-      lines.push(`${indent}if _cond:`);
-      lines.push(`${indent}    spine = __if_in`);
-      if (thenB?.modules.length) {
-        lines.push(...emitPyOrchestratorWalk(thenB.modules, project, stepFnName, indexById, multi, indent + "    "));
-      }
-      lines.push(`${indent}else:`);
-      lines.push(`${indent}    spine = __if_in`);
-      if (elseB?.modules.length) {
-        lines.push(...emitPyOrchestratorWalk(elseB.modules, project, stepFnName, indexById, multi, indent + "    "));
+      if (m.kind === ModuleKind.IfElse) {
+        const thenB = ifThenBranch(m);
+        const elseB = ifElseBranch(m);
+        lines.push(
+          ...ifConditionExportPy(m, "__if_in")
+            .split("\n")
+            .map((l) => `${indent}${l}`),
+        );
+        lines.push(`${indent}if _cond:`);
+        lines.push(`${indent}    spine = __if_in`);
+        if (thenB?.modules.length) {
+          lines.push(...emitPyOrchestratorWalk(thenB.modules, project, stepFnName, indexById, multi, indent + "    "));
+        }
+        lines.push(`${indent}else:`);
+        lines.push(`${indent}    spine = __if_in`);
+        if (elseB?.modules.length) {
+          lines.push(...emitPyOrchestratorWalk(elseB.modules, project, stepFnName, indexById, multi, indent + "    "));
+        }
+      } else {
+        lines.push(
+          ...caseDiscriminantExportPy(m, "__if_in")
+            .split("\n")
+            .map((l) => `${indent}${l}`),
+        );
+        const matches = forkBranchesOf(m).filter((b) => !isDefaultCaseMatch(b.match));
+        const fallback = forkBranchesOf(m).find((b) => isDefaultCaseMatch(b.match));
+        if (matches.length === 0) {
+          lines.push(`${indent}spine = __if_in`);
+          if (fallback?.modules.length) {
+            lines.push(...emitPyOrchestratorWalk(fallback.modules, project, stepFnName, indexById, multi, indent));
+          }
+        } else {
+          for (let ai = 0; ai < matches.length; ai++) {
+            const b = matches[ai]!;
+            const head = ai === 0 ? "if" : "elif";
+            lines.push(`${indent}${head} _disc == ${JSON.stringify((b.match ?? "").trim())}:`);
+            lines.push(`${indent}    spine = __if_in`);
+            if (b.modules.length) {
+              lines.push(...emitPyOrchestratorWalk(b.modules, project, stepFnName, indexById, multi, indent + "    "));
+            }
+          }
+          lines.push(`${indent}else:`);
+          lines.push(`${indent}    spine = __if_in`);
+          if (fallback?.modules.length) {
+            lines.push(...emitPyOrchestratorWalk(fallback.modules, project, stepFnName, indexById, multi, indent + "    "));
+          }
+        }
       }
       lines.push(`${indent}spine = __if_in`);
       lines.push(`${indent}${orchestratorInvokeLine(m, fn, "py", !multi, inPy).trim()}`);
@@ -1815,6 +1982,7 @@ function emitPyOrchestratorWalk(
         );
       }
       lines.push("");
+      if (!followingControlJoin(modules, wi)) break;
       continue;
     }
     lines.push(`${indent}# ${i + 1}. ${m.label}`);
@@ -1860,7 +2028,8 @@ function emitRsOrchestratorWalk(
   indent: string,
 ): string[] {
   const lines: string[] = [];
-  for (const m of modules) {
+  for (let wi = 0; wi < modules.length; wi++) {
+    const m = modules[wi]!;
     const i = indexById.get(m.id) ?? 0;
     const fn = stepFnName(m, i);
     const label = labelAsStateKey(m.label);
@@ -1883,29 +2052,66 @@ function emitRsOrchestratorWalk(
       lines.push("");
       continue;
     }
-    if (m.kind === ModuleKind.IfElse) {
-      const thenB = ifThenBranch(m);
-      const elseB = ifElseBranch(m);
-      lines.push(`${indent}// ${i + 1}. ${m.label} (if/else sequential in export)`);
+    if (isExclusiveKind(m.kind)) {
+      lines.push(`${indent}// ${i + 1}. ${m.label} (${m.kind})`);
       lines.push(`${indent}let __if_in = spine.clone();`);
-      lines.push(`${indent}{`);
-      lines.push(`${indent}    let mut spine = __if_in.clone();`);
-      if (thenB?.modules.length) {
-        lines.push(...emitRsOrchestratorWalk(thenB.modules, project, stepFnName, indexById, multi, indent + "    "));
+      if (m.kind === ModuleKind.IfElse) {
+        const thenB = ifThenBranch(m);
+        const elseB = ifElseBranch(m);
+        lines.push(
+          `${indent}if eval_if_condition("path", &spine_dot_path(&__if_in, ${JSON.stringify(ifConditionPathWire(m))}), &Value::Null) {`,
+        );
+        lines.push(`${indent}    let mut spine = __if_in.clone();`);
+        if (thenB?.modules.length) {
+          lines.push(...emitRsOrchestratorWalk(thenB.modules, project, stepFnName, indexById, multi, indent + "    "));
+        }
+        lines.push(`${indent}} else {`);
+        lines.push(`${indent}    let mut spine = __if_in.clone();`);
+        if (elseB?.modules.length) {
+          lines.push(...emitRsOrchestratorWalk(elseB.modules, project, stepFnName, indexById, multi, indent + "    "));
+        }
+        lines.push(`${indent}}`);
+      } else {
+        const matches = forkBranchesOf(m).filter((b) => !isDefaultCaseMatch(b.match));
+        const fallback = forkBranchesOf(m).find((b) => isDefaultCaseMatch(b.match));
+        lines.push(
+          `${indent}let __got = spine_dot_path(&__if_in, ${JSON.stringify(ifConditionPathWire(m))});`,
+        );
+        lines.push(
+          `${indent}let __disc = __got.as_str().map(|s| s.to_string()).or_else(|| __got.as_i64().map(|n| n.to_string())).or_else(|| __got.as_bool().map(|b| if *b { "true".into() } else { "false".into() })).unwrap_or_default();`,
+        );
+        if (matches.length === 0) {
+          lines.push(`${indent}{`);
+          lines.push(`${indent}    let mut spine = __if_in.clone();`);
+          if (fallback?.modules.length) {
+            lines.push(...emitRsOrchestratorWalk(fallback.modules, project, stepFnName, indexById, multi, indent + "    "));
+          }
+          lines.push(`${indent}}`);
+        } else {
+          for (let ai = 0; ai < matches.length; ai++) {
+            const b = matches[ai]!;
+            const head = ai === 0 ? "if" : "} else if";
+            lines.push(`${indent}${head} __disc == ${JSON.stringify((b.match ?? "").trim())} {`);
+            lines.push(`${indent}    let mut spine = __if_in.clone();`);
+            if (b.modules.length) {
+              lines.push(...emitRsOrchestratorWalk(b.modules, project, stepFnName, indexById, multi, indent + "    "));
+            }
+          }
+          lines.push(`${indent}} else {`);
+          lines.push(`${indent}    let mut spine = __if_in.clone();`);
+          if (fallback?.modules.length) {
+            lines.push(...emitRsOrchestratorWalk(fallback.modules, project, stepFnName, indexById, multi, indent + "    "));
+          }
+          lines.push(`${indent}}`);
+        }
       }
-      lines.push(`${indent}}`);
-      lines.push(`${indent}{`);
-      lines.push(`${indent}    let mut spine = __if_in.clone();`);
-      if (elseB?.modules.length) {
-        lines.push(...emitRsOrchestratorWalk(elseB.modules, project, stepFnName, indexById, multi, indent + "    "));
-      }
-      lines.push(`${indent}}`);
       lines.push(`${indent}spine = __if_in;`);
       lines.push(`${indent}${orchestratorInvokeLine(m, fn, "rs", !multi, inRust).trim()}`);
       if (label) {
         lines.push(`${indent}state.insert(${JSON.stringify(label)}.to_string(), spine.clone());`);
       }
       lines.push("");
+      if (!followingControlJoin(modules, wi)) break;
       continue;
     }
     lines.push(`${indent}// ${i + 1}. ${m.label}`);
@@ -1948,7 +2154,8 @@ function emitGoOrchestratorWalk(
   indent: string,
 ): string[] {
   const lines: string[] = [];
-  for (const m of modules) {
+  for (let wi = 0; wi < modules.length; wi++) {
+    const m = modules[wi]!;
     const i = indexById.get(m.id) ?? 0;
     const fn = stepFnName(m, i);
     const label = labelAsStateKey(m.label);
@@ -1970,17 +2177,55 @@ function emitGoOrchestratorWalk(
       lines.push("");
       continue;
     }
-    if (m.kind === ModuleKind.IfElse) {
-      const thenB = ifThenBranch(m);
-      const elseB = ifElseBranch(m);
-      lines.push(`${indent}// ${i + 1}. ${m.label} (if/else sequential in export)`);
+    if (isExclusiveKind(m.kind)) {
+      lines.push(`${indent}// ${i + 1}. ${m.label} (${m.kind})`);
       lines.push(`${indent}ifIn := append(json.RawMessage(nil), spine...)`);
-      for (const b of [thenB, elseB]) {
-        if (!b?.modules.length) continue;
-        lines.push(`${indent}{`);
+      lines.push(`${indent}var ifObj any`);
+      lines.push(`${indent}if err := json.Unmarshal(ifIn, &ifObj); err != nil { return nil, err }`);
+      if (m.kind === ModuleKind.IfElse) {
+        const thenB = ifThenBranch(m);
+        const elseB = ifElseBranch(m);
+        lines.push(
+          `${indent}if EvalIfCondition("path", SpineDotPath(ifObj, ${JSON.stringify(ifConditionPathWire(m))}), nil) {`,
+        );
         lines.push(`${indent}    spine = append(json.RawMessage(nil), ifIn...)`);
-        lines.push(...emitGoOrchestratorWalk(b.modules, project, stepFnName, indexById, multi, indent + "    "));
+        if (thenB?.modules.length) {
+          lines.push(...emitGoOrchestratorWalk(thenB.modules, project, stepFnName, indexById, multi, indent + "    "));
+        }
+        lines.push(`${indent}} else {`);
+        lines.push(`${indent}    spine = append(json.RawMessage(nil), ifIn...)`);
+        if (elseB?.modules.length) {
+          lines.push(...emitGoOrchestratorWalk(elseB.modules, project, stepFnName, indexById, multi, indent + "    "));
+        }
         lines.push(`${indent}}`);
+      } else {
+        const matches = forkBranchesOf(m).filter((b) => !isDefaultCaseMatch(b.match));
+        const fallback = forkBranchesOf(m).find((b) => isDefaultCaseMatch(b.match));
+        lines.push(
+          `${indent}disc := fmt.Sprint(SpineDotPath(ifObj, ${JSON.stringify(ifConditionPathWire(m))}))`,
+        );
+        if (matches.length === 0) {
+          lines.push(`${indent}spine = append(json.RawMessage(nil), ifIn...)`);
+          if (fallback?.modules.length) {
+            lines.push(...emitGoOrchestratorWalk(fallback.modules, project, stepFnName, indexById, multi, indent));
+          }
+        } else {
+          for (let ai = 0; ai < matches.length; ai++) {
+            const b = matches[ai]!;
+            const head = ai === 0 ? "if" : "} else if";
+            lines.push(`${indent}${head} disc == ${JSON.stringify((b.match ?? "").trim())} {`);
+            lines.push(`${indent}    spine = append(json.RawMessage(nil), ifIn...)`);
+            if (b.modules.length) {
+              lines.push(...emitGoOrchestratorWalk(b.modules, project, stepFnName, indexById, multi, indent + "    "));
+            }
+          }
+          lines.push(`${indent}} else {`);
+          lines.push(`${indent}    spine = append(json.RawMessage(nil), ifIn...)`);
+          if (fallback?.modules.length) {
+            lines.push(...emitGoOrchestratorWalk(fallback.modules, project, stepFnName, indexById, multi, indent + "    "));
+          }
+          lines.push(`${indent}}`);
+        }
       }
       lines.push(`${indent}spine = ifIn`);
       lines.push(orchestratorInvokeLine(m, fn, "go", !multi, inGo).split("\n").map((l) => indent + l.trimStart()).join("\n"));
@@ -1988,6 +2233,7 @@ function emitGoOrchestratorWalk(
         lines.push(`${indent}state[${JSON.stringify(label)}] = append(json.RawMessage(nil), spine...)`);
       }
       lines.push("");
+      if (!followingControlJoin(modules, wi)) break;
       continue;
     }
     lines.push(`${indent}// ${i + 1}. ${m.label}`);

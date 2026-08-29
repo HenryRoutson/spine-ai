@@ -34,7 +34,9 @@ function goImports(needs: ExportRuntimeNeeds, project: Project): string {
     needs.exampleSelect ||
     needs.n8n ||
     needs.connect ||
-    project.modules.some((m) => m.kind === ModuleKind.Combine);
+    flattenPipelineModules(project.modules).some(
+      (m) => m.kind === ModuleKind.Combine || m.kind === ModuleKind.Case,
+    );
   if (needsFmt) pkgs.add("fmt");
   const sorted = [...pkgs].sort();
   return ["import (", ...sorted.map((p) => `\t"${p}"`), ")"].join("\n");

@@ -16,7 +16,7 @@ import type {
   StructureModelId,
   TypeAlias,
 } from "./types";
-import { ModuleKind, FieldType, IfConditionKind } from "./types";
+import { ModuleKind, FieldType } from "./types";
 import { getN8nNode, missingN8nParams } from "@/lib/n8n-catalog";
 import { getConnectAction, missingConnectParams } from "@/lib/connect-catalog";
 import { customCodeEntriesForModule } from "@/lib/custom_code_entries";
@@ -43,7 +43,6 @@ import {
   typeExprEqual,
   typeExprItemRef,
   TypeExprKind,
-  PrimName,
   type TypeExpr,
 } from "./type_expr";
 import { typeExprAssignable, validateAssembleBindings } from "@/lib/assemble-type-expr";
@@ -56,11 +55,17 @@ import {
   forkProductField,
   isForkKind,
   isIfElseKind,
+  isCaseKind,
+  isControlJoinKind,
+  isExclusiveKind,
   isNestedLaneKind,
   locatePipelineModule,
   validateForkAssembleJoin,
 } from "@/lib/fork-pipeline";
 import { ifThenBranch } from "@/lib/if-else-pipeline";
+import { isDefaultCaseMatch } from "@/lib/case-pipeline";
+import { ifConditionTypeError } from "@/lib/if-condition";
+import { pipelineDagIsAcyclic, pipelineToDag } from "@/lib/pipeline-dag";
 import { typeExprAtPath } from "@/lib/type-expr-polymorph";
 import { exampleSelectAcceptsWrapper, isExampleSelectKind } from "@/lib/example-select";
 import {
@@ -609,7 +614,7 @@ function pipelineReachableModelIds(
 ): Set<StructureModelId> {
   const byId = new Map(models.map((m) => [m.id, m]));
   const seeds = new Set<StructureModelId>();
-  for (const m of modules) {
+  for (const m of flattenPipelineModules(modules)) {
     if (m.inStructureId) seeds.add(m.inStructureId);
     if (m.outStructureId) seeds.add(m.outStructureId);
     for (const b of m.parallelBranches ?? []) {
@@ -1021,15 +1026,115 @@ function computeIfElseInvalid(
         kind: InvalidKind.StructureField,
         structureMessage: `unknown condition path "${path}"`,
       });
-    } else if (m.ifCondition?.kind !== IfConditionKind.Equals) {
-      const isBool = at.kind === TypeExprKind.Prim && at.name === PrimName.Bool;
-      if (!isBool) {
+    } else if (m.ifCondition) {
+      const typeErr = ifConditionTypeError(m.ifCondition, at);
+      if (typeErr) {
         pushInvalid(invalid, {
           moduleId: m.id,
           kind: InvalidKind.StructureField,
-          structureMessage: `condition path "${path}" must be bool`,
+          structureMessage: typeErr,
         });
       }
+    }
+  }
+  return invalid;
+}
+
+function computeCaseInvalid(
+  modules: PipelineModule[],
+  models: StructureModel[],
+  typeAliases: TypeAlias[] = [],
+): InvalidMap {
+  const invalid: InvalidMap = new Map();
+  for (const m of flattenPipelineModules(modules)) {
+    if (!isCaseKind(m.kind)) continue;
+    const branches = forkBranchesOf(m);
+    if (branches.length < 2) {
+      pushInvalid(invalid, {
+        moduleId: m.id,
+        kind: InvalidKind.StructureField,
+        structureMessage: "case needs at least two arms",
+      });
+    }
+    if (!branches.some((b) => b.modules.length)) {
+      pushInvalid(invalid, {
+        moduleId: m.id,
+        kind: InvalidKind.StructureField,
+        structureMessage: "case needs at least one arm with a step",
+      });
+    }
+    const defaults = branches.filter((b) => isDefaultCaseMatch(b.match));
+    if (defaults.length > 1) {
+      pushInvalid(invalid, {
+        moduleId: m.id,
+        kind: InvalidKind.StructureField,
+        structureMessage: "case can have only one default arm (_, *, or empty match)",
+      });
+    }
+    const seen = new Set<string>();
+    for (const b of branches) {
+      if (isDefaultCaseMatch(b.match)) continue;
+      const key = (b.match ?? "").trim();
+      if (!key) continue;
+      if (seen.has(key)) {
+        pushInvalid(invalid, {
+          moduleId: m.id,
+          kind: InvalidKind.StructureField,
+          structureMessage: `duplicate case match "${key}"`,
+        });
+      }
+      seen.add(key);
+    }
+    const path = m.ifCondition?.path.trim() ?? "";
+    if (!path) {
+      pushInvalid(invalid, {
+        moduleId: m.id,
+        kind: InvalidKind.StructureField,
+        structureMessage: "case needs a match path on the spine",
+      });
+      continue;
+    }
+    const loc = locatePipelineModule(modules, m.id);
+    const spineType = loc?.predecessor ? stepSpineOutType(loc.predecessor) : m.inType;
+    if (!spineType) continue;
+    const at = typeExprAtPath(spineType, path, models, typeAliases);
+    if (!at) {
+      pushInvalid(invalid, {
+        moduleId: m.id,
+        kind: InvalidKind.StructureField,
+        structureMessage: `unknown match path "${path}"`,
+      });
+    }
+  }
+  return invalid;
+}
+
+function computeExclusiveJoinInvalid(modules: PipelineModule[]): InvalidMap {
+  const invalid: InvalidMap = new Map();
+  for (let i = 0; i < modules.length; i++) {
+    const m = modules[i]!;
+    if (isExclusiveKind(m.kind)) {
+      const nxt = modules[i + 1];
+      if (nxt && !isControlJoinKind(nxt.kind)) {
+        pushInvalid(invalid, {
+          moduleId: nxt.id,
+          kind: InvalidKind.StructureField,
+          structureMessage: "steps after if/case do not run unless you add a Join — move them into a branch or insert Join",
+        });
+      }
+    }
+    if (isControlJoinKind(m.kind)) {
+      const prev = i > 0 ? modules[i - 1] : undefined;
+      if (!prev || !isExclusiveKind(prev.kind)) {
+        pushInvalid(invalid, {
+          moduleId: m.id,
+          kind: InvalidKind.StructureField,
+          structureMessage: "Join must sit immediately after if/else or case",
+        });
+      }
+    }
+    if (isNestedLaneKind(m.kind)) {
+      for (const b of forkBranchesOf(m)) mergeInvalid(invalid, computeExclusiveJoinInvalid(b.modules));
     }
   }
   return invalid;
@@ -1063,11 +1168,23 @@ export function computeInvalid(
   mergeInvalid(invalid, computeMissingCombineBeforeInputInvalid(flat));
   mergeInvalid(invalid, computeForkInvalid(modules, models, opts?.typeAliases ?? []));
   mergeInvalid(invalid, computeIfElseInvalid(modules, models, opts?.typeAliases ?? []));
+  mergeInvalid(invalid, computeCaseInvalid(modules, models, opts?.typeAliases ?? []));
+  mergeInvalid(invalid, computeExclusiveJoinInvalid(modules));
+  if (!pipelineDagIsAcyclic(pipelineToDag(modules))) {
+    const first = modules[0];
+    if (first) {
+      pushInvalid(invalid, {
+        moduleId: first.id,
+        kind: InvalidKind.StructureField,
+        structureMessage: "pipeline DAG has a cycle — loops belong in custom-code or llm-batch, not graph edges",
+      });
+    }
+  }
   if (opts?.requireInputDescriptions) {
     mergeInvalid(invalid, computeInputDescriptionInvalid(flat));
   }
   for (const m of flat) {
-    if (isForkKind(m.kind) || isIfElseKind(m.kind)) continue;
+    if (isForkKind(m.kind) || isExclusiveKind(m.kind) || isControlJoinKind(m.kind)) continue;
     if (usesPassthroughStructure(m.kind)) {
       if (!m.inStructureId) pushInvalid(invalid, { moduleId: m.id, kind: InvalidKind.NoOutput });
       continue;
@@ -1286,7 +1403,7 @@ function computeUnusedOutputInvalid(
   for (let i = 0; i < modules.length; i++) {
     const m = modules[i]!;
     const emitted = stepEmits(m);
-    if (!emitted || m.kind === ModuleKind.Input || usesPassthroughStructure(m.kind)) continue;
+    if (!emitted || m.kind === ModuleKind.Input || usesPassthroughStructure(m.kind) || isExclusiveKind(m.kind)) continue;
     if (laneJoinConsumesLast && i === modules.length - 1) continue;
     // AI : a combine consumes the previous step's output as its newDocument regardless of inStructureId.
     if (modules[i + 1]?.kind === ModuleKind.Combine || modules[i + 1]?.kind === ModuleKind.Assemble || isNestedLaneKind(modules[i + 1]?.kind ?? "")) continue;

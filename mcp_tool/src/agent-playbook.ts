@@ -34,7 +34,7 @@ FORK DAG
 Pipelines are series-parallel. session_action id=pipeline.add-step kind=fork, then session_action with forkId + branchId into a lane. Nest another fork in a lane for a generic DAG (no cycles). Join: product | assemble | merge via session_action pipeline.configure-step forkJoin. get_project.steps[].branches shows the tree.
 
 IF / ELSE
-Exclusive router. session_action id=pipeline.add-step kind=if-else, then add steps into Then/Else with forkId + branchId. Else may be empty (passthrough). Set the condition with pipeline.configure-step ifConditionPath (bool field) or ifConditionKind=equals + ifConditionValue JSON. Out type is Then, or Then | Else when they differ.
+Exclusive router. session_action id=pipeline.add-step kind=if-else, then add steps into Then/Else with forkId + branchId. Else may be empty (passthrough). Set the condition with pipeline.configure-step ifConditionPath (bool spine field). Compute gt/equals/contains in custom-code or Python first. Out type is Then, or Then | Else when they differ. For/while loops are custom-code or llm-batch — never graph cycles.
 
 STEP KINDS
 input, llm, llm-batch, example-select, transform, chunk, merge, assemble, fork, if-else, combine, custom-code, assert, human-review, webhook, sql, n8n, connect, chatbot, output.

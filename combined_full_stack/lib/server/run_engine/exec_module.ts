@@ -24,7 +24,7 @@ import { execN8nStep } from "./steps/n8n";
 import { execConnectStep } from "./steps/connect";
 import { execChatbotStep } from "./steps/chatbot";
 import { execForkJoin } from "./steps/fork";
-import { execIfElseJoin } from "./steps/if_else";
+import { execIfElseJoin, execControlJoin } from "./steps/if_else";
 
 export async function execModule(m: PipelineModule, ctx: RunCtx, log: RunLogger): Promise<ExecResult> {
   log.debug(`execModule start`, { moduleId: m.id, kind: m.kind, label: m.label });
@@ -43,7 +43,10 @@ export async function execModule(m: PipelineModule, ctx: RunCtx, log: RunLogger)
     case ModuleKind.Fork:
       return execForkJoin(m, ctx, log);
     case ModuleKind.IfElse:
+    case ModuleKind.Case:
       return execIfElseJoin(m, ctx, log);
+    case ModuleKind.ControlJoin:
+      return execControlJoin(m, ctx, log);
     case ModuleKind.Combine:
       return execCombineStep(m, ctx, log);
     case ModuleKind.Transform:

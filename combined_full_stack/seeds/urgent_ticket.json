@@ -1,0 +1,130 @@
+{
+  "id": "p_urgent_ticket",
+  "name": "Urgent Ticket Route",
+  "kind": "ops",
+  "models": [
+    {
+      "id": "m_ticket",
+      "name": "Ticket",
+      "description": "Inbound ticket with a bool route flag.",
+      "fields": [
+        { "id": "f_urgent", "name": "urgent", "type": "bool", "optional": false, "description": "True pages on-call; false queues" },
+        { "id": "f_message", "name": "message", "type": "text", "optional": false, "description": "Ticket body" }
+      ]
+    },
+    {
+      "id": "m_pager",
+      "name": "PagerAlert",
+      "description": "On-call page when urgent is true.",
+      "fields": [
+        { "id": "f_channel", "name": "channel", "type": "text", "optional": false, "description": "Pager channel" },
+        { "id": "f_pmsg", "name": "message", "type": "text", "optional": false, "description": "Alert text" }
+      ]
+    },
+    {
+      "id": "m_queue",
+      "name": "QueueTicket",
+      "description": "Support queue row when urgent is false.",
+      "fields": [
+        { "id": "f_queue", "name": "queue", "type": "text", "optional": false, "description": "Queue name" },
+        { "id": "f_qmsg", "name": "message", "type": "text", "optional": false, "description": "Ticket body" }
+      ]
+    }
+  ],
+  "modules": [
+    {
+      "id": "mod_in",
+      "kind": "input",
+      "label": "Ticket",
+      "note": "JSON Ticket with urgent bool",
+      "inputType": "json",
+      "outStructureId": "m_ticket",
+      "inputDescription": "JSON Ticket — urgent bool plus message"
+    },
+    {
+      "id": "mod_route",
+      "kind": "if-else",
+      "label": "Route",
+      "note": "Branch on urgent — Then pages, Else queues",
+      "inputDescription": "Ticket with urgent bool",
+      "ifCondition": { "kind": "path", "path": "urgent" },
+      "forkBranches": [
+        {
+          "id": "br_then",
+          "label": "Then",
+          "modules": [
+            {
+              "id": "mod_pager",
+              "kind": "custom-code",
+              "label": "Page Oncall",
+              "note": "urgent true → PagerAlert",
+              "inputDescription": "Ticket marked urgent",
+              "inStructureId": "m_ticket",
+              "outStructureId": "m_pager",
+              "fallbackList": [
+                { "typescript": "(t)=>({channel:\"#oncall\",message:t.message})" }
+              ]
+            }
+          ]
+        },
+        {
+          "id": "br_else",
+          "label": "Else",
+          "modules": [
+            {
+              "id": "mod_queue",
+              "kind": "custom-code",
+              "label": "Enqueue",
+              "note": "urgent false → QueueTicket",
+              "inputDescription": "Ticket not marked urgent",
+              "inStructureId": "m_ticket",
+              "outStructureId": "m_queue",
+              "fallbackList": [
+                { "typescript": "(t)=>({queue:\"support\",message:t.message})" }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "strategies": [
+    {
+      "id": "s_cheap",
+      "kind": "cheap-agent",
+      "name": "Agent (Cheap Model)",
+      "enabled": true,
+      "model": "deepseek-v4",
+      "accuracy": 80,
+      "latencyMs": 15000,
+      "costCents": 10,
+      "passRate": 80
+    }
+  ],
+  "docs": [
+    {
+      "name": "ticket_urgent_true.json",
+      "type": "json",
+      "label": "inference",
+      "file": "urgent_ticket/ticket_urgent_true.json"
+    },
+    {
+      "name": "ticket_urgent_false.json",
+      "type": "json",
+      "label": "inference",
+      "file": "urgent_ticket/ticket_urgent_false.json"
+    }
+  ],
+  "inferencePresets": [
+    {
+      "name": "Urgent page",
+      "description": "urgent true — Then/Page Oncall. Else/Enqueue is skipped. No Join: spine stops.",
+      "inputs": { "Ticket": "ticket_urgent_true.json" }
+    },
+    {
+      "name": "Queue ticket",
+      "description": "urgent false — Else/Enqueue. Then/Page Oncall is skipped.",
+      "inputs": { "Ticket": "ticket_urgent_false.json" }
+    }
+  ]
+}
