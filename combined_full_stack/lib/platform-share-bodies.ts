@@ -2,6 +2,7 @@
 import { normalizeHostedSiteOptions } from "@/lib/hosted-site"
 import { DEFAULT_HOSTED_SITE_OPTIONS, type HostedSiteOptions } from "@/lib/shared-link-types"
 import { SharedLinkFundingMode, type ProjectId } from "@/lib/types"
+import { websiteNameForCreate } from "@/lib/website-pipelines"
 
 export type platform_share_site_body = {
   projectId: ProjectId
@@ -32,7 +33,7 @@ export function platformShareBodies(input: {
   name: string
   siteOptions?: HostedSiteOptions
 }): platform_share_bodies {
-  const companyName = input.name.trim().slice(0, COMPANY_NAME_MAX)
+  const companyName = websiteNameForCreate(input.name).slice(0, COMPANY_NAME_MAX)
   const base = normalizeHostedSiteOptions(
     input.siteOptions ?? {
       ...DEFAULT_HOSTED_SITE_OPTIONS,

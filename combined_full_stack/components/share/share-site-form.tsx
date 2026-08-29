@@ -18,6 +18,7 @@ import { viewerFundsSharedRun } from "@/lib/shared-link-funding"
 import type { HostedSiteOptions, SharedLinkRecord } from "@/lib/shared-link-types"
 import { DEFAULT_HOSTED_SITE_OPTIONS } from "@/lib/shared-link-types"
 import { DEFAULT_HOSTED_SITE_HTML, isSiteLinkId, normalizeHostedSiteOptions } from "@/lib/hosted-site"
+import { websiteNameForCreate } from "@/lib/website-pipelines"
 import { useOptionalAppShell } from "@/lib/app-shell"
 import { useHideDeveloperTools } from "@/lib/developer-tools-settings"
 import type { DocId, DocRef, ModuleId, Project } from "@/lib/types"
@@ -77,7 +78,7 @@ export function ShareSiteForm({
     normalizeHostedSiteOptions({
       brand: {
         ...DEFAULT_HOSTED_SITE_OPTIONS.brand,
-        companyName: project.name,
+        companyName: websiteNameForCreate(project.name),
         tagline: "Run this pipeline",
       },
       customHtml: DEFAULT_HOSTED_SITE_HTML,
@@ -212,9 +213,9 @@ export function ShareSiteForm({
     <div className={cn(editingWebsite ? "flex h-full min-h-0 flex-col" : "space-y-4")}>
       {editingWebsite ? null : (
       <div>
-        <h3 className="text-sm font-semibold">Hosted company page</h3>
+        <h3 className="text-sm font-semibold">Website</h3>
         <p className="mt-0.5 text-xs text-muted-foreground">
-          Vibe-code a website and attach one or more pipelines. We host it — no site of your own.
+          Create a website and attach pipelines there. We host it — no site of your own.
         </p>
       </div>
       )}
@@ -224,8 +225,8 @@ export function ShareSiteForm({
         value={siteOptions}
         onChange={commitSiteOptions}
         viewerMarkdown={viewerMarkdown}
-        forcedTab={editingWebsite || hideDeveloperTools ? "vibe" : undefined}
-        hideSurfaceTabs={!!editingWebsite || hideDeveloperTools}
+        forcedTab={hideDeveloperTools ? "vibe" : undefined}
+        hideSurfaceTabs={hideDeveloperTools}
         fillHeight={!!editingWebsite}
       />
 
@@ -320,7 +321,7 @@ export function ShareSiteForm({
       ) : (
         <Button className="w-full gap-2" onClick={() => void createSite()} disabled={busy} spineId="share.create-site">
           {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <LayoutTemplate className="h-4 w-4" />}
-          Launch hosted page
+          Create website
         </Button>
       )}
     </div>

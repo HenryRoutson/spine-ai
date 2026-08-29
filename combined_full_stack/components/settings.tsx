@@ -623,7 +623,7 @@ export function Settings() {
             <div className="border-b border-border px-4 py-3">
               <h3 className="text-sm font-semibold">Simplified</h3>
               <p className="mt-0.5 text-xs text-muted-foreground">
-                Hide Testing and other developer pages. Remaining pages use a simpler layout, with the agent on the
+                Hide Testing, Structures, and other developer pages. Remaining pages use a simpler layout, with the agent on the
                 left.
               </p>
             </div>
@@ -636,8 +636,8 @@ export function Settings() {
               <span className="min-w-0 flex-1">
                 <span className="block text-sm font-medium">Simplified</span>
                 <span className="mt-0.5 block text-xs text-muted-foreground">
-                  Same control as the header toggle. On: Structures, Pipeline, Inference, Schedule, and Share — with
-                  the agent open on the left. Off: every workspace page, including Testing.
+                  Same control as the header toggle. On: Pipeline, Inference, Schedule, and Share — with
+                  the agent open on the left. Off: every workspace page, including Structures and Testing.
                 </span>
               </span>
             </label>

@@ -1,4 +1,4 @@
-// AI : Simplified chrome hides Testing and other developer pages; remaining pages use simple layouts.
+// AI : Simplified chrome hides Structures, Testing, and other developer pages; remaining pages use simple layouts.
 // AI : TODO (opt-browser-tui-pref) — optional sibling pref: surface "gui" | "tui" (default gui), same
 // AI :   booleanBrowserPref / useBrowserPrefEvent pattern. Not developer-tools; a chrome mode switch.
 

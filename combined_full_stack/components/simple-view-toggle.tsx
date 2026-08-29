@@ -21,10 +21,12 @@ export function SimpleViewToggle({
   checked,
   onCheckedChange,
   className,
+  spineId = "logging.simple-view",
 }: {
   checked: boolean
   onCheckedChange: (value: boolean) => void
   className?: string
+  spineId?: string
 }) {
   return (
     <label
@@ -42,7 +44,7 @@ export function SimpleViewToggle({
         size="sm"
         checked={checked}
         onCheckedChange={(next) => onCheckedChange(!!next)}
-        data-spine-id="logging.simple-view"
+        data-spine-id={spineId}
       />
     </label>
   )

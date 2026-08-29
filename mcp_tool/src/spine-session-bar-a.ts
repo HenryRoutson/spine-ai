@@ -41,6 +41,7 @@ import { shareDefaultDocsByModule } from "@/lib/share-default-docs"
 import { describeCronExpr, isValidCronExpr, isValidIanaTimeZone } from "@/lib/cron-expr"
 import { DEFAULT_EMBED_OPTIONS, DEFAULT_HOSTED_SITE_OPTIONS } from "@/lib/shared-link-types"
 import { DEFAULT_HOSTED_SITE_HTML, normalizeHostedSiteOptions } from "@/lib/hosted-site"
+import { websiteNameForCreate } from "@/lib/website-pipelines"
 // AI : import enums from server/types — tsx ESM drops named values through lib/types `export *`.
 import { DocLabel, InputType, RunStatus, type PipelineRun, type Project, type RunId } from "@/lib/server/types"
 
@@ -881,11 +882,12 @@ export async function createShareFromSession(kind: "link" | "embed" | "site", ar
   }
   const project = session.project
   if (!project) throw new Error("no active project")
-  const companyName =
+  const companyName = websiteNameForCreate(
     args.companyName?.trim() ||
     args.name?.trim() ||
     (typeof extra.companyName === "string" ? extra.companyName.trim() : "") ||
-    project.name
+    project.name,
+  )
   const extraSite =
     kind === "site" && extra.siteOptions && typeof extra.siteOptions === "object" && !Array.isArray(extra.siteOptions)
       ? (extra.siteOptions as Record<string, unknown>)

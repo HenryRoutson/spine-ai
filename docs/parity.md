@@ -637,8 +637,8 @@ Grep an id (example): `rg 'project.add' combined_full_stack docs mcp_tool`.
 | `share.tab.link` | Link | session share lists ids; mint is HTTP [P] | POST /api/shared-links | session_action id=share.tab.link lists; share.create-link mints | session.listShareLinks / createShareLink |
 | `share.tab.api` | API | session share lists hostedApiIds [P] | POST /api/hosted-apis | session_action id=share.tab.api lists; share.deploy-api mints | session.listHostedApis / createHostedApi |
 | `share.tab.embed` | Embed | no TUI embed mint [N] | POST /api/shared-links (embed/origin allowlist) | session_action id=share.create-embed (allowedOrigins) | session.createShareLink({ kind: 'embed' }) |
-| `share.tab.site` | Page | no TUI site mint [N] | POST /api/shared-links (site HTML wrapper) | session_action id=share.create-site (companyName) | session.createShareLink({ kind: 'site' }) |
-| `share.site-vibe` | Page vibe | no TUI [N] | POST /api/hosted-site-assistant | isolated UI agent — not ask_agent [N] | proposeHostedSitePage |
+| `share.tab.site` | Website | no TUI site mint [N] | POST /api/shared-links (site HTML wrapper) | session_action id=share.create-site (companyName) | session.createShareLink({ kind: 'site' }) |
+| `share.site-vibe` | Website vibe | no TUI [N] | POST /api/hosted-site-assistant | isolated UI agent — not ask_agent [N] | proposeHostedSitePage |
 | `share.site-signin` | Sign-in page | no TUI [N] | siteOptions.auth on POST/PATCH /api/shared-links | pass siteOptions.auth on share.create-site [N] | normalizeHostedSiteOptions |
 | `share.site-preview-viewport` | Desktop / mobile preview | no TUI [N] | preview only [N] | preview only [N] | preview only [N] |
 | `share.site-signin-preview` | App / sign-in preview | no TUI [N] | preview only [N] | preview only [N] | preview only [N] |
@@ -649,7 +649,7 @@ Grep an id (example): `rg 'project.add' combined_full_stack docs mcp_tool`.
 | `share.create-link` | Create link | session share lists; mint HTTP/GUI [P] | POST /api/shared-links | session_action id=share.create-link | session.createShareLink |
 | `share.deploy-api` | Deploy API | session share lists hosted APIs [P] | POST /api/hosted-apis | session_action id=share.deploy-api | session.createHostedApi |
 | `share.create-embed` | Create website embed | no TUI [N] | POST /api/shared-links (emb_ rows) | session_action id=share.create-embed | session.createShareLink({ kind: 'embed' }) |
-| `share.create-site` | Launch hosted page | no TUI [N] | POST /api/shared-links (site_ rows) | session_action id=share.create-site | session.createShareLink({ kind: 'site' }) |
+| `share.create-site` | Create a website | no TUI [N] | POST /api/shared-links (site_ rows) | session_action id=share.create-site | session.createShareLink({ kind: 'site' }) |
 | `share.marketplace-publish` | Share to marketplace | no TUI mint [N] | POST /api/marketplace | session_action id=share.marketplace-publish | session.publishMarketplaceListing |
 | `share.marketplace-clone` | Clone listing | session import-seed for bundled examples | POST /api/marketplace/:id/clone | import_seed (seeds) / clone_project | session.cloneFromTemplate |
 | `share.run-shared` | Run shared link | consumer Run is GUI/HTTP [N] | POST /api/shared-links/:id/run | not in MCP [N] | consumer GUI [host] |

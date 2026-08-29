@@ -39,6 +39,21 @@ describe("website pipeline bindings", () => {
     expect(withRun.customHtml).toBe(DEFAULT_HOSTED_SITE_HTML)
   })
 
+  it("does not name a new website after Untitled Pipeline", () => {
+    const fromBlank = hostedSiteOptionsForCreate({
+      name: "Untitled Pipeline",
+      pipelineIds: [P1],
+      projects: [{ id: P1, name: "Untitled Pipeline" }],
+    })
+    expect(fromBlank.brand.companyName).toBe("Untitled Website")
+    expect(hostedSiteOptionsForCreate({ name: "  ", pipelineIds: [], projects: [] }).brand.companyName).toBe(
+      "Untitled Website",
+    )
+    expect(hostedSiteOptionsForCreate({ name: "Acme Desk", pipelineIds: [], projects: [] }).brand.companyName).toBe(
+      "Acme Desk",
+    )
+  })
+
   it("keeps extra pipelines and unique aliases", () => {
     const bindings = normalizeWebsitePipelineBindings([
       { alias: "run", projectId: P1 },
