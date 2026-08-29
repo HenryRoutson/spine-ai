@@ -10,6 +10,7 @@ import {
   listedWebsitePipelineBindings,
   nextPrimaryProjectIdAfterUnbind,
   normalizeWebsitePipelineBindings,
+  overlayOptimisticSites,
   remapWebsiteProjectId,
   resolveWebsitePipelineBindings,
   stripWebsitePipelineFromCode,
@@ -286,5 +287,13 @@ export default function App() { return <RunPipeline alias="invoice" /> }
     const next = insertWebsitePipelineInCode(options, "invoice")
     expect(next.customHtml).toContain("{{run:invoice}}")
     expect(next.reactFiles[0]?.contents).toContain('alias: "invoice"')
+  })
+
+  it("keeps minted sites that a stale shared-link refetch has not seen yet", () => {
+    const minted = { id: "site_new", revoked: false } as SharedLinkRecord
+    const older = { id: "site_old", revoked: false } as SharedLinkRecord
+    expect(overlayOptimisticSites([older], [minted]).map((s) => s.id)).toEqual(["site_new", "site_old"])
+    expect(overlayOptimisticSites([minted, older], [minted]).map((s) => s.id)).toEqual(["site_new", "site_old"])
+    expect(overlayOptimisticSites([older], [{ ...minted, revoked: true }])).toEqual([older])
   })
 })

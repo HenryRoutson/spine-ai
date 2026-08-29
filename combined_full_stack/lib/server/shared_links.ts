@@ -433,26 +433,29 @@ export async function publishSharedLink(input: PublishSharedLinkInput): Promise<
   const source = input.project ?? pageOnlyProjectStub(siteOptions.brand.companyName || UNNAMED_WEBSITE_NAME);
   const snapshot = projectWithAuthoredModules(migrateProjectModules(structuredClone(source)));
   const defaultDocs: SharedLinkDefaultDoc[] = [];
-  mkdirSync(defaultDocsDir(id), { recursive: true });
+  // AI : Vercel /tmp is optional — jsonb default_docs is the source of truth. A local write must not fail publish.
+  const persistLocalFiles = !isServerless();
+  if (persistLocalFiles) mkdirSync(defaultDocsDir(id), { recursive: true });
 
   for (const [moduleId, docIds] of Object.entries(input.defaultDocsByModule)) {
     for (const docId of docIds ?? []) {
       const doc = input.store.docs().find((d) => d.id === docId);
       const content = input.store.docContent(docId);
       if (!doc || content === undefined) continue;
-      const storageKey = defaultDocStorageKey(moduleId, doc.name);
-      const dest = join(defaultDocsDir(id), storageKey);
-      writeFileSync(dest, content, "utf8");
-      const metaPath = `${dest}.meta.json`;
-      writeFileSync(
-        metaPath,
-        JSON.stringify({ moduleId, filename: doc.name, type: doc.type, label: doc.label }),
-      );
-      const bytesPath = join(dataDir(), "docs", `${docId}`);
-      for (const ext of ["pdf", "png", "jpg", "jpeg"]) {
-        const src = `${bytesPath}.${ext}`;
-        if (existsSync(src)) {
-          writeFileSync(join(defaultDocsDir(id), `${storageKey}.${ext}`), readFileSync(src));
+      if (persistLocalFiles) {
+        const storageKey = defaultDocStorageKey(moduleId, doc.name);
+        const dest = join(defaultDocsDir(id), storageKey);
+        writeFileSync(dest, content, "utf8");
+        writeFileSync(
+          `${dest}.meta.json`,
+          JSON.stringify({ moduleId, filename: doc.name, type: doc.type, label: doc.label }),
+        );
+        const bytesPath = join(dataDir(), "docs", `${docId}`);
+        for (const ext of ["pdf", "png", "jpg", "jpeg"]) {
+          const src = `${bytesPath}.${ext}`;
+          if (existsSync(src)) {
+            writeFileSync(join(defaultDocsDir(id), `${storageKey}.${ext}`), readFileSync(src));
+          }
         }
       }
       defaultDocs.push({

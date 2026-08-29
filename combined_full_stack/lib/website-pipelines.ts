@@ -261,6 +261,16 @@ export function stripWebsitePipelineFromCode(
   }
 }
 
+// AI : GET /api/shared-links can lag POST clone on prod — keep minted site_ rows until the refetch sees them.
+export function overlayOptimisticSites(
+  remote: SharedLinkRecord[],
+  created: readonly SharedLinkRecord[],
+): SharedLinkRecord[] {
+  const ids = new Set(remote.map((s) => s.id))
+  const pending = created.filter((s) => !ids.has(s.id) && !s.revoked)
+  return pending.length ? [...pending, ...remote] : remote
+}
+
 export function insertWebsitePipelineInCode(
   options: HostedSiteOptions,
   alias: string,
