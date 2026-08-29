@@ -658,7 +658,7 @@ export const PARITY_ROWS: ParityRow[] = [
   row(
     "share.tab.link",
     "share",
-    { label: "Link", file: "components/share/share-page.tsx" },
+    { label: "Link", file: "components/share/share-sheet.tsx" },
     p("session share lists ids; mint is HTTP"),
     y("POST /api/shared-links", "/api/shared-links"),
     y("session_action id=share.tab.link lists; share.create-link mints", "session_action"),
@@ -667,7 +667,7 @@ export const PARITY_ROWS: ParityRow[] = [
   row(
     "share.tab.api",
     "share",
-    { label: "API", file: "components/share/share-page.tsx" },
+    { label: "API", file: "components/share/share-sheet.tsx" },
     p("session share lists hostedApiIds"),
     y("POST /api/hosted-apis", "/api/hosted-apis"),
     y("session_action id=share.tab.api lists; share.deploy-api mints", "session_action"),
@@ -676,7 +676,7 @@ export const PARITY_ROWS: ParityRow[] = [
   row(
     "share.tab.embed",
     "share",
-    { label: "Embed", file: "components/share/share-page.tsx" },
+    { label: "Embed", file: "components/share/share-sheet.tsx" },
     n("no TUI embed mint"),
     y("POST /api/shared-links (embed/origin allowlist)", "/api/shared-links"),
     y("session_action id=share.create-embed (allowedOrigins)", "session_action"),
@@ -685,7 +685,7 @@ export const PARITY_ROWS: ParityRow[] = [
   row(
     "share.tab.site",
     "share",
-    { label: "Website", file: "components/share/share-page.tsx" },
+    { label: "Website", file: "components/share/share-sheet.tsx" },
     n("no TUI site mint"),
     y("POST /api/shared-links (site HTML wrapper)", "/api/shared-links"),
     y("session_action id=share.create-site (companyName)", "session_action"),
@@ -1295,6 +1295,7 @@ export const PARITY_LABELED_FILES = [
   "components/share/host-api-form.tsx",
   "components/share/marketplace-publish-form.tsx",
   "components/share/share-page.tsx",
+  "components/share/share-sheet.tsx",
   "components/earnings.tsx",
   "components/account-billing.tsx",
   "components/settings.tsx",

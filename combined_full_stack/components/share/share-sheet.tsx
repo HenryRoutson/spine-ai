@@ -16,6 +16,14 @@ import type { DocId, DocRef, ModuleId, Project } from "@/lib/types"
 
 // AI : generic share — same cards for pipelines and websites; API / website-attach are pipeline-only.
 
+const SHARE_TAB_ACTION = {
+  [PublishTab.Link]: "share.tab.link",
+  [PublishTab.Api]: "share.tab.api",
+  [PublishTab.Embed]: "share.tab.embed",
+  [PublishTab.Site]: "share.tab.site",
+  [PublishTab.Marketplace]: "share.tab.marketplace",
+} as const
+
 export function ShareSheet({
   target,
   docs,
@@ -64,7 +72,7 @@ export function ShareSheet({
                   : "text-muted-foreground hover:text-foreground",
               )}
               onClick={() => setTab(item.id)}
-              {...spineActionProps(`share.tab.${item.id}`)}
+              {...spineActionProps(SHARE_TAB_ACTION[item.id])}
             >
               <Icon className="h-3.5 w-3.5" />
               {item.label}
