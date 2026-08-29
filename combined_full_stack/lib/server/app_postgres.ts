@@ -345,6 +345,16 @@ function isDdl(sql: string): boolean {
 function cellPlain(value: unknown): unknown {
   if (typeof value === "bigint") return Number(value)
   if (value instanceof Date) return value.toISOString()
+  if (typeof value === "string") {
+    const trimmed = value.trim()
+    if (trimmed.startsWith("{") || trimmed.startsWith("[")) {
+      try {
+        return JSON.parse(trimmed)
+      } catch {
+        return value
+      }
+    }
+  }
   return value
 }
 

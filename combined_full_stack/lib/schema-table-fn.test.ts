@@ -48,13 +48,16 @@ describe("schema table helpers", () => {
     expect(modelsPy).toContain("def _sql_lit(value):")
   })
 
-  it("derives INSERT from the same columns, flattening quote objects to text", () => {
+  it("derives INSERT keeping quote objects as JSON so highlights survive persist", () => {
     const sql = defaultInsertSqlForModel(
       receiptRow,
       { vendor: { text: "Acme", quote: { doc_id: "sha_x", start: 0, end: 4 } }, amount: 12.5 },
       "row_fixed",
     )
-    expect(sql).toBe("INSERT INTO receipt_row (id, vendor, amount) VALUES ('row_fixed', 'Acme', 12.5)")
+    expect(sql).toContain("row_fixed")
+    expect(sql).toContain("Acme")
+    expect(sql).toContain("sha_x")
+    expect(sql).not.toBe("INSERT INTO receipt_row (id, vendor, amount) VALUES ('row_fixed', 'Acme', 12.5)")
     expect(sqlLit("O'Brien")).toBe("'O''Brien'")
     expect(derivedInsertSqls(receiptRow, [{ vendor: "Acme", amount: 1, id: "a" }])).toEqual([
       "INSERT INTO receipt_row (id, vendor, amount) VALUES ('a', 'Acme', 1)",

@@ -91,18 +91,9 @@ function isSqlRow(value: unknown): value is Record<string, unknown> {
   return !!value && typeof value === "object" && !Array.isArray(value)
 }
 
-// AI : quote fields are { text, quote } on the spine — SQL stores the copied text.
+// AI : quote fields are { text, quote } on the spine — SQL stores that JSON, not excerpt.text alone.
 export function sqlCellText(value: unknown): string {
   if (typeof value === "string") return value
-  if (
-    value &&
-    typeof value === "object" &&
-    !Array.isArray(value) &&
-    "text" in value &&
-    typeof (value as { text: unknown }).text === "string"
-  ) {
-    return (value as { text: string }).text
-  }
   try {
     return JSON.stringify(value)
   } catch {

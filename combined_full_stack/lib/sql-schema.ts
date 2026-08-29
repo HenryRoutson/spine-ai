@@ -322,7 +322,8 @@ function sqlBaseType(expr: TypeExpr): string {
   switch (expr.kind) {
     case TypeExprKind.Prim:
       if (expr.name === PrimName.Int || expr.name === PrimName.Bool) return "INTEGER"
-      if (expr.name === PrimName.Float) return "REAL"
+      if (expr.name === PrimName.Float) return "DOUBLE PRECISION"
+      if (expr.name === PrimName.Json) return "JSONB"
       return "TEXT"
     case TypeExprKind.Document:
       return "TEXT"
@@ -374,7 +375,7 @@ function emitColumnLine(
       return { line: "", childModelId: expr.item.modelId }
     }
     const nullSql = optional ? "" : " NOT NULL"
-    return { line: `  ${sqlIdent(f.name)} TEXT${nullSql} -- nested list, no parent pk` }
+        return { line: `  ${sqlIdent(f.name)} JSONB${nullSql} -- nested list, no parent pk` }
   }
 
   let typeSql = "TEXT"
@@ -390,14 +391,15 @@ function emitColumnLine(
       break
     case TypeExprKind.Quote:
     case TypeExprKind.TextQuote:
-      typeSql = "TEXT"
+      typeSql = "JSONB"
+      comment = "tuple[text,quote]"
       break
     case TypeExprKind.Ref:
-      typeSql = "TEXT"
+      typeSql = "JSONB"
       comment = "JSON"
       break
     case TypeExprKind.List:
-      typeSql = "TEXT"
+      typeSql = "JSONB"
       comment = "JSON array"
       break
     default:

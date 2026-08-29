@@ -75,6 +75,27 @@ function quoteExtractRaw(): AssistantResponseRaw {
   }
 }
 
+function persistQuoteRaw(): AssistantResponseRaw {
+  const raw = quoteExtractRaw()
+  const modules = [...(raw.modules ?? [])]
+  const out = modules.findIndex((m) => m.kind === "output")
+  modules.splice(out < 0 ? modules.length : out, 0, {
+    kind: "sql",
+    label: "Persist",
+    note: "schema-derived insert of quoted rows",
+    structureIn: "QuoteRow",
+    structureOut: "QuoteRow",
+    inputDescription: "rows",
+  })
+  return {
+    ...raw,
+    message: "I'll extract quoted spans and persist them.",
+    modules,
+    documentationUpdate: "# Quote persist\n",
+    projectNameUpdate: "Quote Persist",
+  }
+}
+
 function persistBatchPlaceholderRaw(): AssistantResponseRaw {
   const raw = persistBatchRaw()
   return {
@@ -348,5 +369,27 @@ describe("schema-driven quoting and SQL", () => {
     const rows = await listAppSqlRows(appSqlScopeForProject(project.id), "persist_row")
     expect(rows).toHaveLength(1)
     expect(String(rows[0]!.vendor)).toContain("Acme Corp")
+  })
+
+  it("persists tuple[text,quote] as JSON so Link Quotes still round-trip after SQL", async () => {
+    const project = projectFromRaw(persistQuoteRaw())
+    const sqlMod = flattenPipelineModules(project.modules).find((m) => m.kind === "sql")
+    expect(sqlMod?.sql?.trim() ?? "").toBe("")
+
+    const run = await runWithSource(project, SOURCE)
+    expect(run.status).toBe(RunStatus.Ok)
+    const sqlStep = run.steps.find((s) => s.kind === "sql")
+    expect(sqlStep?.status).toBe("ok")
+    const parsed = JSON.parse(sqlStep?.outputJson ?? "null") as Array<{
+      excerpt: { text: string; quote: { doc_id: string; start: number; end: number } }
+    }>
+    expect(parsed[0]!.excerpt.text).toContain("Acme Corp")
+    expect(parsed[0]!.excerpt.quote.doc_id).toMatch(/^sha_/)
+
+    const rows = await listAppSqlRows(appSqlScopeForProject(project.id), "quote_row")
+    expect(rows).toHaveLength(1)
+    const excerpt = rows[0]!.excerpt as { text: string; quote: { doc_id: string } }
+    expect(excerpt.text).toContain("Acme Corp")
+    expect(excerpt.quote.doc_id).toMatch(/^sha_/)
   })
 })
