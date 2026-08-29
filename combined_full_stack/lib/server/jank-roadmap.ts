@@ -8,9 +8,8 @@ export {}
 // ---------------------------------------------------------------------------
 // Security / deploy leftovers
 // ---------------------------------------------------------------------------
-// AI : TODO (jank-landing-secret) — landing_build_access.ts: require LANDING_BUILD_ACCESS_SECRET
-// AI :   or LANDING_DEMO_PROXY_SECRET on hosted deploys; never fall through to a hardcoded
-// AI :   local-dev string or SUPABASE_SERVICE_ROLE_KEY outside NODE_ENV=development.
+// AI : DONE (jank-landing-secret) — hosted deploys require LANDING_BUILD_ACCESS_SECRET or
+// AI :   LANDING_DEMO_PROXY_SECRET; never sign with SUPABASE_SERVICE_ROLE_KEY.
 // AI : TODO (jank-redirect-decode) — sanitize_redirect.ts: decode once; reject %2e%2e, control
 // AI :   chars, and protocol-relative / traversal after decode.
 // AI : TODO (jank-cors-app-origin) — landing_demo_cors.ts lists spine-ai.dev + auto-pipeline.dev
