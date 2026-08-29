@@ -14,6 +14,12 @@ import { createAdminClient } from "./supabase_admin";
 import { hashContent, type Store } from "./store";
 import { migrateProjectModules, projectWithAuthoredModules } from "./validity";
 import { isMissingSchemaError } from "./supabase_store";
+import {
+  persistOmittingUnknownColumns,
+  siteOptionsFromPersistence,
+  stripHostedSiteFromSnapshot,
+  withHostedSiteOnSnapshot,
+} from "./shared-link-persist";
 import { LOCAL_DEV_USER_ID, isLocalDevMode, type user_id_string } from "./require_auth";
 import {
   assertValidSharedLinkPricing,
@@ -250,7 +256,7 @@ function loadLocalLink(id: SharedLinkId): StoredSharedLink | null {
     enabled: row.enabled !== false,
     allowedOrigins: originsFromRow(row.allowedOrigins),
     embedOptions: normalizeEmbedOptions(row.embedOptions),
-    siteOptions: normalizeHostedSiteOptions(row.siteOptions),
+    siteOptions: siteOptionsFromPersistence(row.siteOptions, row.snapshot),
     viewerMarkdown: normalizeViewerMarkdown(row.viewerMarkdown),
     projectId: nullableProjectId(row.projectId),
   };
@@ -259,6 +265,72 @@ function loadLocalLink(id: SharedLinkId): StoredSharedLink | null {
 function saveLocalLink(row: StoredSharedLink): void {
   mkdirSync(linksDir(), { recursive: true });
   writeFileSync(linkFile(row.id), JSON.stringify(row, null, 2));
+}
+
+function persistSnapshot(row: Pick<StoredSharedLink, "id" | "snapshot" | "siteOptions">): Project {
+  return isSiteLinkId(row.id) ? withHostedSiteOnSnapshot(row.snapshot, row.siteOptions) : row.snapshot;
+}
+
+function storedFromDbRow(data: Record<string, unknown>): StoredSharedLink {
+  const snapshotRaw = data.snapshot;
+  return {
+    id: data.id as SharedLinkId,
+    ownerId: data.owner_id as user_id_string,
+    projectId: nullableProjectId(data.project_id),
+    name: (snapshotRaw as Project).name,
+    description: undefined,
+    viewerMarkdown: normalizeViewerMarkdown(data.viewer_markdown),
+    snapshot: migrateProjectModules(stripHostedSiteFromSnapshot(snapshotRaw)),
+    defaultModel: (data.default_model as ModelId | null) ?? undefined,
+    fundingMode: data.funding_mode as SharedLinkFundingMode,
+    viewerNameRequired: Boolean(data.viewer_name_required),
+    defaultDocs: (data.default_docs ?? []) as SharedLinkDefaultDoc[],
+    spendLimitCents:
+      data.spend_limit_cents != null ? Number(data.spend_limit_cents) : undefined,
+    totalSpendCents: Number(data.total_spend_cents ?? 0),
+    billingMultiple: normalizeBillingMultiple(
+      data.billing_multiple != null
+        ? Number(data.billing_multiple)
+        : billingMultipleFromLegacyMarkupBps(Number(data.markup_bps ?? 0)),
+    ),
+    flatFeeCents: normalizeFlatFeeCents(Number(data.markup_fixed_cents ?? 0)),
+    runCount: Number(data.run_count ?? 0),
+    createdAt: Number(data.created_at),
+    enabled: data.enabled !== false,
+    revoked: Boolean(data.revoked),
+    allowedOrigins: originsFromRow(data.allowed_origins),
+    embedOptions: normalizeEmbedOptions(data.embed_options),
+    siteOptions: siteOptionsFromPersistence(data.site_options, snapshotRaw),
+  };
+}
+
+function sharedLinkInsertRow(
+  row: StoredSharedLink,
+  projectId: ProjectId | null | "",
+): Record<string, unknown> {
+  return {
+    id: row.id,
+    owner_id: row.ownerId,
+    project_id: projectId,
+    snapshot: persistSnapshot(row),
+    default_docs: row.defaultDocs,
+    default_model: row.defaultModel ?? null,
+    funding_mode: row.fundingMode,
+    viewer_name_required: row.viewerNameRequired,
+    spend_limit_cents: row.spendLimitCents ?? null,
+    total_spend_cents: row.totalSpendCents,
+    billing_multiple: row.billingMultiple,
+    markup_fixed_cents: row.flatFeeCents,
+    markup_bps: 0,
+    enabled: true,
+    revoked: false,
+    run_count: 0,
+    created_at: row.createdAt,
+    allowed_origins: row.allowedOrigins,
+    embed_options: row.embedOptions,
+    site_options: row.siteOptions,
+    viewer_markdown: row.viewerMarkdown ?? "",
+  };
 }
 
 // AI : public link fetch by id — service role only; anon RLS no longer grants blanket SELECT.
@@ -275,37 +347,7 @@ async function loadSupabaseLink(id: SharedLinkId): Promise<StoredSharedLink | nu
     .eq("revoked", false)
     .maybeSingle();
   if (error || !data) return null;
-  return {
-    id: data.id as SharedLinkId,
-    ownerId: data.owner_id as user_id_string,
-    projectId: nullableProjectId(data.project_id),
-    name: (data.snapshot as Project).name,
-    description: undefined,
-    viewerMarkdown: normalizeViewerMarkdown(data.viewer_markdown),
-    snapshot: migrateProjectModules(data.snapshot as Project),
-    defaultModel: (data.default_model as ModelId | null) ?? undefined,
-    fundingMode: data.funding_mode as SharedLinkFundingMode,
-    viewerNameRequired: data.viewer_name_required,
-    defaultDocs: (data.default_docs ?? []) as SharedLinkDefaultDoc[],
-    spendLimitCents:
-      data.spend_limit_cents != null ? Number(data.spend_limit_cents) : undefined,
-    totalSpendCents: Number(data.total_spend_cents ?? 0),
-    billingMultiple: normalizeBillingMultiple(
-      data.billing_multiple != null
-        ? Number(data.billing_multiple)
-        : billingMultipleFromLegacyMarkupBps(Number(data.markup_bps ?? 0)),
-    ),
-    flatFeeCents: normalizeFlatFeeCents(
-      Number(data.markup_fixed_cents ?? 0),
-    ),
-    runCount: data.run_count ?? 0,
-    createdAt: data.created_at,
-    enabled: data.enabled !== false,
-    revoked: data.revoked,
-    allowedOrigins: originsFromRow(data.allowed_origins),
-    embedOptions: normalizeEmbedOptions(data.embed_options),
-    siteOptions: normalizeHostedSiteOptions(data.site_options),
-  };
+  return storedFromDbRow(data as Record<string, unknown>);
 }
 
 export async function getSharedLink(id: SharedLinkId): Promise<StoredSharedLink | null> {
@@ -333,37 +375,7 @@ export async function listSharedLinksForOwner(ownerId: user_id_string): Promise<
     if (isMissingSchemaError(error)) return listLocalLinksForOwner(ownerId);
     throw error;
   }
-  return (data ?? []).map((row) =>
-    toPublicRecord({
-      id: row.id as SharedLinkId,
-      ownerId: row.owner_id as user_id_string,
-      projectId: nullableProjectId(row.project_id),
-      name: (row.snapshot as Project).name,
-      description: undefined,
-      viewerMarkdown: normalizeViewerMarkdown(row.viewer_markdown),
-      snapshot: row.snapshot as Project,
-      defaultModel: (row.default_model as ModelId | null) ?? undefined,
-      fundingMode: row.funding_mode as SharedLinkFundingMode,
-      viewerNameRequired: row.viewer_name_required,
-      defaultDocs: (row.default_docs ?? []) as SharedLinkDefaultDoc[],
-      spendLimitCents:
-        row.spend_limit_cents != null ? Number(row.spend_limit_cents) : undefined,
-      totalSpendCents: Number(row.total_spend_cents ?? 0),
-      billingMultiple: normalizeBillingMultiple(
-        row.billing_multiple != null
-          ? Number(row.billing_multiple)
-          : billingMultipleFromLegacyMarkupBps(Number(row.markup_bps ?? 0)),
-      ),
-      flatFeeCents: normalizeFlatFeeCents(Number(row.markup_fixed_cents ?? 0)),
-      runCount: row.run_count ?? 0,
-      createdAt: row.created_at,
-      enabled: row.enabled !== false,
-      revoked: row.revoked,
-      allowedOrigins: originsFromRow(row.allowed_origins),
-      embedOptions: normalizeEmbedOptions(row.embed_options),
-      siteOptions: normalizeHostedSiteOptions(row.site_options),
-    }),
-  );
+  return (data ?? []).map((row) => toPublicRecord(storedFromDbRow(row as Record<string, unknown>)));
 }
 
 function toPublicRecord(row: StoredSharedLink): SharedLinkRecord {
@@ -503,87 +515,17 @@ export async function publishSharedLink(input: PublishSharedLinkInput): Promise<
     saveLocalLink(row);
     return toPublicRecord(row);
   }
-  let { error } = await db.from("shared_links").upsert({
-    id: row.id,
-    owner_id: row.ownerId,
-    project_id: row.projectId,
-    snapshot: row.snapshot,
-    default_docs: row.defaultDocs,
-    default_model: row.defaultModel ?? null,
-    funding_mode: row.fundingMode,
-    viewer_name_required: row.viewerNameRequired,
-    spend_limit_cents: row.spendLimitCents ?? null,
-    total_spend_cents: row.totalSpendCents,
-    billing_multiple: row.billingMultiple,
-    markup_fixed_cents: row.flatFeeCents,
-    markup_bps: 0,
-    enabled: true,
-    revoked: false,
-    run_count: 0,
-    created_at: row.createdAt,
-    allowed_origins: row.allowedOrigins,
-    embed_options: row.embedOptions,
-    site_options: row.siteOptions,
-    viewer_markdown: row.viewerMarkdown ?? "",
-  });
-  if (error && /null|not-null|project_id/i.test(error.message) && row.projectId == null) {
-    const retryNull = await db.from("shared_links").upsert({
-      id: row.id,
-      owner_id: row.ownerId,
-      project_id: "",
-      snapshot: row.snapshot,
-      default_docs: row.defaultDocs,
-      default_model: row.defaultModel ?? null,
-      funding_mode: row.fundingMode,
-      viewer_name_required: row.viewerNameRequired,
-      spend_limit_cents: row.spendLimitCents ?? null,
-      total_spend_cents: row.totalSpendCents,
-      billing_multiple: row.billingMultiple,
-      markup_fixed_cents: row.flatFeeCents,
-      markup_bps: 0,
-      enabled: true,
-      revoked: false,
-      run_count: 0,
-      created_at: row.createdAt,
-      allowed_origins: row.allowedOrigins,
-      embed_options: row.embedOptions,
-      site_options: row.siteOptions,
-      viewer_markdown: row.viewerMarkdown ?? "",
-    });
-    error = retryNull.error;
+  let { error } = await persistOmittingUnknownColumns(
+    (payload) => db.from("shared_links").upsert(payload),
+    sharedLinkInsertRow(row, row.projectId),
+  );
+  if (error && /null|not-null|project_id/i.test(error.message ?? "") && row.projectId == null) {
+    ({ error } = await persistOmittingUnknownColumns(
+      (payload) => db.from("shared_links").upsert(payload),
+      sharedLinkInsertRow(row, ""),
+    ));
   }
   if (error) {
-    // AI : pre-migration DBs lack embed/site columns — retry without them; local JSON still has full row.
-    const missingOptionalCols =
-      /allowed_origins|embed_options|site_options|viewer_markdown/i.test(error.message) || isMissingSchemaError(error);
-    if (missingOptionalCols && !isServerless()) {
-      linkLog.warn(`optional shared-link columns missing — upsert without them + local save`, {
-        error: error.message,
-      });
-      const { error: retryErr } = await db.from("shared_links").upsert({
-        id: row.id,
-        owner_id: row.ownerId,
-        project_id: row.projectId,
-        snapshot: row.snapshot,
-        default_docs: row.defaultDocs,
-        default_model: row.defaultModel ?? null,
-        funding_mode: row.fundingMode,
-        viewer_name_required: row.viewerNameRequired,
-        spend_limit_cents: row.spendLimitCents ?? null,
-        total_spend_cents: row.totalSpendCents,
-        billing_multiple: row.billingMultiple,
-        markup_fixed_cents: row.flatFeeCents,
-        markup_bps: 0,
-        enabled: true,
-        revoked: false,
-        run_count: 0,
-        created_at: row.createdAt,
-      });
-      if (!retryErr) {
-        saveLocalLink(row);
-        return toPublicRecord(row);
-      }
-    }
     if (isServerless() || !isMissingSchemaError(error)) {
       throw new Error(`shared link persistence failed: ${error.message}`);
     }
@@ -738,13 +680,12 @@ export async function updateSharedLinkSiteSettings(
   saveLocalLink(link);
   const db = await supabaseForSharedLinks();
   if (db) {
-    const { error } = await db
-      .from("shared_links")
-      .update({ site_options: link.siteOptions })
-      .eq("id", id)
-      .eq("owner_id", ownerId);
+    const { error } = await persistOmittingUnknownColumns(
+      (payload) => db.from("shared_links").update(payload).eq("id", id).eq("owner_id", ownerId),
+      { site_options: link.siteOptions, snapshot: persistSnapshot(link) },
+    );
     if (error) {
-      if (isServerless() || (!isMissingSchemaError(error) && !/site_options/i.test(error.message))) {
+      if (isServerless() || (!isMissingSchemaError(error) && !/site_options/i.test(error.message ?? ""))) {
         throw new Error(error.message);
       }
     }
@@ -765,21 +706,23 @@ export async function persistWebsitePipelineChange(
   saveLocalLink(link);
   const db = await supabaseForSharedLinks();
   if (db) {
-    const row = {
+    const row: Record<string, unknown> = {
       site_options: link.siteOptions,
       project_id: link.projectId,
+      snapshot: persistSnapshot(link),
     };
-    let { error } = await db.from("shared_links").update(row).eq("id", id).eq("owner_id", ownerId);
-    if (error && /null|not-null|project_id/i.test(error.message) && link.projectId == null) {
-      const retry = await db
-        .from("shared_links")
-        .update({ ...row, project_id: "" })
-        .eq("id", id)
-        .eq("owner_id", ownerId);
-      error = retry.error;
+    let { error } = await persistOmittingUnknownColumns(
+      (payload) => db.from("shared_links").update(payload).eq("id", id).eq("owner_id", ownerId),
+      row,
+    );
+    if (error && /null|not-null|project_id/i.test(error.message ?? "") && link.projectId == null) {
+      ({ error } = await persistOmittingUnknownColumns(
+        (payload) => db.from("shared_links").update(payload).eq("id", id).eq("owner_id", ownerId),
+        { ...row, project_id: "" },
+      ));
     }
     if (error) {
-      if (isServerless() || (!isMissingSchemaError(error) && !/site_options|project_id/i.test(error.message))) {
+      if (isServerless() || (!isMissingSchemaError(error) && !/site_options|project_id/i.test(error.message ?? ""))) {
         throw new Error(error.message);
       }
     }
