@@ -1,6 +1,8 @@
 It's easy to regress if you forget about a feature.
 This is all of them.
 
+The complete AI-written product spec (same features, full prose) is `docs/product_spec.md`.
+
 
 Tabs :
 projects 
