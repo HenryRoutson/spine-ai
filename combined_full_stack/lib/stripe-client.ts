@@ -1,20 +1,9 @@
 "use client";
 
-import { loadStripe, type Stripe } from "@stripe/stripe-js";
-import { STRIPE_ENABLED } from "@/lib/stripe-enabled";
+// AI : Checkout is a hosted Stripe URL — do not import @stripe/stripe-js here.
+// AI : The default entry injects js.stripe.com on module load (hidden iframes +
+// AI : Permissions-Policy console noise) as soon as Billing is prefetched.
 
-// AI : browser Stripe.js loader — publishable key is inlined by Next from NEXT_PUBLIC_*.
-let stripePromise: Promise<Stripe | null> | null = null;
-
-export function getStripe(): Promise<Stripe | null> {
-  if (!STRIPE_ENABLED) return Promise.resolve(null);
-  const key = process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY;
-  if (!key) throw new Error("NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY missing");
-  stripePromise ??= loadStripe(key);
-  return stripePromise;
-}
-
-// AI : Checkout Sessions redirect — stripe-js v4+ dropped redirectToCheckout; assign URL directly.
 export function redirectToCheckout(url: string): void {
   window.location.assign(url);
 }
