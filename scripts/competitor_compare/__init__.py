@@ -1,6 +1,6 @@
-# AI : Lovable / Replit / Base44 same-prompt comparison harness.
+# AI : Spine vibe eval harness (no competitor platforms — cloud cannot test them).
 from __future__ import annotations
 
 __all__ = ["PLATFORMS"]
 
-PLATFORMS = ("lovable", "replit", "base44")
+PLATFORMS = ("spine",)

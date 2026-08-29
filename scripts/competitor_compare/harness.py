@@ -10,7 +10,6 @@ from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Literal
-from urllib.parse import quote
 
 ROOT = Path(__file__).resolve().parent.parent.parent
 PACKAGE = Path(__file__).resolve().parent
@@ -19,15 +18,11 @@ RUNS_DIR = ROOT / "competitor_runs"
 AUTH_DIR = ROOT / ".competitor_compare" / "auth"
 ENV_FILE = ROOT / ".env"
 
-PlatformName = Literal["lovable", "replit", "base44", "spine"]
-PLATFORMS: tuple[PlatformName, ...] = ("lovable", "replit", "base44")
-# AI : Spine is the product under test; not a default competitor column.
-ALL_PLATFORMS: tuple[PlatformName, ...] = (*PLATFORMS, "spine")
+PlatformName = Literal["spine"]
+PLATFORMS: tuple[PlatformName, ...] = ("spine",)
+ALL_PLATFORMS: tuple[PlatformName, ...] = ("spine",)
 
 PLATFORM_HOME: dict[PlatformName, str] = {
-    "lovable": "https://lovable.dev/",
-    "replit": "https://replit.com/",
-    "base44": "https://app.base44.com/",
     "spine": "http://localhost:3000/",
 }
 
@@ -135,23 +130,8 @@ def resolve_prompt(
     return specs[0]
 
 
-def lovable_autosubmit_url(prompt: str) -> str:
-    return f"https://lovable.dev/?autosubmit=true#prompt={quote(prompt, safe='')}"
-
-
-def replit_agent_url(prompt: str) -> str:
-    return f"https://replit.com/?tab=agent#prompt={quote(prompt, safe='')}"
-
-
-def base44_start_url(prompt: str) -> str:
-    return f"https://app.base44.com/?prompt={quote(prompt, safe='')}"
-
-
-def start_urls(prompt: str) -> dict[PlatformName, str]:
+def start_urls(_prompt: str) -> dict[PlatformName, str]:
     return {
-        "lovable": lovable_autosubmit_url(prompt),
-        "replit": replit_agent_url(prompt),
-        "base44": base44_start_url(prompt),
         "spine": "spine-cli agent ask --assistant vibe",
     }
 

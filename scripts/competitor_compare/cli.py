@@ -1,12 +1,10 @@
 #!/usr/bin/env python3
-"""Compare vibe-coding platforms on the same prompt.
+"""Run Spine vibe on a prompt and write a result folder.
 
 Examples:
   python3 scripts/competitor_compare.py check
   python3 scripts/competitor_compare.py urls --prompt-id kyc
-  python3 scripts/competitor_compare.py login --platform lovable
-  python3 scripts/competitor_compare.py record --platforms base44,spine --prompt-id kyc
-  python3 scripts/competitor_compare.py live --prompt-id kyc
+  python3 scripts/competitor_compare.py record --prompt-id kyc
   python3 scripts/competitor_compare.py serve
 """
 from __future__ import annotations
@@ -47,23 +45,14 @@ def build_parser() -> argparse.ArgumentParser:
     urls = sub.add_parser("urls", help="print start URLs for the same prompt")
     _add_prompt_flags(urls)
 
-    login = sub.add_parser("login", help="open a browser, save your session for later runs")
-    login.add_argument("--platform", choices=[*PLATFORMS, "all"], default="all")
-    login.add_argument("--timeout", type=int, default=300)
-
-    record = sub.add_parser("record", help="send the prompt and write a compare folder")
+    record = sub.add_parser("record", help="send the prompt to Spine vibe and write a run folder")
     _add_prompt_flags(record)
-    record.add_argument("--platforms", default="all", help="comma list: lovable,replit,base44,spine (all = first three)")
+    record.add_argument("--platforms", default="spine", help="spine only")
     record.add_argument("--wait", type=int, default=180, help="seconds to wait for a first response")
     record.add_argument("--name", default="", help="project name prefix on the platforms")
     record.add_argument("--dry-run", action="store_true", help="write the folder without calling APIs")
     record.add_argument("--sequential", action="store_true", help="run platforms one after another")
     record.add_argument("--out", default="", help="run folder (default competitor_runs/<timestamp>_<id>)")
-
-    live = sub.add_parser("live", help="open three tiled browser windows with the same prompt")
-    _add_prompt_flags(live)
-    live.add_argument("--platforms", default="all")
-    live.add_argument("--hold", type=int, default=0, help="auto-close after N seconds (0 = until Ctrl+C)")
 
     serve = sub.add_parser("serve", help="serve the latest (or given) compare.html")
     serve.add_argument("run_dir", nargs="?", default="")
@@ -109,10 +98,9 @@ def cmd_check() -> int:
     print()
     if ready_n == 0:
         print("No credentials yet. See docs/competitor_compare_keys.md")
-        print("  Cloud: add BASE44_API_KEY (and OPENROUTER_API_KEY for Spine vibe), then start a new agent.")
+        print("  Cloud: add OPENROUTER_API_KEY, then start a new agent.")
         return 1
-    print(f"{ready_n}/{len(rows)} platforms ready — record will skip the rest.")
-    print("Spine vibe eval: python3 scripts/competitor_compare.py record --platforms base44,spine --prompt-id kyc")
+    print("Spine vibe ready — python3 scripts/competitor_compare.py record --prompt-id kyc")
     return 0
 
 
@@ -137,15 +125,6 @@ def cmd_urls(args: argparse.Namespace) -> int:
     prompt = _prompt_from(args)
     for name, url in start_urls(prompt.text).items():
         print(f"{name:8}  {url}")
-    return 0
-
-
-def cmd_login(args: argparse.Namespace) -> int:
-    from .browser import login_platform
-
-    targets = PLATFORMS if args.platform == "all" else (args.platform,)
-    for platform in targets:
-        login_platform(platform, timeout_seconds=args.timeout)  # type: ignore[arg-type]
     return 0
 
 
@@ -217,14 +196,6 @@ def _browser_runner(run_dir: Path):
     return run
 
 
-def cmd_live(args: argparse.Namespace) -> int:
-    from .browser import live_side_by_side
-
-    prompt = _prompt_from(args)
-    live_side_by_side(prompt.text, _platforms(args.platforms), hold_seconds=args.hold)
-    return 0
-
-
 def cmd_serve(args: argparse.Namespace) -> int:
     run_dir = Path(args.run_dir) if args.run_dir else None
     if run_dir is None:
@@ -262,9 +233,7 @@ def main(argv: list[str] | None = None) -> int:
         "prompts": lambda: cmd_prompts(),
         "list": lambda: cmd_list(),
         "urls": lambda: cmd_urls(args),
-        "login": lambda: cmd_login(args),
         "record": lambda: cmd_record(args),
-        "live": lambda: cmd_live(args),
         "serve": lambda: cmd_serve(args),
     }
     return commands[args.cmd]()
