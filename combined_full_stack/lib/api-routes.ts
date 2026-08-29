@@ -71,6 +71,7 @@ export const API_ROUTES = {
   },
   sharedLinkDownload: (id: string) => `/api/shared-links/${id}/download`,
   sharedLinkClientStep: (id: string) => `/api/shared-links/${id}/client-step`,
+  sharedLinkSql: (id: string) => `/api/shared-links/${id}/sql`,
   marketplace: "/api/marketplace",
   marketplaceListing: (id: string) => `/api/marketplace/${id}`,
   marketplaceClone: (id: string) => `/api/marketplace/${id}/clone`,
@@ -113,7 +114,7 @@ function isSharedLinkPublicApi(pathname: string, method: string): boolean {
   // AI : only GET on link metadata is public — DELETE/PUT must go through auth middleware.
   if (/^\/api\/shared-links\/[^/]+$/.test(pathname)) return method === "GET";
   return (
-    /^\/api\/shared-links\/[^/]+\/(run|progress|docs|download|client-step)$/.test(pathname) ||
+    /^\/api\/shared-links\/[^/]+\/(run|progress|docs|download|client-step|sql)$/.test(pathname) ||
     /^\/api\/shared-links\/[^/]+\/docs\/[^/]+\/(text|file)$/.test(pathname)
   );
 }

@@ -26,6 +26,7 @@ export function serializeCtx(ctx: RunCtx): SerializedCtx {
     forkId: ctx.forkId,
     branchId: ctx.branchId,
     source: ctx.source,
+    appSqlScope: ctx.appSqlScope,
   };
 }
 
@@ -58,6 +59,7 @@ export function restoreCtx(
     forkId: snap.forkId,
     branchId: snap.branchId,
     source: snap.source,
+    appSqlScope: snap.appSqlScope,
   };
 }
 

@@ -1,5 +1,5 @@
 import { invariant } from "@/lib/assert";
-import { isLlmKind, usesPassthroughStructure } from "@/lib/module-kinds";
+import { isLlmKind, stepNeverCaches, usesPassthroughStructure } from "@/lib/module-kinds";
 import { compactPreview } from "@/lib/text-preview";
 import { labelAsStateKey } from "../pipeline_state";
 import { forkBranchesOf, isIfElseKind } from "@/lib/fork-pipeline";
@@ -17,6 +17,7 @@ import { llmStepCostLimitCents, StepCostLimitExceededError } from "../step_cost_
 import { customCodeMaxRunMs } from "@/lib/custom-code-max-run";
 import { DEFAULT_INPUT_CHECK_MODEL, FailureKind, ModuleKind, RunStepStatus, type LlmCallRecord } from "../types";
 import { execModule } from "./exec_module";
+import { isSqlModuleKind, pauseForHostedAnimation } from "./steps/sql";
 import {
   applyModuleSideEffects,
   modelById,
@@ -86,7 +87,7 @@ export async function runLinearStepsFrom(
 
         const key = stepCacheKey(cacheOwnerId, projectId, m, m.model ?? model, fingerprintInputDocIds, project);
         log.debug(`cache lookup`, { key, cachedFlag: !!m.cached });
-        const cached = m.cached ? readStepCache(key) : undefined;
+        const cached = m.cached && !stepNeverCaches(m.kind) ? readStepCache(key) : undefined;
 
         let descriptionCheckCostCents = 0;
         let descriptionCheckLlmCalls: LlmCallRecord[] | undefined;
@@ -219,7 +220,7 @@ export async function runLinearStepsFrom(
               const itemCount = isList && Array.isArray(result.value) ? result.value.length : 1;
               log.debug(`validation ok`, { moduleId: m.id, structure: out.name, itemCount });
             }
-            if (m.cached) {
+            if (m.cached && !stepNeverCaches(m.kind)) {
               const stepCost = +(ledger.totalCents() - beforeCents).toFixed(4);
               writeStepCache(
                 key,
@@ -449,6 +450,7 @@ export async function runLinearStepsFrom(
       log.warn(`pipeline aborted after error`, { failedModule: m.id, stepsCompleted: steps.length });
       return "error";
     }
+    if (isSqlModuleKind(m.kind)) await pauseForHostedAnimation(m);
   }
   return "ok";
 }

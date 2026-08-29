@@ -1,0 +1,251 @@
+{
+  "id": "p_double_shared_number",
+  "name": "Double Shared Number",
+  "kind": "double-number-demo",
+  "documentation": "Hosted-app SQL backend. shared_number starts at 1. The page shows two centered cards: Double (n → 2n, one SQL step) and 3n+1 (odd: times three then plus one; even: divide by two). The hosted trace only lists those arithmetic steps.",
+  "models": [
+    {
+      "id": "m_trigger",
+      "name": "Trigger",
+      "description": "Dummy JSON so the button can run without a file picker.",
+      "fields": [
+        {
+          "id": "f_ping",
+          "name": "action",
+          "type": "text",
+          "optional": false,
+          "description": "Which hosted button ran — double or collatz",
+          "examples": ["double"]
+        }
+      ]
+    },
+    {
+      "id": "m_number",
+      "name": "SharedNumber",
+      "description": "The one row everyone on the hosted page sees.",
+      "fields": [
+        {
+          "id": "f_id",
+          "name": "id",
+          "type": "text",
+          "optional": false,
+          "description": "Row id — always global for this demo",
+          "relation": { "kind": "pk" },
+          "examples": ["global"]
+        },
+        {
+          "id": "f_value",
+          "name": "value",
+          "type": "int",
+          "optional": false,
+          "description": "Shared integer, starts at 1",
+          "examples": ["1"]
+        },
+        {
+          "id": "f_odd",
+          "name": "odd",
+          "type": "int",
+          "optional": true,
+          "description": "1 when value is odd, 0 when even — recomputed by the Collatz Odd? step",
+          "examples": ["1"]
+        }
+      ]
+    }
+  ],
+  "modules": [
+    {
+      "id": "mod_in",
+      "kind": "input",
+      "label": "Trigger",
+      "note": "JSON ping so the hosted button can run with a default file",
+      "inputType": "json",
+      "inputDescription": "Tiny JSON ping to start the run",
+      "inputNameContains": "trigger",
+      "outStructureId": "m_trigger",
+      "cached": true,
+      "avgMs": 1,
+      "avgCostCents": 0
+    },
+    {
+      "id": "mod_collatz_if",
+      "kind": "if-else",
+      "label": "Collatz?",
+      "note": "Then = one 3n+1 step. Else = double.",
+      "inputDescription": "Trigger with action double or collatz",
+      "checkInputDescription": false,
+      "inStructureId": "m_trigger",
+      "outStructureId": "m_number",
+      "cached": true,
+      "avgMs": 1,
+      "avgCostCents": 0,
+      "ifCondition": { "kind": "equals", "path": "action", "value": "collatz" },
+      "forkBranches": [
+        {
+          "id": "fbr_collatz",
+          "label": "Then",
+          "modules": [
+            {
+              "id": "mod_read",
+              "kind": "sql",
+              "label": "Read n",
+              "note": "Load the shared SQL row",
+              "inputDescription": "Trigger JSON — ignored by the SELECT",
+              "inStructureId": "m_trigger",
+              "outStructureId": "m_number",
+              "sql": "SELECT * FROM shared_number WHERE id = 'global'",
+              "sqlSeedRows": [{ "id": "global", "value": 1, "odd": 1 }],
+              "cached": false,
+              "avgMs": 400,
+              "avgCostCents": 0
+            },
+            {
+              "id": "mod_odd",
+              "kind": "sql",
+              "label": "Odd?",
+              "note": "odd = value % 2 so the next if-else can branch",
+              "inputDescription": "SharedNumber row before the parity update",
+              "inStructureId": "m_number",
+              "outStructureId": "m_number",
+              "sql": "UPDATE shared_number SET odd = value % 2 WHERE id = 'global' RETURNING *",
+              "sqlSeedRows": [{ "id": "global", "value": 1, "odd": 1 }],
+              "cached": false,
+              "avgMs": 550,
+              "avgCostCents": 0
+            },
+            {
+              "id": "mod_odd_if",
+              "kind": "if-else",
+              "label": "3n or n/2",
+              "note": "Odd → times three, then plus one. Even → divide by two.",
+              "inputDescription": "SharedNumber with odd 0 or 1",
+              "checkInputDescription": false,
+              "inStructureId": "m_number",
+              "outStructureId": "m_number",
+              "cached": true,
+              "avgMs": 1,
+              "avgCostCents": 0,
+              "ifCondition": { "kind": "equals", "path": "odd", "value": 1 },
+              "forkBranches": [
+                {
+                  "id": "fbr_odd",
+                  "label": "Then",
+                  "modules": [
+                    {
+                      "id": "mod_times_three",
+                      "kind": "sql",
+                      "label": "Times three",
+                      "note": "n is odd — multiply by 3",
+                      "inputDescription": "SharedNumber row before 3n",
+                      "inStructureId": "m_number",
+                      "outStructureId": "m_number",
+                      "sql": "UPDATE shared_number SET value = value * 3 WHERE id = 'global' RETURNING *",
+                      "sqlSeedRows": [{ "id": "global", "value": 1, "odd": 1 }],
+                      "cached": false,
+                      "avgMs": 1100,
+                      "avgCostCents": 0
+                    },
+                    {
+                      "id": "mod_plus_one",
+                      "kind": "sql",
+                      "label": "Plus one",
+                      "note": "Finish 3n+1",
+                      "inputDescription": "SharedNumber row after times three",
+                      "inStructureId": "m_number",
+                      "outStructureId": "m_number",
+                      "sql": "UPDATE shared_number SET value = value + 1 WHERE id = 'global' RETURNING *",
+                      "sqlSeedRows": [{ "id": "global", "value": 1, "odd": 1 }],
+                      "cached": false,
+                      "avgMs": 1100,
+                      "avgCostCents": 0
+                    }
+                  ]
+                },
+                {
+                  "id": "fbr_even",
+                  "label": "Else",
+                  "modules": [
+                    {
+                      "id": "mod_div_two",
+                      "kind": "sql",
+                      "label": "Divide by two",
+                      "note": "n is even — n/2",
+                      "inputDescription": "SharedNumber row before n/2",
+                      "inStructureId": "m_number",
+                      "outStructureId": "m_number",
+                      "sql": "UPDATE shared_number SET value = value / 2 WHERE id = 'global' RETURNING *",
+                      "sqlSeedRows": [{ "id": "global", "value": 1, "odd": 1 }],
+                      "cached": false,
+                      "avgMs": 1100,
+                      "avgCostCents": 0
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "id": "fbr_double",
+          "label": "Else",
+          "modules": [
+            {
+              "id": "mod_sql",
+              "kind": "sql",
+              "label": "Double",
+              "note": "Read the shared SQL row and double it",
+              "inputDescription": "JSON ping that starts the double — ignored by the SQL statement",
+              "inStructureId": "m_trigger",
+              "outStructureId": "m_number",
+              "sql": "UPDATE shared_number SET value = value * 2 WHERE id = 'global' RETURNING *",
+              "sqlSeedRows": [{ "id": "global", "value": 1, "odd": 1 }],
+              "cached": false,
+              "avgMs": 450,
+              "avgCostCents": 0
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "mod_out",
+      "kind": "output",
+      "label": "Number",
+      "note": "The shared number after this click",
+      "inputDescription": "SharedNumber row with id and value after the SQL update",
+      "inStructureId": "m_number",
+      "outStructureId": "m_number",
+      "cached": true,
+      "avgMs": 1,
+      "avgCostCents": 0
+    }
+  ],
+  "strategies": [
+    {
+      "id": "s_single",
+      "kind": "single-llm",
+      "name": "Single LLM Call",
+      "enabled": true,
+      "model": "deepseek-v4",
+      "accuracy": 99,
+      "latencyMs": 50,
+      "costCents": 0,
+      "passRate": 99
+    }
+  ],
+  "docs": [
+    {
+      "name": "trigger.json",
+      "type": "json",
+      "label": "inference",
+      "file": "double_shared_number/trigger.json"
+    }
+  ],
+  "hostedSite": {
+    "brand": {
+      "companyName": "Shared Number",
+      "tagline": "Everyone shares the same number"
+    },
+    "customHtml": "<nav class=\"hs-nav\">\n  <div class=\"hs-nav-brand\">\n    {{logo}}\n    <span class=\"hs-nav-name\">{{company}}</span>\n  </div>\n</nav>\n<header class=\"hs-hero\">\n  <p class=\"hs-kicker\">Shared number</p>\n  <h1 class=\"hs-title\">{{tagline}}</h1>\n  <p class=\"hs-lede\">One SQL row. Double it, or take the next Collatz step.</p>\n</header>\n{{sql:shared_number}}\n{{action}}\n{{action:collatz}}\n",
+    "customCss": ".hs-hero { padding: 3.25rem 1.5rem 0.35rem; }\n.hs-lede { max-width: 26rem; }\n.hs-counter { max-width: 46rem; margin: 0 auto; padding: 2.25rem 1.25rem 4rem; text-align: center; }\n.hs-sql-widget { margin: 0 0 1.75rem; }\n.hs-sql-value { font-size: 4.5rem; font-weight: 750; letter-spacing: -0.07em; line-height: 1; }\n.hs-sql-caption { margin-top: 0.65rem; font-size: 0.85rem; color: color-mix(in srgb, var(--hs-fg) 58%, transparent); }\n"
+  }
+}

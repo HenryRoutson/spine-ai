@@ -200,6 +200,15 @@ const moduleSpecSchema = z
       .record(z.string(), z.unknown())
       .optional()
       .describe("connect only — params matching the action props"),
+    sql: z
+      .string()
+      .optional()
+      .describe("sql steps only — SELECT / UPDATE / INSERT against the hosted app SQL store"),
+    sqlSeedRows: z
+      .array(z.record(z.string(), z.unknown()))
+      .max(64)
+      .optional()
+      .describe("sql steps — rows inserted when the table is empty"),
   })
   .superRefine((spec, ctx) => {
     if (stepRequiresNote(asModuleKind(spec.kind)) && !spec.note?.trim()) {
@@ -318,6 +327,8 @@ const modulePatchEntrySchema = z.object({
   n8nParameters: z.record(z.string(), z.unknown()).optional(),
   connectActionId: z.string().optional(),
   connectParameters: z.record(z.string(), z.unknown()).optional(),
+  sql: z.string().optional(),
+  sqlSeedRows: z.array(z.record(z.string(), z.unknown())).max(64).optional(),
 });
 
 const modelSpecSchema = structureModelSpecSchema;
@@ -548,6 +559,8 @@ function makeModuleFromSpec(
       n8nCode: spec.kind === "n8n" ? spec.n8nCode : undefined,
       connectActionId: spec.kind === "connect" ? spec.connectActionId : undefined,
       connectParameters: spec.kind === "connect" ? spec.connectParameters : undefined,
+      sql: spec.kind === "sql" ? spec.sql : undefined,
+      sqlSeedRows: spec.kind === "sql" ? spec.sqlSeedRows : undefined,
     },
     models,
     globalModel,
@@ -727,6 +740,8 @@ function applyModulePatch(
     ...(patch.n8nParameters !== undefined ? { n8nParameters: patch.n8nParameters } : {}),
     ...(patch.connectActionId !== undefined ? { connectActionId: patch.connectActionId } : {}),
     ...(patch.connectParameters !== undefined ? { connectParameters: patch.connectParameters } : {}),
+    ...(patch.sql !== undefined ? { sql: patch.sql } : {}),
+    ...(patch.sqlSeedRows !== undefined ? { sqlSeedRows: patch.sqlSeedRows } : {}),
   };
   if (outHint) {
     next = { ...next, ...patchSpineOutList(next, kindAlwaysEmitsList(existing.kind) || outHint.isList) };

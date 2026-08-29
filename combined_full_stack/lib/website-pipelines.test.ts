@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest"
 import { htmlSiteToReactFiles, parseReactPreviewTree } from "@/lib/hosted-site-react"
-import { splitHostedSiteSlots } from "@/lib/hosted-site-slots"
+import { groupHostedActionSlots, splitHostedSiteSlots } from "@/lib/hosted-site-slots"
 import { normalizeHostedSiteOptions } from "@/lib/hosted-site"
 import { DEFAULT_HOSTED_SITE_HTML, DEFAULT_HOSTED_SITE_LANDING_HTML } from "@/lib/hosted-site-defaults"
 import {
@@ -71,6 +71,45 @@ describe("named run slots", () => {
       { kind: "slot", slot: "run", alias: "invoice" },
     ])
   })
+
+  it("parses {{sql:shared_number}} and {{action}}", () => {
+    const segs = splitHostedSiteSlots("{{sql:shared_number}}{{action}}")
+    expect(segs).toEqual([
+      { kind: "slot", slot: "sql", alias: "shared_number" },
+      { kind: "slot", slot: "action" },
+    ])
+  })
+
+  it("parses {{action:collatz}} as a named action slot", () => {
+    const segs = splitHostedSiteSlots("{{action}}{{action:collatz}}")
+    expect(segs).toEqual([
+      { kind: "slot", slot: "action" },
+      { kind: "slot", slot: "action", alias: "collatz" },
+    ])
+  })
+
+  it("groups adjacent action slots into a centered row", () => {
+    const segs = splitHostedSiteSlots("<div class=\"hs-action-row\">{{action}}\n    {{action:collatz}}</div>")
+    expect(groupHostedActionSlots(segs)).toEqual([
+      {
+        kind: "action-row",
+        slots: [
+          { kind: "slot", slot: "action" },
+          { kind: "slot", slot: "action", alias: "collatz" },
+        ],
+      },
+    ])
+  })
+
+  it("keeps complete chrome HTML when actions are not nested", () => {
+    const html =
+      "<nav class=\"hs-nav\"></nav>\n<header class=\"hs-hero\"></header>\n{{sql:shared_number}}\n{{action}}\n{{action:collatz}}\n"
+    const grouped = groupHostedActionSlots(splitHostedSiteSlots(html))
+    expect(grouped.filter((s) => s.kind === "html").every((s) => s.kind === "html" && !s.html.includes("<section"))).toBe(
+      true,
+    )
+    expect(grouped.some((s) => s.kind === "action-row")).toBe(true)
+  })
 })
 
 describe("html to react conversion", () => {
@@ -92,6 +131,21 @@ describe("html to react conversion", () => {
     expect(tree.css).toContain("h1{color:red}")
     expect(tree.nodes.some((n) => n.kind === "run" && n.alias === "run")).toBe(true)
     expect(tree.nodes.some((n) => n.kind === "run" && n.alias === "invoice")).toBe(true)
+  })
+
+  it("emits sql and action parts from HTML slots", () => {
+    const files = htmlSiteToReactFiles(
+      normalizeHostedSiteOptions({
+        customHtml: "{{sql:shared_number}}{{action}}",
+      }),
+    )
+    const app = files.find((f) => f.path === "src/App.tsx")?.contents ?? ""
+    expect(app).toContain('kind: "sql"')
+    expect(app).toContain("shared_number")
+    expect(app).toContain('kind: "action"')
+    const tree = parseReactPreviewTree(files)
+    expect(tree.nodes.some((n) => n.kind === "sql" && n.table === "shared_number")).toBe(true)
+    expect(tree.nodes.some((n) => n.kind === "action")).toBe(true)
   })
 })
 

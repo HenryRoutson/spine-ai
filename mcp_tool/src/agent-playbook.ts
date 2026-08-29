@@ -37,7 +37,7 @@ IF / ELSE
 Exclusive router. session_action id=pipeline.add-step kind=if-else, then add steps into Then/Else with forkId + branchId. Else may be empty (passthrough). Set the condition with pipeline.configure-step ifConditionPath (bool field) or ifConditionKind=equals + ifConditionValue JSON. Out type is Then, or Then | Else when they differ.
 
 STEP KINDS
-input, llm, llm-batch, example-select, transform, chunk, merge, assemble, fork, if-else, combine, custom-code, assert, human-review, webhook, n8n, connect, chatbot, output.
+input, llm, llm-batch, example-select, transform, chunk, merge, assemble, fork, if-else, combine, custom-code, assert, human-review, webhook, sql, n8n, connect, chatbot, output.
 Aliases: code→custom-code, http→webhook, piece→n8n, app→connect, dag→fork, ifelse→if-else. Case-insensitive.
 
 SHARE / HOSTED PAGE / API (same HTTP as the GUI Share tab)

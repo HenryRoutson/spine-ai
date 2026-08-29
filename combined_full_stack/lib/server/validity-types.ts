@@ -21,6 +21,7 @@ export enum InvalidKind {
   StructureField = "structure-field",
   MissingCombineBeforeInput = "missing-combine-before-input",
   MissingWebhookUrl = "missing-webhook-url",
+  MissingSql = "missing-sql",
   MissingN8nNodeType = "missing-n8n-node-type",
   MissingConnectAction = "missing-connect-action",
 }

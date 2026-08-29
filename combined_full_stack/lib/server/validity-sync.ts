@@ -18,6 +18,7 @@ import { migrateCustomCodeModule } from "@/lib/custom_code_entries";
 import { migrateListMergeModule, syncListOpsModules } from "@/lib/list-ops-steps";
 import { syncAssembleModules } from "@/lib/assemble-type-expr";
 import { isNestedLaneKind, mapPipelineModules, syncForkModules } from "@/lib/fork-pipeline";
+import { stepNeverCaches } from "@/lib/module-kinds";
 import { resolveModuleNote } from "@/lib/pipeline-module-factory";
 import { usesPassthroughStructure, isLlmKind } from "@/lib/module-kinds";
 import { assertEntriesForModule, parseAssertReferencedLabels } from "@/lib/assert_steps";
@@ -572,7 +573,9 @@ export function migrateProjectModules(project: Project): Project {
   const listSynced = syncListOpsModules(migrated, models);
   const assembleSynced = syncAssembleModules(listSynced.modules, models);
   const forkSynced = syncForkModules(assembleSynced.modules, assembleSynced.models);
-  const withCache = mapPipelineModules(forkSynced.modules, (m) => (m.cached ? m : { ...m, cached: true }));
+  const withCache = mapPipelineModules(forkSynced.modules, (m) =>
+    stepNeverCaches(m.kind) ? { ...m, cached: false } : m.cached ? m : { ...m, cached: true },
+  );
   models = forkSynced.models;
   const normalized = normalizePassthroughStructureIds(withCache);
   const chatbotPinned = normalizeChatbotStructureIds(normalized);
