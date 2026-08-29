@@ -172,10 +172,21 @@ export function resolveQuotesValueFromSources(
   return resolveQuotesForModel(value, model, models, link, isList)
 }
 
+type quote_href_span =
+  | Pick<SourceQuote, "docId" | "start" | "end">
+  | Pick<LinkedQuoteValue["quote"], "doc_id" | "start" | "end">;
+
 // AI : canonical export link for a saved quote — the doc CONTENT HASH + index range survive
 // AI : export and resolve without any run context: load docs/<hash>.txt and slice [start, end).
-export function quoteHref(q: Pick<SourceQuote, "docId" | "start" | "end">): string {
-  return `doc://${q.docId}#${q.start}-${q.end}`;
+export function quoteHref(q: quote_href_span): string {
+  const docId = "docId" in q ? q.docId : q.doc_id;
+  return `doc://${docId}#${q.start}-${q.end}`;
+}
+
+// AI : flatten { text, quote } → ExportedQuote without restating doc_id / start / end.
+export function exportedQuoteFromLinked(value: LinkedQuoteValue): ExportedQuote {
+  const { quote, ...rest } = structuredClone(value);
+  return { ...rest, ...quote, href: quoteHref(quote) };
 }
 
 export function parseQuoteHref(href: string): Pick<SourceQuote, "docId" | "start" | "end"> | undefined {
@@ -203,13 +214,7 @@ export function collectQuotes(
 ): ExportedQuote[] {
   if (model && models.length) {
     for (const q of collectQuotesForModel(value, model, models, isList)) {
-      out.push({
-        text: q.text,
-        doc_id: q.quote.doc_id,
-        start: q.quote.start,
-        end: q.quote.end,
-        href: quoteHref({ docId: q.quote.doc_id, start: q.quote.start, end: q.quote.end }),
-      });
+      out.push(exportedQuoteFromLinked(q));
     }
     return out;
   }
@@ -218,18 +223,11 @@ export function collectQuotes(
     for (const v of value) collectQuotes(v, out);
     return out;
   }
-  if (!value || typeof value !== "object") return out;
-  const o = value as { text?: unknown; quote?: { doc_id?: unknown; start?: unknown; end?: unknown } };
-  if (
-    typeof o.text === "string" &&
-    typeof o.quote?.doc_id === "string" &&
-    typeof o.quote.start === "number" &&
-    typeof o.quote.end === "number"
-  ) {
-    const { doc_id, start, end } = o.quote as { doc_id: DocId; start: number; end: number };
-    out.push({ text: o.text, doc_id, start, end, href: quoteHref({ docId: doc_id, start, end }) });
+  if (isLinkedQuoteValue(value)) {
+    out.push(exportedQuoteFromLinked(value));
     return out;
   }
-  for (const v of Object.values(o)) collectQuotes(v, out);
+  if (!value || typeof value !== "object") return out;
+  for (const v of Object.values(value)) collectQuotes(v, out);
   return out;
 }

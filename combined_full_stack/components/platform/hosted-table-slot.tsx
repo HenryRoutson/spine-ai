@@ -5,7 +5,7 @@ import { Table2 } from "lucide-react"
 import { rowsForModel, rowsStoreForProject, type project_row_store } from "@/lib/platform-row-store"
 import { friendlyFieldName } from "@/lib/platform-row-fields"
 import { QuoteButton } from "@/components/quote-links"
-import { isLinkedQuoteValue, quoteDisplayText, quoteHref } from "@/lib/quotes"
+import { exportedQuoteFromLinked, isLinkedQuoteValue, quoteDisplayText } from "@/lib/quotes"
 import type { Project, StructureModel } from "@/lib/types"
 
 // AI : {{table:Model}} — live rows from the project structure store, shared across frontends.
@@ -84,17 +84,7 @@ export function hostedTableSlotsForProject(
 
 function formatCell(value: unknown): ReactNode {
   if (isLinkedQuoteValue(value)) {
-    return (
-      <QuoteButton
-        quote={{
-          text: value.text,
-          doc_id: value.quote.doc_id,
-          start: value.quote.start,
-          end: value.quote.end,
-          href: quoteHref({ docId: value.quote.doc_id, start: value.quote.start, end: value.quote.end }),
-        }}
-      />
-    )
+    return <QuoteButton quote={exportedQuoteFromLinked(value)} />
   }
   const quoted = quoteDisplayText(value)
   if (quoted != null) return quoted
