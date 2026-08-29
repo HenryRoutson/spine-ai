@@ -8,8 +8,10 @@ import type {
 } from "@/lib/shared-link-types"
 import { DEFAULT_HOSTED_RUN_INPUT_CHROME, normalizeHostedRunInputChrome } from "@/lib/hosted-run-chrome"
 
+export const UNNAMED_WEBSITE_NAME = "Untitled"
+
 export function websiteDisplayName(site: Pick<SharedLinkRecord, "name" | "siteOptions">): string {
-  return site.siteOptions.brand.companyName.trim() || site.name
+  return site.siteOptions.brand.companyName.trim() || UNNAMED_WEBSITE_NAME
 }
 
 export const DEFAULT_WEBSITE_PIPELINE_ALIAS = "run" as website_pipeline_alias
@@ -136,7 +138,7 @@ export function hostedSiteOptionsForCreate({
   const hasPipelines = pipelineIds.length > 0
   return {
     brand: {
-      companyName: name,
+      companyName: name.trim(),
       tagline: hasPipelines ? "Run attached pipelines" : "Your product",
     },
     customHtml: hasPipelines ? DEFAULT_HOSTED_SITE_HTML : DEFAULT_HOSTED_SITE_LANDING_HTML,

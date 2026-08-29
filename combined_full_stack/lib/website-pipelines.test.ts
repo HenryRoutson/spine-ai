@@ -12,7 +12,9 @@ import {
   remapHostedSitePipelineBindings,
   resolveWebsitePipelineBindings,
   stripWebsitePipelineFromCode,
+  UNNAMED_WEBSITE_NAME,
   websiteBoundProjectIds,
+  websiteDisplayName,
 } from "@/lib/website-pipelines"
 import type { ProjectId } from "@/lib/types"
 
@@ -36,8 +38,18 @@ describe("website pipeline bindings", () => {
     ])
   })
 
+  it("labels an unnamed page Untitled", () => {
+    expect(
+      websiteDisplayName({
+        name: "Untitled Pipeline",
+        siteOptions: normalizeHostedSiteOptions({ brand: { companyName: "" } }),
+      }),
+    ).toBe(UNNAMED_WEBSITE_NAME)
+  })
+
   it("mints landing HTML when no pipelines are selected", () => {
-    const none = hostedSiteOptionsForCreate({ name: "Acme", pipelineIds: [], projects: [] })
+    const none = hostedSiteOptionsForCreate({ name: "", pipelineIds: [], projects: [] })
+    expect(none.brand.companyName).toBe("")
     expect(none.pipelineBindings).toEqual([])
     expect(none.customHtml).toBe(DEFAULT_HOSTED_SITE_LANDING_HTML)
     expect(none.customHtml).not.toContain("{{run}}")

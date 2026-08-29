@@ -738,6 +738,11 @@ export const hostedSiteOptionsSchema = z
         accentColor: hexColorSchema.optional(),
         backgroundColor: hexColorSchema.optional(),
         textColor: hexColorSchema.optional(),
+        functionTheme: z.enum(["light", "dark"]).optional(),
+        // AI : empty = inherit page chrome; otherwise #rgb / #rrggbb.
+        functionBackgroundColor: z.union([z.literal(""), hexColorSchema]).optional(),
+        functionTextColor: z.union([z.literal(""), hexColorSchema]).optional(),
+        functionAccentColor: z.union([z.literal(""), hexColorSchema]).optional(),
       })
       .strict()
       .optional(),
@@ -863,13 +868,6 @@ export const createSharedLinkBodySchema = z
         code: z.ZodIssueCode.custom,
         message: "Embed requires at least one allowed origin",
         path: ["allowedOrigins"],
-      });
-    }
-    if (data.kind === "site" && !data.siteOptions?.brand?.companyName?.trim()) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        message: "Hosted page requires a company name",
-        path: ["siteOptions", "brand", "companyName"],
       });
     }
   });

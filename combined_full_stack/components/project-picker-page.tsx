@@ -97,9 +97,6 @@ export function ProjectPickerPage() {
   }, [])
   const [sites, setSites] = useState<SharedLinkRecord[]>([])
   const [sitesLoading, setSitesLoading] = useState(false)
-  const [newSiteOpen, setNewSiteOpen] = useState(false)
-  const [siteName, setSiteName] = useState("")
-  const [sitePipelineIds, setSitePipelineIds] = useState<ProjectId[]>([])
 
   useEffect(() => {
     warmProjectPrefetches(
@@ -210,32 +207,23 @@ export function ProjectPickerPage() {
   }
 
   async function handleCreateWebsite() {
+    if (busy === "website") return
     setBusy("website")
     setResyncMsg(null)
     try {
-      const name = siteName.trim() || "Website"
-      const selected = sitePipelineIds
-      let primary = selected[0]
-      if (!primary) {
-        const stub = await addProject({ open: false })
-        renameProject(stub.id, name)
-        primary = stub.id
-      }
+      const stub = await addProject({ open: false })
       const body = await apiJson<{ url: string; link: SharedLinkRecord }>(API_ROUTES.sharedLinks, {
         method: "POST",
         headers: JSON_HEADERS,
         body: JSON.stringify({
-          projectId: primary,
+          projectId: stub.id,
           kind: "site",
           siteOptions: normalizeHostedSiteOptions(
-            hostedSiteOptionsForCreate({ name, pipelineIds: selected, projects }),
+            hostedSiteOptionsForCreate({ name: "", pipelineIds: [], projects }),
           ),
         }),
       })
       setSites((prev) => [body.link, ...prev.filter((s) => s.id !== body.link.id)])
-      setNewSiteOpen(false)
-      setSiteName("")
-      setSitePipelineIds([])
       handleOpenWebsite(body.link)
     } catch (e) {
       setResyncMsg((e as Error).message)
@@ -329,7 +317,7 @@ export function ProjectPickerPage() {
               ) : (
                 <Button
                   size="sm"
-                  onClick={() => setNewSiteOpen((v) => !v)}
+                  onClick={() => void handleCreateWebsite()}
                   disabled={busy === "website"}
                   spineId="website.create"
                 >
@@ -387,52 +375,6 @@ export function ProjectPickerPage() {
 
           {listTab === "websites" ? (
             <section className="mb-8">
-              {newSiteOpen ? (
-                <div className="mb-4 space-y-3 rounded-lg border border-border bg-card p-4">
-                  <p className="text-sm font-medium">New website</p>
-                  <p className="text-[11px] text-muted-foreground">
-                    Start with a page — like Lovable. Attach pipelines now, or add them later.
-                  </p>
-                  <Input
-                    value={siteName}
-                    onChange={(e) => setSiteName(e.target.value)}
-                    placeholder="Company or page name"
-                    className="h-8 max-w-sm text-sm"
-                  />
-                  <div className="flex flex-wrap gap-2">
-                    {sortedProjects.map((p) => {
-                      const on = sitePipelineIds.includes(p.id)
-                      return (
-                        <button
-                          key={p.id}
-                          type="button"
-                          className={cn(
-                            "rounded-md border px-2 py-1 text-[11px]",
-                            on
-                              ? "border-border bg-secondary text-foreground"
-                              : "border-border text-muted-foreground hover:text-foreground",
-                          )}
-                          onClick={() =>
-                            setSitePipelineIds((prev) =>
-                              on ? prev.filter((id) => id !== p.id) : [...prev, p.id],
-                            )
-                          }
-                        >
-                          {p.name}
-                        </button>
-                      )
-                    })}
-                  </div>
-                  <div className="flex gap-2">
-                    <Button size="sm" onClick={() => void handleCreateWebsite()} disabled={busy === "website"}>
-                      Create website
-                    </Button>
-                    <Button size="sm" variant="ghost" onClick={() => setNewSiteOpen(false)}>
-                      Cancel
-                    </Button>
-                  </div>
-                </div>
-              ) : null}
               <div className="mb-3 flex items-center gap-2">
                 <Globe className="h-4 w-4 text-primary" />
                 <h3 className="text-sm font-semibold">Your websites</h3>
