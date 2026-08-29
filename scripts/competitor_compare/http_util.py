@@ -7,6 +7,7 @@ import ssl
 import urllib.error
 import urllib.request
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any
 from urllib.parse import urlencode
 
@@ -99,6 +100,9 @@ def download_url(url: str, dest: Path, timeout: int = 30) -> bool:
         return dest.exists() and dest.stat().st_size > 0
     except (urllib.error.URLError, TimeoutError, OSError):
         return False
+
+
+def jsonrpc(method: str, params: JsonDict | None, req_id: int) -> JsonDict:
     payload: JsonDict = {"jsonrpc": "2.0", "method": method, "id": req_id}
     if params is not None:
         payload["params"] = params

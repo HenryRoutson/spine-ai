@@ -20,7 +20,7 @@ from competitor_compare.harness import (
     start_urls,
     write_run_files,
 )
-from competitor_compare.http_util import parse_sse_json, tool_arguments
+from competitor_compare.http_util import jsonrpc, parse_sse_json, tool_arguments
 
 
 class PromptTests(unittest.TestCase):
@@ -152,6 +152,13 @@ class CredentialTests(unittest.TestCase):
 
 
 class McpHelperTests(unittest.TestCase):
+    def test_jsonrpc_payload(self) -> None:
+        self.assertEqual(
+            jsonrpc("initialize", {"protocolVersion": "2025-03-26"}, 1),
+            {"jsonrpc": "2.0", "method": "initialize", "id": 1, "params": {"protocolVersion": "2025-03-26"}},
+        )
+        self.assertEqual(jsonrpc("tools/list", None, 2), {"jsonrpc": "2.0", "method": "tools/list", "id": 2})
+
     def test_sse_parse(self) -> None:
         raw = 'event: message\ndata: {"jsonrpc":"2.0","result":{"ok":true}}\n\n'
         events = parse_sse_json(raw)
