@@ -67,15 +67,15 @@ http://localhost:5050
 testing emails must contain
 spine-ai-dev-testing-account
 
-## Compare Lovable / Replit / Base44
+## Compare vibe coding (Base44 vs Spine)
 
-How to mint keys (and which official docs match): [`docs/competitor_compare_keys.md`](docs/competitor_compare_keys.md).
+How to mint keys: [`docs/competitor_compare_keys.md`](docs/competitor_compare_keys.md).
 
-Cloud: add secrets on the Cursor environment, start a new agent, then:
+Cloud: add `BASE44_API_KEY` (and `OPENROUTER_API_KEY` for Spine vibe), start a new agent, then:
 
 ```bash
 python3 scripts/competitor_compare.py check
-python3 scripts/competitor_compare.py record --prompt-id kyc
+python3 scripts/competitor_compare.py record --platforms base44,spine --prompt-id kyc
 ```
 
 Runs land in `competitor_runs/<timestamp>/compare.html`.

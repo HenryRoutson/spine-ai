@@ -19,13 +19,16 @@ RUNS_DIR = ROOT / "competitor_runs"
 AUTH_DIR = ROOT / ".competitor_compare" / "auth"
 ENV_FILE = ROOT / ".env"
 
-PlatformName = Literal["lovable", "replit", "base44"]
+PlatformName = Literal["lovable", "replit", "base44", "spine"]
 PLATFORMS: tuple[PlatformName, ...] = ("lovable", "replit", "base44")
+# AI : Spine is the product under test; not a default competitor column.
+ALL_PLATFORMS: tuple[PlatformName, ...] = (*PLATFORMS, "spine")
 
 PLATFORM_HOME: dict[PlatformName, str] = {
     "lovable": "https://lovable.dev/",
     "replit": "https://replit.com/",
     "base44": "https://app.base44.com/",
+    "spine": "http://localhost:3000/",
 }
 
 
@@ -149,6 +152,7 @@ def start_urls(prompt: str) -> dict[PlatformName, str]:
         "lovable": lovable_autosubmit_url(prompt),
         "replit": replit_agent_url(prompt),
         "base44": base44_start_url(prompt),
+        "spine": "spine-cli agent ask --assistant vibe",
     }
 
 
@@ -231,7 +235,8 @@ def render_compare_html(
 ) -> str:
     by_name = {r.platform: r for r in results}
     columns: list[str] = []
-    for name in PLATFORMS:
+    names: tuple[PlatformName, ...] = tuple(r.platform for r in results) or PLATFORMS
+    for name in names:
         result = by_name.get(name) or PlatformResult(name, False, "missing", skipped=True)
         screenshot = None
         video = None
@@ -285,7 +290,7 @@ def render_compare_html(
     h1 {{ margin: 0 0 8px; font-size: 18px; }}
     .wrap {{ padding: 16px 20px 24px; }}
     .prompt {{ white-space: pre-wrap; background: #1a1d24; border: 1px solid #2a2f3a; border-radius: 10px; padding: 12px 14px; margin: 0 0 16px; }}
-    .grid {{ display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }}
+    .grid {{ display: grid; grid-template-columns: repeat({len(names)}, minmax(0, 1fr)); gap: 12px; }}
     .col {{ background: #161920; border: 1px solid #2a2f3a; border-radius: 12px; min-width: 0; overflow: hidden; }}
     .col.ok {{ border-color: #2e7d4f; }}
     .col.error {{ border-color: #8a3b3b; }}
@@ -301,7 +306,7 @@ def render_compare_html(
 </head>
 <body>
   <div class="wrap">
-    <h1>Lovable · Replit · Base44 — {html.escape(prompt.prompt_id)}</h1>
+    <h1>{html.escape(" · ".join(n.capitalize() for n in names))} — {html.escape(prompt.prompt_id)}</h1>
     <div class="prompt">{prompt_html}</div>
     <div class="grid">
       {cols}

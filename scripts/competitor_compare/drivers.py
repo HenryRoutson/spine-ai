@@ -12,6 +12,7 @@ _browser_lock = threading.Lock()
 
 from .harness import (
     AUTH_DIR,
+    ROOT,
     PlatformName,
     PlatformResult,
     env_get,
@@ -42,36 +43,13 @@ def _has_storage(platform: PlatformName) -> bool:
     return path.exists() and path.stat().st_size > 2
 
 
-def _base44_home_token() -> str:
-    auth = Path.home() / ".base44" / "auth" / "auth.json"
-    if not auth.exists():
-        return ""
-    try:
-        data = json_load(auth)
-    except (OSError, ValueError):
-        return ""
-    for key in ("access_token", "accessToken", "token"):
-        value = data.get(key)
-        if isinstance(value, str) and value.strip():
-            return value.strip()
-    return ""
-
-
-def json_load(path: Path) -> JsonDict:
-    import json
-
-    raw = json.loads(path.read_text(encoding="utf-8"))
-    if not isinstance(raw, dict):
-        raise ValueError(f"{path} is not a JSON object")
-    return raw
-
-
 def credential_status(env: dict[str, str] | None = None) -> list[CredentialStatus]:
     env = env if env is not None else load_env()
     return [
         _lovable_status(env),
         _replit_status(env),
         _base44_status(env),
+        _spine_status(env),
     ]
 
 
@@ -104,19 +82,37 @@ def _replit_status(env: dict[str, str]) -> CredentialStatus:
 
 
 def _base44_status(env: dict[str, str]) -> CredentialStatus:
-    key = env_get(env, "BASE44_API_KEY", "BASE44_ACCESS_TOKEN", "BASE44_TOKEN")
+    # AI : this eval uses BASE44_API_KEY only — no access token, CLI auth file, or browser cookies.
+    key = env_get(env, "BASE44_API_KEY")
     if key:
-        return CredentialStatus("base44", True, "api_key" if key.startswith("b44k_") else "access_token", f"BASE44 token {mask_secret(key)}")
-    home = _base44_home_token()
-    if home:
-        return CredentialStatus("base44", True, "cli_auth", "~/.base44/auth/auth.json")
-    if _has_storage("base44"):
-        return CredentialStatus("base44", True, "storage_state", str(storage_state_path("base44")))
+        return CredentialStatus("base44", True, "api_key", f"BASE44_API_KEY {mask_secret(key)}")
     return CredentialStatus(
         "base44",
         False,
         "none",
-        "docs/competitor_compare_keys.md — copy Base44 Settings → Preferences → API Key into BASE44_API_KEY",
+        "set Cloud secret BASE44_API_KEY (Settings → Preferences → API Key) and start a new agent",
+    )
+
+
+def _live_openrouter_key(env: dict[str, str]) -> str:
+    key = env_get(env, "OPENROUTER_API_KEY")
+    if not key or "placeholder" in key or key.startswith("sk-or-local"):
+        return ""
+    return key
+
+
+def _spine_status(env: dict[str, str]) -> CredentialStatus:
+    key = _live_openrouter_key(env)
+    if key:
+        return CredentialStatus("spine", True, "openrouter", f"OPENROUTER_API_KEY {mask_secret(key)}")
+    cli = ROOT / "combined_full_stack" / "scripts" / "spine-cli.ts"
+    if not cli.exists():
+        return CredentialStatus("spine", False, "none", "combined_full_stack/scripts/spine-cli.ts missing")
+    return CredentialStatus(
+        "spine",
+        False,
+        "cli",
+        "spine vibe needs a real OPENROUTER_API_KEY (not the local placeholder)",
     )
 
 
@@ -148,8 +144,12 @@ def run_platform(
             result = _run_lovable(prompt, wait_seconds, env, browser_runner, project_name)
         elif platform == "replit":
             result = _run_replit(prompt, wait_seconds, env, browser_runner, project_name)
-        else:
+        elif platform == "base44":
             result = _run_base44(prompt, wait_seconds, env, browser_runner, project_name)
+        elif platform == "spine":
+            result = _run_spine(prompt, wait_seconds, env, project_name)
+        else:
+            raise ValueError(f"unknown platform {platform}")
         result.elapsed_ms = _elapsed(started)
         return result
     except Exception as exc:  # noqa: BLE001 — surface any driver failure into the compare folder
@@ -215,25 +215,146 @@ def _run_base44(
     browser_runner: Callable[..., PlatformResult] | None,
     project_name: str,
 ) -> PlatformResult:
-    token = env_get(env, "BASE44_API_KEY", "BASE44_ACCESS_TOKEN", "BASE44_TOKEN") or _base44_home_token()
-    if token:
+    # AI : eval path is BASE44_API_KEY only — ignore access tokens, CLI auth, and browser cookies.
+    del browser_runner
+    key = env_get(env, "BASE44_API_KEY")
+    if key:
         extra: JsonDict = {}
         if project_name:
             extra["name"] = project_name
         return mcp_create(
             platform="base44",
             url=BASE44_MCP,
-            token=token,
+            token=key,
             prompt=prompt,
             wait_seconds=wait_seconds,
             tool_names=("create_base44_app", "create_app", "createApp"),
             extra_args=extra,
         )
-    if _has_storage("base44") and browser_runner:
-        with _browser_lock:
-            return browser_runner("base44", prompt, wait_seconds)
     status = _base44_status(env)
     return PlatformResult("base44", False, status.method, skipped=True, error=status.hint)
+
+
+def _run_spine(prompt: str, wait_seconds: int, env: dict[str, str], project_name: str) -> PlatformResult:
+    import os
+    import subprocess
+    import tempfile
+
+    cli = ROOT / "combined_full_stack" / "scripts" / "spine-cli.ts"
+    if not cli.exists():
+        return PlatformResult("spine", False, "none", skipped=True, error="spine-cli.ts missing")
+    if not _live_openrouter_key(env):
+        status = _spine_status(env)
+        return PlatformResult("spine", False, status.method, skipped=True, error=status.hint)
+
+    app = ROOT / "combined_full_stack"
+    run_env = os.environ.copy()
+    for key, value in env.items():
+        if value:
+            run_env[key] = value
+    timeout = max(90, wait_seconds + 30)
+
+    def spine(*args: str) -> JsonDict:
+        cmd = ["npx", "tsx", "scripts/spine-cli.ts", *args, "--json"]
+        proc = subprocess.run(
+            cmd,
+            cwd=app,
+            env=run_env,
+            capture_output=True,
+            text=True,
+            timeout=timeout,
+            check=False,
+        )
+        payload = _parse_cli_json(proc.stdout) if proc.stdout.strip() else {}
+        if proc.returncode != 0 and not payload:
+            err = (proc.stderr or proc.stdout or f"exit {proc.returncode}").strip()
+            raise RuntimeError(err[:800])
+        if not isinstance(payload, dict):
+            raise RuntimeError(f"spine CLI returned non-object JSON: {payload!r}")
+        payload["_exit"] = proc.returncode
+        payload["_stderr"] = (proc.stderr or "").strip()[-400:]
+        return payload
+
+    with tempfile.TemporaryDirectory(prefix="spine-compare-") as tmp:
+        session_path = str(Path(tmp) / "session.json")
+        created = spine("session", "add-project", "--open", "--session", session_path)
+        if project_name:
+            spine("session", "rename", "--name", project_name, "--session", session_path)
+        asked = spine(
+            "agent",
+            "ask",
+            "--message",
+            prompt,
+            "--assistant",
+            "vibe",
+            "--apply",
+            "--session",
+            session_path,
+        )
+        mermaid = spine("session", "mermaid", "--session", session_path)
+        pipeline = spine("session", "pipeline", "--session", session_path)
+
+    data = asked.get("data") if isinstance(asked.get("data"), dict) else {}
+    issues = asked.get("issues") if isinstance(asked.get("issues"), list) else []
+    error_text = "; ".join(
+        str(i.get("message")) for i in issues if isinstance(i, dict) and i.get("level") == "error" and i.get("message")
+    )
+    ok = bool(asked.get("ok")) and not error_text
+    return PlatformResult(
+        platform="spine",
+        ok=ok,
+        method="vibe",
+        editor_url="spine-cli agent ask --assistant vibe",
+        transcript=_spine_transcript(asked, mermaid, pipeline),
+        error=error_text or None,
+        extra={
+            "changed": data.get("changed") if isinstance(data, dict) else [],
+            "applied": data.get("applied") if isinstance(data, dict) else False,
+            "invalidCount": data.get("invalidCount") if isinstance(data, dict) else None,
+            "add_project": (created.get("data") or {}).get("project") if isinstance(created.get("data"), dict) else None,
+        },
+    )
+
+
+def _parse_cli_json(stdout: str) -> JsonDict:
+    import json
+
+    text = stdout.strip()
+    try:
+        parsed = json.loads(text)
+    except json.JSONDecodeError:
+        start = text.find("{")
+        end = text.rfind("}")
+        if start < 0 or end <= start:
+            raise ValueError(f"spine CLI stdout is not JSON: {text[:300]}") from None
+        parsed = json.loads(text[start : end + 1])
+    if not isinstance(parsed, dict):
+        raise ValueError("spine CLI JSON is not an object")
+    return parsed
+
+
+def _spine_transcript(asked: JsonDict, mermaid: JsonDict, pipeline: JsonDict) -> str:
+    import json
+
+    parts: list[str] = []
+    data = asked.get("data") if isinstance(asked.get("data"), dict) else {}
+    human = data.get("human") if isinstance(data, dict) else None
+    message = data.get("message") if isinstance(data, dict) else None
+    if isinstance(human, str) and human.strip():
+        parts.append(human.strip())
+    elif isinstance(message, str) and message.strip():
+        parts.append(message.strip())
+    issues = asked.get("issues") if isinstance(asked.get("issues"), list) else []
+    for issue in issues:
+        if isinstance(issue, dict) and issue.get("message"):
+            parts.append(f"[{issue.get('level')}] {issue.get('where')}: {issue.get('message')}")
+    chart = (mermaid.get("data") or {}).get("mermaid") if isinstance(mermaid.get("data"), dict) else None
+    if isinstance(chart, str) and chart.strip():
+        parts.append("## mermaid\n" + chart.strip())
+    pipe = (pipeline.get("data") or {}).get("pipeline") if isinstance(pipeline.get("data"), dict) else None
+    if pipe:
+        parts.append("## pipeline\n" + json.dumps(pipe, indent=2)[:8000])
+    return "\n\n".join(parts) or "(no vibe output)"
 
 
 def lovable_headers(api_key: str) -> dict[str, str]:

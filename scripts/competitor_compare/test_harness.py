@@ -50,10 +50,11 @@ class UrlTests(unittest.TestCase):
         self.assertIn("Create%20a%20todo%20app", url)
         self.assertNotIn(" ", url.split("#", 1)[1])
 
-    def test_start_urls_has_all_three(self) -> None:
+    def test_start_urls_has_competitors_and_spine(self) -> None:
         urls = start_urls("hello")
-        self.assertEqual(set(urls), {"lovable", "replit", "base44"})
+        self.assertEqual(set(urls), {"lovable", "replit", "base44", "spine"})
         self.assertIn("hello", urls["base44"])
+        self.assertIn("vibe", urls["spine"])
 
 
 class CompareFolderTests(unittest.TestCase):
@@ -95,9 +96,21 @@ class CompareFolderTests(unittest.TestCase):
 class CredentialTests(unittest.TestCase):
     def test_missing_keys(self) -> None:
         rows = credential_status(env={})
-        self.assertEqual([r.platform for r in rows], ["lovable", "replit", "base44"])
+        self.assertEqual([r.platform for r in rows], ["lovable", "replit", "base44", "spine"])
         self.assertFalse(any(r.ready for r in rows))
-        self.assertTrue(all("competitor_compare_keys.md" in r.hint for r in rows))
+        hints = {r.platform: r.hint for r in rows}
+        self.assertIn("competitor_compare_keys.md", hints["lovable"])
+        self.assertIn("competitor_compare_keys.md", hints["replit"])
+        self.assertIn("BASE44_API_KEY", hints["base44"])
+        self.assertIn("OPENROUTER_API_KEY", hints["spine"])
+
+    def test_base44_ignores_access_token(self) -> None:
+        rows = credential_status(env={"BASE44_ACCESS_TOKEN": "tok_abcdefghij"})
+        base44 = next(r for r in rows if r.platform == "base44")
+        self.assertFalse(base44.ready)
+        result = run_platform("base44", "hello", wait_seconds=1, env={"BASE44_ACCESS_TOKEN": "tok_abcdefghij"})
+        self.assertTrue(result.skipped)
+        self.assertIn("BASE44_API_KEY", result.error or "")
 
     def test_ready_when_keys_set(self) -> None:
         rows = credential_status(
@@ -105,6 +118,7 @@ class CredentialTests(unittest.TestCase):
                 "LOVABLE_API_KEY": "lov_abcdefghij",
                 "REPLIT_MCP_ACCESS_TOKEN": "rpt_abcdefghij",
                 "BASE44_API_KEY": "b44k_abcdefghij",
+                "OPENROUTER_API_KEY": "sk-or-v1-abcdefghij",
             }
         )
         self.assertTrue(all(r.ready for r in rows))
@@ -156,6 +170,30 @@ class CliSmokeTests(unittest.TestCase):
             self.assertIn(">lovable</h2>", html)
             self.assertIn(">replit</h2>", html)
             self.assertIn(">base44</h2>", html)
+
+    def test_record_base44_spine_dry_run(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            out = Path(tmp) / "run"
+            code = main(
+                [
+                    "record",
+                    "--dry-run",
+                    "--platforms",
+                    "base44,spine",
+                    "--prompt-id",
+                    "kyc",
+                    "--out",
+                    str(out),
+                ]
+            )
+            self.assertEqual(code, 0)
+            html = (out / "compare.html").read_text(encoding="utf-8")
+            self.assertIn("Base44 · Spine", html)
+            self.assertIn(">base44</h2>", html)
+            self.assertIn(">spine</h2>", html)
+            self.assertNotIn(">lovable</h2>", html)
+            manifest = json.loads((out / "manifest.json").read_text(encoding="utf-8"))
+            self.assertEqual([r["platform"] for r in manifest["results"]], ["base44", "spine"])
 
     def test_record_without_credentials_skips(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

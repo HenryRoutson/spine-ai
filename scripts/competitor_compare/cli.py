@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
-"""Compare Lovable, Replit, and Base44 on the same prompt.
+"""Compare vibe-coding platforms on the same prompt.
 
 Examples:
   python3 scripts/competitor_compare.py check
   python3 scripts/competitor_compare.py urls --prompt-id kyc
   python3 scripts/competitor_compare.py login --platform lovable
-  python3 scripts/competitor_compare.py record --prompt-id kyc
+  python3 scripts/competitor_compare.py record --platforms base44,spine --prompt-id kyc
   python3 scripts/competitor_compare.py live --prompt-id kyc
   python3 scripts/competitor_compare.py serve
 """
@@ -19,6 +19,7 @@ from pathlib import Path
 
 from .drivers import credential_status, run_platform
 from .harness import (
+    ALL_PLATFORMS,
     PLATFORMS,
     PlatformName,
     PlatformResult,
@@ -52,7 +53,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     record = sub.add_parser("record", help="send the prompt and write a compare folder")
     _add_prompt_flags(record)
-    record.add_argument("--platforms", default="all", help="comma list: lovable,replit,base44")
+    record.add_argument("--platforms", default="all", help="comma list: lovable,replit,base44,spine (all = first three)")
     record.add_argument("--wait", type=int, default=180, help="seconds to wait for a first response")
     record.add_argument("--name", default="", help="project name prefix on the platforms")
     record.add_argument("--dry-run", action="store_true", help="write the folder without calling APIs")
@@ -91,8 +92,8 @@ def _platforms(raw: str) -> tuple[PlatformName, ...]:
     picked: list[PlatformName] = []
     for part in raw.split(","):
         name = part.strip().lower()
-        if name not in PLATFORMS:
-            raise SystemExit(f"unknown platform {part!r}; expected {', '.join(PLATFORMS)}")
+        if name not in ALL_PLATFORMS:
+            raise SystemExit(f"unknown platform {part!r}; expected {', '.join(ALL_PLATFORMS)}")
         picked.append(name)  # type: ignore[arg-type]
     return tuple(picked)
 
@@ -108,12 +109,10 @@ def cmd_check() -> int:
     print()
     if ready_n == 0:
         print("No credentials yet. See docs/competitor_compare_keys.md")
-        print("  Cloud: add BASE44_API_KEY (and optional LOVABLE_API_KEY / REPLIT_MCP_ACCESS_TOKEN) on the environment, then start a new agent.")
+        print("  Cloud: add BASE44_API_KEY (and OPENROUTER_API_KEY for Spine vibe), then start a new agent.")
         return 1
-    if ready_n < 3:
-        print(f"{ready_n}/3 platforms ready — record will skip the rest.")
-        return 0
-    print("All three platforms have credentials. Run: python3 scripts/competitor_compare.py record --prompt-id kyc")
+    print(f"{ready_n}/{len(rows)} platforms ready — record will skip the rest.")
+    print("Spine vibe eval: python3 scripts/competitor_compare.py record --platforms base44,spine --prompt-id kyc")
     return 0
 
 
