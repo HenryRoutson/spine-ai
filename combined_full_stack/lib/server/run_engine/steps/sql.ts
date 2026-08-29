@@ -1,16 +1,27 @@
 import { ModuleKind, type PipelineModule } from "../../types"
 import { pkFieldOf } from "@/lib/sql-id-types"
-import { sqlIsRunnableAppSql, sqlSeedRowsOf, tableNameForModel } from "@/lib/app-sql"
+import { sqlSeedRowsOf, tableNameForModel } from "@/lib/app-sql"
 import {
   defaultSelectSqlForModule,
   derivedInsertSqls,
   shouldDeriveInsertSql,
 } from "@/lib/schema-table-fn"
+import { allModelsToSql } from "@/lib/sql-schema"
 import { execAppSql } from "../../app_sql"
 import { materializeHints, materializeStepOutput, modelById, prevModuleFor } from "../helpers"
 import { jsonStringifyStepValue } from "../results"
 import { stepEmitsList } from "../../type_expr"
 import type { ExecResult, RunCtx, RunLogger } from "../engine_types"
+
+type sql_row = Record<string, unknown>
+
+function prevSqlRows(prevValue: unknown): sql_row[] {
+  if (Array.isArray(prevValue)) {
+    return prevValue.filter((r): r is sql_row => !!r && typeof r === "object" && !Array.isArray(r))
+  }
+  if (prevValue && typeof prevValue === "object") return [prevValue as sql_row]
+  return []
+}
 
 export async function pauseForHostedAnimation(m: PipelineModule): Promise<void> {
   // AI : hold after onStep ok so the hosted page can paint the SQL write before the next JSON step.
@@ -25,13 +36,11 @@ export async function execSqlStep(m: PipelineModule, ctx: RunCtx, log: RunLogger
   const prevValue = ctx.prevModuleId ? ctx.outputs.get(ctx.prevModuleId) : undefined
   const out = modelById(ctx.project.models, m.outStructureId)
   const sqls: string[] = []
-  // AI : empty or unbound INSERT after an extract → fill from the previous row(s), not placeholders.
-  if (sqlIsRunnableAppSql(m.sql)) {
-    sqls.push(m.sql!.trim())
+  // AI : authored SQL runs as SQLite. Empty sql after extract still INSERTs from the previous row(s).
+  if (m.sql?.trim()) {
+    sqls.push(m.sql.trim())
   } else if (shouldDeriveInsertSql(prev, m) && out && prevValue != null) {
     sqls.push(...derivedInsertSqls(out, prevValue))
-  } else if (m.sql?.trim()) {
-    sqls.push(m.sql.trim())
   }
   if (!sqls.length) {
     const select = defaultSelectSqlForModule(m, ctx.project.models)
@@ -42,10 +51,19 @@ export async function execSqlStep(m: PipelineModule, ctx: RunCtx, log: RunLogger
   if (!scope) throw new Error(`sql step "${m.label}" has no app SQL scope`)
   const pkField = out ? pkFieldOf(out)?.name ?? "id" : "id"
   const table = out ? tableNameForModel(out) : undefined
+  const schemaSql = allModelsToSql(ctx.project.models, ctx.project.modules)
+  const bindRows = prevSqlRows(prevValue)
   log.info(`sql step`, { moduleId: m.id, scope, table, sql: sqls.join("; ") })
   const rows: Record<string, unknown>[] = []
   for (const sql of sqls) {
-    rows.push(...(await execAppSql(scope, sql, { seedRows: sqlSeedRowsOf(m), pkField })))
+    rows.push(
+      ...(await execAppSql(scope, sql, {
+        seedRows: sqlSeedRowsOf(m),
+        pkField,
+        bindRows,
+        schemaSql,
+      })),
+    )
   }
   const raw = stepEmitsList(m) || rows.length > 1 ? rows : (rows[0] ?? {})
   const value = out

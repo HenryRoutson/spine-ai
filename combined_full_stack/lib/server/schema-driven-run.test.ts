@@ -81,7 +81,7 @@ function persistBatchPlaceholderRaw(): AssistantResponseRaw {
     ...raw,
     modules: (raw.modules ?? []).map((m) =>
       m.kind === "sql"
-        ? { ...m, sql: "INSERT INTO persist_row (vendor) VALUES (?, ?)" }
+        ? { ...m, sql: "INSERT INTO persist_row (vendor) VALUES (?)" }
         : m,
     ),
   }
@@ -261,6 +261,7 @@ describe("schema-driven quoting and SQL", () => {
   it("links tuple[text,quote] spans from a hosted-style upload under seed LLM", async () => {
     const project = projectFromRaw(quoteExtractRaw())
     expect(flattenPipelineModules(project.modules).some((m) => m.kind === "quote")).toBe(true)
+    expect(flattenPipelineModules(project.modules).some((m) => m.kind === "sql")).toBe(false)
     const llm = flattenPipelineModules(project.modules).find((m) => m.kind === "llm-batch")
     expect(llm?.prompt?.trim() ?? "").toBe("")
 
@@ -316,35 +317,33 @@ describe("schema-driven quoting and SQL", () => {
     expect(String(rows[0]!.vendor)).toContain("Acme Corp")
   })
 
-  it("omits placeholder INSERT after extract and INSERTs each row from the structure", async () => {
+  it("keeps authored INSERT ? and binds each previous extract row", async () => {
     const project = projectFromRaw(persistBatchPlaceholderRaw())
     const sqlMod = flattenPipelineModules(project.modules).find((m) => m.kind === "sql")
-    expect(sqlMod?.sql?.trim() ?? "").toBe("")
+    expect(sqlMod?.sql?.trim()).toBe("INSERT INTO persist_row (vendor) VALUES (?)")
     expect(sqlMod?.outType?.kind).toBe("list")
 
     const run = await runWithSource(project, SOURCE)
     expect(run.status).toBe(RunStatus.Ok)
     const sqlStep = run.steps.find((s) => s.kind === "sql")
-    expect(sqlStep?.inputPreview).toMatch(/^INSERT INTO persist_row /)
-    expect(sqlStep?.inputPreview).not.toContain("?")
-    expect(sqlStep?.inputPreview).toContain("Acme Corp billed 42 on Tuesday")
+    expect(sqlStep?.inputPreview).toContain("INSERT INTO persist_row")
+    expect(sqlStep?.inputPreview).toContain("?")
 
     const rows = await listAppSqlRows(appSqlScopeForProject(project.id), "persist_row")
     expect(rows).toHaveLength(1)
     expect(String(rows[0]!.vendor)).toContain("Acme Corp")
   })
 
-  it("derives INSERT at run time when a saved sql step still has placeholder binds", async () => {
+  it("binds $1 from previous rows without rewriting the statement", async () => {
     const project = projectFromRaw(persistBatchRaw())
     const sqlMod = flattenPipelineModules(project.modules).find((m) => m.kind === "sql")
     expect(sqlMod).toBeTruthy()
-    sqlMod!.sql = "INSERT INTO persist_row (vendor) VALUES (?, ?)"
+    sqlMod!.sql = "INSERT INTO persist_row (vendor) VALUES ($1)"
 
     const run = await runWithSource(project, SOURCE)
     expect(run.status).toBe(RunStatus.Ok)
     const sqlStep = run.steps.find((s) => s.kind === "sql")
-    expect(sqlStep?.inputPreview).toMatch(/^INSERT INTO persist_row /)
-    expect(sqlStep?.inputPreview).not.toContain("?")
+    expect(sqlStep?.inputPreview).toContain("$1")
 
     const rows = await listAppSqlRows(appSqlScopeForProject(project.id), "persist_row")
     expect(rows).toHaveLength(1)

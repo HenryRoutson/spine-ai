@@ -27,7 +27,6 @@ import { isListRoot, normalizeStructureModels, stepSpineOutType, stepEmitsList }
 import { migrateModulesSpineTypes, patchSpineOutList, refFromType } from "./spine_types";
 import { dedupeInferredModelsByShape } from "@/lib/structure-shape";
 import { shouldDeriveInsertSql } from "@/lib/schema-table-fn";
-import { sqlIsRunnableAppSql } from "@/lib/app-sql";
 
 export { stepEmitsList } from "./type_expr";
 
@@ -371,11 +370,9 @@ export function syncManagedPipelineSteps(
 ): PipelineModule[] {
   const outer = migrateModulesSpineTypes(
     syncDerivedSqlListSpine(
-      syncDerivedSqlOmitUnrunnable(
-        syncAutoQuoteSteps(
-          syncAutoStructureParseSteps(syncAutoDocToTextSteps(modules), models, globalModel),
-          models,
-        ),
+      syncAutoQuoteSteps(
+        syncAutoStructureParseSteps(syncAutoDocToTextSteps(modules), models, globalModel),
+        models,
       ),
     ),
   );
@@ -389,18 +386,6 @@ export function syncManagedPipelineSteps(
       })),
     };
   });
-}
-
-// AI : placeholder INSERT after extract is not a real backend — drop it so runtime derives from the structure.
-function syncDerivedSqlOmitUnrunnable(modules: PipelineModule[]): PipelineModule[] {
-  const out = modules.map((m, i) => {
-    if (m.kind !== ModuleKind.Sql) return m;
-    const prev = i > 0 ? modules[i - 1] : undefined;
-    if (!shouldDeriveInsertSql(prev, m) || !m.sql?.trim()) return m;
-    if (sqlIsRunnableAppSql(m.sql)) return m;
-    return { ...m, sql: undefined };
-  });
-  return modulesEqual(modules, out) ? modules : out;
 }
 
 // AI : empty INSERT after llm-batch / Link Quotes inherits list spine — same pattern as auto quotes.

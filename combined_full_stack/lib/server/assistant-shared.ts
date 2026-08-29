@@ -13,13 +13,28 @@ export type ChatTurn = { role: "user" | "assistant"; content: string };
 const fieldTypeValues = FIELD_TYPES as [FieldType, ...FieldType[]];
 const FIELD_TYPE_SET = new Set<string>(FIELD_TYPES);
 
+// AI : authoring accepts whatever the model put in examples — do not reshape quote objects.
+function exampleListToStrings(values: unknown[] | undefined): string[] | undefined {
+  if (!values) return undefined;
+  return values.map((item) => {
+    if (typeof item === "string") return item;
+    if (typeof item === "number" || typeof item === "boolean") return String(item);
+    if (item == null) return "null";
+    try {
+      return JSON.stringify(item);
+    } catch {
+      return String(item);
+    }
+  });
+}
+
 export const modelFieldSpecSchema = z.object({
   name: z.string(),
   type: z.union([z.enum(fieldTypeValues), z.string()]),
   optional: z.boolean().default(false),
   description: z.string().default(""),
-  examples: z.array(z.string()).optional(),
-  negativeExamples: z.array(z.string()).optional(),
+  examples: z.array(z.unknown()).nullish(),
+  negativeExamples: z.array(z.unknown()).nullish(),
   ref: z.string().optional(),
   typeExpr: z.string().optional(),
 });
@@ -138,8 +153,10 @@ export function materializeModelField(
     name: f.name,
     optional: f.optional,
     description: f.description,
-    examples: f.examples ?? prev?.examples,
-    negativeExamples: f.negativeExamples ?? prev?.negativeExamples,
+    examples: Array.isArray(f.examples) ? exampleListToStrings(f.examples) : prev?.examples,
+    negativeExamples: Array.isArray(f.negativeExamples)
+      ? exampleListToStrings(f.negativeExamples)
+      : prev?.negativeExamples,
     // AI : preserve field-level deterministic flag — assistant edits must not reset probabilistic markers.
     deterministic: prev?.deterministic,
     testTolerance: prev?.testTolerance,

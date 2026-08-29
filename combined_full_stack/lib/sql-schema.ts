@@ -61,7 +61,7 @@
 // AI : allModelsToSql ALGORITHM
 // AI : =============================================================================
 // AI : Header comment:
-// AI :   -- generated schema.sql — annotation only; runtime is still JSON maps
+// AI :   -- generated schema.sql — executable SQLite; sql steps apply this then run your statement
 // AI : Always emit platform tables first (even if project has no documents):
 // AI :   CREATE TABLE document (
 // AI :     id TEXT PRIMARY KEY,
@@ -440,7 +440,7 @@ export function allModelsToSql(models: StructureModel[], modules?: PipelineModul
   const lookup = stripSharedModels(models)
   const exported = modelsForPydanticExport(lookup)
   const chunks: string[] = [
-    "-- generated schema.sql — annotation only; runtime is still JSON maps",
+    "-- generated schema.sql — executable SQLite; sql steps apply this then run your statement",
     "",
     emitCreateTable("document", [
       "  id TEXT PRIMARY KEY",

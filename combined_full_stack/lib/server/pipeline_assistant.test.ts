@@ -12,6 +12,7 @@ import { computeWarnings, formatPipelineValidationErrors } from "@/lib/server/va
 import { PipelineWarningKind } from "@/lib/server/validity-types"
 import { stepEmitsList } from "@/lib/server/type_expr"
 import { buildFewShotPromptBlock, resolveAssistantUserMessage, structureOutForAssistant } from "@/lib/server/assistant-prompt"
+import { structureModelSpecSchema } from "@/lib/server/assistant-shared"
 import { loadProjectSeed, SEEDS_DIR } from "@/lib/server/seed"
 
 type AssistantRaw = Parameters<typeof materializeProposal>[0]
@@ -460,5 +461,25 @@ describe("seed LLM can add a second named function", () => {
     expect(second.invalidCount).toBe(0)
     session.applyProposal(second.proposal!)
     expect(functionsOnProject(session.project!).map((fn) => fn.name)).toEqual(["unnamed function", "Hello Notes"])
+  })
+})
+
+describe("structure field examples", () => {
+  it("accepts object-shaped examples without rewriting them", () => {
+    const parsed = structureModelSpecSchema.parse({
+      name: "RuleAssessment",
+      fields: [
+        {
+          name: "evidence",
+          type: "tuple[text,quote]",
+          optional: false,
+          description: "Supporting evidence",
+          examples: [{ text: "We collect driver's licenses", quote: "We collect driver's licenses" }],
+        },
+      ],
+    })
+    expect(parsed.fields[0]!.examples).toEqual([
+      { text: "We collect driver's licenses", quote: "We collect driver's licenses" },
+    ])
   })
 })

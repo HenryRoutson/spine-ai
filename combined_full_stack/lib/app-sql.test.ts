@@ -1,6 +1,6 @@
 import { describe, expect, it, beforeEach } from "vitest"
 import { resolve } from "node:path"
-import { evalSqlExpr, parseAppSql, sqlIsRunnableAppSql, sqlWhereMatches, tableNameForModel } from "@/lib/app-sql"
+import { evalSqlExpr, parseAppSql, sqlWhereMatches, tableNameForModel } from "@/lib/app-sql"
 import { execAppSql, resetAppSqlForTests } from "@/lib/server/app_sql"
 import { loadProjectSeed, SEEDS_DIR } from "@/lib/server/seed"
 import { shouldCheckInputDescription } from "@/lib/server/input_description_check"
@@ -40,15 +40,6 @@ describe("parseAppSql", () => {
     })
   })
 
-  it("treats placeholder INSERT as not runnable", () => {
-    expect(sqlIsRunnableAppSql("INSERT INTO invoice_row (vendor, amount, excerpt) VALUES (?, ?, ?)")).toBe(false)
-    expect(sqlIsRunnableAppSql("INSERT INTO persist_row (vendor) VALUES ($1)")).toBe(false)
-    expect(sqlIsRunnableAppSql("INSERT INTO persist_row (vendor) VALUES ('Acme')")).toBe(true)
-    expect(sqlIsRunnableAppSql("SELECT * FROM persist_row")).toBe(true)
-    expect(sqlIsRunnableAppSql("")).toBe(false)
-    expect(sqlIsRunnableAppSql(undefined)).toBe(false)
-  })
-
   it("parses modulo parity", () => {
     const stmt = parseAppSql("UPDATE shared_number SET odd = value % 2 WHERE id = 'global' RETURNING *")
     expect(stmt).toEqual({
@@ -60,7 +51,7 @@ describe("parseAppSql", () => {
     })
   })
 
-  it("rejects join", () => {
+  it("rejects join in the hosted animation parser (SQLite still runs JOIN)", () => {
     expect(() => parseAppSql("SELECT * FROM a JOIN b ON a.id = b.id")).toThrow()
   })
 })
@@ -118,6 +109,29 @@ describe("execAppSql", () => {
     expect(timesThree).toEqual([{ id: "global", value: 3, odd: 1 }])
     const plusOne = await execAppSql(scope, "UPDATE shared_number SET value = value + 1 WHERE id = 'global' RETURNING *")
     expect(plusOne).toEqual([{ id: "global", value: 4, odd: 1 }])
+  })
+
+  it("runs JOIN and ? binds from previous rows", async () => {
+    const scope = "project:p_join"
+    await execAppSql(scope, "CREATE TABLE invoice (id TEXT, vendor TEXT)")
+    await execAppSql(scope, "CREATE TABLE line (invoice_id TEXT, amount REAL)")
+    await execAppSql(scope, "INSERT INTO invoice (id, vendor) VALUES ('1', 'Acme')")
+    await execAppSql(scope, "INSERT INTO line (invoice_id, amount) VALUES ('1', 42)")
+    const joined = await execAppSql(
+      scope,
+      "SELECT invoice.vendor AS vendor, line.amount AS amount FROM invoice JOIN line ON invoice.id = line.invoice_id",
+    )
+    expect(joined).toEqual([{ vendor: "Acme", amount: 42 }])
+
+    const bound = await execAppSql(scope, "INSERT INTO invoice (id, vendor) VALUES (?, ?)", {
+      bindRows: [{ id: "2", vendor: "Beta" }],
+    })
+    expect(bound).toHaveLength(1)
+    expect(bound[0]).toMatchObject({ id: "2", vendor: "Beta" })
+    const named = await execAppSql(scope, "INSERT INTO invoice (id, vendor) VALUES (:id, :vendor)", {
+      bindRows: [{ id: "3", vendor: "Gamma" }],
+    })
+    expect(named[0]).toMatchObject({ id: "3", vendor: "Gamma" })
   })
 })
 

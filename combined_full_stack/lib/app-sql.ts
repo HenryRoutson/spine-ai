@@ -1,4 +1,4 @@
-// AI : tiny SQL dialect for hosted-app tables — SELECT / UPDATE / INSERT only, no JOIN.
+// AI : hosted Collatz animation parser only — sql steps execute SQLite (JOIN, binds) in app_sqlite.ts.
 
 import { sqlTableName } from "@/lib/sql-id-types"
 import type { StructureModel } from "@/lib/types"
@@ -309,18 +309,6 @@ export function parseAppSql(sql: string): ParsedAppSql {
   const trimmed = sql.trim()
   if (!trimmed) throw new Error("SQL is empty")
   return new Parser(tokenize(trimmed)).parse()
-}
-
-// AI : live vibe often writes INSERT … VALUES (?, ?) — our dialect has no binds, so that is not runnable.
-export function sqlIsRunnableAppSql(sql: string | undefined): boolean {
-  const trimmed = sql?.trim() ?? ""
-  if (!trimmed) return false
-  try {
-    parseAppSql(trimmed)
-    return true
-  } catch {
-    return false
-  }
 }
 
 function asNumber(value: unknown, col: string): number {
