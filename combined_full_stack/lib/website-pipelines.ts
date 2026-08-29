@@ -1,4 +1,5 @@
 import { DEFAULT_HOSTED_SITE_HTML, DEFAULT_HOSTED_SITE_LANDING_HTML } from "@/lib/hosted-site-defaults"
+import { isUnnamedProjectName } from "@/lib/project-assistant-types"
 import type { Project, ProjectId } from "@/lib/types"
 import type {
   HostedSiteOptions,
@@ -6,6 +7,15 @@ import type {
   website_pipeline_alias,
   WebsitePipelineBinding,
 } from "@/lib/shared-link-types"
+
+export const UNNAMED_WEBSITE_NAME = "Untitled Website" as const
+
+// AI : websites are not pipelines — never inherit "Untitled Pipeline" as the page title.
+export function websiteNameForCreate(suggested: string): string {
+  const trimmed = suggested.trim()
+  if (!trimmed || isUnnamedProjectName(trimmed)) return UNNAMED_WEBSITE_NAME
+  return trimmed
+}
 
 export function websiteDisplayName(site: Pick<SharedLinkRecord, "name" | "siteOptions">): string {
   return site.siteOptions.brand.companyName.trim() || site.name
@@ -114,7 +124,7 @@ export function hostedSiteOptionsForCreate({
   const hasPipelines = pipelineIds.length > 0
   return {
     brand: {
-      companyName: name,
+      companyName: websiteNameForCreate(name),
       tagline: hasPipelines ? "Run attached pipelines" : "Your product",
     },
     customHtml: hasPipelines ? DEFAULT_HOSTED_SITE_HTML : DEFAULT_HOSTED_SITE_LANDING_HTML,

@@ -53,6 +53,7 @@ import {
   hostedSiteOptionsForCreate,
   listedWebsitePipelineBindings,
   websiteDisplayName,
+  websiteNameForCreate,
 } from "@/lib/website-pipelines"
 import { consumePendingPickerList, readPickerList, pickerHomeHref, type picker_list_tab } from "@/lib/picker-list"
 import type { Project, ProjectId } from "@/lib/types"
@@ -213,7 +214,7 @@ export function ProjectPickerPage() {
     setBusy("website")
     setResyncMsg(null)
     try {
-      const name = siteName.trim() || "Website"
+      const name = websiteNameForCreate(siteName)
       const selected = sitePipelineIds
       let primary = selected[0]
       if (!primary) {

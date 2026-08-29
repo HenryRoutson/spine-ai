@@ -63,6 +63,14 @@ describe("platformShareBodies", () => {
     expect(bodies.site.siteOptions.customHtml).toContain("{{run}}")
   })
 
+  it("does not stamp Untitled Pipeline onto a website", () => {
+    const bodies = platformShareBodies({
+      projectId: PROJECT_ID,
+      name: "Untitled Pipeline",
+    })
+    expect(bodies.site.siteOptions.brand.companyName).toBe("Untitled Website")
+  })
+
   it("rejects the old hub payload that sent a name field", () => {
     expect(
       siteBodySchema.safeParse({

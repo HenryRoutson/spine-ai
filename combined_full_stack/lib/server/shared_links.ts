@@ -37,7 +37,8 @@ import type { SharedLinkDefaultDoc, SharedLinkRecord, EmbedOptions, HostedSiteBr
 import { DEFAULT_EMBED_OPTIONS } from "@/lib/shared-link-types";
 import { isEmbedLinkId, normalizeEmbedOrigins } from "@/lib/server/embed_origins";
 import { isSiteLinkId, normalizeHostedSiteOptions } from "@/lib/hosted-site";
-import { DEFAULT_WEBSITE_PIPELINE_ALIAS, resolveWebsitePipelineBindings } from "@/lib/website-pipelines";
+import { DEFAULT_WEBSITE_PIPELINE_ALIAS, resolveWebsitePipelineBindings, UNNAMED_WEBSITE_NAME } from "@/lib/website-pipelines"
+import { isUnnamedProjectName } from "@/lib/project-assistant-types";
 import { normalizeViewerMarkdown } from "@/lib/share-viewer-markdown";
 
 export type { SharedLinkDefaultDoc, SharedLinkRecord };
@@ -420,6 +421,9 @@ export async function publishSharedLink(input: PublishSharedLinkInput): Promise<
   assertValidSharedLinkPricing(fundingMode, billingMultiple, flatFeeCents);
   const embedOptions = normalizeEmbedOptions(isEmbed ? input.embedOptions : undefined);
   const siteOptions = normalizeHostedSiteOptions(isSite ? input.siteOptions : undefined);
+  if (isSite && isUnnamedProjectName(siteOptions.brand.companyName)) {
+    siteOptions.brand = { ...siteOptions.brand, companyName: UNNAMED_WEBSITE_NAME }
+  }
   if (isSite && !siteOptions.brand.companyName.trim()) {
     throw new Error("Hosted page requires a company name");
   }
@@ -462,7 +466,7 @@ export async function publishSharedLink(input: PublishSharedLinkInput): Promise<
     id,
     ownerId: input.ownerId,
     projectId: input.project.id,
-    name: snapshot.name,
+    name: isSite ? siteOptions.brand.companyName : snapshot.name,
     description: undefined,
     viewerMarkdown: normalizeViewerMarkdown(input.viewerMarkdown),
     snapshot,

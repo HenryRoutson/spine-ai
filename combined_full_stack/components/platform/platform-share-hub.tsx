@@ -12,6 +12,7 @@ import { COPY_FEEDBACK_MS } from "@/lib/ui-timing"
 import { copyTextToClipboard } from "@/lib/clipboard"
 import type { HostedSiteOptions, SharedLinkRecord } from "@/lib/shared-link-types"
 import { absoluteShareUrl, platformShareBodies } from "@/lib/platform-share-bodies"
+import { websiteNameForCreate } from "@/lib/website-pipelines"
 import type { Project } from "@/lib/types"
 
 type share_result = {
@@ -34,7 +35,7 @@ export function PlatformShareHub({
   const [error, setError] = useState<string | null>(null)
   const [result, setResult] = useState<share_result | null>(null)
   const [copied, setCopied] = useState<string | null>(null)
-  const [name, setName] = useState(project.name)
+  const [name, setName] = useState(websiteNameForCreate(project.name))
 
   async function shareAll() {
     setBusy(true)

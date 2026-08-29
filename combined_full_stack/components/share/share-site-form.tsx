@@ -18,6 +18,7 @@ import { viewerFundsSharedRun } from "@/lib/shared-link-funding"
 import type { HostedSiteOptions, SharedLinkRecord } from "@/lib/shared-link-types"
 import { DEFAULT_HOSTED_SITE_OPTIONS } from "@/lib/shared-link-types"
 import { DEFAULT_HOSTED_SITE_HTML, isSiteLinkId, normalizeHostedSiteOptions } from "@/lib/hosted-site"
+import { websiteNameForCreate } from "@/lib/website-pipelines"
 import { useOptionalAppShell } from "@/lib/app-shell"
 import { useHideDeveloperTools } from "@/lib/developer-tools-settings"
 import type { DocId, DocRef, ModuleId, Project } from "@/lib/types"
@@ -77,7 +78,7 @@ export function ShareSiteForm({
     normalizeHostedSiteOptions({
       brand: {
         ...DEFAULT_HOSTED_SITE_OPTIONS.brand,
-        companyName: project.name,
+        companyName: websiteNameForCreate(project.name),
         tagline: "Run this pipeline",
       },
       customHtml: DEFAULT_HOSTED_SITE_HTML,
