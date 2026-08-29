@@ -94,7 +94,7 @@ export const QuoteSchema = z.object({
 
 const TextQuoteSchema = z.object({ text: z.string(), quote: QuoteSchema });
 const DocumentSchema = z.object({ content: z.string(), filename: z.string() });
-// AI : Document row: id PK, filename, mime, content TEXT NULL, blob BLOB NULL. content/filename
+// AI : Document row: id PK, filename, mime, content TEXT NULL, blob BYTEA NULL. content/filename
 // AI :   are projections; original PDF is the blob, not a parallel File TypeExpr.
 const JsonStringSchema = z.string().refine(isValidJsonString, { message: "must be valid JSON" });
 const MarkdownStringSchema = z.string().refine(isValidMarkdown, { message: "must be valid markdown" });

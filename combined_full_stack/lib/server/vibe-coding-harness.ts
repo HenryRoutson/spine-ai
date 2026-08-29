@@ -47,7 +47,10 @@ export const vibeHarnessTurnSchema = z.object({
 export type VibeHarnessTurn = z.infer<typeof vibeHarnessTurnSchema>
 export type VibeHarnessToolCall = z.infer<typeof harnessToolCallSchema>
 
-export type VibeHarnessChecksFn = (draft: VibeWorkspaceDraft, workspace: VibeWorkspace) => string
+export type VibeHarnessChecksFn = (
+  draft: VibeWorkspaceDraft,
+  workspace: VibeWorkspace,
+) => string | Promise<string>
 
 export type VibeHarnessResult = {
   draft: VibeWorkspaceDraft
@@ -63,11 +66,11 @@ function toolOrder(tool: HarnessToolName): number {
   return 3
 }
 
-export function executeVibeHarnessTool(
+export async function executeVibeHarnessTool(
   call: VibeHarnessToolCall,
   workspace: VibeWorkspace,
   runChecks: VibeHarnessChecksFn,
-): string {
+): Promise<string> {
   const tool = call.tool
   if (tool === "done") {
     return "done"
@@ -117,7 +120,7 @@ export function executeVibeHarnessTool(
   }
   if (tool === "run_tests") {
     const draft = parseVibeWorkspaceFiles(workspace.files, workspace.seed)
-    const report = runChecks(draft, workspace)
+    const report = await runChecks(draft, workspace)
     workspace.files.set("VALIDATION.md", report)
     return report
   }
@@ -139,11 +142,11 @@ export function isHarnessProposalPass(report: string, draft: VibeWorkspaceDraft)
   return harnessDraftHasPipelineWork(draft)
 }
 
-export function applyHarnessTurn(
+export async function applyHarnessTurn(
   plan: VibeHarnessTurn,
   workspace: VibeWorkspace,
   runChecks: VibeHarnessChecksFn,
-): { results: string[]; done: boolean; wrote: boolean } {
+): Promise<{ results: string[]; done: boolean; wrote: boolean }> {
   const calls = [...plan.tools]
     .sort((a, b) => toolOrder(a.tool) - toolOrder(b.tool))
     .slice(0, VIBE_HARNESS_MAX_TOOLS_PER_TURN)
@@ -152,7 +155,7 @@ export function applyHarnessTurn(
   let wrote = false
   let ranTests = false
   for (const call of calls) {
-    const result = executeVibeHarnessTool(call, workspace, runChecks)
+    const result = await executeVibeHarnessTool(call, workspace, runChecks)
     results.push(`$ ${call.tool}${call.path ? ` ${call.path}` : ""}\n${result}`)
     if (call.tool === "write_file" || call.tool === "delete_file") wrote = true
     if (call.tool === "run_tests") ranTests = true
@@ -168,7 +171,7 @@ export function applyHarnessTurn(
   }
   // AI : always validate after writes — live models often skip run_tests and then look "done".
   if (wrote && !ranTests) {
-    const result = executeVibeHarnessTool({ tool: "run_tests" }, workspace, runChecks)
+    const result = await executeVibeHarnessTool({ tool: "run_tests" }, workspace, runChecks)
     results.push(`$ run_tests (auto)\n${result}`)
     const draft = parseVibeWorkspaceFiles(workspace.files, workspace.seed)
     if (isHarnessProposalPass(result, draft)) done = true
@@ -186,7 +189,7 @@ function buildHarnessSystemPrompt(): string {
 Return JSON { "tools": [...], "note"?: string }.
 
 Tools: write_file, read_file, run_tests, list_dir, delete_file, done.
-- No shell, no network, no package installs. run_tests = parse → materialize → I/O validate → custom-code syntax → graph lint.
+- No shell, no network, no package installs. run_tests = parse → materialize → I/O validate → custom-code syntax → Postgres prepare of each sql step → graph lint.
 - Workspace is RAM on this server. Never ask for API keys or write secrets.
 - AGENTS.md and examples/* are read-only.
 - The first user message ALREADY includes AGENTS.md, project.json, pipeline.json/js, and derived/schema.sql + derived/models.py. Do not spend a turn only on list_dir or read_file.
@@ -315,7 +318,7 @@ export async function runVibeCodingHarness(args: {
       lastResults = `${lastResults}\n\nEmpty tools ignored — stub Input is not a finished pipeline. write_file then run_tests.`
       continue
     }
-    const applied = applyHarnessTurn(plan, workspace, args.runChecks)
+    const applied = await applyHarnessTurn(plan, workspace, args.runChecks)
     const doneCall = plan.tools.find((c) => c.tool === "done")
     if (applied.done) {
       done = true

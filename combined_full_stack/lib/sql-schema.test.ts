@@ -82,8 +82,8 @@ describe("allModelsToSql billed_work", () => {
     expect(sql).toContain("CREATE TABLE job_example")
     expect(sql).toContain("CREATE TABLE job_example_billed_items")
     expect(sql).toContain("REFERENCES work_item(id)")
-    expect(sql).toMatch(/CREATE VIEW \w+_prompt AS\s+SELECT id, title, work_description FROM job_example/i)
-    const viewBlock = sql.slice(sql.search(/CREATE VIEW /i))
+    expect(sql).toMatch(/CREATE (OR REPLACE )?VIEW \w+_prompt AS\s+SELECT id, title, work_description FROM job_example/i)
+    const viewBlock = sql.slice(sql.search(/CREATE (OR REPLACE )?VIEW /i))
     expect(viewBlock).toContain("title")
     expect(viewBlock).toContain("work_description")
     expect(viewBlock).not.toMatch(/SELECT[^\n]*billed_items/i)
@@ -98,8 +98,8 @@ describe("allModelsToSql estimate_intelligence", () => {
     expect(sql).toContain("CREATE TABLE past_job")
     expect(sql).toContain("CREATE TABLE past_job_billed_lines")
     expect(sql).toContain("REFERENCES work_item(id)")
-    expect(sql).toMatch(/CREATE VIEW \w+_prompt AS\s+SELECT id, builder_id, title, peril, construction, storeys, rooms_affected, narrative FROM past_job/i)
-    expect(sql).toMatch(/CREATE VIEW \w+_prompt AS\s+SELECT work_item_id, code, trade, description, unit, source_job_id FROM candidate_line/i)
+    expect(sql).toMatch(/CREATE (OR REPLACE )?VIEW \w+_prompt AS\s+SELECT id, builder_id, title, peril, construction, storeys, rooms_affected, narrative FROM past_job/i)
+    expect(sql).toMatch(/CREATE (OR REPLACE )?VIEW \w+_prompt AS\s+SELECT work_item_id, code, trade, description, unit, source_job_id FROM candidate_line/i)
     const jobView = sql.match(/SELECT id, builder_id[\s\S]*?FROM past_job/i)?.[0] ?? ""
     expect(jobView).not.toMatch(/billed_lines/)
     const lineView = sql.match(/SELECT work_item_id[\s\S]*?FROM candidate_line/i)?.[0] ?? ""

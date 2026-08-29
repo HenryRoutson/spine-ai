@@ -12,7 +12,7 @@ export const BUILTIN_IMAGE_STILL_ID = "m_builtin_image_still" as StructureModelI
 
 // AI : shared across every project — the canonical shape for field type `document`.
 // AI : CREATE TABLE document (id TEXT PK, filename TEXT NOT NULL, mime TEXT,
-// AI :   content TEXT, blob BLOB). Extracted text vs original bytes are columns, not two types.
+// AI :   content TEXT, blob BYTEA). Extracted text vs original bytes are columns, not two types.
 export const BUILTIN_DOCUMENT_MODEL: StructureModel = {
   id: BUILTIN_DOCUMENT_ID,
   name: "Document",

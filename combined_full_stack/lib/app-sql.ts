@@ -1,4 +1,4 @@
-// AI : hosted Collatz animation parser only — sql steps execute SQLite (JOIN, binds) in app_sqlite.ts.
+// AI : hosted Collatz animation parser only — sql steps execute Postgres in app_postgres.ts.
 
 import { sqlTableName } from "@/lib/sql-id-types"
 import type { StructureModel } from "@/lib/types"

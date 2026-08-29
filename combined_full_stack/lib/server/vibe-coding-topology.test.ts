@@ -36,7 +36,7 @@ describe("vibe topology cheat-sheet", () => {
     expect(parseThinkingTopology("TOPOLOGY: assemble\nthen zip resumes")).toBe("assemble")
     expect(parseThinkingTopology("  TOPOLOGY: llm-batch")).toBeNull()
     expect(buildVibeTopologyPromptBlock()).toMatch(/TOPOLOGY: <name>/)
-    expect(buildVibeTopologyPromptBlock()).toMatch(/SQLite/)
+    expect(buildVibeTopologyPromptBlock()).toMatch(/Postgres/)
     expect(buildVibeTopologyPromptBlock()).not.toMatch(/receipts \/ merchant/i)
     expect(buildVibeTopologyPromptBlock()).not.toMatch(/hundreds of unstructured/i)
   })
@@ -68,10 +68,10 @@ describe("vibe topology cheat-sheet", () => {
     )
   })
 
-  it("PASS I/O-valid pipelines even when the task text matches a few-shot example", () => {
+  it("PASS I/O-valid pipelines even when the task text matches a few-shot example", async () => {
     const session = createSpineSession()
     session.addProject({ open: true })
-    const report = runVibeWorkspaceChecks(
+    const report = await runVibeWorkspaceChecks(
       draft(
         [
           {

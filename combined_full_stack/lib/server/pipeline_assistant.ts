@@ -87,7 +87,7 @@ import { tryCompileCustomCodeEntry } from "@/lib/custom_code";
 import { customCodeEntriesForModule } from "@/lib/custom_code_entries";
 import { lintPipeline } from "./pipeline_lint";
 import { VIBE_THINKING_MAX_TOKENS, coerceVibePipelineModules, writeVibeDerivedFiles, type VibeWorkspace, type VibeWorkspaceDraft } from "./vibe-coding-workspace";
-import { prepareSqliteSql } from "./app_sqlite";
+import { prepareAppSql } from "./app_sql";
 import { allModelsToSql } from "@/lib/sql-schema";
 import {
   harnessDraftHasPipelineWork,
@@ -820,14 +820,14 @@ function draftToAssistantRaw(draft: VibeWorkspaceDraft): z.infer<typeof assistan
   return parseAssistantDraft(draft).raw;
 }
 
-export function runVibeWorkspaceChecks(
+export async function runVibeWorkspaceChecks(
   draft: VibeWorkspaceDraft,
   project: Project,
   globalModel: ModelId,
   testDocsCatalog: AssistantTestDocCatalogEntry[],
   task?: string,
   workspace?: VibeWorkspace,
-): string {
+): Promise<string> {
   if (draft.errors.length) {
     return `FAIL parse\n${draft.errors.map((e) => `- ${e}`).join("\n")}`;
   }
@@ -864,7 +864,7 @@ export function runVibeWorkspaceChecks(
     if (m.kind !== ModuleKind.Sql) continue;
     const sql = m.sql?.trim();
     if (!sql) continue;
-    const err = prepareSqliteSql(sql, schemaSql);
+    const err = await prepareAppSql(sql, schemaSql);
     if (err) sqlErrors.push(`${m.label}: ${err}`);
   }
   // AI : react to THIS user message — not few-shot task phrases. No sql step when they asked to persist is a miss.
@@ -874,7 +874,7 @@ export function runVibeWorkspaceChecks(
     !flattenPipelineModules(proposal.modules).some((m) => m.kind === ModuleKind.Sql)
   ) {
     sqlErrors.push(
-      "pipeline.json has no sql step, but the task asks to persist or query a database. Add a sql step. Omit the sql text after an extract of the same structure to INSERT each previous row, or write JOIN / ? / :name binds yourself.",
+      "pipeline.json has no sql step, but the task asks to persist or query a database. Add a sql step. Omit the sql text after an extract of the same structure to INSERT each previous row, or write JOIN / ? / :name / $1 binds yourself.",
     );
   }
   const lint = lintPipeline(

@@ -1,21 +1,33 @@
-// AI : hosted-app SQL — SQLite engine so vibe-written SQL (JOIN, ?, aggregations) actually runs.
+// AI : hosted-app SQL — Postgres (PGlite in tests, pg → Supabase when a DB URL is up).
 import { sqlSeedRowsOf, type app_sql_scope } from "@/lib/app-sql"
 import {
-  execSqlite,
-  listSqliteRows,
-  resetAppSqliteForTests,
-  upsertSqliteRow,
-  type ExecSqliteOpts,
-} from "./app_sqlite"
+  execPostgres,
+  listPostgresRows,
+  preferLivePostgres,
+  resetAppPostgresForTests,
+  resetAppPostgresForTestsAsync,
+  upsertPostgresRow,
+  preparePostgresSql,
+  appSqlEngineKind,
+  type ExecPostgresOpts,
+} from "./app_postgres"
 
 type sql_row = Record<string, unknown>
 
+export type ExecAppSqlOpts = ExecPostgresOpts
+
 export function resetAppSqlForTests(): void {
-  resetAppSqliteForTests()
+  resetAppPostgresForTests()
 }
 
+export async function resetAppSqlForTestsAsync(): Promise<void> {
+  await resetAppPostgresForTestsAsync()
+}
+
+export { preferLivePostgres, preparePostgresSql as prepareAppSql, appSqlEngineKind }
+
 export async function listAppSqlRows(scope: app_sql_scope | string, table: string): Promise<sql_row[]> {
-  return listSqliteRows(scope, table)
+  return listPostgresRows(scope, table)
 }
 
 export async function upsertAppSqlRow(
@@ -24,7 +36,7 @@ export async function upsertAppSqlRow(
   row: sql_row,
   pkField = "id",
 ): Promise<sql_row> {
-  return upsertSqliteRow(scope, table, row, pkField)
+  return upsertPostgresRow(scope, table, row, pkField)
 }
 
 export async function ensureAppSqlSeed(
@@ -43,9 +55,9 @@ export async function ensureAppSqlSeed(
 export async function execAppSql(
   scope: app_sql_scope | string,
   sql: string,
-  opts?: ExecSqliteOpts,
+  opts?: ExecAppSqlOpts,
 ): Promise<sql_row[]> {
-  return execSqlite(scope, sql, opts)
+  return execPostgres(scope, sql, opts)
 }
 
 export { sqlSeedRowsOf }

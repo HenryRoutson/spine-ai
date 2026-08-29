@@ -88,7 +88,7 @@ describe("vibe coding workspace", () => {
     const ws = seedVibeWorkspace({ project: ctx.project, globalModel: DEFAULT_MODEL })
     expect(ws.files.get("AGENTS.md")).toMatch(/run_tests/)
     expect(ws.files.get("AGENTS.md")).toMatch(/derived\/schema\.sql/)
-    expect(ws.files.get("AGENTS.md")).toMatch(/executable SQLite/)
+    expect(ws.files.get("AGENTS.md")).toMatch(/executable Postgres/)
     expect(ws.files.get("AGENTS.md")).not.toMatch(/Persist is auto-inserted/)
     expect(ws.files.has("pipeline.json")).toBe(true)
     expect(ws.files.get("derived/schema.sql")).toMatch(/CREATE TABLE document/)
@@ -174,11 +174,11 @@ describe("vibe coding harness tools", () => {
     else process.env.SPINE_VIBE_HARNESS = prevHarness
   })
 
-  it("write_file refuses escapes and run_tests writes VALIDATION.md", () => {
+  it("write_file refuses escapes and run_tests writes VALIDATION.md", async () => {
     const session = createSpineSession()
     session.addProject({ open: true })
     const ws = seedVibeWorkspace({ project: session.project!, globalModel: DEFAULT_MODEL })
-    const escaped = executeVibeHarnessTool(
+    const escaped = await executeVibeHarnessTool(
       { tool: "write_file", path: "../secret.env", content: "KEY=1" },
       ws,
       () => "PASS",
@@ -186,31 +186,31 @@ describe("vibe coding harness tools", () => {
     expect(escaped).toMatch(/^error:/)
     expect([...ws.files.keys()].some((p) => p.includes("secret"))).toBe(false)
 
-    const agents = executeVibeHarnessTool(
+    const agents = await executeVibeHarnessTool(
       { tool: "write_file", path: "AGENTS.md", content: "nope" },
       ws,
       () => "PASS",
     )
     expect(agents).toMatch(/read-only/)
-    const derived = executeVibeHarnessTool(
+    const derived = await executeVibeHarnessTool(
       { tool: "write_file", path: "derived/schema.sql", content: "DROP TABLE document;" },
       ws,
       () => "PASS",
     )
     expect(derived).toMatch(/read-only/)
 
-    const wrote = executeVibeHarnessTool(
+    const wrote = await executeVibeHarnessTool(
       { tool: "write_file", path: "message.md", content: "I'll add a receipt pipeline." },
       ws,
       () => "PASS",
     )
     expect(wrote).toMatch(/wrote message.md/)
-    const tested = executeVibeHarnessTool({ tool: "run_tests" }, ws, () => "PASS\nI/O valid")
+    const tested = await executeVibeHarnessTool({ tool: "run_tests" }, ws, () => "PASS\nI/O valid")
     expect(tested).toContain("PASS")
     expect(ws.files.get("VALIDATION.md")).toContain("PASS")
   })
 
-  it("refreshes derived SQL and Python table helpers after run_tests", () => {
+  it("refreshes derived SQL and Python table helpers after run_tests", async () => {
     const session = createSpineSession()
     session.addProject({ open: true })
     const ws = seedVibeWorkspace({ project: session.project!, globalModel: DEFAULT_MODEL })
@@ -222,19 +222,19 @@ describe("vibe coding harness tools", () => {
     })
     const checks = (draft: Parameters<typeof runVibeWorkspaceChecks>[0]) =>
       runVibeWorkspaceChecks(draft, session.project!, DEFAULT_MODEL, [], undefined, ws)
-    executeVibeHarnessTool(
+    await executeVibeHarnessTool(
       { tool: "write_file", path: "structures/ReceiptRow.json", content: `${row}\n` },
       ws,
       checks,
     )
-    executeVibeHarnessTool({ tool: "run_tests" }, ws, checks)
+    await executeVibeHarnessTool({ tool: "run_tests" }, ws, checks)
     expect(ws.files.get("derived/schema.sql")).toMatch(/receipt_row/)
     expect(ws.files.get("derived/models.py")).toMatch(/class ReceiptRowTable/)
     expect(ws.files.get("derived/schema.zod.ts")).toMatch(/export const ReceiptRow/)
     expect(ws.files.get("derived/prompts.md")).toMatch(/## ReceiptRow/)
   })
 
-  it("prepares authored SQLite including JOIN and fails on syntax errors", () => {
+  it("prepares authored Postgres including JOIN and fails on syntax errors", async () => {
     const session = createSpineSession()
     session.addProject({ open: true })
     const persistRow = {
@@ -289,10 +289,10 @@ describe("vibe coding harness tools", () => {
       proposedActions: null,
       errors: [] as string[],
     }
-    const ok = runVibeWorkspaceChecks(base, session.project!, DEFAULT_MODEL, [])
+    const ok = await runVibeWorkspaceChecks(base, session.project!, DEFAULT_MODEL, [])
     expect(ok).toMatch(/^PASS/m)
     expect(ok).toMatch(/sql prepared/)
-    const fail = runVibeWorkspaceChecks(
+    const fail = await runVibeWorkspaceChecks(
       {
         ...base,
         modules: modules.map((m) => (m.kind === "sql" ? { ...m, sql: "INSERT INTO persist_row (vendor) VALUESS (?)" } : m)),
@@ -303,7 +303,7 @@ describe("vibe coding harness tools", () => {
     )
     expect(fail).toMatch(/^FAIL/m)
     expect(fail).toMatch(/^sql:/m)
-    const missing = runVibeWorkspaceChecks(
+    const missing = await runVibeWorkspaceChecks(
       {
         ...base,
         modules: modules.filter((m) => m.kind !== "sql"),
@@ -317,7 +317,7 @@ describe("vibe coding harness tools", () => {
     expect(missing).toMatch(/no sql step/)
   })
 
-  it("auto run_tests after writes and ignores Q&A PASS / premature done", () => {
+  it("auto run_tests after writes and ignores Q&A PASS / premature done", async () => {
     const session = createSpineSession()
     session.addProject({ open: true })
     const ws = seedVibeWorkspace({ project: session.project!, globalModel: DEFAULT_MODEL })
@@ -335,7 +335,7 @@ describe("vibe coding harness tools", () => {
     })
     expect(qa).toBe(false)
 
-    const applied = applyHarnessTurn(
+    const applied = await applyHarnessTurn(
       {
         tools: [
           { tool: "write_file", path: "message.md", content: "I'll add a notes pipeline." },
@@ -364,11 +364,11 @@ describe("vibe coding harness tools", () => {
     expect(parsed.data.tools[0]?.path).toBe("pipeline.json")
   })
 
-  it("run_tests reports Document structureOut errors instead of a generic FAIL", () => {
+  it("run_tests reports Document structureOut errors instead of a generic FAIL", async () => {
     const session = createSpineSession()
     session.addProject({ open: true })
     const ws = seedVibeWorkspace({ project: session.project!, globalModel: DEFAULT_MODEL })
-    executeVibeHarnessTool(
+    await executeVibeHarnessTool(
       {
         tool: "write_file",
         path: "pipeline.json",
@@ -396,7 +396,7 @@ describe("vibe coding harness tools", () => {
       () => "unused",
     )
     const draft = parseVibeWorkspaceFiles(ws.files, ws.seed)
-    const report = runVibeWorkspaceChecks(draft, session.project!, DEFAULT_MODEL, [])
+    const report = await runVibeWorkspaceChecks(draft, session.project!, DEFAULT_MODEL, [])
     expect(report).toMatch(/^FAIL schema/m)
     expect(report).toMatch(/structureOut Document/)
   })

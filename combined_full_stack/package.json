@@ -30,6 +30,7 @@
   "dependencies": {
     "@assistant-ui/react": "^0.15.13",
     "@base-ui/react": "^1.5.0",
+    "@electric-sql/pglite": "^0.5.8",
     "@langfuse/otel": "^5.10.0",
     "@langfuse/tracing": "^5.10.0",
     "@monaco-editor/react": "^4.7.0",
@@ -56,6 +57,7 @@
     "next": "16.2.6",
     "next-themes": "^0.4.6",
     "pdf-parse": "^2.4.5",
+    "pg": "^8.23.0",
     "pyodide": "^0.27.7",
     "react": "19.2.4",
     "react-dom": "19.2.4",
@@ -82,6 +84,7 @@
     "@types/estree": "^1.0.9",
     "@types/katex": "^0.16.8",
     "@types/node": "^24",
+    "@types/pg": "^8.23.1",
     "@types/react": "19.2.14",
     "@types/react-dom": "19.2.3",
     "@types/ws": "^8.18.1",

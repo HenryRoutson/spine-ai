@@ -1,5 +1,5 @@
 // AI : SQL DDL annotation — client-safe string building only (like lib/pydantic.ts).
-// AI :   No better-sqlite3 / sql.js / postgres in this slice. Runtime values stay JSON maps.
+// AI :   Printer only — runtime Postgres is lib/server/app_postgres.ts.
 // AI : parametric structs / trees stay JSON columns — no GENERIC TABLE.
 // AI :
 // AI : =============================================================================
@@ -61,14 +61,14 @@
 // AI : allModelsToSql ALGORITHM
 // AI : =============================================================================
 // AI : Header comment:
-// AI :   -- generated schema.sql — executable SQLite; sql steps apply this then run your statement
+// AI :   -- generated schema.sql — executable Postgres; sql steps apply this then run your statement
 // AI : Always emit platform tables first (even if project has no documents):
 // AI :   CREATE TABLE document (
 // AI :     id TEXT PRIMARY KEY,
 // AI :     filename TEXT NOT NULL,
 // AI :     mime TEXT,
 // AI :     content TEXT,
-// AI :     blob BLOB
+// AI :     blob BYTEA
 // AI :   );
 // AI :   CREATE TABLE quote_span (
 // AI :     doc_id TEXT NOT NULL REFERENCES document(id),
@@ -103,7 +103,7 @@
 // AI :   then each child model field (same rules; nested list[model] on child → JSON TEXT, do not recurse infinitely)
 // AI : Emit order: all parent CREATE TABLE, then all child CREATE TABLE, then views.
 // AI : Views: for modules with kind example-select, exampleSelectViewSql if defined, separated by blank line.
-// AI : Pretty-print: 2-space indent, trailing comma on last column optional (SQLite allows none — omit last comma).
+// AI : Pretty-print: 2-space indent, trailing comma on last column optional (omit last comma).
 // AI :
 // AI : =============================================================================
 // AI : TYPES / SEED / API (not this file, but required for DDL + views to persist)
@@ -256,7 +256,7 @@ export function parseSqlSelect(sql: string): ParsedSqlSelect {
   if (FORBIDDEN_SQL.test(collapsed)) {
     return { columns: [], hasJoin: true, error: JOIN_SLICE_ERROR }
   }
-  const selectSql = collapsed.replace(/^CREATE\s+VIEW\s+\S+\s+AS\s+/i, "")
+  const selectSql = collapsed.replace(/^CREATE\s+(OR\s+REPLACE\s+)?VIEW\s+\S+\s+AS\s+/i, "")
   const selectMatch = /^SELECT\s+(.+)$/i.exec(selectSql)
   if (!selectMatch) return { columns: [], hasJoin: false, error: "could not parse SELECT …" }
   const body = selectMatch[1]!.trim()
@@ -297,7 +297,7 @@ export function exampleSelectViewSql(m: PipelineModule, models?: StructureModel[
   if (view) {
     if (/^CREATE\s+VIEW\b/i.test(view)) return withSemicolon(view)
     if (/^SELECT\b/i.test(view)) {
-      return `CREATE VIEW ${sqlIdent(m.label)}_prompt AS\n${view.replace(/;+\s*$/, "")};`
+      return `CREATE OR REPLACE VIEW ${sqlIdent(m.label)}_prompt AS\n${view.replace(/;+\s*$/, "")};`
     }
     return undefined
   }
@@ -305,7 +305,7 @@ export function exampleSelectViewSql(m: PipelineModule, models?: StructureModel[
   if (!fields?.length) return undefined
   const inModel = models?.find((x) => x.id === m.inStructureId)
   const from = sqlTableName(inModel?.name ?? "example")
-  return `CREATE VIEW ${sqlIdent(m.label)}_prompt AS\nSELECT ${fields.map(sqlIdent).join(", ")} FROM ${from};`
+  return `CREATE OR REPLACE VIEW ${sqlIdent(m.label)}_prompt AS\nSELECT ${fields.map(sqlIdent).join(", ")} FROM ${from};`
 }
 
 type Unwrapped = { inner: TypeExpr; optional: boolean }
@@ -440,14 +440,14 @@ export function allModelsToSql(models: StructureModel[], modules?: PipelineModul
   const lookup = stripSharedModels(models)
   const exported = modelsForPydanticExport(lookup)
   const chunks: string[] = [
-    "-- generated schema.sql — executable SQLite; sql steps apply this then run your statement",
+    "-- generated schema.sql — executable Postgres; sql steps apply this then run your statement",
     "",
     emitCreateTable("document", [
       "  id TEXT PRIMARY KEY",
       "  filename TEXT NOT NULL",
       "  mime TEXT",
       "  content TEXT",
-      "  blob BLOB",
+      "  blob BYTEA",
     ]),
     "",
     emitCreateTable("quote_span", [

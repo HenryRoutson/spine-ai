@@ -76,7 +76,7 @@ const nextConfig = {
     ],
   },
   // AI : pdf-parse + canvas must stay unbundled (worker files + native .node binaries).
-  serverExternalPackages: ["pdf-parse", "pdfjs-dist", "@napi-rs/canvas", "ink", "sqlite"],
+  serverExternalPackages: ["pdf-parse", "pdfjs-dist", "@napi-rs/canvas", "ink", "pg", "@electric-sql/pglite"],
   images: {
     unoptimized: true,
   },

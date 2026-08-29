@@ -1,7 +1,7 @@
 import { describe, expect, it, beforeEach } from "vitest"
 import { resolve } from "node:path"
 import { evalSqlExpr, parseAppSql, sqlWhereMatches, tableNameForModel } from "@/lib/app-sql"
-import { execAppSql, resetAppSqlForTests } from "@/lib/server/app_sql"
+import { execAppSql, resetAppSqlForTests, appSqlEngineKind, prepareAppSql } from "@/lib/server/app_sql"
 import { loadProjectSeed, SEEDS_DIR } from "@/lib/server/seed"
 import { shouldCheckInputDescription } from "@/lib/server/input_description_check"
 import { computeInvalid, migrateProjectModules } from "@/lib/server/validity"
@@ -51,7 +51,7 @@ describe("parseAppSql", () => {
     })
   })
 
-  it("rejects join in the hosted animation parser (SQLite still runs JOIN)", () => {
+  it("rejects join in the hosted animation parser (Postgres still runs JOIN)", () => {
     expect(() => parseAppSql("SELECT * FROM a JOIN b ON a.id = b.id")).toThrow()
   })
 })
@@ -111,7 +111,7 @@ describe("execAppSql", () => {
     expect(plusOne).toEqual([{ id: "global", value: 4, odd: 1 }])
   })
 
-  it("runs JOIN and ? binds from previous rows", async () => {
+  it("runs JOIN and ? / :name binds from previous rows on Postgres", async () => {
     const scope = "project:p_join"
     await execAppSql(scope, "CREATE TABLE invoice (id TEXT, vendor TEXT)")
     await execAppSql(scope, "CREATE TABLE line (invoice_id TEXT, amount REAL)")
@@ -122,6 +122,7 @@ describe("execAppSql", () => {
       "SELECT invoice.vendor AS vendor, line.amount AS amount FROM invoice JOIN line ON invoice.id = line.invoice_id",
     )
     expect(joined).toEqual([{ vendor: "Acme", amount: 42 }])
+    expect(appSqlEngineKind()).toBe("pglite")
 
     const bound = await execAppSql(scope, "INSERT INTO invoice (id, vendor) VALUES (?, ?)", {
       bindRows: [{ id: "2", vendor: "Beta" }],
@@ -132,6 +133,23 @@ describe("execAppSql", () => {
       bindRows: [{ id: "3", vendor: "Gamma" }],
     })
     expect(named[0]).toMatchObject({ id: "3", vendor: "Gamma" })
+  })
+
+  it("adds a missing INSERT column instead of treating it as a missing table", async () => {
+    const scope = "project:p_evolve_col"
+    await execAppSql(scope, "CREATE TABLE persist_row (vendor TEXT NOT NULL)")
+    const rows = await execAppSql(scope, "INSERT INTO persist_row (id, vendor) VALUES ('row_a', 'Acme')")
+    expect(rows[0]).toMatchObject({ id: "row_a", vendor: "Acme" })
+  })
+
+  it("prepares JOIN SQL against Postgres schema DDL", async () => {
+    const err = await prepareAppSql(
+      "SELECT persist_row.vendor FROM persist_row JOIN persist_row AS other ON persist_row.vendor = other.vendor",
+      "CREATE TABLE persist_row (vendor TEXT);",
+    )
+    expect(err).toBeNull()
+    const bad = await prepareAppSql("INSERT INTO persist_row (vendor) VALUESS (?)", "CREATE TABLE persist_row (vendor TEXT);")
+    expect(bad).toMatch(/syntax/i)
   })
 })
 

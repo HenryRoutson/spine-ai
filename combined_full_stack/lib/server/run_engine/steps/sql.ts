@@ -36,7 +36,7 @@ export async function execSqlStep(m: PipelineModule, ctx: RunCtx, log: RunLogger
   const prevValue = ctx.prevModuleId ? ctx.outputs.get(ctx.prevModuleId) : undefined
   const out = modelById(ctx.project.models, m.outStructureId)
   const sqls: string[] = []
-  // AI : authored SQL runs as SQLite. Empty sql after extract still INSERTs from the previous row(s).
+  // AI : authored SQL runs as Postgres. Empty sql after extract still INSERTs from the previous row(s).
   if (m.sql?.trim()) {
     sqls.push(m.sql.trim())
   } else if (shouldDeriveInsertSql(prev, m) && out && prevValue != null) {
