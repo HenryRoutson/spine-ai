@@ -27,7 +27,7 @@ export {}
 // AI : TODO (jank-site-urls) — production hosts are split: spine-ai.dev (marketing),
 // AI :   spine-ai-app.dev (app), app.usespine.com (login), auto-pipeline.dev (legacy CORS).
 // AI :   One constant module + env overrides; do not hardcode a fourth name.
-// AI : DONE (jank-mcp-paths) — .cursor/mcp.json uses PATH `node` + mcp_tool/spine-mcp.mjs (cwd .).
+// AI : DONE (jank-mcp-paths) — .cursor/mcp.json uses ${workspaceFolder}/mcp_tool/spine-mcp.mjs (no machine PATH).
 // AI : TODO (jank-oauth-login) — login page GitHub/Google OAuth is commented out
 // AI :   (callback route exists at /auth/callback).
 

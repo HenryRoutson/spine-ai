@@ -649,6 +649,19 @@ def cmd_deps(_: argparse.Namespace) -> None:
     install_deps()
 
 
+def cmd_mcp(_: argparse.Namespace) -> None:
+    node = shutil.which("node")
+    if not node:
+        raise SetupError("node is required — install Node 20+ and rerun.")
+    if not (ROOT / "mcp_tool" / "node_modules" / "tsx").exists():
+        run(["npm", "install"], cwd=ROOT / "mcp_tool")
+    run([node, str(ROOT / "mcp_tool" / "spine-mcp.mjs"), "--write-cursor"], cwd=ROOT)
+    log("Optional editor MCP is ready — in-app Vibe stays the default.")
+    log("Guide: docs/mcp_setup.md")
+    log('Claude Code: claude mcp add spine -- node "$PWD/mcp_tool/spine-mcp.mjs"')
+    log("Cursor: enable the spine server in Settings → MCP.")
+
+
 def cmd_seeds(_: argparse.Namespace) -> None:
     ensure_env_bootstrap()
     status = supabase_status()
@@ -738,6 +751,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
 
     sub.add_parser("deps", help="npm install all apps + sync shared code")
+    sub.add_parser("mcp", help="install Spine MCP and write portable Cursor/Claude Code client config")
     sub.add_parser("seeds", help="create local test user + sync example projects")
     sub.add_parser("nango", help="start self-hosted Nango (auth + proxy on :3003)")
     sub.add_parser("ap", help="start Activepieces CE sidecar (piece runtime on :3080)")
@@ -767,6 +781,7 @@ def main() -> int:
         "env": cmd_env,
         "supabase": cmd_supabase,
         "deps": cmd_deps,
+        "mcp": cmd_mcp,
         "seeds": cmd_seeds,
         "nango": cmd_nango,
         "ap": cmd_ap,

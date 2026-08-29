@@ -133,7 +133,9 @@ CLI today **does not** speak this HTTP surface except where it imports server li
 
 ### 2.4 MCP (Cursor / agents)
 
-Entry: `.cursor/mcp.json` + `~/.cursor/mcp.json` → `mcp_tool/src/index.ts` (stdio JSON-RPC). Spawn must use **absolute** `node` + `tsx/cli.mjs` + `tsconfig.json` — Cursor starts the process from `$HOME` and ignores `cwd`. Handshake test: `mcp_tool/src/mcp-boot.test.ts`.
+User setup: [`docs/mcp_setup.md`](mcp_setup.md). In-app Vibe stays the default; Claude Code / Cursor is opt-in.
+
+Entry: `.mcp.json` (Claude Code) + `.cursor/mcp.json` (`${workspaceFolder}/mcp_tool/spine-mcp.mjs`) → `mcp_tool/src/index.ts` (stdio JSON-RPC). The launcher `spine-mcp.mjs` resolves the repo from its own path, so Cursor can spawn from `$HOME`. Handshake test: `mcp_tool/src/mcp-boot.test.ts`. Copy snippets: Settings → Editors (MCP).
 
 Two tool families on one server:
 
@@ -669,6 +671,9 @@ Grep an id (example): `rg 'project.add' combined_full_stack docs mcp_tool`.
 | `settings.accept-invite` | Accept invite | no teams TUI [host] | POST /api/teams/invites/accept | Bar B [N] | GUI [host] |
 | `settings.remove-member` | Remove member | no teams TUI [host] | DELETE /api/teams/:teamId/members/:userId | Bar B [N] | GUI [host] |
 | `settings.set-model` | Default model | spine session set-model --model | PUT /api/projects/:id + account prefs | session_action id=settings.set-model | session.setModel(id) |
+| `settings.mcp-copy-claude` | Copy Claude Code MCP command | editor install [n/a] | stdio MCP [n/a] | user connects Claude Code to this server [host] | spineMcpSetupSnippets() [host] |
+| `settings.mcp-copy-cursor` | Copy Cursor MCP JSON | editor install [n/a] | stdio MCP [n/a] | user connects Cursor to this server [host] | spineMcpSetupSnippets() [host] |
+| `settings.mcp-copy-token` | Copy MCP API env | editor env [n/a] | SPINE_API_TOKEN bearer [n/a] | paste token into editor env / .env [host] | supabase.auth.getSession() [host] |
 | `assistant.send` | Send (agent chat) | Ink: press a then type / spine agent ask --message | POST /api/pipeline-assistant (also structure/testing/diagnosis) | ask_agent | askAgent(session, message, { kind }) |
 | `assistant.approve` | Approve | Ink: press y | local apply + optional POST /api/runs | session_action id=assistant.approve (pending or proposalJson) | session.applyProposal / applyPendingProposal() |
 | `assistant.reject` | Reject | Ink: press d | local only [n/a] | session_action id=assistant.reject | session.rejectPendingProposal() |

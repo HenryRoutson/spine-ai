@@ -15,6 +15,7 @@
       "Skill",
       "NotebookEdit",
       "TodoWrite",
+      "mcp__spine__*",
       "mcp__spine-pinpoint__*"
     ],
     "deny": [

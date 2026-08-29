@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "start": "node ./spine-mcp.mjs",
+    "print-config": "tsx --tsconfig tsconfig.json scripts/print-client-config.ts",
     "benchmark-bridge": "tsx --tsconfig tsconfig.json scripts/benchmark_bridge.ts",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
