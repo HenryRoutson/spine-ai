@@ -2,6 +2,7 @@
 
 import { useEffect, useId, useRef, useState } from "react"
 import { loadMermaidRuntime } from "@/lib/mermaid-runtime"
+import { MERMAID_VERBOSE_STEP_LABELS } from "@/lib/pipeline-mermaid"
 import { cn } from "@/lib/utils"
 
 const MONO_FONT = "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace"
@@ -43,11 +44,52 @@ function unclipMermaidNodeLabels(root: HTMLElement): void {
   }
 }
 
-// AI : client-only mermaid render — used for derived pipeline structure in documentation.
+function mermaidFlowchartConfig(verbose: boolean): Record<string, unknown> {
+  if (verbose) {
+    return {
+      startOnLoad: false,
+      theme: "base",
+      fontFamily: MONO_FONT,
+      securityLevel: "strict",
+      useMaxWidth: false,
+      themeCSS:
+        ".label,.edgeLabel,.nodeLabel,foreignObject{overflow:visible!important}.nodeLabel div{white-space:nowrap}",
+      flowchart: {
+        htmlLabels: true,
+        curve: "basis",
+        padding: 20,
+        nodeSpacing: 80,
+        rankSpacing: 80,
+        wrappingWidth: 480,
+        useMaxWidth: false,
+      },
+    }
+  }
+  return {
+    startOnLoad: false,
+    theme: "base",
+    fontFamily: MONO_FONT,
+    securityLevel: "strict",
+    useMaxWidth: false,
+    themeCSS: ".node,.node .label,.edgeLabel{overflow:visible!important}",
+    flowchart: {
+      htmlLabels: false,
+      curve: "basis",
+      padding: 12,
+      nodeSpacing: 40,
+      rankSpacing: 56,
+      wrappingWidth: 999,
+      useMaxWidth: false,
+    },
+  }
+}
+
+// AI : SVG text labels by default — htmlLabels + unclip when MERMAID_VERBOSE_STEP_LABELS.
 export function MermaidView({ chart, className }: MermaidViewProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const renderId = useId().replace(/:/g, "")
   const [error, setError] = useState<string | null>(null)
+  const verbose = MERMAID_VERBOSE_STEP_LABELS
 
   useEffect(() => {
     let cancelled = false
@@ -61,28 +103,11 @@ export function MermaidView({ chart, className }: MermaidViewProps) {
     void (async () => {
       try {
         const mermaid = await loadMermaidRuntime()
-        mermaid.initialize({
-          startOnLoad: false,
-          theme: "base",
-          fontFamily: MONO_FONT,
-          securityLevel: "strict",
-          useMaxWidth: false,
-          themeCSS:
-            ".label,.edgeLabel,.nodeLabel,foreignObject{overflow:visible!important}.nodeLabel div{white-space:nowrap}",
-          flowchart: {
-            htmlLabels: true,
-            curve: "basis",
-            padding: 20,
-            nodeSpacing: 80,
-            rankSpacing: 80,
-            wrappingWidth: 480,
-            useMaxWidth: false,
-          },
-        })
+        mermaid.initialize(mermaidFlowchartConfig(verbose))
         const { svg } = await mermaid.render(`pipeline-mermaid-${renderId}`, chart)
         if (!cancelled && containerRef.current) {
           containerRef.current.innerHTML = svg
-          unclipMermaidNodeLabels(containerRef.current)
+          if (verbose) unclipMermaidNodeLabels(containerRef.current)
           setError(null)
         }
       } catch (e) {
@@ -96,7 +121,7 @@ export function MermaidView({ chart, className }: MermaidViewProps) {
     return () => {
       cancelled = true
     }
-  }, [chart, renderId])
+  }, [chart, renderId, verbose])
 
   if (!chart.trim()) return null
 
@@ -104,7 +129,7 @@ export function MermaidView({ chart, className }: MermaidViewProps) {
     <div className={cn("min-w-0", className)}>
       <div
         ref={containerRef}
-        className="overflow-x-auto py-1 font-mono [&_svg]:mx-auto [&_svg]:h-auto [&_svg_.edgeLabel]:font-mono [&_svg_.edgeLabel]:text-[10px] [&_svg_.label]:font-mono [&_svg_.nodeLabel]:font-mono [&_svg_foreignObject]:overflow-visible [&_svg_text]:font-mono"
+        className="overflow-x-auto py-1 [&_svg]:mx-auto [&_svg]:h-auto"
         aria-label="Pipeline structure diagram"
       />
       {error && (
