@@ -4,7 +4,11 @@ import {
   stampHostedSiteHsIds,
   stripHostedSiteHsIds,
 } from "@/lib/hosted-site-select"
-import { hostedSiteNeedsInjectedPrimarySlot, splitHostedSiteSlots } from "@/lib/hosted-site-slots"
+import {
+  hostedPipelineSlotHighlighted,
+  hostedSiteNeedsInjectedPrimarySlot,
+  splitHostedSiteSlots,
+} from "@/lib/hosted-site-slots"
 
 describe("hosted site click-to-edit", () => {
   it("stamps stable data-hs-id on opening tags and strips them", () => {
@@ -38,6 +42,14 @@ describe("hosted site extra slots", () => {
       "output",
       "chatbot",
     ])
+  })
+
+  it("matches a highlighted pipeline to its run or action slot", () => {
+    expect(hostedPipelineSlotHighlighted("run", undefined, "run")).toBe(true)
+    expect(hostedPipelineSlotHighlighted("run", "count", "count")).toBe(true)
+    expect(hostedPipelineSlotHighlighted("run", "count", "run")).toBe(false)
+    expect(hostedPipelineSlotHighlighted("action", undefined, "run")).toBe(true)
+    expect(hostedPipelineSlotHighlighted("sql", "employee", "run")).toBe(false)
   })
 
   it("does not inject a Run widget on a page-only site", () => {

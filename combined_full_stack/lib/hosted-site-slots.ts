@@ -196,6 +196,20 @@ export function hostedSiteHasPrimarySlot(
 }
 
 // AI : Lovable landing pages have no {{run}} and no pipelines — do not append a Run widget.
+export function hostedPipelineSlotKey(slot: hosted_site_widget_slot, alias?: string): string | null {
+  if (slot !== "run" && slot !== "action") return null
+  return alias || "run"
+}
+
+export function hostedPipelineSlotHighlighted(
+  slot: hosted_site_widget_slot,
+  alias: string | undefined,
+  highlighted: string | null | undefined,
+): boolean {
+  const key = hostedPipelineSlotKey(slot, alias)
+  return Boolean(highlighted && key === highlighted)
+}
+
 export function hostedSiteNeedsInjectedPrimarySlot(
   segments: HostedSiteHtmlSegment[],
   surface: "app" | "signin",

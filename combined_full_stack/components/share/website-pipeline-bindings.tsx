@@ -1,8 +1,7 @@
 "use client"
 
 import { useMemo } from "react"
-import { GitBranch, Plus, X } from "lucide-react"
-import { DeleteButton } from "@/components/delete-button"
+import { GitBranch, MoreHorizontal, Plus } from "lucide-react"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -35,12 +34,16 @@ export function WebsitePipelineBindings({
   projects,
   options,
   onChange,
+  highlightedAlias = null,
+  onHighlight,
   className,
 }: {
   primaryProjectId: ProjectId
   projects: Pick<Project, "id" | "name">[]
   options: HostedSiteOptions
   onChange: (next: HostedSiteOptions) => void
+  highlightedAlias?: string | null
+  onHighlight?: (alias: string | null) => void
   className?: string
 }) {
   const store = useOptionalStore()
@@ -126,7 +129,7 @@ export function WebsitePipelineBindings({
     <div className={cn("space-y-1.5", className)}>
       <p className="text-xs font-medium">Pipelines on this website</p>
       <p className="text-[10px] text-muted-foreground">
-        Optional backends. Add a pipeline for a run widget. Open it to edit — this page stays the frontend.
+        Optional backends. Click a pipeline to highlight it on the page. Remove lives in the ⋯ menu.
       </p>
       <div className="flex flex-wrap items-center gap-1.5">
         {linked.length === 0 ? (
@@ -134,39 +137,63 @@ export function WebsitePipelineBindings({
         ) : null}
         {linked.map((binding) => {
           const name = catalog.find((p) => p.id === binding.projectId)?.name ?? binding.alias
+          const selected = highlightedAlias === binding.alias
           return (
             <span
               key={binding.projectId}
-              className="inline-flex max-w-full flex-col gap-1 rounded-md border border-border bg-background px-2 py-1.5 font-mono text-[11px]"
-            >
-              <span className="inline-flex h-6 max-w-full items-center gap-1">
-              <GitBranch className="h-3 w-3 shrink-0 text-muted-foreground" />
-              {canOpenBackend ? (
-                <button
-                  type="button"
-                  className="truncate hover:text-foreground"
-                  title="Open this pipeline to edit the backend"
-                  onClick={() => openBackend(binding.projectId)}
-                  {...spineActionProps("website.open-backend")}
-                >
-                  {name}
-                </button>
-              ) : (
-                <span className="truncate">{name}</span>
+              className={cn(
+                "inline-flex max-w-full flex-col gap-1 rounded-md border bg-background px-2 py-1.5 font-mono text-[11px]",
+                selected ? "border-primary" : "border-border",
               )}
-              <span className="text-[10px] text-muted-foreground">{binding.alias}</span>
-              <DeleteButton
+            >
+              <span className="inline-flex min-h-8 max-w-full items-center gap-1">
+              <button
                 type="button"
-                variant="ghost"
-                size="icon"
-                className="h-7 w-7 shrink-0"
-                label={`Remove ${name} from this website`}
-                title="Unattach and remove from the page code"
-                onClick={() => remove(binding.projectId)}
-                {...spineActionProps("website.remove-pipeline")}
+                className="inline-flex min-h-8 min-w-0 flex-1 items-center gap-1.5 rounded-sm px-1 text-left hover:bg-accent"
+                title="Show where this pipeline is used on the page"
+                aria-pressed={selected}
+                onClick={() => onHighlight?.(selected ? null : binding.alias)}
+                {...spineActionProps("website.focus-pipeline")}
               >
-                <X className="h-3 w-3" />
-              </DeleteButton>
+                <GitBranch className="h-3 w-3 shrink-0 text-muted-foreground" />
+                <span className="truncate">{name}</span>
+                <span className="text-[10px] text-muted-foreground">{binding.alias}</span>
+              </button>
+              <DropdownMenu modal={false}>
+                <DropdownMenuTrigger
+                  type="button"
+                  className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground"
+                  aria-label={`More actions for ${name}`}
+                  title="More"
+                >
+                  <MoreHorizontal className="h-4 w-4" />
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="z-[80] w-52">
+                  <DropdownMenuItem
+                    className="font-mono text-xs"
+                    onClick={() => onHighlight?.(selected ? null : binding.alias)}
+                  >
+                    {selected ? "Clear highlight" : "Show on page"}
+                  </DropdownMenuItem>
+                  {canOpenBackend ? (
+                    <DropdownMenuItem
+                      className="font-mono text-xs"
+                      onClick={() => openBackend(binding.projectId)}
+                      {...spineActionProps("website.open-backend")}
+                    >
+                      Open backend
+                    </DropdownMenuItem>
+                  ) : null}
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem
+                    className="font-mono text-xs text-destructive focus:text-destructive"
+                    onClick={() => remove(binding.projectId)}
+                    {...spineActionProps("website.remove-pipeline")}
+                  >
+                    Remove from website
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
               </span>
               <span className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[10px] text-muted-foreground">
                 <label className="inline-flex items-center gap-1">

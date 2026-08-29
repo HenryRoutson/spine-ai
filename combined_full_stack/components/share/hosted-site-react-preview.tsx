@@ -13,13 +13,21 @@ import type { hosted_site_widget_slot } from "@/lib/hosted-site-slots"
 function HostRunPipeline({
   alias,
   runByAlias,
+  highlightedAlias,
 }: {
   alias: string
   runByAlias?: Record<string, ReactNode>
+  highlightedAlias?: string | null
 }) {
   const key = alias || DEFAULT_WEBSITE_PIPELINE_ALIAS
+  const lit = highlightedAlias === key
   return (
-    <div data-spine-run={key}>
+    <div
+      data-spine-run={key}
+      data-hs-pipeline={key}
+      {...(lit ? { "data-hs-pipeline-lit": "" } : {})}
+      className={lit ? "hs-pipeline-lit" : undefined}
+    >
       {runByAlias?.[key] ?? (
         <div className="rounded-md border border-dashed border-border px-3 py-4 text-center text-[11px] text-muted-foreground">
           Pipeline · {key}
@@ -88,6 +96,7 @@ export function HostedSiteReactPreview({
   slots,
   bundle: bundleProp,
   compileError: compileErrorProp,
+  highlightedAlias = null,
 }: {
   options: HostedSiteOptions
   runByAlias?: Record<string, ReactNode>
@@ -95,6 +104,7 @@ export function HostedSiteReactPreview({
   slots?: Partial<Record<hosted_site_widget_slot, ReactNode>>
   bundle?: hosted_site_react_bundle | null
   compileError?: string | null
+  highlightedAlias?: string | null
 }) {
   const files = options.reactFiles.length > 0 ? options.reactFiles : htmlSiteToReactFiles(options)
   const filesKey = useMemo(() => files.map((f) => `${f.path}:${f.contents}`).join("\0"), [files])
@@ -104,6 +114,14 @@ export function HostedSiteReactPreview({
     bundle: bundleProp ?? null,
     error: compileErrorProp ?? null,
   })
+
+  useEffect(() => {
+    if (!highlightedAlias) return
+    document.querySelector<HTMLElement>("[data-hs-pipeline-lit]")?.scrollIntoView({
+      behavior: "smooth",
+      block: "center",
+    })
+  }, [highlightedAlias])
 
   useEffect(() => {
     if (bundleProp || compileErrorProp) {
@@ -149,7 +167,9 @@ export function HostedSiteReactPreview({
   const mounted = useMemo((): { App: ComponentType | null; error: string | null } => {
     if (!bundle) return { App: null, error: null }
     try {
-      const Run = (props: { alias: string }) => <HostRunPipeline alias={props.alias} runByAlias={runByAlias} />
+      const Run = (props: { alias: string }) => (
+        <HostRunPipeline alias={props.alias} runByAlias={runByAlias} highlightedAlias={highlightedAlias} />
+      )
       const Slot = (props: { slot: string }) => (
         <HostSlot slot={props.slot} tableByAlias={tableByAlias} slots={slots} />
       )
@@ -157,12 +177,17 @@ export function HostedSiteReactPreview({
     } catch (err) {
       return { App: null, error: (err as Error).message }
     }
-  }, [bundle, runByAlias, tableByAlias, slots])
+  }, [bundle, runByAlias, tableByAlias, slots, highlightedAlias])
 
   const PreviewApp = mounted.App
   return (
     <div className="hs-root hs-react-preview min-h-40" style={hostedSiteBrandVars(options.brand) as CSSProperties}>
-      {css ? <style>{css}</style> : null}
+      {css ? (
+        <style>{`${css}
+.hs-pipeline-lit { outline: 3px solid var(--hs-accent); outline-offset: 4px; box-shadow: 0 0 0 6px color-mix(in srgb, var(--hs-accent) 22%, transparent); }`}</style>
+      ) : (
+        <style>{`.hs-pipeline-lit { outline: 3px solid var(--hs-accent); outline-offset: 4px; box-shadow: 0 0 0 6px color-mix(in srgb, var(--hs-accent) 22%, transparent); }`}</style>
+      )}
       {error || mounted.error ? (
         <p className="px-3 py-4 font-mono text-[11px] text-destructive">{error || mounted.error}</p>
       ) : PreviewApp ? (

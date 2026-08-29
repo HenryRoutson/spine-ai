@@ -1,7 +1,7 @@
 "use client"
 // AI : parity ids — share.site-vibe
 
-import { useCallback, useRef, useState } from "react"
+import { useCallback, useEffect, useRef, useState } from "react"
 import { Code2, FileCode2, Plus, Sparkles, X } from "lucide-react"
 import { AssistantChat } from "@/components/assistant-chat"
 import { MonacoCodeEditor } from "@/components/code-viewer"
@@ -81,6 +81,7 @@ export function HostedSitePageStudio({
   const [selection, setSelection] = useState<{ cssPath: string; snippet: string } | null>(null)
   const [runtimeConfirm, setRuntimeConfirm] = useState<"html" | "react" | null>(null)
   const [reactPath, setReactPath] = useState("src/App.tsx")
+  const [highlightedPipelineAlias, setHighlightedPipelineAlias] = useState<string | null>(null)
   const valueRef = useRef(value)
   valueRef.current = value
   const resolvedTarget: studio_preview_target =
@@ -146,6 +147,11 @@ export function HostedSitePageStudio({
   })
   const listedBindings = listedWebsitePipelineBindings(value.pipelineBindings)
   const hasPipelines = listedBindings.length > 0
+  useEffect(() => {
+    if (highlightedPipelineAlias && !listedBindings.some((b) => b.alias === highlightedPipelineAlias)) {
+      setHighlightedPipelineAlias(null)
+    }
+  }, [listedBindings, highlightedPipelineAlias])
   const runByAlias = Object.fromEntries(
     listedBindings.map((binding) => {
       if (binding.alias === "run" || binding.projectId === project.id) {
@@ -174,6 +180,7 @@ export function HostedSitePageStudio({
         runByAlias={runByAlias}
         tableByAlias={tableByAlias}
         slots={slotWidgets}
+        highlightedAlias={highlightedPipelineAlias}
       />
     ) : (
     <HostedSiteChrome
@@ -197,6 +204,7 @@ export function HostedSitePageStudio({
         collatz: <HostedSiteActionPreview alias="collatz" />,
       }}
       tableByAlias={tableByAlias}
+      highlightedAlias={highlightedPipelineAlias}
       editable={value.runtime !== "react"}
     />
     )
@@ -362,6 +370,8 @@ export function HostedSitePageStudio({
         projects={projects}
         options={value}
         onChange={onChange}
+        highlightedAlias={highlightedPipelineAlias}
+        onHighlight={setHighlightedPipelineAlias}
       />
 
       {runtimeConfirm ? (

@@ -1,6 +1,6 @@
 "use client"
 
-import { useMemo, type CSSProperties, type FocusEvent, type MouseEvent, type ReactNode } from "react"
+import { useEffect, useMemo, type CSSProperties, type FocusEvent, type MouseEvent, type ReactNode } from "react"
 import {
   compileHostedSiteAuthHtml,
   compileHostedSiteHtml,
@@ -12,6 +12,8 @@ import {
   HOSTED_SITE_IGNORED_SLOT_SELECTOR,
   HOSTED_SITE_SLOT_CLASS,
   groupHostedActionSlots,
+  hostedPipelineSlotHighlighted,
+  hostedPipelineSlotKey,
   hostedSiteNeedsInjectedPrimarySlot,
   hostedSitePrimarySlot,
   type hosted_site_widget_slot,
@@ -38,6 +40,7 @@ export function HostedSiteChrome({
   sqlByTable,
   actionByAlias,
   tableByAlias,
+  highlightedAlias = null,
   editable = false,
 }: {
   options: HostedSiteOptions
@@ -50,6 +53,7 @@ export function HostedSiteChrome({
   sqlByTable?: Record<string, ReactNode>
   actionByAlias?: Record<string, ReactNode>
   tableByAlias?: Record<string, ReactNode>
+  highlightedAlias?: string | null
   editable?: boolean
 }) {
   const compiled = useMemo(() => {
@@ -65,6 +69,28 @@ export function HostedSiteChrome({
     surface,
     listedWebsitePipelineBindings(options.pipelineBindings).length > 0,
   )
+
+  useEffect(() => {
+    if (!highlightedAlias) return
+    document.querySelector<HTMLElement>("[data-hs-pipeline-lit]")?.scrollIntoView({
+      behavior: "smooth",
+      block: "center",
+    })
+  }, [highlightedAlias, compiled.segments])
+
+  function slotFrameClass(slot: hosted_site_widget_slot, alias?: string, extra = ""): string {
+    const lit = hostedPipelineSlotHighlighted(slot, alias, highlightedAlias)
+    return `${HOSTED_SITE_SLOT_CLASS[slot]}${extra ? ` ${extra}` : ""}${lit ? " hs-pipeline-lit" : ""}`
+  }
+
+  function slotFrameProps(slot: hosted_site_widget_slot, alias?: string): { "data-hs-pipeline"?: string; "data-hs-pipeline-lit"?: "" } {
+    const key = hostedPipelineSlotKey(slot, alias)
+    const lit = hostedPipelineSlotHighlighted(slot, alias, highlightedAlias)
+    return {
+      ...(key ? { "data-hs-pipeline": key } : {}),
+      ...(lit ? { "data-hs-pipeline-lit": "" } : {}),
+    }
+  }
 
   function slotNode(slot: hosted_site_widget_slot, alias?: string): ReactNode {
     if (slot === "run") {
@@ -162,9 +188,11 @@ export function HostedSiteChrome({
     >
       {editable ? (
         <style>{`${compiled.css}
-[data-hs-selected] { outline: 2px solid var(--hs-accent); outline-offset: 2px; cursor: text; }`}</style>
+[data-hs-selected] { outline: 2px solid var(--hs-accent); outline-offset: 2px; cursor: text; }
+.hs-pipeline-lit { outline: 3px solid var(--hs-accent); outline-offset: 4px; box-shadow: 0 0 0 6px color-mix(in srgb, var(--hs-accent) 22%, transparent); }`}</style>
       ) : (
-        <style>{compiled.css}</style>
+        <style>{`${compiled.css}
+.hs-pipeline-lit { outline: 3px solid var(--hs-accent); outline-offset: 4px; box-shadow: 0 0 0 6px color-mix(in srgb, var(--hs-accent) 22%, transparent); }`}</style>
       )}
       {renderSegments.map((seg, i) => {
         if (seg.kind === "html") {
@@ -174,7 +202,11 @@ export function HostedSiteChrome({
           return (
             <div key={`action-row-${i}`} className="hs-action-row">
               {seg.slots.map((slot, j) => (
-                <div key={`slot-${slot.slot}-${slot.alias ?? "run"}-${j}`} className={HOSTED_SITE_SLOT_CLASS.action}>
+                <div
+                  key={`slot-${slot.slot}-${slot.alias ?? "run"}-${j}`}
+                  className={slotFrameClass("action", slot.alias)}
+                  {...slotFrameProps("action", slot.alias)}
+                >
                   {slotNode(slot.slot, slot.alias)}
                 </div>
               ))}
@@ -185,7 +217,11 @@ export function HostedSiteChrome({
           return (
             <div key={`run-row-${i}`} className="hs-split">
               {seg.slots.map((slot, j) => (
-                <div key={`slot-${slot.slot}-${slot.alias ?? "run"}-${j}`} className={HOSTED_SITE_SLOT_CLASS.run}>
+                <div
+                  key={`slot-${slot.slot}-${slot.alias ?? "run"}-${j}`}
+                  className={slotFrameClass("run", slot.alias)}
+                  {...slotFrameProps("run", slot.alias)}
+                >
                   {slotNode(slot.slot, slot.alias)}
                 </div>
               ))}
@@ -193,12 +229,20 @@ export function HostedSiteChrome({
           )
         }
         return (
-          <div key={`slot-${seg.slot}-${i}`} className={HOSTED_SITE_SLOT_CLASS[seg.slot]}>
+          <div
+            key={`slot-${seg.slot}-${i}`}
+            className={slotFrameClass(seg.slot, seg.alias)}
+            {...slotFrameProps(seg.slot, seg.alias)}
+          >
             {slotNode(seg.slot, seg.alias)}
           </div>
         )
       })}
-      {injectPrimary ? <div className={HOSTED_SITE_SLOT_CLASS[primary]}>{slotNode(primary)}</div> : null}
+      {injectPrimary ? (
+        <div className={slotFrameClass(primary)} {...slotFrameProps(primary)}>
+          {slotNode(primary)}
+        </div>
+      ) : null}
       {options.hideSpineFooter ? null : (
         <p className="hs-foot">
           {company} · pipeline hosted by{" "}
