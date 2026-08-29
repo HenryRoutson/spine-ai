@@ -9,6 +9,7 @@ import { publishSharedLink } from "@/lib/server/shared_links";
 import { migrateProjectModules } from "@/lib/server/validity";
 import { logger } from "@/lib/server/server_logger";
 import { remapWebsiteProjectId } from "@/lib/website-pipelines";
+import type { SharedLinkRecord } from "@/lib/shared-link-types";
 import type { AuthSession } from "@/lib/server/require_auth";
 import { ModuleKind, type DocId, type ModuleId, type Project, type ProjectId } from "@/lib/server/types";
 
@@ -35,20 +36,29 @@ async function maybePublishHostedSites(opts: {
   store: Store;
   project: Project;
   templateId: string;
-}): Promise<void> {
+}): Promise<{ sites: SharedLinkRecord[]; siteError?: string }> {
   const seed = allProjectSeeds().find((s) => s.project.id === (opts.templateId as ProjectId));
-  if (!seed?.hostedSites.length) return;
+  if (!seed?.hostedSites.length) return { sites: [] };
   const defaultDocsByModule = defaultDocsForHostedSite(opts.project, opts.store, seed);
+  const sites: SharedLinkRecord[] = [];
+  const errors: string[] = [];
   for (const site of seed.hostedSites) {
-    await publishSharedLink({
-      ownerId: opts.auth.userId,
-      project: opts.project,
-      defaultDocsByModule,
-      store: opts.store,
-      kind: "site",
-      siteOptions: remapWebsiteProjectId(site, seed.project.id, opts.project.id),
-    });
+    try {
+      sites.push(
+        await publishSharedLink({
+          ownerId: opts.auth.userId,
+          project: opts.project,
+          defaultDocsByModule,
+          store: opts.store,
+          kind: "site",
+          siteOptions: remapWebsiteProjectId(site, seed.project.id, opts.project.id),
+        }),
+      );
+    } catch (err) {
+      errors.push((err as Error).message);
+    }
   }
+  return { sites, siteError: errors.length ? errors.join("; ") : undefined };
 }
 
 // AI : blank project, numbered clone of a template, or numbered clone of an existing project.
@@ -88,12 +98,15 @@ export async function POST(req: NextRequest) {
     return storeAuthError(err);
   }
   // AI : example pipeline seeds mint their hosted pages, remapped onto the clone (two skins share one pipeline).
-  if (body.templateId) {
-    try {
-      await maybePublishHostedSites({ auth, store, project, templateId: body.templateId });
-    } catch (err) {
-      apiLog.warn("hosted site auto-publish failed", { projectId: project.id, err: String(err) });
-    }
+  const published = body.templateId
+    ? await maybePublishHostedSites({ auth, store, project, templateId: body.templateId })
+    : { sites: [] as SharedLinkRecord[] };
+  if (published.siteError) {
+    apiLog.warn("hosted site auto-publish failed", { projectId: project.id, err: published.siteError });
   }
-  return NextResponse.json(migrateProjectModules(project));
+  return NextResponse.json({
+    project: migrateProjectModules(project),
+    sites: published.sites,
+    ...(published.siteError ? { siteError: published.siteError } : {}),
+  });
 }

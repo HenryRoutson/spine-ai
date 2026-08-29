@@ -97,10 +97,15 @@ import { emptySessionSnapshot, type SpineSession } from "@/lib/core/session"
 import { DEMO_DEFAULT_PROJECT_ID } from "@/lib/demo-constants"
 import { setDemoMode } from "@/lib/demo-mode"
 import { overlayOptimisticProjects as mergeOptimisticProjects, confirmCreatedInMap, reseedCreatedFromLocal, shouldKeepLocalProject } from "@/lib/core/realtime"
-import type { ProjectCreateOpts, EarningsAccountView } from "@/lib/core/types"
+import type { ProjectCreateOpts as CoreProjectCreateOpts, EarningsAccountView } from "@/lib/core/types"
+import type { SharedLinkRecord } from "@/lib/shared-link-types"
+import { parseCreatedProjectResponse } from "@/lib/created-project-response"
 import { ProjectPickerSkeleton, StoreShellSkeleton } from "@/components/store-shell-skeletons"
 
-export type { ProjectCreateOpts, EarningsAccountView }
+export type ProjectCreateOpts = CoreProjectCreateOpts & {
+  onHostedSites?: (sites: SharedLinkRecord[], siteError?: string) => void
+}
+export type { EarningsAccountView }
 
 export enum StoreMode {
   Workspace = "workspace",
@@ -1212,19 +1217,21 @@ export function StoreProvider({
     opts?: ProjectCreateOpts,
   ) => {
     const open = opts?.open !== false
-    return apiJson<Project>(API_ROUTES.projects, {
+    return apiJson<unknown>(API_ROUTES.projects, {
       method: "POST",
       headers: JSON_HEADERS,
       body: JSON.stringify(body),
     })
-      .then(async (fresh) => {
-        ingestCreatedProject(fresh)
-        if (!open) return fresh
-        selectActiveProject(fresh.id, { skipPersist: true })
-        navigateToBuildWorkspace(fresh.id as ProjectId)
+      .then(async (raw) => {
+        const created = parseCreatedProjectResponse(raw)
+        ingestCreatedProject(created.project)
+        opts?.onHostedSites?.(created.sites, created.siteError)
+        if (!open) return created.project
+        selectActiveProject(created.project.id, { skipPersist: true })
+        navigateToBuildWorkspace(created.project.id as ProjectId)
         // AI : clone may ingest/rename bundled seed docs server-side — reload docs + backfilled seedDocNames.
-        await refresh(fresh.id)
-        return fresh
+        await refresh(created.project.id)
+        return created.project
       })
       .catch((err) => {
         setSaveError(err instanceof Error ? err.message : "Failed to create project")

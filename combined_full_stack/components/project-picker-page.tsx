@@ -1,6 +1,6 @@
 "use client"
 
-import { useCallback, useEffect, useMemo, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import {
   Copy,
   FolderKanban,
@@ -50,6 +50,7 @@ import type { SharedLinkRecord } from "@/lib/shared-link-types"
 import {
   hostedSiteOptionsForCreate,
   listedWebsitePipelineBindings,
+  overlayOptimisticSites,
   websiteDisplayName,
   websiteNameForCreate,
   websitesUsingProject,
@@ -103,10 +104,20 @@ export function ProjectPickerPage() {
   const [newSiteOpen, setNewSiteOpen] = useState(false)
   const [siteName, setSiteName] = useState("")
   const [sitePipelineIds, setSitePipelineIds] = useState<ProjectId[]>([])
+  const mintedSitesRef = useRef<SharedLinkRecord[]>([])
   const [pendingDelete, setPendingDelete] = useState<{
     project: Project
     sites: website_dependent[]
   } | null>(null)
+
+  const rememberSites = useCallback((created: SharedLinkRecord[]) => {
+    if (!created.length) return
+    mintedSitesRef.current = overlayOptimisticSites(
+      mintedSitesRef.current.filter((s) => !created.some((c) => c.id === s.id)),
+      created,
+    )
+    setSites((prev) => overlayOptimisticSites(prev, mintedSitesRef.current))
+  }, [])
 
   useEffect(() => {
     warmProjectPrefetches(
@@ -121,10 +132,11 @@ export function ProjectPickerPage() {
     void apiJson<{ links: SharedLinkRecord[] }>(API_ROUTES.sharedLinks)
       .then((body) => {
         if (cancelled) return
-        setSites((body.links ?? []).filter((link) => isSiteLinkId(link.id) && !link.revoked))
+        const fetched = (body.links ?? []).filter((link) => isSiteLinkId(link.id) && !link.revoked)
+        setSites(overlayOptimisticSites(fetched, mintedSitesRef.current))
       })
       .catch(() => {
-        if (!cancelled) setSites([])
+        // AI : keep the current list — wiping after clone made the button look dead on prod.
       })
       .finally(() => {
         if (!cancelled) setSitesLoading(false)
@@ -187,10 +199,22 @@ export function ProjectPickerPage() {
 
   async function handleCloneTemplate(templateId: ProjectId) {
     setBusy(templateId)
+    setResyncMsg(null)
     try {
-      await cloneFromTemplate(templateId, { open: false })
-    } catch {
-      /* saveError banner */
+      await cloneFromTemplate(templateId, {
+        open: false,
+        onHostedSites: (created, siteError) => {
+          if (created.length) rememberSites(created)
+          if (listTab !== "websites") return
+          if (created[0]) {
+            handleOpenWebsite(created[0])
+            return
+          }
+          setResyncMsg(siteError ?? "Cloned the pipeline, but no hosted page was published.")
+        },
+      })
+    } catch (e) {
+      setResyncMsg((e as Error).message)
     } finally {
       setBusy(null)
     }
@@ -237,7 +261,7 @@ export function ProjectPickerPage() {
           ),
         }),
       })
-      setSites((prev) => [body.link, ...prev.filter((s) => s.id !== body.link.id)])
+      rememberSites([body.link])
       setNewSiteOpen(false)
       setSiteName("")
       setSitePipelineIds([])
@@ -532,7 +556,7 @@ export function ProjectPickerPage() {
                   embedded
                   kind="website"
                   onClonedSite={(site) => {
-                    setSites((prev) => [site, ...prev.filter((s) => s.id !== site.id)])
+                    rememberSites([site])
                     handleOpenWebsite(site)
                   }}
                 />
