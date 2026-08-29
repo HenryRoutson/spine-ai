@@ -66,3 +66,17 @@ http://localhost:5050
 
 testing emails must contain
 spine-ai-dev-testing-account
+
+## Compare Lovable / Replit / Base44
+
+Send the same prompt to all three (API keys, CLI tokens, or saved browser logins) and write a three-column folder you can open later:
+
+```bash
+python3 scripts/competitor_compare.py check
+python3 scripts/competitor_compare.py login          # once per platform, saves cookies
+python3 scripts/competitor_compare.py record --prompt-id kyc
+python3 scripts/competitor_compare.py live --prompt-id kyc
+python3 scripts/competitor_compare.py serve
+```
+
+Credentials go in `.env` (`LOVABLE_API_KEY`, `REPLIT_MCP_ACCESS_TOKEN`, `BASE44_API_KEY` / `BASE44_ACCESS_TOKEN`) or in `.competitor_compare/auth/*.json` after `login`. Runs land in `competitor_runs/<timestamp>/compare.html`.
