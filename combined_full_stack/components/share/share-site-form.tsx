@@ -9,6 +9,7 @@ import { ShareDefaultFiles } from "@/components/share/share-default-files"
 import { ShareFundingPicker } from "@/components/share/share-funding-flow"
 import { parseSharePricing, parseSpendLimitUsd, SharePricingFields } from "@/components/share/share-pricing-fields"
 import { HostedSitePageStudio } from "@/components/share/hosted-site-page-studio"
+import { ShareSheet } from "@/components/share/share-sheet"
 import { ShareViewerDocsFields, useShareViewerMarkdown } from "@/components/share/share-viewer-docs-fields"
 import { API_ROUTES } from "@/lib/api-routes"
 import { apiJson, JSON_HEADERS } from "@/lib/api-client"
@@ -18,7 +19,7 @@ import { viewerFundsSharedRun } from "@/lib/shared-link-funding"
 import type { HostedSiteOptions, SharedLinkRecord } from "@/lib/shared-link-types"
 import { DEFAULT_HOSTED_SITE_OPTIONS } from "@/lib/shared-link-types"
 import { DEFAULT_HOSTED_SITE_HTML, isSiteLinkId, normalizeHostedSiteOptions } from "@/lib/hosted-site"
-import { websiteNameForCreate } from "@/lib/website-pipelines"
+import { listedWebsitePipelineBindings, websiteNameForCreate } from "@/lib/website-pipelines"
 import { useOptionalAppShell } from "@/lib/app-shell"
 import { useHideDeveloperTools } from "@/lib/developer-tools-settings"
 import type { DocId, DocRef, ModuleId, Project } from "@/lib/types"
@@ -232,7 +233,18 @@ export function ShareSiteForm({
 
       {editingWebsite || hideDeveloperTools ? null : <ShareViewerDocsFields {...fieldsProps} />}
 
-      {!created ? (
+      {editingWebsite && created ? (
+        <div className="shrink-0 border-t border-border p-3">
+          <ShareSheet
+            target={{ kind: "website", site: created.link, project }}
+            docs={docs}
+            inferenceInputDocIds={inferenceInputDocIds}
+            onCreated={onCreated}
+          />
+        </div>
+      ) : null}
+
+      {!created && listedWebsitePipelineBindings(siteOptions.pipelineBindings).length > 0 ? (
         <>
           <ShareFundingPicker
             value={fundingMode}

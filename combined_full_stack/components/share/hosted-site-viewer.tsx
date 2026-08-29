@@ -102,11 +102,6 @@ export function HostedSiteViewer({
         />
       )
     }
-    if (!map.run) {
-      map.run = (
-        <SharedRunViewer linkId={linkId} variant="site" hideViewerMarkdown={hasDocsSlot} />
-      )
-    }
     return map
   }, [bindings, hasDocsSlot, linkId])
   const tableByAlias = useMemo(

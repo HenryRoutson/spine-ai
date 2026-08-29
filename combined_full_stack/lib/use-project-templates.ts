@@ -11,6 +11,8 @@ export type ProjectTemplateSummary = {
   kind: string
   moduleCount: number
   inputCount: number
+  hasHostedSite?: boolean
+  functionCount?: number
 }
 
 const TEMPLATE_EVENT = "template"

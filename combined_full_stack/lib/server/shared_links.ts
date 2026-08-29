@@ -37,6 +37,7 @@ import type { SharedLinkDefaultDoc, SharedLinkRecord, EmbedOptions, HostedSiteBr
 import { DEFAULT_EMBED_OPTIONS } from "@/lib/shared-link-types";
 import { isEmbedLinkId, normalizeEmbedOrigins } from "@/lib/server/embed_origins";
 import { isSiteLinkId, normalizeHostedSiteOptions } from "@/lib/hosted-site";
+import { projectForFunction } from "@/lib/pipeline-functions"
 import { DEFAULT_WEBSITE_PIPELINE_ALIAS, resolveWebsitePipelineBindings, UNNAMED_WEBSITE_NAME } from "@/lib/website-pipelines"
 import { isUnnamedProjectName } from "@/lib/project-assistant-types";
 import { normalizeViewerMarkdown } from "@/lib/share-viewer-markdown";
@@ -391,7 +392,7 @@ function toPublicRecord(row: StoredSharedLink): SharedLinkRecord {
 
 export type PublishSharedLinkInput = {
   ownerId: user_id_string;
-  project: Project;
+  project?: Project;
   defaultModel?: ModelId;
   fundingMode?: SharedLinkFundingMode;
   viewerNameRequired?: boolean;
@@ -428,7 +429,17 @@ export async function publishSharedLink(input: PublishSharedLinkInput): Promise<
     throw new Error("Hosted page requires a company name");
   }
 
-  const snapshot = projectWithAuthoredModules(migrateProjectModules(structuredClone(input.project)));
+  const source =
+    input.project ??
+    ({
+      id: "" as ProjectId,
+      name: UNNAMED_WEBSITE_NAME,
+      kind: "page",
+      models: [],
+      modules: [],
+      strategies: [],
+    } satisfies Project);
+  const snapshot = projectWithAuthoredModules(migrateProjectModules(structuredClone(source)));
   const defaultDocs: SharedLinkDefaultDoc[] = [];
   mkdirSync(defaultDocsDir(id), { recursive: true });
 
@@ -465,7 +476,7 @@ export async function publishSharedLink(input: PublishSharedLinkInput): Promise<
   const row: StoredSharedLink = {
     id,
     ownerId: input.ownerId,
-    projectId: input.project.id,
+    projectId: (input.project?.id ?? "") as ProjectId,
     name: isSite ? siteOptions.brand.companyName : snapshot.name,
     description: undefined,
     viewerMarkdown: normalizeViewerMarkdown(input.viewerMarkdown),
@@ -865,29 +876,36 @@ export async function snapshotForWebsiteAlias(
   link: StoredSharedLink,
   alias: string | undefined,
   sharerStore?: Store,
+  functionId?: string,
 ): Promise<Project> {
-  const want = (alias ?? "").trim() || DEFAULT_WEBSITE_PIPELINE_ALIAS
   const bindings = resolveWebsitePipelineBindings(
     link.projectId,
     normalizeHostedSiteOptions(link.siteOptions).pipelineBindings,
   )
-  const bound = bindings.find((b) => b.alias === want) ?? bindings[0]
-  if (!bound || bound.projectId === link.projectId) return link.snapshot
-  const store = sharerStore ?? (await openStoreForUser(link.ownerId))
-  const project = store.project(bound.projectId)
-  return project ? migrateProjectModules(project) : link.snapshot
+  const want = (alias ?? "").trim()
+  const bound = want
+    ? bindings.find((b) => b.alias === want)
+    : bindings.find((b) => b.alias === DEFAULT_WEBSITE_PIPELINE_ALIAS) ?? bindings[0]
+  let project = link.snapshot
+  if (bound && bound.projectId && bound.projectId !== link.projectId) {
+    const store = sharerStore ?? (await openStoreForUser(link.ownerId))
+    const loaded = store.project(bound.projectId)
+    if (loaded) project = migrateProjectModules(loaded)
+  }
+  const fnId = functionId ?? bound?.functionId
+  return projectForFunction(project, fnId) ?? project
 }
 
-export async function publicLinkViewForAlias(link: StoredSharedLink, alias?: string) {
-  const snapshot = await snapshotForWebsiteAlias(link, alias)
+export async function publicLinkViewForAlias(link: StoredSharedLink, alias?: string, functionId?: string) {
+  const snapshot = await snapshotForWebsiteAlias(link, alias, undefined, functionId)
   const view = publicLinkView(link)
-  if (snapshot === link.snapshot) return view
+  if (snapshot === link.snapshot && !functionId && !alias) return view
   return {
     ...view,
     name: snapshot.name,
     modules: snapshot.modules.map(sanitizeModuleForPublic),
     models: snapshot.models,
-    defaultDocs: [] as typeof view.defaultDocs,
+    defaultDocs: snapshot === link.snapshot ? view.defaultDocs : ([] as typeof view.defaultDocs),
   }
 }
 

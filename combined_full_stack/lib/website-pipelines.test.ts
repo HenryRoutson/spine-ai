@@ -19,10 +19,10 @@ const P1 = "p1" as ProjectId
 const P2 = "p2" as ProjectId
 
 describe("website pipeline bindings", () => {
-  it("treats stored empty bindings as no pipelines; viewer still defaults to primary", () => {
+  it("treats stored empty bindings as no pipelines at runtime", () => {
     expect(listedWebsitePipelineBindings([])).toEqual([])
     expect(websiteBoundProjectIds(P1, [])).toEqual([])
-    expect(resolveWebsitePipelineBindings(P1, [])).toEqual([{ alias: "run", projectId: P1 }])
+    expect(resolveWebsitePipelineBindings(P1, [])).toEqual([])
   })
 
   it("mints landing HTML when no pipelines are selected", () => {

@@ -19,6 +19,6 @@ export {}
 // AI : DONE (app-sql-P2-ui) — WebsiteActionBindings on the page studio; SQL step has seed-rows editor.
 //
 // Later
+// AI : DONE (app-sql-P3-function) — HostedSiteActionBinding.functionId; hosted run uses projectForFunction
 // AI : TODO (app-sql-P3-join) — JOIN / OR / comparisons when a real app needs them
-// AI : TODO (app-sql-P3-function) — bind an action to a function id, not only a pipeline alias
 

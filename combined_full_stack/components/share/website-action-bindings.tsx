@@ -19,11 +19,13 @@ import { spineActionProps } from "@/lib/core/parity"
 function ActionRow({
   row,
   tables,
+  functions,
   onPatch,
   onRemove,
 }: {
   row: HostedSiteActionBinding
   tables: string[]
+  functions: { id: string; name: string }[]
   onPatch: (next: Partial<HostedSiteActionBinding>) => void
   onRemove: () => void
 }) {
@@ -75,6 +77,21 @@ function ActionRow({
             </option>
           ))}
         </select>
+        {functions.length > 0 ? (
+          <select
+            value={row.functionId ?? ""}
+            className="h-7 rounded-md border border-input bg-background px-2 font-mono text-[11px] sm:col-span-2"
+            onChange={(e) => onPatch({ functionId: e.target.value || undefined })}
+            {...spineActionProps("website.action-function")}
+          >
+            <option value="">Function (active spine)</option>
+            {functions.map((fn) => (
+              <option key={fn.id} value={fn.id}>
+                {fn.name}
+              </option>
+            ))}
+          </select>
+        ) : null}
       </div>
       <div className="flex items-center gap-1.5">
         <Input
@@ -116,11 +133,13 @@ function parsePayload(raw: string, alias: string): Record<string, unknown> {
 export function WebsiteActionBindings({
   options,
   models,
+  functions = [],
   onChange,
   className,
 }: {
   options: HostedSiteOptions
   models: StructureModel[]
+  functions?: { id: string; name: string }[]
   onChange: (next: HostedSiteOptions) => void
   className?: string
 }) {
@@ -184,6 +203,7 @@ export function WebsiteActionBindings({
             key={i}
             row={row}
             tables={tables}
+            functions={functions}
             onPatch={(next) => patch(row.alias, next)}
             onRemove={() => update(options.actions.filter((a) => a.alias !== row.alias))}
           />

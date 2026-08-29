@@ -768,6 +768,7 @@ export const hostedSiteOptionsSchema = z
           .object({
             alias: z.string().trim().min(1).max(40),
             projectId: projectIdSchema,
+            functionId: z.string().trim().min(1).max(128).optional(),
           })
           .strict(),
       )
@@ -782,6 +783,7 @@ export const hostedSiteOptionsSchema = z
             title: z.string().trim().max(80).optional(),
             table: z.string().trim().max(64).optional(),
             pipelineAlias: z.string().trim().max(40).optional(),
+            functionId: z.string().trim().min(1).max(128).optional(),
             payload: z.record(z.string(), z.unknown()).optional(),
           })
           .strict(),
@@ -846,7 +848,8 @@ export const hostedSiteAssistantBodySchema = z
 
 export const createSharedLinkBodySchema = z
   .object({
-    projectId: projectIdSchema,
+    // AI : optional for kind=site page-only (no stub host pipeline).
+    projectId: z.string().trim().max(128).optional(),
     defaultModel: z.string().max(128).optional(),
     fundingMode: z.enum(["sharer_pays", "viewer_pays", "viewer_signs_in"]).optional(),
     viewerNameRequired: z.boolean().optional(),
@@ -876,6 +879,13 @@ export const createSharedLinkBodySchema = z
         code: z.ZodIssueCode.custom,
         message: "Hosted page requires a company name",
         path: ["siteOptions", "brand", "companyName"],
+      });
+    }
+    if (data.kind !== "site" && !data.projectId) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "projectId is required",
+        path: ["projectId"],
       });
     }
   });
@@ -934,6 +944,7 @@ export const sharedLinkRunBodySchema = z
     // AI : HMAC from /embed/[id] — never trust client-asserted parentOrigin for allowlist auth.
     embedSessionToken: z.string().min(16).max(512).optional(),
     pipelineAlias: z.string().trim().min(1).max(40).optional(),
+    functionId: z.string().trim().min(1).max(128).optional(),
   })
   .strict();
 

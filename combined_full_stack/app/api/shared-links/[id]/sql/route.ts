@@ -8,6 +8,7 @@ import { getSharedLink } from "@/lib/server/shared_links"
 import { appSqlScopeForSite, sqlSeedRowsOf, tableNameForModel } from "@/lib/app-sql"
 import { ensureAppSqlSeed, listAppSqlRows } from "@/lib/server/app_sql"
 import { flattenPipelineModules } from "@/lib/fork-pipeline"
+import { functionsOnProject } from "@/lib/pipeline-functions"
 import { pkFieldOf } from "@/lib/sql-id-types"
 import { ModuleKind } from "@/lib/server/types"
 
@@ -29,7 +30,8 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string 
   if (!/^[a-z][a-z0-9_]*$/i.test(table)) return apiError("table required", 400)
 
   const scope = appSqlScopeForSite(link.id)
-  const sqlMod = flattenPipelineModules(link.snapshot.modules).find((m) => {
+  const sqlMods = functionsOnProject(link.snapshot).flatMap((fn) => flattenPipelineModules(fn.modules))
+  const sqlMod = sqlMods.find((m) => {
     if (m.kind !== ModuleKind.Sql) return false
     const out = link.snapshot.models.find((model) => model.id === m.outStructureId)
     return out ? tableNameForModel(out) === table : false

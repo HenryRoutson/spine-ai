@@ -24,8 +24,8 @@ export async function POST(req: NextRequest) {
     const parsed = await parseRequestJson(req, createSharedLinkBodySchema);
     if ("validationError" in parsed) return apiError(parsed.validationError, HTTP.BAD_REQUEST);
     const body = parsed;
-    const project = ctx.store.project(body.projectId as ProjectId);
-    if (!project) return apiError(`unknown project ${body.projectId}`, 404);
+    const project = body.projectId ? ctx.store.project(body.projectId as ProjectId) : undefined;
+    if (body.projectId && !project) return apiError(`unknown project ${body.projectId}`, 404);
 
     let defaultModel: ModelId | undefined;
     try {
@@ -37,7 +37,7 @@ export async function POST(req: NextRequest) {
 
     const link = await publishSharedLink({
       ownerId: ctx.auth.userId,
-      project: migrateProjectModules(project),
+      project: project ? migrateProjectModules(project) : undefined,
       defaultModel,
       fundingMode: body.fundingMode as SharedLinkFundingMode | undefined,
       viewerNameRequired: body.viewerNameRequired,

@@ -17,7 +17,7 @@ describe("hosted site actions", () => {
       { alias: "add-todo", label: "Dup" },
     ])
     expect(actions).toEqual([
-      { alias: "add-todo", label: "Add", title: undefined, table: "todo", pipelineAlias: undefined, payload: { action: "add" } },
+      { alias: "add-todo", label: "Add", title: undefined, table: "todo", pipelineAlias: undefined, functionId: undefined, payload: { action: "add" } },
     ])
   })
 

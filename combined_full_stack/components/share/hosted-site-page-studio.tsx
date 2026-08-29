@@ -37,6 +37,7 @@ import {
 } from "@/lib/hosted-site"
 import { HOSTED_SITE_DOCS_SLOT } from "@/lib/hosted-site-slots"
 import { htmlSiteToReactFiles } from "@/lib/hosted-site-react"
+import { functionsOnProject } from "@/lib/pipeline-functions"
 import { listedWebsitePipelineBindings } from "@/lib/website-pipelines"
 import { patchHostedSiteHtmlText, type HsPreviewInlinePayload, type HsPreviewSelectPayload } from "@/lib/hosted-site-select"
 import type { HostedSiteAuth, HostedSiteBrand, HostedSiteOptions } from "@/lib/shared-link-types"
@@ -358,7 +359,12 @@ export function HostedSitePageStudio({
         options={value}
         onChange={onChange}
       />
-      <WebsiteActionBindings options={value} models={project.models} onChange={onChange} />
+      <WebsiteActionBindings
+        options={value}
+        models={project.models}
+        functions={functionsOnProject(project).map((fn) => ({ id: fn.id, name: fn.name }))}
+        onChange={onChange}
+      />
 
       {runtimeConfirm ? (
         <div className="flex flex-wrap items-center gap-2 rounded-md border border-border bg-muted/20 px-3 py-2 text-[11px]">

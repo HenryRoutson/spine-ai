@@ -1,18 +1,16 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import { AlertTriangle, Boxes, Globe, LayoutTemplate, type LucideIcon, PanelTop, ScrollText, Store, User, Users, Zap } from "lucide-react"
+import { AlertTriangle, Boxes, Globe, LayoutTemplate, type LucideIcon, ScrollText, Store, User, Users } from "lucide-react"
 import {
   DeploymentActivityPage,
   type ActivityFilter,
 } from "@/components/share/deployment-activity-page"
 import { DeploymentsList } from "@/components/share/deployments-list"
-import { HostApiForm } from "@/components/share/host-api-form"
 import { MarketplaceBrowsePanel } from "@/components/share/marketplace-browse-panel"
-import { MarketplacePublishForm } from "@/components/share/marketplace-publish-form"
+import { ShareSheet } from "@/components/share/share-sheet"
 import { MyPipelinesPanel } from "@/components/share/my-pipelines-panel"
 import { OwnPipelineRunner } from "@/components/share/own-pipeline-runner"
-import { ShareEmbedForm } from "@/components/share/share-embed-form"
 import { ShareLinkForm } from "@/components/share/share-link-form"
 import { ShareSiteForm } from "@/components/share/share-site-form"
 import { PipelineWebsitesPanel } from "@/components/share/pipeline-websites-panel"
@@ -21,7 +19,6 @@ import { SharedLinkRunner } from "@/components/share/shared-link-runner"
 import { SharedWithMePanel } from "@/components/share/shared-with-me-panel"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
-import { spineActionProps } from "@/lib/core/parity"
 import { useOptionalStore } from "@/lib/store"
 import { isVibeWindow } from "@/lib/app-nav-config"
 import { useAppShell } from "@/lib/app-shell"
@@ -29,7 +26,6 @@ import { consumePendingSharedRun } from "@/lib/pending-shared-run"
 import { useMarkPrimarySectionReady } from "@/lib/primary-section-opening"
 import { computeWorkspaceValidity } from "@/lib/workspace-validity-ui"
 import {
-  PublishTab,
   ShareSection,
   ShareTabLabel,
 } from "@/lib/window-panel-meta"
@@ -62,7 +58,6 @@ export function SharePage({ simple }: { simple?: boolean } = {}) {
   const [section, setSection] = useState<ShareSection>(
     isConsumer ? ShareSection.MyPipelines : ShareSection.Publish,
   )
-  const [tab, setTab] = useState<PublishTab>(PublishTab.Link)
   const [refreshToken, setRefreshToken] = useState(0)
   const [activityFilter, setActivityFilter] = useState<ActivityFilter>(null)
   const [activeOwnProjectId, setActiveOwnProjectId] = useState<ProjectId | null>(null)
@@ -250,107 +245,13 @@ export function SharePage({ simple }: { simple?: boolean } = {}) {
             </div>
             <div className="mx-auto grid max-w-6xl gap-5 lg:grid-cols-2">
               <section className="rounded-lg border border-border bg-card p-4">
-                <div className="mb-4 flex gap-1 rounded-md border border-border bg-muted/30 p-1">
-                  <button
-                    type="button"
-                    className={cn(
-                      "flex flex-1 items-center justify-center gap-1.5 rounded px-2 py-1.5 text-xs font-medium transition-colors",
-                      tab === PublishTab.Link
-                        ? "bg-background text-foreground shadow-sm"
-                        : "text-muted-foreground hover:text-foreground",
-                    )}
-                    onClick={() => setTab(PublishTab.Link)}
-                    {...spineActionProps("share.tab.link")}
-                  >
-                    <Globe className="h-3.5 w-3.5" />
-                    Link
-                  </button>
-                  <button
-                    type="button"
-                    className={cn(
-                      "flex flex-1 items-center justify-center gap-1.5 rounded px-2 py-1.5 text-xs font-medium transition-colors",
-                      tab === PublishTab.Api
-                        ? "bg-background text-foreground shadow-sm"
-                        : "text-muted-foreground hover:text-foreground",
-                    )}
-                    onClick={() => setTab(PublishTab.Api)}
-                    {...spineActionProps("share.tab.api")}
-                  >
-                    <Zap className="h-3.5 w-3.5" />
-                    API
-                  </button>
-                  <button
-                    type="button"
-                    className={cn(
-                      "flex flex-1 items-center justify-center gap-1.5 rounded px-2 py-1.5 text-xs font-medium transition-colors",
-                      tab === PublishTab.Embed
-                        ? "bg-background text-foreground shadow-sm"
-                        : "text-muted-foreground hover:text-foreground",
-                    )}
-                    onClick={() => setTab(PublishTab.Embed)}
-                    {...spineActionProps("share.tab.embed")}
-                  >
-                    <PanelTop className="h-3.5 w-3.5" />
-                    Embed
-                  </button>
-                  <button
-                    type="button"
-                    className={cn(
-                      "flex flex-1 items-center justify-center gap-1.5 rounded px-2 py-1.5 text-xs font-medium transition-colors",
-                      tab === PublishTab.Site
-                        ? "bg-background text-foreground shadow-sm"
-                        : "text-muted-foreground hover:text-foreground",
-                    )}
-                    onClick={() => setTab(PublishTab.Site)}
-                    {...spineActionProps("share.tab.site")}
-                  >
-                    <LayoutTemplate className="h-3.5 w-3.5" />
-                    Website
-                  </button>
-                  <button
-                    type="button"
-                    className={cn(
-                      "flex flex-1 items-center justify-center gap-1.5 rounded px-2 py-1.5 text-xs font-medium transition-colors",
-                      tab === PublishTab.Marketplace
-                        ? "bg-background text-foreground shadow-sm"
-                        : "text-muted-foreground hover:text-foreground",
-                    )}
-                    onClick={() => setTab(PublishTab.Marketplace)}
-                  >
-                    <Store className="h-3.5 w-3.5" />
-                    Marketplace
-                  </button>
-                </div>
-
-                {tab === PublishTab.Link ? (
-                  <ShareLinkForm
-                    project={builder.project}
-                    docs={builder.docs}
-                    inferenceInputDocIds={builder.inferenceInputDocIds}
-                    onCreated={() => setRefreshToken((n) => n + 1)}
-                  />
-                ) : tab === PublishTab.Api ? (
-                  <HostApiForm
-                    project={builder.project}
-                    docs={builder.docs}
-                    inferenceInputDocIds={builder.inferenceInputDocIds}
-                    onCreated={() => setRefreshToken((n) => n + 1)}
-                  />
-                ) : tab === PublishTab.Embed ? (
-                  <ShareEmbedForm
-                    project={builder.project}
-                    docs={builder.docs}
-                    inferenceInputDocIds={builder.inferenceInputDocIds}
-                    onCreated={() => setRefreshToken((n) => n + 1)}
-                  />
-                ) : tab === PublishTab.Site ? (
-                  <PipelineWebsitesPanel project={builder.project} projects={builder.projects} />
-                ) : (
-                  <MarketplacePublishForm
-                    project={builder.project}
-                    onCreated={() => setRefreshToken((n) => n + 1)}
-                  />
-                )}
+                <ShareSheet
+                  target={{ kind: "pipeline", project: builder.project }}
+                  docs={builder.docs}
+                  inferenceInputDocIds={builder.inferenceInputDocIds}
+                  projects={builder.projects}
+                  onCreated={() => setRefreshToken((n) => n + 1)}
+                />
               </section>
 
               <section className="rounded-lg border border-border bg-card p-4">

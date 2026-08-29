@@ -6,6 +6,7 @@ import { loadProjectSeed, SEEDS_DIR } from "@/lib/server/seed"
 import { shouldCheckInputDescription } from "@/lib/server/input_description_check"
 import { computeInvalid, migrateProjectModules } from "@/lib/server/validity"
 import { flattenPipelineModules } from "@/lib/fork-pipeline"
+import { functionsOnProject } from "@/lib/pipeline-functions"
 import { hostedActionButtonLabel } from "@/lib/hosted-site-actions"
 import { ModuleKind } from "@/lib/types"
 import { compileHostedSiteLooksOk, normalizeHostedSiteOptions } from "@/lib/hosted-site"
@@ -147,10 +148,14 @@ describe("double shared number seed", () => {
   it("loads a sql step, shared_number table, and action-only hosted page", () => {
     const seed = loadProjectSeed(resolve(SEEDS_DIR, "double_shared_number.json"))
     const project = migrateProjectModules(seed.project)
-    expect([...computeInvalid(project.modules, project.models).keys()]).toEqual([])
-    const flat = flattenPipelineModules(project.modules)
+    const fns = functionsOnProject(project)
+    expect(fns.map((fn) => fn.name)).toEqual(["Double", "Collatz"])
+    for (const fn of fns) {
+      expect([...computeInvalid(fn.modules, project.models).keys()]).toEqual([])
+    }
+    const flat = fns.flatMap((fn) => flattenPipelineModules(fn.modules))
     const sql = flat.filter((m) => m.kind === ModuleKind.Sql)
-    expect(sql.map((m) => m.label)).toEqual(["Read n", "Odd?", "Times three", "Plus one", "Divide by two", "Double"])
+    expect(sql.map((m) => m.label)).toEqual(["Double", "Read n", "Odd?", "Times three", "Plus one", "Divide by two"])
     expect(sql.every((m) => m.cached === false)).toBe(true)
     expect(sql.every((m) => shouldCheckInputDescription(m) === false)).toBe(true)
     expect(flat.some((m) => m.label === "Times three" && m.sql?.includes("value * 3"))).toBe(true)
@@ -165,6 +170,7 @@ describe("double shared number seed", () => {
     const site = normalizeHostedSiteOptions(seed.hostedSite as Parameters<typeof normalizeHostedSiteOptions>[0])
     expect(hostedActionButtonLabel("collatz", site.actions)).toBe("3n + 1")
     expect(hostedActionButtonLabel(undefined, site.actions)).toBe("Double it")
+    expect(site.actions.map((a) => a.functionId)).toEqual(["fn_double", "fn_collatz"])
     const report = compileHostedSiteLooksOk(site)
     expect(report.ok, report.issues.map((i) => `${i.level}:${i.code} ${i.message}`).join("\n")).toBe(true)
     expect(report.pageHtml).toContain("hs-sql-slot")

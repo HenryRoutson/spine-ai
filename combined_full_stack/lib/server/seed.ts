@@ -27,6 +27,8 @@ import {
   type StrategyKind,
   type StructureModel,
   type TypeAlias,
+  type PipelineFunction,
+  type pipeline_function_id,
 } from "./types";
 
 // AI : projects are seeded from generic JSON files under combined_full_stack/seeds/ —
@@ -339,6 +341,16 @@ const SeedFileSchema = z.object({
       }),
     )
     .optional(),
+  functions: z
+    .array(
+      z.object({
+        id: z.string(),
+        name: z.string(),
+        modules: z.array(z.any()),
+      }),
+    )
+    .optional(),
+  activeFunctionId: z.string().optional(),
 });
 
 export interface SeedDocSpec {
@@ -487,12 +499,28 @@ export function loadProjectSeed(path: string): ProjectSeed {
     expectedOutputs: loadExpectedOutputs(p.expectedOutputs, { lenient: true }),
   }));
   const typeAliases = raw.typeAliases as TypeAlias[] | undefined;
+  const models = normalizeStructureModels(raw.models as StructureModel[]);
   // AI : product-join forks auto-derive sm_fork_<id> the same way the GUI validity-sync does.
   const forkSynced = syncForkModules(
     raw.modules.map(normalizeSeedModule) as PipelineModule[],
-    normalizeStructureModels(raw.models as StructureModel[]),
+    models,
     typeAliases ?? [],
   );
+  const functions: PipelineFunction[] | undefined = raw.functions?.map((fn) => {
+    const synced = syncForkModules(
+      (fn.modules as PipelineModule[]).map((m) => normalizeSeedModule(m as unknown as Parameters<typeof normalizeSeedModule>[0])),
+      forkSynced.models,
+      typeAliases ?? [],
+    );
+    return {
+      id: fn.id as pipeline_function_id,
+      name: fn.name,
+      modules: synced.modules,
+    };
+  });
+  const activeFunctionId = (raw.activeFunctionId ?? functions?.[0]?.id) as pipeline_function_id | undefined;
+  const activeModules =
+    functions?.find((fn) => fn.id === activeFunctionId)?.modules ?? forkSynced.modules;
   return {
     // AI : zod-validated plain strings → branded contract types
     project: {
@@ -502,7 +530,9 @@ export function loadProjectSeed(path: string): ProjectSeed {
       documentation: raw.documentation,
       models: forkSynced.models,
       typeAliases,
-      modules: forkSynced.modules,
+      modules: activeModules,
+      functions,
+      activeFunctionId,
       strategies: raw.strategies as Strategy[],
       seedDocNames: raw.docs.map((d) => d.name),
       expectedOutputs,
@@ -620,6 +650,8 @@ export type ProjectTemplateSummary = {
   kind: string;
   moduleCount: number;
   inputCount: number;
+  hasHostedSite: boolean;
+  functionCount: number;
 };
 
 // AI : lightweight seed scan — no expected-output file reads, no full project validation.
@@ -628,6 +660,8 @@ const SeedTemplateSummaryFileSchema = z.object({
   name: z.string(),
   kind: z.string(),
   modules: z.array(z.object({ kind: ModuleKindSchema })),
+  hostedSite: z.unknown().optional(),
+  functions: z.array(z.object({ id: z.string() })).optional(),
 });
 
 export const PROJECT_TEMPLATE_STREAM_EVENT = {
@@ -652,6 +686,8 @@ export function projectTemplateSummaryFromFile(filename: string): ProjectTemplat
     kind: raw.kind,
     moduleCount: raw.modules.length,
     inputCount: raw.modules.filter((m) => m.kind === "input").length,
+    hasHostedSite: raw.hostedSite != null,
+    functionCount: raw.functions?.length ?? 1,
   };
 }
 
