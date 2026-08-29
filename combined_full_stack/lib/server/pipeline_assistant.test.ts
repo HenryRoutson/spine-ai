@@ -458,6 +458,6 @@ describe("seed LLM can add a second named function", () => {
     expect(second.proposal?.targetFunctionName).toBe("Hello Notes")
     expect(second.invalidCount).toBe(0)
     session.applyProposal(second.proposal!)
-    expect(functionsOnProject(session.project!).map((fn) => fn.name)).toEqual(["Main", "Hello Notes"])
+    expect(functionsOnProject(session.project!).map((fn) => fn.name)).toEqual(["unnamed function", "Hello Notes"])
   })
 })

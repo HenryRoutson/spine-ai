@@ -22,7 +22,12 @@ import type {
   TypeAlias,
   pipeline_function_id,
 } from "@/lib/types"
-import { addPipelineFunction, switchActiveFunction } from "@/lib/pipeline-functions"
+import {
+  addPipelineFunction as addPipelineFunctionPatch,
+  deletePipelineFunction as deletePipelineFunctionPatch,
+  renamePipelineFunction as renamePipelineFunctionPatch,
+  switchActiveFunction,
+} from "@/lib/pipeline-functions"
 import {
   attachRealtimePort,
   overlayOptimisticProjects,
@@ -433,9 +438,19 @@ export class SpineSession {
 
   addPipelineFunction(name?: string): PipelineFunction {
     const project = this.requireProject()
-    const patch = addPipelineFunction(project, name)
+    const patch = addPipelineFunctionPatch(project, name)
     this.patchProject(patch)
     return patch.functions![patch.functions!.length - 1]!
+  }
+
+  renamePipelineFunction(id: pipeline_function_id, name: string): void {
+    const project = this.requireProject()
+    this.patchProject(renamePipelineFunctionPatch(project, id, name))
+  }
+
+  deletePipelineFunction(id: pipeline_function_id): void {
+    const project = this.requireProject()
+    this.patchProject(deletePipelineFunctionPatch(project, id))
   }
 
   applyProjectChanges(changes: ProjectPatch): void {

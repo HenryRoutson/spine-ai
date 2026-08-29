@@ -83,7 +83,7 @@ describe("project-ops", () => {
     expect(patch?.modules?.length).toBeGreaterThan(0)
   })
 
-  it("proposalGraphPatch adds a named function without replacing Main modules", () => {
+  it("proposalGraphPatch adds a named function without replacing unnamed function modules", () => {
     const project: Project = {
       ...base("p1", "Pack"),
       modules: [
@@ -128,8 +128,8 @@ describe("project-ops", () => {
       "gpt-4",
     )
     expect(patch?.functions).toHaveLength(2)
-    expect(patch?.functions?.map((fn) => fn.name)).toEqual(["Main", "Summarize"])
+    expect(patch?.functions?.map((fn) => fn.name)).toEqual(["unnamed function", "Summarize"])
     expect(patch?.modules?.[0]?.label).toBe("Notes")
-    expect(patch?.functions?.find((fn) => fn.name === "Main")?.modules[0]?.id).toBe("mod_in")
+    expect(patch?.functions?.find((fn) => fn.name === "unnamed function")?.modules[0]?.id).toBe("mod_in")
   })
 })

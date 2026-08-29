@@ -189,7 +189,7 @@ This is a **file workspace**, not a chat dump. Edit files, then \`run_tests\`. T
 - \`aliases.json\` — user type aliases only (not quote_string_t / text_quote_t).
 - \`docs.md\` — project Docs tab markdown. Refresh when pipeline/models change.
 - \`tests/*\` — synthetic inference docs (text/json/markdown only).
-- \`project.json\` — name + functions. Set \`targetFunctionName\` to add/edit a named function without replacing Main.
+- \`project.json\` — name + functions. Set \`targetFunctionName\` to add/edit a named function without replacing the unnamed / active function.
 - \`message.md\` — short user-facing proposal.
 - \`proposed_actions.json\` — optional \`[{ "type": "run_test" }]\` or \`run_inference\`.
 - \`examples/few-shot.md\` — valid JSON shapes. Read when unsure.
