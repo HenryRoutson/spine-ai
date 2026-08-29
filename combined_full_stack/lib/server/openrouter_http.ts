@@ -4,7 +4,7 @@ import { Agent, fetch as undiciFetch, type Dispatcher } from "undici";
 import { FailureKind } from "./types";
 import { type ServerLogger, logger } from "./server_logger";
 import { DEEPSEEK_SLUG, OPENROUTER_AUTH_KEY_URL, resolveOpenRouterChatUrl, resolveOpenRouterSeed } from "./openrouter_slugs";
-import "./config";
+import { resolveOpenRouterApiKey } from "./config";
 
 const orLog = logger("openrouter");
 
@@ -128,8 +128,8 @@ function retryDelayMs(res: Response, attempt: number): number {
 }
 
 function apiKey(): ApiKey {
-  const key = process.env.OPENROUTER_API_KEY?.trim();
-  if (!key) throw new Error("OPENROUTER_API_KEY missing — set it in the repo root .env");
+  const key = resolveOpenRouterApiKey();
+  if (!key) throw new Error("OPENROUTER_API_KEY missing — set OPENROUTER_API_KEY or OPENROUTER_KEY");
   return key as ApiKey;
 }
 

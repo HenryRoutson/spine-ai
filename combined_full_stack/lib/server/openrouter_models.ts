@@ -2,6 +2,7 @@
 import { MODEL_CATALOG, catalogEntry, type ModelCatalogEntry } from "./model_catalog";
 import { blendedCentsPer1k, type OpenRouterRates } from "./openrouter_pricing";
 import { OPENROUTER_MODELS_URL } from "./openrouter_slugs";
+import { resolveOpenRouterApiKey } from "./config";
 import { logger } from "./server_logger";
 import type { ModelId, ModelOption, ModelOptionPublic, OpenRouterSlug } from "./types";
 
@@ -51,8 +52,8 @@ function catalogFallbackOptions(): ModelOption[] {
 }
 
 async function fetchOpenRouterRatesBySlug(): Promise<Map<string, OpenRouterRates>> {
-  const key = process.env.OPENROUTER_API_KEY?.trim();
-  if (!key) throw new Error("OPENROUTER_API_KEY missing — set it in the repo root .env");
+  const key = resolveOpenRouterApiKey();
+  if (!key) throw new Error("OPENROUTER_API_KEY missing — set OPENROUTER_API_KEY or OPENROUTER_KEY");
 
   const res = await fetch(OPENROUTER_MODELS_URL, {
     headers: { Authorization: `Bearer ${key}` },
@@ -94,7 +95,7 @@ export async function refreshModelOptions(): Promise<ModelOption[]> {
 
 export async function getModelOptions(): Promise<ModelOption[]> {
   if (cachedOptions && Date.now() - cachedAt < CACHE_TTL_MS) return cachedOptions;
-  if (!process.env.OPENROUTER_API_KEY?.trim()) {
+  if (!resolveOpenRouterApiKey()) {
     orModelsLog.debug(`OPENROUTER_API_KEY missing — using catalog without live rates`);
     return catalogFallbackOptions();
   }

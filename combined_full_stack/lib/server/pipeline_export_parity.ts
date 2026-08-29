@@ -23,6 +23,7 @@ import { clearLlmProviderCache } from "@/lib/server/llm/registry";
 import { SEED_LLM_PROVIDER_ID } from "@/lib/server/llm/providers/seed";
 import { seedOpenAiChatCompletion } from "@/lib/server/llm/seed_response";
 import { DEEPSEEK_FLASH_SLUG, DEEPSEEK_SLUG } from "@/lib/server/openrouter_slugs";
+import { isLiveOpenRouterApiKey, resolveOpenRouterApiKey } from "@/lib/server/config";
 import { generatePipelineSourceTs } from "@/lib/server/pipeline_ts_export";
 import { exportRuntimeTsPath } from "@/lib/server/pipeline_export_runtime_files";
 import { loadProjectSeed, resolveSeedDocPath, type ProjectSeed } from "@/lib/server/seed";
@@ -75,7 +76,7 @@ export function parityOpenRouterSeed(): number {
 }
 
 export function parityHasOpenRouterKey(): boolean {
-  return !!process.env.OPENROUTER_API_KEY?.trim();
+  return isLiveOpenRouterApiKey();
 }
 
 /** Catalog model id for UI runs — flash unless OPENROUTER_MODEL points at the default deepseek chat slug. */
@@ -447,7 +448,7 @@ export async function runTsExportParityTrace(
     writeFileSync(file, source, "utf8");
     copyFileSync(exportRuntimeTsPath(), join(dir, "pipeline_runtime.ts"));
     const mod = (await import(`${pathToFileURL(file).href}?t=${Date.now()}`)) as TsExportModule;
-    const apiKey = process.env.OPENROUTER_API_KEY?.trim();
+    const apiKey = resolveOpenRouterApiKey();
     const needsLlm = flattenPipelineModules(project.modules).some(
       (m) =>
         m.kind === ModuleKind.Llm ||

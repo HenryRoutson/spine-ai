@@ -1,5 +1,6 @@
 // AI : OpenRouter list-models pricing + our 40% markup on top of their per-token rates.
 import { OPENROUTER_MODELS_URL } from "./openrouter_slugs";
+import { resolveOpenRouterApiKey } from "./config";
 
 export const PRICE_MARKUP = 1.4;
 
@@ -27,8 +28,8 @@ export function tokenCostCents(
 
 // AI : live pull from OpenRouter — runtime pricing in openrouter_models.ts; scripts/sync_openrouter_pricing.mjs validates catalog slugs.
 export async function fetchOpenRouterRates(slug: string): Promise<OpenRouterRates> {
-  const key = process.env.OPENROUTER_API_KEY;
-  if (!key) throw new Error("OPENROUTER_API_KEY missing — set it in the repo root .env");
+  const key = resolveOpenRouterApiKey();
+  if (!key) throw new Error("OPENROUTER_API_KEY missing — set OPENROUTER_API_KEY or OPENROUTER_KEY");
 
   const res = await fetch(OPENROUTER_MODELS_URL, { headers: { Authorization: `Bearer ${key}` } });
   if (!res.ok) throw new Error(`OpenRouter models ${res.status}: ${await res.text()}`);

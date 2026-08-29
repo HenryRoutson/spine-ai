@@ -18,8 +18,31 @@ interface Config {
   dataDir: DataDir;
 }
 
+export function isPlaceholderOpenRouterKey(key: string): boolean {
+  const k = key.trim().toLowerCase();
+  return !k || k.includes("placeholder") || k.startsWith("sk-or-local") || k === "seed";
+}
+
+// AI : Cursor secrets often land as OPENROUTER_KEY; repo docs use OPENROUTER_API_KEY.
+export function resolveOpenRouterApiKey(): string {
+  const api = process.env.OPENROUTER_API_KEY?.trim() ?? "";
+  const alt = process.env.OPENROUTER_KEY?.trim() ?? "";
+  if (api && !isPlaceholderOpenRouterKey(api)) return api;
+  if (alt && !isPlaceholderOpenRouterKey(alt)) return alt;
+  return api || alt;
+}
+
+export function isLiveOpenRouterApiKey(key = resolveOpenRouterApiKey()): boolean {
+  return key.startsWith("sk-or-v1-") && !isPlaceholderOpenRouterKey(key);
+}
+
 // AI : fail early if a required env var is missing (pitch: "raise errors early").
 function requireEnv(name: string): string {
+  if (name === "OPENROUTER_API_KEY") {
+    const key = resolveOpenRouterApiKey();
+    if (!key) throw new Error("OPENROUTER_API_KEY missing — set OPENROUTER_API_KEY or OPENROUTER_KEY");
+    return key;
+  }
   const value = process.env[name];
   if (!value) throw new Error(`${name} missing — set it in the repo root .env`);
   return value;

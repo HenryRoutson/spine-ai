@@ -13,6 +13,7 @@ import {
   vibeExampleTasks,
   type VibeExampleTask,
 } from "@/lib/server/vibe-coding-examples"
+import { isLiveOpenRouterApiKey } from "@/lib/server/config"
 
 loadEnv({ path: resolve(import.meta.dirname, "../../.env.local") })
 loadEnv({ path: resolve(import.meta.dirname, "../../../.env") })
@@ -120,8 +121,7 @@ async function runMode(mode: Mode, ex: VibeExampleTask): Promise<VibeAbScore> {
 }
 
 function hasLiveOpenRouterKey(): boolean {
-  const key = process.env.OPENROUTER_API_KEY?.trim() ?? ""
-  return key.startsWith("sk-or-v1-") && !/placeholder|local-dev/i.test(key)
+  return isLiveOpenRouterApiKey()
 }
 
 function summaryLines(rows: VibeAbScore[]): string[] {
