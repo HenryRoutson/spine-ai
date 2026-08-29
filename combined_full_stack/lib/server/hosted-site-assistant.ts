@@ -132,6 +132,7 @@ ${opts.message.trim()}`
 }
 
 function ensureRunSlot(html: string, keep: boolean): string {
+  // AI : SQL pages use {{action}} as the primary control; landing pages omit {{run}} until a pipeline is attached.
   if (html.includes(HOSTED_SITE_RUN_SLOT) || html.includes("{{action") || !keep) return html
   return `${html.trim()}\n<section class="hs-run">\n${HOSTED_SITE_RUN_SLOT}\n</section>\n`
 }
