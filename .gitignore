@@ -247,3 +247,7 @@ AutomationBench
 
 # Claude Code personal approvals (project policy lives in .claude/settings.json)
 .claude/settings.local.json
+
+# competitor compare — recorded runs + saved logins (never commit credentials)
+competitor_runs/*/
+.competitor_compare/auth/*.json
