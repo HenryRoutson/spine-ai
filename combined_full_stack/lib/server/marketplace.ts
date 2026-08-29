@@ -14,6 +14,12 @@ import { creditCreatorEarnings } from "@/lib/server/creator_earnings";
 import { dataDir } from "./config";
 import { createAdminClient } from "./supabase_admin";
 import { isMissingSchemaError } from "./supabase_store";
+import {
+  persistOmittingUnknownColumns,
+  siteOptionsFromPersistence,
+  stripHostedSiteFromSnapshot,
+  withHostedSiteOnSnapshot,
+} from "./shared-link-persist";
 import { getSupabasePublicEnv } from "@/utils/supabase/env";
 import type { user_id_string } from "./require_auth";
 import { cloneProject } from "./seed";
@@ -154,7 +160,7 @@ function loadLocalListing(id: MarketplaceListingId): StoredListing | null {
     ...raw,
     kind,
     projectId: nullableProjectId(raw.projectId),
-    siteOptions: kind === "website" ? normalizeHostedSiteOptions(raw.siteOptions) : undefined,
+    siteOptions: kind === "website" ? siteOptionsFromPersistence(raw.siteOptions, raw.snapshot) : undefined,
   };
 }
 
@@ -186,7 +192,7 @@ function rowFromSupabase(data: Record<string, unknown>): StoredListing {
     cloneCount: Number(data.clone_count ?? 0),
     createdAt: Number(data.created_at ?? 0),
     revoked: Boolean(data.revoked),
-    siteOptions: kind === "website" ? normalizeHostedSiteOptions(data.site_options) : undefined,
+    siteOptions: kind === "website" ? siteOptionsFromPersistence(data.site_options, data.snapshot) : undefined,
   };
 }
 
@@ -287,6 +293,8 @@ export async function publishMarketplaceListing(
   const snapshot = input.project
     ? snapshotForMarketplace(input.project)
     : pageOnlyProjectStub(siteOptions?.brand.companyName ?? title);
+  const persistSnapshot =
+    kind === "website" && siteOptions ? withHostedSiteOnSnapshot(snapshot, siteOptions) : snapshot;
   const row: StoredListing = {
     id,
     ownerId: input.ownerId,
@@ -295,7 +303,7 @@ export async function publishMarketplaceListing(
     title,
     description: input.description.trim(),
     priceCents,
-    snapshot,
+    snapshot: persistSnapshot,
     cloneCount: 0,
     createdAt: Date.now(),
     revoked: false,
@@ -312,28 +320,28 @@ export async function publishMarketplaceListing(
     return toRecord(row);
   }
 
-  const persist = async (projectId: ProjectId | null | "", includeKind: boolean) =>
-    db.from("marketplace_listings").upsert({
-      id: row.id,
-      owner_id: row.ownerId,
-      project_id: projectId,
-      title: row.title,
-      description: row.description,
-      price_cents: row.priceCents,
-      snapshot: row.snapshot,
-      clone_count: 0,
-      created_at: row.createdAt,
-      revoked: false,
-      ...(includeKind ? { kind: row.kind, site_options: row.siteOptions ?? null } : {}),
-    });
+  const persist = async (projectId: ProjectId | null | "") =>
+    persistOmittingUnknownColumns(
+      (payload) => db.from("marketplace_listings").upsert(payload),
+      {
+        id: row.id,
+        owner_id: row.ownerId,
+        project_id: projectId,
+        title: row.title,
+        description: row.description,
+        price_cents: row.priceCents,
+        snapshot: row.snapshot,
+        clone_count: 0,
+        created_at: row.createdAt,
+        revoked: false,
+        kind: row.kind,
+        site_options: row.siteOptions ?? null,
+      },
+    );
 
-  let { error } = await persist(row.projectId, true);
-  if (error && /kind|site_options/i.test(error.message)) {
-    mktLog.warn(`marketplace kind columns missing — upsert without them`, { error: error.message });
-    ({ error } = await persist(row.projectId ?? "", false));
-  }
-  if (error && /null|project_id/i.test(error.message) && row.projectId == null) {
-    ({ error } = await persist("", true));
+  let { error } = await persist(row.projectId);
+  if (error && /null|project_id/i.test(error.message ?? "") && row.projectId == null) {
+    ({ error } = await persist(""));
   }
   if (error) {
     if (isServerless() || !isMissingSchemaError(error)) {
@@ -416,7 +424,7 @@ export async function cloneMarketplaceListing(opts: {
 
   let project: Project | undefined;
   if (listing.kind !== "website" || snapshotHasPipeline(listing.snapshot)) {
-    project = migrateProjectModules(cloneProject(listing.snapshot, opts.store.projects()));
+    project = migrateProjectModules(cloneProject(stripHostedSiteFromSnapshot(listing.snapshot), opts.store.projects()));
     opts.store.saveProject(project);
     await opts.store.flush();
   }
