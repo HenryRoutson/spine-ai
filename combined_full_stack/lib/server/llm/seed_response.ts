@@ -1,6 +1,6 @@
 // AI : deterministic seed LLM replies — shared by server provider + OpenAI-compatible mock HTTP.
 // AI : Schema-aware fill from prompt context so UI (schema-first) and exports (schema-last) match.
-import { matchVibeExample, seedHarnessWriteTools } from "../vibe-coding-examples";
+import { seedHarnessWriteTools } from "../vibe-coding-examples";
 import { isSpineJsAuthoringPrompt } from "@/lib/spine-js/compile";
 import { payloadToSpineJs } from "@/lib/spine-js/payload-to-js";
 
@@ -293,19 +293,15 @@ function isProjectAssistantSchemaPrompt(prompt: string): boolean {
   return prompt.includes('"targetFunctionName"') && prompt.includes('"modulePatch"') && prompt.includes('"proposedActions"');
 }
 
-// AI : offline Vibe — valid assistant JSON so a second named function does not need OpenRouter.
+// AI : offline Vibe — a generic notes pipeline so tests do not need OpenRouter.
+// AI : Do NOT look up few-shot Example 1–5 by task text. That pastes the answer key
+// AI : into the A/B (reward hacking): seed then scores 100% without generating anything.
 function seedProjectAssistantReply(prompt: string): string | null {
   if (!isProjectAssistantSchemaPrompt(prompt)) return null;
   const userRequest = extractUserRequest(prompt);
   const named = seedNamedFunctionFromPrompt(userRequest);
-  if (named) {
-    const unnamed = /\bUntitled Pipeline\b/.test(prompt);
-    return JSON.stringify(seedNotesProposalPayload(named, named, unnamed));
-  }
-  const example = matchVibeExample(userRequest) ?? matchVibeExample(prompt);
-  if (example) return JSON.stringify(example.payload);
   const unnamed = /\bUntitled Pipeline\b/.test(prompt);
-  return JSON.stringify(seedNotesProposalPayload("Notes", null, unnamed));
+  return JSON.stringify(seedNotesProposalPayload(named || "Notes", named, unnamed));
 }
 
 function seedObservePlanReply(prompt: string): string | null {
@@ -327,10 +323,8 @@ function seedVibeHarnessReply(prompt: string): string | null {
   if (!isVibeHarnessSchemaPrompt(prompt)) return null;
   const userRequest = extractUserRequest(prompt);
   const named = seedNamedFunctionFromPrompt(userRequest);
-  const example = named ? null : matchVibeExample(userRequest) ?? matchVibeExample(prompt);
-  const payload = example
-    ? example.payload
-    : seedNotesProposalPayload(named || "Notes", named, /\bUntitled Pipeline\b/.test(prompt));
+  // AI : always the notes stub — never the matching few-shot payload (reward hacking).
+  const payload = seedNotesProposalPayload(named || "Notes", named, /\bUntitled Pipeline\b/.test(prompt));
   const wrotePipeline = /wrote pipeline\.json/i.test(prompt) || /wrote pipeline\.js/i.test(prompt);
   const ranTests = /\$ run_tests\b/i.test(prompt);
   const passed = /^PASS\b/m.test(prompt);
@@ -342,7 +336,7 @@ function seedVibeHarnessReply(prompt: string): string | null {
   }
   return JSON.stringify({
     tools: seedHarnessWriteTools(payload),
-    note: example ? `seed writes few-shot ${example.id}` : "seed writes the notes pipeline",
+    note: "seed writes the notes pipeline",
   });
 }
 
@@ -350,10 +344,8 @@ function seedSpineJsReply(prompt: string): string | null {
   if (!isSpineJsAuthoringPrompt(prompt)) return null;
   const userRequest = extractUserRequest(prompt);
   const named = seedNamedFunctionFromPrompt(userRequest);
-  const example = named ? null : matchVibeExample(userRequest) ?? matchVibeExample(prompt);
-  const payload = example
-    ? example.payload
-    : seedNotesProposalPayload(named || "Notes", named, /\bUntitled Pipeline\b/.test(prompt));
+  // AI : same notes stub as JSON/harness — do not compile the few-shot answer key.
+  const payload = seedNotesProposalPayload(named || "Notes", named, /\bUntitled Pipeline\b/.test(prompt));
   return payloadToSpineJs(payload);
 }
 

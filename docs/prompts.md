@@ -4,6 +4,14 @@ A chronological record of product-direction prompts (user voice, not task-demo s
 
 ---
 
+## 2026-08-29 — Seed few-shot lookup is reward hacking (this session)
+
+Ok then it’s not a test, remove this behaviour and test again, note this down that it’s reward hacking to do this
+
+Seed was matching the Vibe task string to Example 1–5 and writing that canned `payload` (JSON, `pipeline.js`, or harness `write_file`). Reliability then scored 100% because the answer key was pasted, not generated. That is reward hacking. Seed must not look up few-shot answers. Catalog materialize tests still prove the examples themselves are valid. Live OpenRouter is the coding comparison.
+
+---
+
 ## 2026-08-29 — JSON authoring vs JS library (this session)
 
 I’m worried about the custom json being so new for the llm that performance in coding is terrible, so I would like an option for the llm to output into normal JavaScript and then it’s converted into the the json schema, the other option is that I go the library approach which is probably better where stuff like caching , step by step output, DAG visualisation is exported from a library rather than a json structure, the issue with this is that it’s not cross language and would need to be implemented repeatedly across languages. While being able to have have a single function that is intensive be a language like rust and everything else JavaScript is nice, the json coding performance degradation is a real issue. Please create a doc file which record all my prompts and another doc file which is the product spec in markdown pure AI description , including this prompt. Try to create a library where each function takes a single zod structure and try to enforce all restrictions of the json. Compare using json or library if this improves performance with harness or direct retry output (currently json)

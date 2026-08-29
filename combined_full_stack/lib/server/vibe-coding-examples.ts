@@ -130,6 +130,8 @@ export function vibeExampleTasks(): VibeExampleTask[] {
   return cached
 }
 
+// AI : catalog lookup for scoring A/B topology — never use this in seed LLM replies.
+// AI : Pasting ex.payload because the task string matched is reward hacking (100% without generating).
 export function matchVibeExample(text: string): VibeExampleTask | null {
   const src = text.trim()
   if (!src) return null

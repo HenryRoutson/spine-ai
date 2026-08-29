@@ -1,4 +1,4 @@
-// AI : A/B JSON vs spine-js library × direct-retry vs file-harness.
+// AI : A/B JSON vs spine-js × direct vs harness. Seed is a notes stub — do not paste few-shot payloads (reward hacking).
 import { afterAll, beforeAll, describe, expect, it } from "vitest"
 import { mkdirSync, writeFileSync } from "node:fs"
 import { resolve } from "node:path"
@@ -182,21 +182,24 @@ describe("vibe json vs spine-js A/B (seed LLM)", () => {
     else process.env.SPINE_VIBE_AUTHORING = prevAuth
     clearLlmProviderCache()
     writeArtifacts(
-      "vibe-ab-json-vs-js-seed",
-      "JSON vs spine-js library A/B (seed LLM)",
-      "Seed writes the matching few-shot payload (JSON or compiled JS). Direct = structured retry. Harness = file loop. Reliable = valid AND topology.",
+      "vibe-ab-json-vs-js-seed-no-lookup",
+      "JSON vs spine-js library A/B (seed LLM, no answer-key lookup)",
+      "Seed emits a generic notes stub (JSON or compiled JS). Pasting the matching few-shot payload is reward hacking and was removed. Direct = structured retry. Harness = file loop. Reliable = valid AND topology. Coding quality is OpenRouter only.",
       rows,
     )
   })
 
   for (const ex of TASKS) {
     for (const [authoring, collection] of MODES) {
-      it(`${ex.id}: ${authoring}-${collection} builds a valid ${ex.topology} pipeline`, async () => {
+      it(`${ex.id}: ${authoring}-${collection} records a proposal (seed stub, not few-shot ${ex.topology})`, async () => {
         const scored = await runMode(authoring, collection, ex)
         rows.push(scored)
         expect(scored.hasProposal, `${ex.id} ${authoring}-${collection} err=${scored.error}`).toBe(true)
-        expect(scored.valid, `${ex.id} ${authoring}-${collection} kinds=${scored.kinds.join(",")}`).toBe(true)
-        expect(scored.topologyHit, `${ex.id} ${authoring}-${collection} kinds=${scored.kinds.join(",")}`).toBe(true)
+        expect(scored.kinds, `${ex.id} ${authoring}-${collection} seed stub, not few-shot ${ex.topology}`).toEqual([
+          "input",
+          "llm-batch",
+          "output",
+        ])
         if (collection === "harness") {
           expect(scored.generator, `${ex.id} harness generator`).toBe("harness")
         }

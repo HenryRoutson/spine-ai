@@ -77,7 +77,13 @@ The experiment is a 2×2:
 | **JSON** | Current default | Existing file loop on `pipeline.json` |
 | **Library (JS)** | Model emits JS; compile; retry with compile + validation errors | File loop writes `pipeline.js` |
 
-Metrics: reliability (valid pipeline **and** topology hit), seconds per task, prompt tokens, completion tokens. Seed LLM proves the wiring. Live OpenRouter (when a key is present) is the actual coding-performance comparison.
+Metrics: reliability (valid pipeline **and** topology hit), seconds per task, prompt tokens, completion tokens.
+
+### Reward hacking (do not do this)
+
+Matching the user task string to few-shot Example 1–5 and emitting that example’s `payload` is **reward hacking**. Seed then scores 100% reliable without generating a pipeline. That is not a test of JSON vs library vs harness.
+
+Seed may emit a generic notes stub so offline tests still return a proposal. Catalog tests (`vibe-coding-examples.test.ts`, `spine-js` round-trip) prove the few-shot graphs are I/O-valid — they are not LLM tests. Seed A/B records wiring and tokens; it must not assert topology. Live OpenRouter is the coding-performance comparison.
 
 ## What this does not change
 
@@ -91,5 +97,5 @@ Metrics: reliability (valid pipeline **and** topology hit), seconds per task, pr
 1. `docs/prompts.md` exists and includes this prompt.
 2. This spec exists.
 3. `lib/spine-js` compiles JS → JSON IR and rejects the same illegal graphs as `moduleSpecSchema`.
-4. Seed A/B: all four cells produce valid topology-correct pipelines on the few-shot tasks.
-5. Optional live A/B writes token/time/reliability tables so we can see whether JS actually helps.
+4. Seed A/B: records the 2×2 without pasting few-shot payloads. Must not require topology hits (that was reward hacking).
+5. Live OpenRouter A/B (when a key is present) is the coding-performance comparison.
