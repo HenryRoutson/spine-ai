@@ -1,6 +1,7 @@
 import { llmBatchStructured } from "../../llm";
 import { deferBrowserLlmIfNeeded } from "../defer_browser_llm";
 import { llmSchema, structuredLlmPrompt } from "../../structure";
+import { withStructurePrompt } from "@/lib/schema-derived";
 import { labeledJsonPreviewItems } from "@/lib/step-response-preview";
 import type { PipelineModule } from "../../types";
 import { llmCallBudget, modelById } from "../helpers";
@@ -33,7 +34,7 @@ export async function execLlmBatchStep(m: PipelineModule, ctx: RunCtx, log: RunL
   const schema = llmSchema(out, project.models, false, project.typeAliases ?? []);
   const promptFor = (item: unknown) =>
     structuredLlmPrompt(
-      `${m.prompt ?? "Process the item."}\n\nITEM:\n${JSON.stringify(item, null, 2)}`,
+      `${withStructurePrompt(m.prompt, out, project.models)}\n\nITEM:\n${JSON.stringify(item, null, 2)}`,
       schema,
     );
   const preview = batchInputPreview(items, promptFor);
@@ -57,7 +58,7 @@ export async function execLlmBatchStep(m: PipelineModule, ctx: RunCtx, log: RunL
   ctx.stepLlmCalls = [];
   const rows = await llmBatchStructured(
     items,
-    (item: unknown) => `${m.prompt ?? "Process the item."}\n\nITEM:\n${JSON.stringify(item, null, 2)}`,
+    (item: unknown) => `${withStructurePrompt(m.prompt, out, project.models)}\n\nITEM:\n${JSON.stringify(item, null, 2)}`,
     schema,
     { model: stepModel, ledger: ctx.ledger, llmCalls: ctx.stepLlmCalls, ...llmCallBudget(ctx, m.label) },
     log.child("llm-batch"),

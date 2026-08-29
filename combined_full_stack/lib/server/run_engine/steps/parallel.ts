@@ -1,6 +1,7 @@
 import { llmStructured } from "../../llm"
 import { deferBrowserLlmIfNeeded } from "../defer_browser_llm"
 import { llmSchema, structuredLlmPrompt } from "../../structure"
+import { withStructurePrompt } from "@/lib/schema-derived"
 import type { PipelineModule } from "../../types"
 import { llmCallBudget, materializeHints, materializeStepOutput, modelById, prevModuleFor } from "../helpers"
 import { requireLinearInput } from "../context"
@@ -28,7 +29,7 @@ export async function execParallelStep(m: PipelineModule, ctx: RunCtx, log: RunL
     const branchOut = modelById(project.models, b.outStructureId)
     if (!branchOut) throw new Error(`parallel branch "${b.field}" missing out structure`)
     const schema = llmSchema(branchOut, project.models, false, project.typeAliases ?? [])
-    const userPrompt = `${b.prompt || "Process the input."}\n\n${context}`
+    const userPrompt = `${withStructurePrompt(b.prompt, branchOut, project.models)}\n\n${context}`
     return { branch: b, schema, userPrompt, prompt: structuredLlmPrompt(userPrompt, schema) }
   })
 

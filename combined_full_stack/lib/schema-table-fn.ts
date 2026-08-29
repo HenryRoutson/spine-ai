@@ -55,6 +55,19 @@ ${insert}
 `
 }
 
+export function defaultSelectSqlForModel(model: StructureModel): string {
+  return `SELECT * FROM ${sqlTableName(model.name)}`
+}
+
+export function defaultSelectSqlForModule(
+  m: { outStructureId?: string },
+  models: StructureModel[],
+): string | null {
+  const out = models.find((x) => x.id === m.outStructureId)
+  if (!out?.name.trim()) return null
+  return defaultSelectSqlForModel(out)
+}
+
 export function allModelsToTableFns(models: StructureModel[]): string {
   const exportModels = modelsForPydanticExport(stripSharedModels(models)).filter((m) =>
     m.fields.some((f) => f.name.trim()),

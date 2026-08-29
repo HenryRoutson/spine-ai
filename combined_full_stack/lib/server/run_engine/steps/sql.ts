@@ -1,6 +1,7 @@
 import { ModuleKind, type PipelineModule } from "../../types"
 import { pkFieldOf } from "@/lib/sql-id-types"
 import { sqlSeedRowsOf, tableNameForModel } from "@/lib/app-sql"
+import { defaultSelectSqlForModule } from "@/lib/schema-table-fn"
 import { execAppSql } from "../../app_sql"
 import { materializeHints, materializeStepOutput, modelById, prevModuleFor } from "../helpers"
 import { jsonStringifyStepValue } from "../results"
@@ -16,7 +17,7 @@ export async function pauseForHostedAnimation(m: PipelineModule): Promise<void> 
 }
 
 export async function execSqlStep(m: PipelineModule, ctx: RunCtx, log: RunLogger): Promise<ExecResult> {
-  const sql = m.sql?.trim()
+  const sql = m.sql?.trim() || defaultSelectSqlForModule(m, ctx.project.models) || ""
   if (!sql) throw new Error(`sql step "${m.label}" has no SQL`)
   const scope = ctx.appSqlScope
   if (!scope) throw new Error(`sql step "${m.label}" has no app SQL scope`)

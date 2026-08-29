@@ -76,7 +76,7 @@ export function LlmModuleFields({
             />
             {hasNoPromptWarning && (
               <p className="mt-1 font-mono text-[9px] text-muted-foreground">
-                no custom text — JSON schema is sent as the structured output contract
+                no custom text — field prompts and JSON schema come from the output structure
               </p>
             )}
           </>

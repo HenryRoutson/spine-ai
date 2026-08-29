@@ -73,6 +73,8 @@ describe("vibe coding workspace", () => {
     expect(isWritableVibePath("AGENTS.md")).toBe(false)
     expect(isReadonlyVibePath("derived/schema.sql")).toBe(true)
     expect(isWritableVibePath("derived/models.py")).toBe(false)
+    expect(isReadonlyVibePath("derived/schema.zod.ts")).toBe(true)
+    expect(isReadonlyVibePath("derived/prompts.md")).toBe(true)
     expect(isWritableVibePath("pipeline.json")).toBe(true)
     expect(isWritableVibePath("pipeline.js")).toBe(true)
     expect(isWritableVibePath("structures/ReceiptRow.json")).toBe(true)
@@ -87,6 +89,8 @@ describe("vibe coding workspace", () => {
     expect(ws.files.has("pipeline.json")).toBe(true)
     expect(ws.files.get("derived/schema.sql")).toMatch(/CREATE TABLE document/)
     expect(ws.files.get("derived/models.py")).toMatch(/_sql_lit/)
+    expect(ws.files.get("derived/schema.zod.ts")).toMatch(/from "zod"/)
+    expect(ws.files.get("derived/prompts.md")).toMatch(/Derived LLM prompts/)
     expect(listVibePaths(ws.files, "structures").length).toBeGreaterThan(0)
     const draft = parseVibeWorkspaceFiles(ws.files, ws.seed)
     expect(draft.errors).toEqual([])
@@ -222,6 +226,8 @@ describe("vibe coding harness tools", () => {
     executeVibeHarnessTool({ tool: "run_tests" }, ws, checks)
     expect(ws.files.get("derived/schema.sql")).toMatch(/receipt_row/)
     expect(ws.files.get("derived/models.py")).toMatch(/class ReceiptRowTable/)
+    expect(ws.files.get("derived/schema.zod.ts")).toMatch(/export const ReceiptRow/)
+    expect(ws.files.get("derived/prompts.md")).toMatch(/## ReceiptRow/)
   })
 
   it("auto run_tests after writes and ignores Q&A PASS / premature done", () => {

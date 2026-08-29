@@ -19,7 +19,7 @@ export function buildVibeTopologyPromptBlock(): string {
 - assemble — two already-parsed outputs: assembleBindings after both parses. Bind quoted lists to the auto-inserted Link Quotes label. Not combine, not a custom-code zip, not a third upload.
 - fork — independent extracts on ONE document: fork with product join; each lane llm structureIn is Document. Not one mega-llm, not parallel.
 
-The platform already derives Zod, SQL tables, LLM JSON schemas, OCR (pdf/image → text), and Link Quotes from your structures. Prefer sql steps for table reads/writes. Use tuple[text,quote] on copied spans so hosted-site uploads can be quoted. Do not invent {state.X} prompt templates.`
+The platform already derives Zod, SQL tables, LLM field prompts, OCR (pdf/image → text), and Link Quotes from your structures. See derived/schema.sql, derived/schema.zod.ts, derived/models.py, derived/prompts.md. Prefer sql steps for table reads/writes — omit sql for SELECT * from the out structure. Leave llm prompts empty unless you need extra instructions. Use tuple[text,quote] on copied spans so hosted-site uploads can be quoted. Do not invent {state.X} prompt templates.`
 }
 
 export function parseThinkingTopology(thinking: string): VibeTopologyName | null {

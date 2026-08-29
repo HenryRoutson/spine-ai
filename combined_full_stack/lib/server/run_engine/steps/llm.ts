@@ -7,6 +7,7 @@ import {
   logDynamicStructureCreated,
   structuredLlmPrompt,
 } from "../../structure";
+import { withStructurePrompt } from "@/lib/schema-derived";
 import { stepEmitsList } from "../../type_expr";
 import type { PipelineModule } from "../../types";
 import { llmCallBudget, materializeHints, modelById, sourceDocumentBlock } from "../helpers";
@@ -24,7 +25,7 @@ export async function execLlmStep(m: PipelineModule, ctx: RunCtx, log: RunLogger
   const context = usesSourceDoc
     ? sourceDocumentBlock(ctx.sourceText, ctx.sourceDocId)
     : `INPUT DATA:\n${JSON.stringify(inputData, null, 2)}`;
-  const userPrompt = `${m.prompt ?? "Process the input."}\n\n${context}`;
+  const userPrompt = `${withStructurePrompt(m.prompt, out, project.models)}\n\n${context}`;
   // AI : m.prompt is literal; spine JSON is appended above. {state.X} / {risks} are not interpolated.
   const schema = llmSchema(out, project.models, stepEmitsList(m), project.typeAliases ?? []);
   const prompt = structuredLlmPrompt(userPrompt, schema);
