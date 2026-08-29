@@ -195,7 +195,7 @@ Tools: write_file, read_file, run_tests, list_dir, delete_file, done.
 - Two different doc kinds (policy + company pack) → two inputs, parse each, then assemble or combine (side file immediately before combine).
 - Non-JSON inputs (text/pdf/word/image/web): structureOut is Document or list[Document]. Typed rows belong on a later llm/llm-batch.
 ${buildVibeTopologyPromptBlock()}
-- run_tests FAILs topology even when I/O is valid — rebuild the named spine; do not call done.
+- run_tests FAILs when I/O, custom-code, or lint is invalid — fix files; do not call done.
 ${pipelineHint}
 - message.md is future tense ("I'll add…") — the user still has to Approve.
 - After writes, run_tests. Call done only when VALIDATION.md starts with PASS (not Q&A-only).
@@ -224,7 +224,7 @@ function buildHarnessUserPrompt(args: {
   return `Turn ${args.turn + 1}/${VIBE_HARNESS_MAX_TURNS}
 Task: ${args.task}
 ${first ? `${buildVibeTopologyPromptBlock()}\n` : ""}${thinking}${args.extra}
-${first ? "Write files this turn (do not only list_dir / read_file). Replace the stub Input + Output. Pick TOPOLOGY first." : "Continue from the tool results. If VALIDATION.md is FAIL (including FAIL topology), fix files. If PASS, done. Empty tools is not done."}
+${first ? "Write files this turn (do not only list_dir / read_file). Replace the stub Input + Output. Pick TOPOLOGY first." : "Continue from the tool results. If VALIDATION.md is FAIL, fix files. If PASS, done. Empty tools is not done."}
 
 ${first ? "Workspace (already loaded):" : "Last tool results:"}
 ${args.lastResults || "(empty workspace)"}

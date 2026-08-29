@@ -95,7 +95,7 @@ import {
 import { vibeJsAuthoringEnabled } from "./vibe-coding-mode";
 import { compileSpineJs, extractSpineJsSource } from "@/lib/spine-js/compile";
 import { buildSpineJsSystemPrompt, buildSpineJsUserPrompt } from "@/lib/spine-js/prompt";
-import { buildVibeTopologyPromptBlock, formatTopologyRetryErrors, topologyAdvice } from "./vibe-coding-topology";
+import { buildVibeTopologyPromptBlock } from "./vibe-coding-topology";
 
 export type {
   AssistantProposedAction,
@@ -823,7 +823,7 @@ export function runVibeWorkspaceChecks(
   project: Project,
   globalModel: ModelId,
   testDocsCatalog: AssistantTestDocCatalogEntry[],
-  task?: string,
+  _task?: string,
 ): string {
   if (draft.errors.length) {
     return `FAIL parse\n${draft.errors.map((e) => `- ${e}`).join("\n")}`;
@@ -863,9 +863,7 @@ export function runVibeWorkspaceChecks(
   );
   const lintErrors = lint.lints.filter((l) => l.severity === "error");
   const ok = !validation && compileErrors.length === 0 && lintErrors.length === 0;
-  const kinds = flattenPipelineModules(proposal.modules).map((m) => m.kind);
-  const topoHints = task ? topologyAdvice(task, kinds) : [];
-  const lines = [ok && !topoHints.length ? "PASS" : topoHints.length && ok ? "FAIL topology" : "FAIL"];
+  const lines = [ok ? "PASS" : "FAIL"];
   if (validation) lines.push("I/O:", validation.trim());
   if (compileErrors.length) lines.push("custom-code:", ...compileErrors.map((e) => `- ${e}`));
   if (lintErrors.length) {
@@ -874,13 +872,7 @@ export function runVibeWorkspaceChecks(
       ...lintErrors.map((l) => `- ${l.stepLabel ?? l.structureName ?? l.code}: ${l.message}`),
     );
   }
-  if (topoHints.length) {
-    lines.push("topology:", ...topoHints.map((h) => `- ${h}`));
-  }
-  if (ok && !topoHints.length) lines.push("I/O valid, custom-code compiled, lint clean.");
-  else if (topoHints.length) {
-    lines.push("Fix: rewrite pipeline.json from examples/few-shot.md for this TOPOLOGY — do not patch a wrong spine.");
-  }
+  if (ok) lines.push("I/O valid, custom-code compiled, lint clean.");
   return lines.join("\n");
 }
 
@@ -1240,10 +1232,7 @@ export async function proposePipelineChange(
         proposal.models,
         proposal.typeAliases ?? [],
       );
-      const kinds = flattenPipelineModules(proposal.modules).map((m) => m.kind);
-      const validationErrors = [ioErrors.trim(), formatTopologyRetryErrors(effectiveMessage, kinds)]
-        .filter(Boolean)
-        .join("\n\n");
+      const validationErrors = ioErrors.trim();
       if (!validationErrors) break;
 
       retryCount += 1;

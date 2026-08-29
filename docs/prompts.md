@@ -4,6 +4,12 @@ A chronological record of product-direction prompts (user voice, not task-demo s
 
 ---
 
+## 2026-08-29 — Remove topology cheat sheet; generalize SQL; Spine-only eval
+
+Fix the vibe topology cheat sheet (task-string retry hints). Leave A/B scoring as-is (still testing). Spine-in-Spine stays. Hosted SQL must not be a Collatz toy — available in vibe and configurable in the UI. Typed DAG is fine. Competitor compare: Spine only (cloud cannot test Base44/others). Explain #9 / #18 / #19.
+
+---
+
 ## 2026-08-29 — Store OpenRouter key in Cursor secrets, run live tests
 
 I gave you the openrouter key already, please store it! In secrets on cursor not on git, it’s only got a bit of money I don’t care it’s exposed it’s for testing, run tests : [key redacted]
