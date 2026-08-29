@@ -97,7 +97,7 @@ class CredentialTests(unittest.TestCase):
         rows = credential_status(env={})
         self.assertEqual([r.platform for r in rows], ["lovable", "replit", "base44"])
         self.assertFalse(any(r.ready for r in rows))
-        self.assertTrue(all("login" in r.hint or "KEY" in r.hint or "TOKEN" in r.hint for r in rows))
+        self.assertTrue(all("competitor_compare_keys.md" in r.hint for r in rows))
 
     def test_ready_when_keys_set(self) -> None:
         rows = credential_status(

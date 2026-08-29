@@ -85,7 +85,7 @@ def _lovable_status(env: dict[str, str]) -> CredentialStatus:
         "lovable",
         False,
         "none",
-        "set LOVABLE_API_KEY (lov_…) or run: python3 scripts/competitor_compare.py login --platform lovable",
+        "docs/competitor_compare_keys.md — official Lovable API is Build-with-URL; REST lov_… key is not on that page",
     )
 
 
@@ -99,7 +99,7 @@ def _replit_status(env: dict[str, str]) -> CredentialStatus:
         "replit",
         False,
         "none",
-        "run: python3 scripts/competitor_compare.py login --platform replit  (or set REPLIT_MCP_ACCESS_TOKEN)",
+        "docs/competitor_compare_keys.md — official Replit Agent API is MCP OAuth, no static key",
     )
 
 
@@ -116,7 +116,7 @@ def _base44_status(env: dict[str, str]) -> CredentialStatus:
         "base44",
         False,
         "none",
-        "set BASE44_API_KEY (b44k_…) or BASE44_ACCESS_TOKEN, or run login --platform base44",
+        "docs/competitor_compare_keys.md — copy Base44 Settings → Preferences → API Key into BASE44_API_KEY",
     )
 
 

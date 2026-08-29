@@ -107,9 +107,8 @@ def cmd_check() -> int:
         ready_n += int(row.ready)
     print()
     if ready_n == 0:
-        print("No credentials yet. Either:")
-        print("  1) Put keys in .env  (LOVABLE_API_KEY, BASE44_API_KEY / BASE44_ACCESS_TOKEN, REPLIT_MCP_ACCESS_TOKEN)")
-        print("  2) Save browser sessions: python3 scripts/competitor_compare.py login")
+        print("No credentials yet. See docs/competitor_compare_keys.md")
+        print("  Cloud: add BASE44_API_KEY (and optional LOVABLE_API_KEY / REPLIT_MCP_ACCESS_TOKEN) on the environment, then start a new agent.")
         return 1
     if ready_n < 3:
         print(f"{ready_n}/3 platforms ready — record will skip the rest.")
