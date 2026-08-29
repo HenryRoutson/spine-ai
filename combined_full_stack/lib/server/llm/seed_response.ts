@@ -46,6 +46,8 @@ export function extractContextFromPrompt(prompt: string): JsonValue | null {
       if (parsed != null) return parsed;
     }
   }
+  const source = extractSourceDocumentText(prompt);
+  if (source) return source;
   return findLastJsonValue(prompt);
 }
 
@@ -119,6 +121,25 @@ function contextText(context: JsonValue | null): string {
   }
 }
 
+// AI : SOURCE DOCUMENT (sha_…, N chars):\nbody — llm steps with quote fields use this instead of ITEM JSON.
+export function extractSourceDocumentText(prompt: string): string | null {
+  const m = prompt.match(/SOURCE DOCUMENT \([^)]+\):\n([\s\S]*)/i);
+  if (!m?.[1]) return null;
+  const body = m[1].replace(/\n… \(\d+ more chars\)\s*$/, "").trim();
+  return body || null;
+}
+
+// AI : copy a real source span so Link Quotes can attach offsets under seed LLM.
+function spanFromSource(src: string, fieldName: string): string {
+  const safe = fieldName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const labeled = src.match(new RegExp(`${safe}\\s*[:#=]\\s*([^\\n,;.]+)`, "i"));
+  const labeledSpan = labeled?.[1]?.trim();
+  if (labeledSpan) return labeledSpan.slice(0, 200);
+  const line = src.split(/\n/).map((s) => s.trim()).find((s) => s.length > 0);
+  if (line) return line.slice(0, 120);
+  return src.trim().slice(0, 80);
+}
+
 function isSummaryish(name: string): boolean {
   return /^(summary|body|reason|explanation|chain_of_thought|analysis|description|note|comment)$/i.test(
     name,
@@ -168,12 +189,18 @@ function fillSchema(schema: JsonSchemaNode, context: JsonValue | null, fieldName
   if (t === "string" || !t) {
     const v = rec[fieldName];
     if (typeof v === "string") return v;
+    if (fieldName === "id") {
+      if (typeof rec.id === "string") return rec.id;
+      if (typeof rec.id === "number") return String(rec.id);
+    }
+    const src = contextText(context);
     if (isSummaryish(fieldName)) {
-      const src = contextText(context);
       return src ? `Summary of: ${src}` : "seed";
     }
-    if (fieldName === "id" && typeof rec.id === "string") return rec.id;
-    if (fieldName === "id" && typeof rec.id === "number") return String(rec.id);
+    if (src) {
+      const span = spanFromSource(src, fieldName);
+      if (span) return span;
+    }
     return fieldName ? `seed:${fieldName}` : "seed";
   }
 
@@ -248,10 +275,10 @@ function notesSummarizerModules(title: string) {
     {
       kind: "llm-batch",
       label: `Summarize ${title}`,
-      note: "One summary per note.",
+      note: "One summary per note. Field prompts come from the structure.",
       structureIn: "Document",
       structureOut: "NoteSummary",
-      prompt: "Write a short summary of the note.",
+      prompt: "",
       inputDescription: "notes",
     },
     {
@@ -268,7 +295,15 @@ function seedNotesModel() {
   return {
     name: "NoteSummary",
     description: "A short summary of one note.",
-    fields: [{ name: "summary", type: "text", optional: false, description: "Summary" }],
+    fields: [
+      {
+        name: "excerpt",
+        type: "tuple[text,quote]",
+        optional: false,
+        description: "Span copied from the note",
+      },
+      { name: "summary", type: "text", optional: false, description: "Summary" },
+    ],
   };
 }
 

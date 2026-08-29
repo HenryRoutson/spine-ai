@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   extractContextFromPrompt,
   extractJsonSchemaFromPrompt,
+  extractSourceDocumentText,
   seedLlmReply,
   seedNamedFunctionFromPrompt,
 } from "@/lib/server/llm/seed_response";
@@ -109,6 +110,8 @@ User request: Keep Main. Also add a second function named Hello Notes that greet
     ) as { tools: { tool: string; path?: string; content?: string }[]; note?: string };
     expect(first.tools.some((t) => t.tool === "write_file" && t.path === "pipeline.json")).toBe(true);
     expect(first.tools.some((t) => t.path?.includes("NoteSummary"))).toBe(true);
+    expect(JSON.stringify(first)).toMatch(/tuple\[text,quote\]/);
+    expect(JSON.stringify(first)).not.toMatch(/Write a short summary of the note/);
     expect(JSON.stringify(first)).not.toMatch(/ReceiptRow/);
     expect(first.note).toBe("seed writes the notes pipeline");
 
@@ -134,5 +137,33 @@ User request: Convert hundreds of unstructured receipts into a single Excel file
     const reply = seedLlmReply(prompt, true);
     expect(reply).not.toMatch(/ReceiptRow/);
     expect(reply).toMatch(/NoteSummary/);
+    expect(reply).toMatch(/tuple\[text,quote\]/);
+  });
+
+  it("copies a source span from SOURCE DOCUMENT so quotes can link", () => {
+    const prompt = `Respond with ONLY a JSON value that validates against this JSON Schema:
+{"type":"object","properties":{"excerpt":{"type":"string"},"summary":{"type":"string"}},"required":["excerpt","summary"]}
+
+Extract JSON for QuoteRow.
+
+SOURCE DOCUMENT (sha_abc, 40 chars):
+Acme Corp billed 42 on Tuesday`;
+    expect(extractSourceDocumentText(prompt)).toContain("Acme Corp billed 42");
+    expect(extractContextFromPrompt(prompt)).toBe("Acme Corp billed 42 on Tuesday");
+    expect(JSON.parse(seedLlmReply(prompt, true))).toEqual({
+      excerpt: "Acme Corp billed 42 on Tuesday",
+      summary: "Summary of: Acme Corp billed 42 on Tuesday",
+    });
+  });
+
+  it("copies a source span from ITEM Document.content", () => {
+    const prompt = `Respond with ONLY a JSON value that validates against this JSON Schema:
+{"type":"object","properties":{"excerpt":{"type":"string"}},"required":["excerpt"]}
+
+ITEM:
+{"content":"Merchant ACME billed 42 on Tuesday","filename":"quote_sample.txt"}`;
+    expect(JSON.parse(seedLlmReply(prompt, true))).toEqual({
+      excerpt: "Merchant ACME billed 42 on Tuesday",
+    });
   });
 });
