@@ -95,9 +95,9 @@ export function JsonViewerEmbed({
   useEffect(() => {
     const onMessage = (e: MessageEvent) => {
       if (e.origin !== window.location.origin) return
-      if (e.source !== iframeRef.current?.contentWindow) return
       if (!e.data || typeof e.data !== "object") return
       if (e.data.type === JSON_VIEWER_MESSAGE_FULLSCREEN) {
+        if (e.source !== iframeRef.current?.contentWindow) return
         onFullscreenRef.current?.()
         return
       }

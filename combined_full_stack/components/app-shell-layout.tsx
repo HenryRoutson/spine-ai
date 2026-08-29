@@ -340,6 +340,11 @@ function AppShellLayoutInner({ variant = "default" }: { variant?: "default" | "e
   const showConsumer = shellKind === AppShellKind.Consumer
   const showBuilder = shellKind === AppShellKind.Builder
   const showPicker = shellKind === AppShellKind.Picker
+  const { sharedRunDocScope, activeSharedLinkId } = useAppShell()
+  const sharedRunDocScopeForViewer = useMemo(
+    () => sharedRunDocScope ?? (activeSharedLinkId ? { linkId: activeSharedLinkId } : null),
+    [sharedRunDocScope, activeSharedLinkId],
+  )
 
   return (
     <>
@@ -369,6 +374,10 @@ function AppShellLayoutInner({ variant = "default" }: { variant?: "default" | "e
       >
         <ProjectPickerPage />
       </WarmShellSlot>
+
+      <SharedRunDocScopeProvider scope={sharedRunDocScopeForViewer}>
+        <LazyDocViewer />
+      </SharedRunDocScopeProvider>
     </>
   )
 }
@@ -458,17 +467,11 @@ function BuilderShellLayoutInner({ variant = "default" }: { variant?: "default" 
   const {
     activeWindow,
     setActiveWindow,
-    activeSharedLinkId,
-    sharedRunDocScope,
     editingWebsite,
     setVibeObserveTab,
     websiteSurface,
     setWebsiteSurface,
   } = useAppShell()
-  const sharedRunDocScopeForViewer = useMemo(
-    () => sharedRunDocScope ?? (activeSharedLinkId ? { linkId: activeSharedLinkId } : null),
-    [sharedRunDocScope, activeSharedLinkId],
-  )
   const { modules, models, project, projectLoading, typeAliases } = useStore()
   useSyncProjectDocStructures()
   const validity = useMemo(
@@ -645,9 +648,6 @@ function BuilderShellLayoutInner({ variant = "default" }: { variant?: "default" 
           </ProjectAssistantDockLayout>
         )}
 
-        <SharedRunDocScopeProvider scope={sharedRunDocScopeForViewer}>
-          <LazyDocViewer />
-        </SharedRunDocScopeProvider>
         {!previewOnly ? (
           <>
             <ActivityTracker />

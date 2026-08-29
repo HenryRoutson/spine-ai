@@ -3,6 +3,7 @@
 import { useState } from "react"
 import { AlertTriangle, CheckCircle2 } from "lucide-react"
 import { DataViewPanel } from "@/components/data-view-panel"
+import { QuoteLinks, quotesFromJson } from "@/components/quote-links"
 import { PopupModal, type PopupPayload } from "@/components/logging/popup-modal"
 import { cn } from "@/lib/utils"
 import { useStatusPalette } from "@/lib/chart-colors"
@@ -95,13 +96,16 @@ function InferenceStepOutput({
       </div>
       {step.outputJson ? (
         <div className={expanded ? "h-[min(28rem,55vh)]" : "h-[min(16rem,32vh)]"}>
-          <DataViewPanel
-            json={step.outputJson}
-            models={models}
-            defaultView="table"
-            className="h-full"
-            onFullscreen={onFullscreen}
-          />
+          <div className="flex h-full min-h-0 flex-col">
+            <QuoteLinks quotes={quotesFromJson(step.outputJson)} className="shrink-0 px-4 pt-2" hint={null} />
+            <DataViewPanel
+              json={step.outputJson}
+              models={models}
+              defaultView="table"
+              className="min-h-0 flex-1"
+              onFullscreen={onFullscreen}
+            />
+          </div>
         </div>
       ) : (
         <div className="max-h-48 overflow-auto px-4 py-3">
