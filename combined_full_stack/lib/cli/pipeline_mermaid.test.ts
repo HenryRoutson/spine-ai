@@ -13,12 +13,20 @@ describe("derivePipelineMermaid", () => {
     const ctx = loadProjectContext(resolve(SEEDS_DIR, "batch_llm_example.json"))
     const chart = derivePipelineMermaid(ctx.project.modules, ctx.project.models)
     expect(chart).toContain("flowchart LR")
+    expect(chart).toContain('finish["End"]')
+    expect(chart).not.toMatch(/\bend\["End"\]/)
     expect(chart).toContain("classDef step")
     expect(chart).toContain("-->")
+    expect(chart).not.toContain("start --> finish")
     expect(chart.split("-->").length).toBeGreaterThan(ctx.project.modules.length - 1)
     for (const m of ctx.project.modules) {
       expect(chart).toContain(m.label)
     }
+    expect(chart).not.toContain("<br/><small>")
+    const verbose = derivePipelineMermaid(ctx.project.modules, ctx.project.models, "light", {
+      verboseStepLabels: true,
+    })
+    expect(verbose).toContain("<br/><small>")
   })
 
   it("includes dashed side-input edges for combine groups", () => {

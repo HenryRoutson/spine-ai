@@ -4,6 +4,16 @@ A chronological record of product-direction prompts (user voice, not task-demo s
 
 ---
 
+## 2026-08-29 — Base44 prompt to rebuild Spine
+
+Paste-ready spec for giving Base44 (or similar) so it tries to build Spine itself: one type = Zod = SQL, auto OCR + quote-link steps, spreadsheet views, vibe proposes / run executes.
+
+- Index: `docs/base44_rebuild_spine.md`
+- Prompt: `docs/base44_rebuild_spine_prompt.md`
+- Follow-ups: `docs/base44_rebuild_spine_followups.md`
+
+---
+
 ## 2026-08-29 — Remove topology cheat sheet; generalize SQL; Spine-only eval
 
 Fix the vibe topology cheat sheet (task-string retry hints). Leave A/B scoring as-is (still testing). Spine-in-Spine stays. Hosted SQL must not be a Collatz toy — available in vibe and configurable in the UI. Typed DAG is fine. Competitor compare: Spine only (cloud cannot test Base44/others). Explain #9 / #18 / #19.
