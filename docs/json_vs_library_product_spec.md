@@ -1,6 +1,6 @@
 # Spine product spec — JSON IR vs JavaScript library authoring
 
-This is an AI description of the product, including the 2026-08-29 prompt about JSON coding performance. It is not a dump of the UI feature list; that lives in `combined_full_stack_specification.md`.
+This is an AI description of the JSON-IR vs library authoring slice, including the 2026-08-29 prompt about JSON coding performance. The complete product spec is `docs/product_spec.md`. The raw UI feature dump is `combined_full_stack_specification.md`.
 
 ## What Spine is
 

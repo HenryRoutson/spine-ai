@@ -4,6 +4,14 @@ A chronological record of product-direction prompts (user voice, not task-demo s
 
 ---
 
+## 2026-08-29 — Full AI product spec (this session)
+
+ok combined_full_stack_specification.md Ln 1–80 is hand coded mostly, but i want a full AI version which is in complete detail. please build this
+
+The dump stays as the regression checklist. The complete AI prose spec is `docs/product_spec.md` (every dump section plus types, share/websites, authoring, landing, dashboard, UI modes).
+
+---
+
 ## 2026-08-29 — Base44 prompt to rebuild Spine
 
 Paste-ready spec for giving Base44 (or similar) so it tries to build Spine itself: one type = Zod = SQL, auto OCR + quote-link steps, spreadsheet views, vibe proposes / run executes.
@@ -48,6 +56,7 @@ These were already captured as specs, demo scripts, or example tasks. They are n
 
 | Source | What it is |
 | --- | --- |
+| `docs/product_spec.md` | Complete AI product spec (prose). Source of truth for “what is the product.” |
 | `combined_full_stack_specification.md` | Running feature dump: tabs, structures, pipeline kinds, inference, share, cache, documents, vibe coding. |
 | `docs/demo_outline.md` | Original demo: typed I/O, cached steps, batch LLM, implicit zod/pydantic validation. |
 | `docs/example_prompts.md` | Harder greenfield task prompts (KYC, quantum, tax, investment banking, PTR). |
