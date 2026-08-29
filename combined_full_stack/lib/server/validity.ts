@@ -614,7 +614,7 @@ function pipelineReachableModelIds(
 ): Set<StructureModelId> {
   const byId = new Map(models.map((m) => [m.id, m]));
   const seeds = new Set<StructureModelId>();
-  for (const m of modules) {
+  for (const m of flattenPipelineModules(modules)) {
     if (m.inStructureId) seeds.add(m.inStructureId);
     if (m.outStructureId) seeds.add(m.outStructureId);
     for (const b of m.parallelBranches ?? []) {

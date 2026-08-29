@@ -8,6 +8,7 @@ import { parseUserAddableKind } from "@/lib/module-kinds"
 import { createPipelineModule } from "@/lib/pipeline-module-factory"
 import { loadProjectSeed, SEEDS_DIR } from "@/lib/server/seed"
 import { formatModuleSpineOut } from "@/lib/spine-type"
+import { computeWarnings } from "@/lib/validity"
 import { FieldType, IfConditionKind, ModuleKind, type ModuleId, type PipelineModule, type StructureModel, type StructureModelId } from "@/lib/types"
 
 function step(partial: Omit<Partial<PipelineModule>, "id"> & { id: string; kind: PipelineModule["kind"]; label: string }): PipelineModule {
@@ -134,5 +135,6 @@ describe("case + optional Join", () => {
     expect(formatModuleSpineOut(route!, project.models)).toBe("LegalRoute | BillingRoute | GeneralRoute")
     expect(project.modules.some((m) => m.kind === ModuleKind.ControlJoin)).toBe(false)
     expect([...computeInvalid(project.modules, project.models).values()].flat()).toHaveLength(0)
+    expect([...computeWarnings(project.modules, project.models).values()].flat().map((w) => w.detail).join(" ")).not.toMatch(/never used/)
   })
 })

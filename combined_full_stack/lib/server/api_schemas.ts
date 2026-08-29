@@ -320,6 +320,7 @@ const pipelineModulePatchSchema = z
           .object({
             id: z.string().max(128),
             label: z.string().max(200),
+            match: z.string().max(200).optional(),
             modules: z.array(z.any()).max(200),
           })
           .strict(),
