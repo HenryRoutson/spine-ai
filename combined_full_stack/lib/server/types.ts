@@ -206,6 +206,8 @@ export enum ModuleKind {
   Assert = "assert", // AI : validate pipeline state — passthrough spine; code reads step["Label"] keys
   HumanReview = "human-review", // AI : pause in Inference — operator approves or rejects before continuing
   Webhook = "webhook", // AI : server-side HTTP call — search APIs, Zapier, internal services (generic URL)
+  // AI : hosted-app SQL — SELECT/UPDATE/INSERT against app_sql_rows for the website or project.
+  Sql = "sql",
   // AI : DONE (n8n-stage-A) — N8n = typed catalog piece + local Code-node JS (no live vendor APIs).
   N8n = "n8n",
   // AI : DONE (connect-A-kind) — live Slack/Gmail/Sheets via Nango; hidden in Vibe.
@@ -417,6 +419,9 @@ export interface PipelineModule {
   // AI : fetch a media URL from the terminal JSON into document.blob; spine becomes VideoClip-shaped.
   webhookIngestUrlPath?: string;
   webhookIngestInputType?: InputType; // video | audio | image
+  // AI : sql — hosted-app table statement (SELECT/UPDATE/INSERT). Not cached; mutates app_sql_rows.
+  sql?: string;
+  sqlSeedRows?: Record<string, unknown>[];
   // AI : n8n — typed catalog piece (Activepieces-style). Local Code-node JS; no live Slack/Gmail in-process.
   n8nNodeType?: string
   n8nNodeVersion?: number
@@ -976,6 +981,11 @@ export const MODULE_META: Record<ModuleKind, { label: string; description: strin
     label: "Webhook",
     description:
       "HTTP call with typed spine in/out — optional poll of a status URL and fetch of a media URL into Documents. Not a vendor catalog.",
+  },
+  [ModuleKind.Sql]: {
+    label: "SQL",
+    description:
+      "Read or write the hosted app’s SQL tables (from your structures). Demo: UPDATE shared_number SET value = value * 2.",
   },
   [ModuleKind.N8n]: {
     label: "Transform piece",

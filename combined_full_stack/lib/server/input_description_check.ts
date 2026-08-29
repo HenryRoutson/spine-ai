@@ -145,7 +145,6 @@ function bytesToBase64(bytes: Uint8Array): string {
   return Buffer.from(bytes).toString("base64");
 }
 
-
 // AI : optional per-step guard — cheap LLM judges incoming data before processing.
 export async function runInputDescriptionCheck(
   stepLabel: string,

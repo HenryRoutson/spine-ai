@@ -22,6 +22,7 @@ export const USER_ADDABLE_MODULE_KINDS = [
   "assert",
   "human-review",
   "webhook",
+  "sql",
   "n8n",
   "connect",
   "chatbot",
@@ -36,6 +37,7 @@ const ADDABLE_KIND_ALIASES: Record<string, UserAddableModuleKind> = {
   javascript: "custom-code",
   llmbatch: "llm-batch",
   http: "webhook",
+  sql: "sql",
   piece: "n8n",
   app: "connect",
   dag: "fork",
@@ -75,6 +77,11 @@ export function asModuleKind(kind: UserAddableModuleKind): ModuleKind {
 
 // AI : output/assert/human-review use inStructureId as the spine passthrough contract.
 // AI : Chatbot is NOT passthrough — in=ChatbotPrompt, out=ChatbotResult.
+// AI : SQL mutates app_sql_rows — cache would freeze the shared number after the first double.
+export function stepNeverCaches(kind: ModuleKind | string): boolean {
+  return kind === ModuleKind.Sql || kind === "sql"
+}
+
 export function usesPassthroughStructure(kind: ModuleKind): boolean {
   return kind === ModuleKind.Output || kind === ModuleKind.Assert || kind === ModuleKind.HumanReview || kind === ModuleKind.ControlJoin
 }

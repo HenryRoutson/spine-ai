@@ -256,6 +256,10 @@ export function chatbotComment(): string {
   return "Prompted chatbot — input is ChatbotPrompt; returns ChatbotResult";
 }
 
+export function sqlStepComment(): string {
+  return "Hosted app SQL — SELECT/UPDATE/INSERT against Spine app_sql_rows";
+}
+
 export function snapshotComment(outName: string | undefined, inName: string | undefined): string {
   return `Snapshot ${outName ?? inName ?? "pipeline output"}`;
 }

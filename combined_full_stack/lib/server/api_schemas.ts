@@ -349,6 +349,8 @@ const pipelineModulePatchSchema = z
     webhookPollFailWhen: z.array(z.string().max(64)).max(16).optional(),
     webhookIngestUrlPath: z.string().max(512).optional(),
     webhookIngestInputType: z.nativeEnum(InputType).optional(),
+    sql: z.string().max(MAX_MODULE_STRING_CHARS).optional(),
+    sqlSeedRows: z.array(z.record(z.string().max(128), z.unknown())).max(64).optional(),
     n8nNodeType: z.string().max(256).optional(),
     n8nNodeVersion: z.number().int().min(1).max(99).optional(),
     n8nParameters: z.record(z.string().max(128), z.unknown()).optional(),

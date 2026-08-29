@@ -57,7 +57,7 @@ export function buildHostedSiteAssistantSystemPrompt(runtime: website_runtime_ki
 
 The default page is a signed-in workspace. Do not add a sign-in screen unless the publisher explicitly asks.
 
-You edit the Vite + React project: src/App.tsx, src/index.css, and files under src/. Keep <RunPipeline alias="…" /> for each bound pipeline (default alias "run") when those widgets are already on the page. Do not add a run widget unless they asked for a workspace. Keep <HostedSlot slot="…" /> for pay / table / output widgets.
+You edit the Vite + React project: src/App.tsx, src/index.css, and files under src/. Keep <RunPipeline alias="…" /> for each bound pipeline (default alias "run") when those widgets are already on the page. Do not add a run widget unless they asked for a workspace. Keep <HostedSlot slot="…" /> for pay / table / output widgets. You may also use data-spine-sql and data-spine-action placeholders from {{sql:table}} / {{action}}.
 You MUST NOT change the pipeline, structures, prompts, project Docs, test files, or funding.
 You MUST NOT invent a custom Supabase URL or anon key.
 
@@ -78,9 +78,9 @@ You ONLY change the public webpage: custom HTML, extra CSS, brand colors/copy, s
 You MUST NOT change the pipeline, structures, prompts, code, project Docs, test files, or funding.
 You MUST NOT invent a custom Supabase URL or anon key — that stays a publisher placeholder.
 
-The run form is injected where you place ${HOSTED_SITE_RUN_SLOT}. If the current HTML already has that token, keep exactly one. If the page has no run slot (no pipeline attached yet), do not add one unless they asked for a workspace.
+The run form is injected where you place ${HOSTED_SITE_RUN_SLOT}. If the current HTML already has that token, keep exactly one. If the page has no run slot (no pipeline attached yet), do not add one unless they asked for a workspace. You may use {{action}} as the primary button instead (SQL-backed pages).
 The sign-in form is injected where you place ${HOSTED_SITE_AUTH_SLOT}. If authEnabled is true, keep exactly one ${HOSTED_SITE_AUTH_SLOT} on the sign-in page.
-Optional widgets (existing runtimes, not new backends): ${HOSTED_SITE_OUTPUT_SLOT} (result viewer), ${HOSTED_SITE_CHATBOT_SLOT} (chat), ${HOSTED_SITE_DOCS_SLOT} (viewer markdown), ${HOSTED_SITE_PAY_SLOT} (checkout), ${HOSTED_SITE_TABLE_SLOT} / {{table:ModelName}} (live structure table). Keep those tokens if they are already on the page.
+Optional widgets (existing runtimes, not new backends): ${HOSTED_SITE_OUTPUT_SLOT} (result viewer), ${HOSTED_SITE_CHATBOT_SLOT} (chat), ${HOSTED_SITE_DOCS_SLOT} (viewer markdown), {{sql:table}} (live SQL rows from the app store), {{action}} (button that runs the bound pipeline), ${HOSTED_SITE_PAY_SLOT} (checkout), ${HOSTED_SITE_TABLE_SLOT} / {{table:ModelName}} (live structure table). Keep {{sql:shared_number}} + {{action}} for a shared counter. Keep those tokens if they are already on the page.
 Tokens: {{company}}, {{tagline}}, {{logo}}, {{email}} fill from brand fields. Default nav shows {{email}} as the signed-in account. Scripts, iframes, and event handlers are stripped.
 
 Return a short message for the publisher, then fields:
@@ -132,7 +132,8 @@ ${opts.message.trim()}`
 }
 
 function ensureRunSlot(html: string, keep: boolean): string {
-  if (html.includes(HOSTED_SITE_RUN_SLOT) || !keep) return html
+  // AI : SQL pages use {{action}} as the primary control; landing pages omit {{run}} until a pipeline is attached.
+  if (html.includes(HOSTED_SITE_RUN_SLOT) || html.includes("{{action") || !keep) return html
   return `${html.trim()}\n<section class="hs-run">\n${HOSTED_SITE_RUN_SLOT}\n</section>\n`
 }
 

@@ -40,6 +40,8 @@ export function htmlSiteToReactFiles(options: HostedSiteOptions): HostedSiteReac
     if (seg.kind === "html") return `{ kind: "html", html: ${jsString(seg.html)} }`
     const alias = seg.alias ?? DEFAULT_WEBSITE_PIPELINE_ALIAS
     if (seg.slot === "run") return `{ kind: "run", alias: ${jsString(alias)} }`
+    if (seg.slot === "sql") return `{ kind: "sql", table: ${jsString(seg.alias ?? "")} }`
+    if (seg.slot === "action") return `{ kind: "action", alias: ${jsString(alias)} }`
     if (seg.slot === "table") {
       return `{ kind: "slot", slot: ${jsString(seg.alias ? `table:${seg.alias}` : "table")} }`
     }
@@ -63,6 +65,8 @@ export default function App() {
           return <div key={i} dangerouslySetInnerHTML={{ __html: part.html }} />
         }
         if (part.kind === "run") return <RunPipeline key={i} alias={part.alias} />
+        if (part.kind === "sql") return <div key={i} data-spine-sql={part.table} />
+        if (part.kind === "action") return <div key={i} data-spine-action={part.alias} />
         return <HostedSlot key={i} slot={part.slot} />
       })}
     </div>
@@ -197,10 +201,12 @@ export type hosted_site_react_bundle = {
 export type react_preview_node =
   | { kind: "html"; html: string }
   | { kind: "run"; alias: string }
+  | { kind: "sql"; table: string }
+  | { kind: "action"; alias: string }
   | { kind: "slot"; slot: string }
 
 const PART_ITEM_RE =
-  /\{\s*kind:\s*"(html|run|slot)"\s*,\s*(?:html|alias|slot):\s*("(?:\\.|[^"\\])*")\s*\}/g
+  /\{\s*kind:\s*"(html|run|slot|sql|action)"\s*,\s*(?:html|alias|slot|table):\s*("(?:\\.|[^"\\])*")\s*\}/g
 const RUN_TAG_RE = /<RunPipeline\s+alias=["']([^"']+)["']\s*\/>/g
 
 export function parseReactPreviewTree(files: HostedSiteReactFile[]): {
@@ -228,6 +234,8 @@ function parseAppPreviewNodes(app: string): react_preview_node[] {
       }
       if (kind === "html") nodes.push({ kind: "html", html: value })
       else if (kind === "run") nodes.push({ kind: "run", alias: value || DEFAULT_WEBSITE_PIPELINE_ALIAS })
+      else if (kind === "sql") nodes.push({ kind: "sql", table: value })
+      else if (kind === "action") nodes.push({ kind: "action", alias: value || DEFAULT_WEBSITE_PIPELINE_ALIAS })
       else nodes.push({ kind: "slot", slot: value })
     }
     if (nodes.length) return nodes

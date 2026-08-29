@@ -22,7 +22,7 @@ import {
   syncListOpsStepModule,
 } from "@/lib/list-ops-steps"
 import { uid } from "@/lib/id"
-import { isLlmKind, kindAlwaysEmitsList, stepRequiresNote, usesPassthroughStructure } from "@/lib/module-kinds"
+import { isLlmKind, kindAlwaysEmitsList, stepNeverCaches, stepRequiresNote, usesPassthroughStructure } from "@/lib/module-kinds"
 import { defaultForkBranches } from "@/lib/fork-pipeline"
 import { defaultIfCondition, padIfElseBranches } from "@/lib/if-else-pipeline"
 import { defaultCaseBranches, defaultCaseCondition, padCaseBranches } from "@/lib/case-pipeline"
@@ -60,6 +60,8 @@ export type ModuleFactoryOpts = {
   ifCondition?: import("@/lib/types").PipelineModule["ifCondition"]
   webhookMethod?: WebhookMethod
   webhookTimeoutMs?: number
+  sql?: string
+  sqlSeedRows?: Record<string, unknown>[]
   n8nNodeType?: string
   n8nParameters?: Record<string, unknown>
   n8nCode?: string
@@ -125,7 +127,7 @@ export function createPipelineModule(
       label: opts.label ?? MODULE_META[kind].label,
       inputDescription: opts.inputDescription,
     }),
-    cached: true,
+    cached: !stepNeverCaches(kind),
     avgMs: 0,
     avgCostCents: 0,
     inputType: kind === ModuleKind.Input ? (opts.inputType ?? InputType.Pdf) : undefined,
@@ -182,6 +184,8 @@ export function createPipelineModule(
         : undefined,
     webhookMethod: kind === ModuleKind.Webhook ? (opts.webhookMethod ?? WebhookMethod.Post) : undefined,
     webhookTimeoutMs: kind === ModuleKind.Webhook ? (opts.webhookTimeoutMs ?? DEFAULT_WEBHOOK_TIMEOUT_MS) : undefined,
+    sql: kind === ModuleKind.Sql ? (opts.sql ?? "") : undefined,
+    sqlSeedRows: kind === ModuleKind.Sql ? opts.sqlSeedRows : undefined,
     n8nNodeType: kind === ModuleKind.N8n ? (opts.n8nNodeType ?? "n8n-nodes-base.set") : undefined,
     n8nParameters:
       kind === ModuleKind.N8n

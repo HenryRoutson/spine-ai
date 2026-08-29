@@ -7,6 +7,9 @@ import { friendlyFieldName } from "@/lib/platform-row-fields"
 import type { Project, StructureModel } from "@/lib/types"
 
 // AI : {{table:Model}} — live rows from the project structure store, shared across frontends.
+// AI : TODO (spine-in-spine-bootstrap-S6-mirror) — when this slot is the Spine-in-Spine guest builder,
+// AI :   Project / Document / PipelineRun / SharedLink / Earnings read the host SpineSession snapshot
+// AI :   (HOST_MIRROR_MODELS), not nested structureRows. Writes go through SESSION_ACTIONS (S3).
 export function HostedTableSlot({
   model,
   store,

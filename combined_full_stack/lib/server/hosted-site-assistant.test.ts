@@ -96,6 +96,27 @@ describe("hosted site UI vibe agent prompts", () => {
     expect(next.brand.companyName).toBe("Northwind")
   })
 
+  it("does not append {{run}} when the page already has {{action}}", () => {
+    const next = applyHostedSiteAssistantPatch(OPTIONS, {
+      message: "ok",
+      customHtml: "<section>{{sql:shared_number}}{{action}}</section>",
+      customCss: null,
+      companyName: null,
+      tagline: null,
+      primaryColor: null,
+      accentColor: null,
+      backgroundColor: null,
+      textColor: null,
+      hideSpineFooter: null,
+      authEnabled: null,
+      authProvider: null,
+      authHtml: null,
+      reactFilePatches: null,
+    })
+    expect(next.customHtml).toContain("{{action}}")
+    expect(next.customHtml).not.toContain(HOSTED_SITE_RUN_SLOT)
+  })
+
   it("does not inject {{run}} onto a page-only site", () => {
     const current = {
       ...OPTIONS,
@@ -186,7 +207,9 @@ describe("hosted site UI vibe agent prompts", () => {
       reactFilePatches: [{ path: "src/App.tsx", contents: "export default function App(){return <h1>Hi</h1>}" }],
     })
     expect(next.runtime).toBe("react")
-    expect(next.pipelineBindings).toEqual(current.pipelineBindings)
+    expect(next.pipelineBindings.map((b) => ({ alias: b.alias, projectId: b.projectId }))).toEqual(
+      current.pipelineBindings,
+    )
     expect(next.customHtml).toBe(OPTIONS.customHtml)
     expect(next.reactFiles.find((f) => f.path === "src/App.tsx")?.contents).toContain("Hi")
   })

@@ -38,6 +38,7 @@ export type RunCheckpoint = {
     forkId?: ModuleId;
     branchId?: string;
     source?: import("./types").RunSource;
+    appSqlScope?: string;
   };
   clientStep: {
     moduleId: ModuleId;

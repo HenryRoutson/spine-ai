@@ -11,6 +11,8 @@ import {
 import {
   HOSTED_SITE_IGNORED_SLOT_SELECTOR,
   HOSTED_SITE_SLOT_CLASS,
+  groupHostedActionSlots,
+  hostedSiteHasPrimarySlot,
   hostedSitePrimarySlot,
   type hosted_site_widget_slot,
 } from "@/lib/hosted-site-slots"
@@ -32,6 +34,8 @@ export function HostedSiteChrome({
   children,
   slots,
   runByAlias,
+  sqlByTable,
+  actionByAlias,
   tableByAlias,
   editable = false,
 }: {
@@ -42,6 +46,8 @@ export function HostedSiteChrome({
   children?: ReactNode
   slots?: Partial<Record<hosted_site_widget_slot, ReactNode>>
   runByAlias?: Record<string, ReactNode>
+  sqlByTable?: Record<string, ReactNode>
+  actionByAlias?: Record<string, ReactNode>
   tableByAlias?: Record<string, ReactNode>
   editable?: boolean
 }) {
@@ -50,14 +56,10 @@ export function HostedSiteChrome({
     if (pageHtml != null) return compileHostedSitePageHtml(options, pageHtml, opts)
     return surface === "signin" ? compileHostedSiteAuthHtml(options, opts) : compileHostedSiteHtml(options, opts)
   }, [options, surface, pageHtml, editable])
+  const renderSegments = useMemo(() => groupHostedActionSlots(compiled.segments), [compiled.segments])
   const company = options.brand.companyName.trim() || "Your company"
   const primary = hostedSitePrimarySlot(surface)
-  const hasPrimary = compiled.segments.some(
-    (s) =>
-      s.kind === "slot" &&
-      s.slot === primary &&
-      (primary !== "run" || !s.alias || s.alias === "run"),
-  )
+  const hasPrimary = hostedSiteHasPrimarySlot(compiled.segments, surface)
 
   function slotNode(slot: hosted_site_widget_slot, alias?: string): ReactNode {
     if (slot === "run") {
@@ -70,6 +72,24 @@ export function HostedSiteChrome({
           </div>
         )
       }
+    }
+    if (slot === "sql") {
+      const table = alias || ""
+      if (table && sqlByTable?.[table]) return sqlByTable[table]
+      return slots?.sql ?? (
+        <div className="rounded-md border border-dashed border-border px-3 py-4 text-center text-[11px] text-muted-foreground">
+          SQL · {table || "table"}
+        </div>
+      )
+    }
+    if (slot === "action") {
+      const key = alias || "run"
+      if (actionByAlias?.[key]) return actionByAlias[key]
+      return slots?.action ?? (
+        <div className="rounded-md border border-dashed border-border px-3 py-4 text-center text-[11px] text-muted-foreground">
+          Action · {key}
+        </div>
+      )
     }
     if (slot === "table") {
       const key = alias || ""
@@ -141,15 +161,38 @@ export function HostedSiteChrome({
       ) : (
         <style>{compiled.css}</style>
       )}
-      {compiled.segments.map((seg, i) =>
-        seg.kind === "html" ? (
-          <div key={`html-${i}`} dangerouslySetInnerHTML={{ __html: seg.html }} />
-        ) : (
+      {renderSegments.map((seg, i) => {
+        if (seg.kind === "html") {
+          return <div key={`html-${i}`} dangerouslySetInnerHTML={{ __html: seg.html }} />
+        }
+        if (seg.kind === "action-row") {
+          return (
+            <div key={`action-row-${i}`} className="hs-action-row">
+              {seg.slots.map((slot, j) => (
+                <div key={`slot-${slot.slot}-${slot.alias ?? "run"}-${j}`} className={HOSTED_SITE_SLOT_CLASS.action}>
+                  {slotNode(slot.slot, slot.alias)}
+                </div>
+              ))}
+            </div>
+          )
+        }
+        if (seg.kind === "run-row") {
+          return (
+            <div key={`run-row-${i}`} className="hs-split">
+              {seg.slots.map((slot, j) => (
+                <div key={`slot-${slot.slot}-${slot.alias ?? "run"}-${j}`} className={HOSTED_SITE_SLOT_CLASS.run}>
+                  {slotNode(slot.slot, slot.alias)}
+                </div>
+              ))}
+            </div>
+          )
+        }
+        return (
           <div key={`slot-${seg.slot}-${i}`} className={HOSTED_SITE_SLOT_CLASS[seg.slot]}>
             {slotNode(seg.slot, seg.alias)}
           </div>
-        ),
-      )}
+        )
+      })}
       {hasPrimary ? null : <div className={HOSTED_SITE_SLOT_CLASS[primary]}>{slotNode(primary)}</div>}
       {options.hideSpineFooter ? null : (
         <p className="hs-foot">

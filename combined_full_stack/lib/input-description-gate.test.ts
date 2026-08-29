@@ -46,6 +46,12 @@ describe("shouldCheckInputDescription", () => {
     ).toBe(true)
   })
 
+  it("skips SQL, fork, and passthrough kinds", () => {
+    expect(shouldCheckInputDescription({ kind: ModuleKind.Sql, inputDescription: "rows" })).toBe(false)
+    expect(shouldCheckInputDescription({ kind: ModuleKind.Fork, inputDescription: "split" })).toBe(false)
+    expect(shouldCheckInputDescription({ kind: ModuleKind.Output, inputDescription: "done" })).toBe(false)
+  })
+
   it("skips JSON input steps", () => {
     expect(
       shouldCheckInputDescription({

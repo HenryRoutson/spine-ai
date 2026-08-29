@@ -562,6 +562,7 @@ function stripDocNoise(value: unknown): unknown {
 }
 
 export function seedIsExportable(project: Project): boolean {
+  if (flattenPipelineModules(project.modules).some((m) => m.kind === ModuleKind.Sql)) return false;
   return (
     computeInvalid(project.modules, project.models, { typeAliases: project.typeAliases ?? [] }).size === 0
   );

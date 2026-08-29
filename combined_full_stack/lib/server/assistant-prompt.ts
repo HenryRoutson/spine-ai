@@ -20,6 +20,7 @@ import type { ModuleKind, PipelineModule, StructureModel } from "./types";
 import { customCodeEntriesForModule } from "@/lib/custom_code_entries";
 import { listConnectActions } from "@/lib/connect-catalog";
 import { activeFunction, functionsPromptSummary } from "@/lib/pipeline-functions";
+import { buildVibeTopologyPromptBlock } from "./vibe-coding-topology";
 
 function structureName(models: StructureModel[], id: string | undefined): string | undefined {
   if (!id) return undefined;
@@ -142,6 +143,7 @@ Validation error messages and how to fix them:
 - "combine output Foo has no field for the side input" — structureOut needs a document field (or a field whose ref matches the previous step). Do not put a parsed model in the side slot unless that model is what the previous step emits. If both documents are already parsed, use assemble instead of combine.
 - "prior pipeline state is dropped on the spine" — a second input appeared after processing without a join. Use combine (raw side Document immediately before combine) or assemble (zip two parsed outputs). Never add a third upload named "… Document".
 - "input expects Foo, upstream emits Bar" on assemble — assemble is not a linear hop; omit structureIn and set assembleBindings (spine + state["Label"]). Do not copy combine's structureIn onto assemble.
+- "Topology mismatch" — I/O may already be valid; rebuild using the named topology (batch-map / explode / split-join / combine / assemble / fork). Receipts need llm-batch; many rows/file need wrapper+flatten; policy+expenses need combine; resumes+job need assemble; independent extracts need fork with lane structureIn Document.
 
 Before returning modules, mentally verify spineExpects/spineEmits on each adjacent pair in the current pipeline JSON.`;
 }
@@ -321,6 +323,7 @@ ${listConnectActions()
   .map((a) => `  - ${a.id} — ${a.description} (params: ${a.props.map((p) => p.name).join(", ")})`)
   .join("\n")}
   After Approve, the human taps Connect {App}. Nango ids open a Slack/Google popup. ap.* ids open the CE sidecar — still no node canvas and no pasted tokens from the chat. Prefer connect over webhook for those apps. HTTP connect (http.request) is the generic hatch.
+- sql: hosted-app table statement (SELECT / UPDATE / INSERT, no JOIN). Tables come from structures (SharedNumber → shared_number). Set sql + sqlSeedRows. cached is always false — mutations are not idempotent. Host the page with {{sql:table}} + {{action}} so visitors run this step.
 - llm steps with tuple[text,quote] outputs get a Link Quotes step auto-inserted after them — do NOT emit quote steps yourself.
 - PDF/word/image/web inputs get a locked Convert to text step auto-inserted after the input (parser or OCR). Omit it from modules JSON and seeds — do NOT emit it yourself. A locked Parse to structure LLM step is auto-inserted when structureOut is not Document — do NOT emit that either.
 - transform reshapes upstream data. When a list feeds a single-object output, include a list field on that structure (prefer list[model] ref = input structure) so transform can wrap items automatically, or use custom-code.
@@ -427,7 +430,11 @@ export function isGreenfieldProject(project: Project): boolean {
 /** AI : one user-message shape for landing + in-app greenfield design — keep in sync with buildFewShotPromptBlock. */
 export function buildGreenfieldPipelineUserMessage(task: string): string {
   const trimmed = task.trim();
-  return `Design a complete Spine pipeline to automate this task. Include input step(s), processing (llm / llm-batch / transform / custom-code / combine / assemble / fork as needed), and output step(s). Name structures clearly. Walk the series-parallel spine before returning modules — adjacent steps must match single vs list types. Use combine (not one giant llm) when two different RAW document kinds must merge (side file immediately before combine). Use assemble (Example 4) when both kinds are already parsed — never input → code → second input (that drops spine state). Use fork with product join (Example 5, not one mega-llm) when independent extractions share one input — one lane per extract. Do not emit new parallel steps; Fork covers LLM-only and mixed-kind lanes. Use llm-batch for one output object PER input item; many rows per file need a wrapper + flatten (Example 1c).
+  return `Design a complete Spine pipeline to automate this task. Include input step(s), processing (llm / llm-batch / transform / custom-code / combine / assemble / fork as needed), and output step(s). Name structures clearly. Walk the series-parallel spine before returning modules — adjacent steps must match single vs list types.
+
+${buildVibeTopologyPromptBlock()}
+
+Use combine (not one giant llm) when two different RAW document kinds must merge (side file immediately before combine). Use assemble (Example 4) when both kinds are already parsed — never input → code → second input (that drops spine state). Use fork with product join (Example 5, not one mega-llm) when independent extractions share one input — one lane per extract; each lane llm structureIn is Document. Do not emit new parallel steps; Fork covers LLM-only and mixed-kind lanes. Use llm-batch for one output object PER input item; many rows per file need a wrapper + flatten (Example 1c).
 
 If the goal is a spreadsheet/CSV/Excel of extracted rows, end at list[Row] → output — do NOT add custom-code that folds rows into a CSV string (lists are already CSV/XLSX-exportable in the UI).
 
@@ -925,9 +932,9 @@ Do NOT one llm with ExtractedData {risks, parties, dates}. Do NOT write {risks} 
   "modules": [
     { "kind": "input", "label": "Contract", "note": "One contract file.", "structureOut": "Document", "inputType": "text", "inputDescription": "Contract text" },
     { "kind": "fork", "label": "Extract Lanes", "note": "Independent LLM branches on the same contract.", "forkJoin": "product", "forkBranches": [
-      { "label": "Risks", "modules": [{ "kind": "llm", "label": "Extract Risks", "note": "Risk quotes", "structureOut": "list[Risk]", "prompt": "Extract each risk as a quote.", "inputDescription": "Contract text" }] },
-      { "label": "Parties", "modules": [{ "kind": "llm", "label": "Extract Parties", "note": "Party quotes", "structureOut": "list[Party]", "prompt": "Extract each party as a quote.", "inputDescription": "Contract text" }] },
-      { "label": "Dates", "modules": [{ "kind": "llm", "label": "Extract Dates", "note": "Date quotes", "structureOut": "list[KeyDate]", "prompt": "Extract each key date as a quote.", "inputDescription": "Contract text" }] }
+      { "label": "Risks", "modules": [{ "kind": "llm", "label": "Extract Risks", "note": "Risk quotes", "structureIn": "Document", "structureOut": "list[Risk]", "prompt": "Extract each risk as a quote.", "inputDescription": "Contract Document" }] },
+      { "label": "Parties", "modules": [{ "kind": "llm", "label": "Extract Parties", "note": "Party quotes", "structureIn": "Document", "structureOut": "list[Party]", "prompt": "Extract each party as a quote.", "inputDescription": "Contract Document" }] },
+      { "label": "Dates", "modules": [{ "kind": "llm", "label": "Extract Dates", "note": "Date quotes", "structureIn": "Document", "structureOut": "list[KeyDate]", "prompt": "Extract each key date as a quote.", "inputDescription": "Contract Document" }] }
     ]},
     { "kind": "llm", "label": "Write Memo", "note": "Memo from the fork product.", "structureOut": "DiligenceMemo", "prompt": "Write a one-paragraph diligence memo from the extracted risks, parties, and dates.", "inputDescription": "Fork product" },
     { "kind": "output", "label": "Memo Out", "structureIn": "DiligenceMemo", "structureOut": "DiligenceMemo", "inputDescription": "Memo" }
@@ -1007,6 +1014,8 @@ ${buildDocumentRulesPromptBlock()}
 
 ${buildProjectNameRulesPromptBlock(projectName)}
 
+${buildVibeTopologyPromptBlock()}
+
 ${buildFewShotPromptBlock()}
 
 For large-document workflows (contracts, tickets, resumes): design section-aware chunking, then map (llm-batch per item) and reduce (custom-code or llm) — walk the linear spine chain first (see Linear spine I/O); do not assume the whole document fits one context window.
@@ -1073,6 +1082,8 @@ export function buildProjectContextBlock(
       code: customCodeEntriesForModule(m)[0]?.code ?? m.code,
       model: m.model,
       inputMinCount: m.inputMinCount,
+      sql: m.sql,
+      sqlSeedRows: m.sqlSeedRows,
     })),
     null,
     2,

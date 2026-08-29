@@ -52,6 +52,7 @@ import { CaseModuleFields } from "@/components/pipeline-fields/case-fields"
 import { ControlJoinModuleFields } from "@/components/pipeline-fields/control-join-fields"
 import { ExampleSelectModuleFields } from "@/components/pipeline-fields/example-select-fields"
 import { WebhookModuleFields } from "@/components/pipeline-fields/webhook-fields"
+import { SqlModuleFields } from "@/components/pipeline-fields/sql-fields"
 import { N8nModuleFields } from "@/components/pipeline-fields/n8n-fields"
 import { ConnectModuleFields } from "@/components/pipeline-fields/connect-fields"
 import { ChatbotModuleFields } from "@/components/pipeline-fields/chatbot-fields"
@@ -569,6 +570,9 @@ export function PipelineModuleFields({
 
       {selected.kind === ModuleKind.Webhook && (
         <WebhookModuleFields selected={selected} edit={!!edit} invalid={invalid} onUpdate={onUpdate} />
+      )}
+      {selected.kind === ModuleKind.Sql && (
+        <SqlModuleFields selected={selected} edit={!!edit} invalid={invalid} onUpdate={onUpdate} />
       )}
       {selected.kind === ModuleKind.N8n && (
         <N8nModuleFields selected={selected} edit={!!edit} invalid={invalid} onUpdate={onUpdate} />

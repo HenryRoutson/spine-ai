@@ -1,6 +1,6 @@
 // AI : shared debug trace types (client + server).
 
-export type AssistantLoadingPhase = "thinking" | "observing" | "structuring" | "retrying"
+export type AssistantLoadingPhase = "thinking" | "observing" | "coding" | "structuring" | "retrying"
 
 // AI : debug-trace discriminant — keep wire strings stable for streamed events + UI.
 export const AssistantDebugKind = {

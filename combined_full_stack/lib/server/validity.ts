@@ -832,6 +832,16 @@ function computeWebhookInvalid(modules: PipelineModule[]): InvalidMap {
   return invalid;
 }
 
+function computeSqlInvalid(modules: PipelineModule[]): InvalidMap {
+  const invalid: InvalidMap = new Map();
+  for (const m of modules) {
+    if (m.kind !== ModuleKind.Sql) continue;
+    if (m.sql?.trim()) continue;
+    pushInvalid(invalid, { moduleId: m.id, kind: InvalidKind.MissingSql });
+  }
+  return invalid;
+}
+
 function computeN8nInvalid(modules: PipelineModule[]): InvalidMap {
   const invalid: InvalidMap = new Map();
   for (const m of flattenPipelineModules(modules)) {
@@ -1148,6 +1158,7 @@ export function computeInvalid(
   const invalid = computeLabelInvalid(flat);
   mergeInvalid(invalid, computeNoteInvalid(flat));
   mergeInvalid(invalid, computeWebhookInvalid(flat));
+  mergeInvalid(invalid, computeSqlInvalid(flat));
   mergeInvalid(invalid, computeN8nInvalid(modules));
   mergeInvalid(invalid, computeConnectInvalid(modules));
   mergeInvalid(invalid, computeExampleSelectInvalid(flat, models));

@@ -60,6 +60,7 @@ const AUTHORED_MODULE_KINDS = [
   "assert",
   "human-review",
   "webhook",
+  "sql",
   "n8n",
   "connect",
   "chatbot",
@@ -74,6 +75,8 @@ const SeedFileSchema = z.object({
   id: z.string(),
   name: z.string(),
   kind: z.string(),
+  documentation: z.string().optional(),
+  hostedSite: z.unknown().optional(),
   models: z.array(
     z.object({
       id: z.string(),
@@ -206,6 +209,8 @@ const SeedFileSchema = z.object({
       webhookPollFailWhen: z.array(z.string()).optional(),
       webhookIngestUrlPath: z.string().optional(),
       webhookIngestInputType: InputTypeSchema.optional(),
+      sql: z.string().optional(),
+      sqlSeedRows: z.array(z.record(z.string(), z.unknown())).max(64).optional(),
       n8nNodeType: z.string().optional(),
       n8nNodeVersion: z.number().optional(),
       n8nParameters: z.record(z.string(), z.unknown()).optional(),
@@ -347,6 +352,7 @@ export interface SeedDocSpec {
 export interface ProjectSeed {
   project: Project;
   docSpecs: SeedDocSpec[];
+  hostedSite?: unknown;
 }
 
 export { isUnavailableSeedDoc, unavailableSeedDocMessage } from "../seed-doc";
@@ -493,6 +499,7 @@ export function loadProjectSeed(path: string): ProjectSeed {
       id: raw.id as ProjectId,
       name: raw.name,
       kind: raw.kind,
+      documentation: raw.documentation,
       models: forkSynced.models,
       typeAliases,
       modules: forkSynced.modules,
@@ -510,6 +517,7 @@ export function loadProjectSeed(path: string): ProjectSeed {
       path: resolveSeedDocPath(d.file),
       relativeFile: d.file,
     })),
+    hostedSite: raw.hostedSite,
   };
 }
 

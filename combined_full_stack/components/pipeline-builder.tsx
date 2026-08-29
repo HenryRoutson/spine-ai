@@ -2,6 +2,10 @@
 
 // AI : parity ids — pipeline.add-step pipeline.move-step pipeline.validate
 // AI : TODO refactor — only extract shared pipeline chrome if a third layout consumer appears (Logging already uses PipelineCanvas).
+// AI : TODO (spine-in-spine-bootstrap-S4-dag) — guest Functions page mounts PipelineCanvas as
+// AI :   {{slot:pipeline-dag}} + {{table:PipelineStep}}. Do not clone this file into HTML strings.
+// AI :   Step CRUD is SESSION_ACTIONS (pipeline.add-step / move-step), not a new form.
+// AI : TODO (spine-in-spine-full-F4-widgets) — full track mounts this panel as {{slot:pipeline}}.
 import { useEffect, useMemo, useState, type ReactNode } from "react"
 import {
   Plus,
