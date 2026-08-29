@@ -36,9 +36,11 @@ describe("vibe topology cheat-sheet", () => {
     expect(parseThinkingTopology("TOPOLOGY: assemble\nthen zip resumes")).toBe("assemble")
     expect(parseThinkingTopology("  TOPOLOGY: llm-batch")).toBeNull()
     expect(buildVibeTopologyPromptBlock()).toMatch(/TOPOLOGY: <name>/)
+    expect(buildVibeTopologyPromptBlock()).not.toMatch(/receipts \/ merchant/i)
+    expect(buildVibeTopologyPromptBlock()).not.toMatch(/hundreds of unstructured/i)
   })
 
-  it("flags live A/B misses by task phrasing", () => {
+  it("scores known A/B example prompts without injecting them into live retries", () => {
     expect(topologyAdvice("Extract merchant and date from receipts with quotes; amount as a number", ["llm"])).toEqual(
       expect.arrayContaining([expect.stringMatching(/llm-batch/)]),
     )
@@ -60,12 +62,12 @@ describe("vibe topology cheat-sheet", () => {
     expect(
       topologyAdvice("From one contract extract risks, parties, and dates independently, then write a memo", ["llm"]),
     ).toEqual(expect.arrayContaining([expect.stringMatching(/fork/)]))
-    expect(formatTopologyRetryErrors("Convert hundreds of unstructured receipts into a single Excel file", ["llm-batch"])).toBe(
+    expect(formatTopologyRetryErrors("Convert hundreds of unstructured receipts into a single Excel file", ["llm"])).toBe(
       "",
     )
   })
 
-  it("FAIL topology when I/O is valid but receipts used a single llm", () => {
+  it("PASS I/O-valid pipelines even when the task text matches a few-shot example", () => {
     const session = createSpineSession()
     session.addProject({ open: true })
     const report = runVibeWorkspaceChecks(
@@ -103,7 +105,7 @@ describe("vibe topology cheat-sheet", () => {
       [],
       "Convert hundreds of unstructured receipts into a single Excel file",
     )
-    expect(report).toMatch(/^FAIL topology/m)
-    expect(report).toMatch(/llm-batch/)
+    expect(report).toMatch(/^PASS/m)
+    expect(report).not.toMatch(/FAIL topology/)
   })
 })

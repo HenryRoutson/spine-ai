@@ -68,8 +68,8 @@
 // AI : TODO (opt-browser-tui) — optional GUI terminal mode (not required). DOM skin of Ink ViewModels
 // AI :   + extracted controller; never Ink-in-browser or a PTY. lib/cli/ink/browser-tui-roadmap.ts.
 // AI : DONE (vibe-coding-harness) — in-memory file workspace + write/run_tests loop (OpenCode/Pi-shaped).
-// AI :   SPINE_VIBE_HARNESS=1 turns it on (harness first, JSON fallback). Unset/0 = few-shot JSON only.
-// AI :   OpenRouter stays server-side; no disk, no shell, no secrets in the workspace.
+// AI :   Live OpenRouter: harness on unless SPINE_VIBE_HARNESS=0 (JSON fallback on miss).
+// AI :   Seed: harness off unless SPINE_VIBE_HARNESS=1. OpenRouter stays server-side; no disk/shell/secrets.
 // AI : DONE (vibe-js-authoring) — SPINE_VIBE_AUTHORING=js: LLM writes spine-js (one Zod object per step),
 // AI :   compileSpineJs → same JSON IR. Direct retry or harness. JSON remains the portable cross-language IR.
 // AI :   Seed must NOT matchVibeExample and paste the few-shot payload — that is reward hacking.

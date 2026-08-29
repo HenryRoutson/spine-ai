@@ -183,19 +183,16 @@ function buildHarnessSystemPrompt(): string {
     : `- Write structures/*.json, pipeline.json, tests/*, docs.md, message.md. Up to 12 tools per turn; more files → next turn.`
   return `You are a coding agent editing a Spine project in an in-memory file workspace (OpenCode / Pi loop: write files, run_tests, repeat).
 
-This file loop is ON only when SPINE_VIBE_HARNESS=1. Return JSON { "tools": [...], "note"?: string }.
+Return JSON { "tools": [...], "note"?: string }.
 
 Tools: write_file, read_file, run_tests, list_dir, delete_file, done.
 - No shell, no network, no package installs. run_tests = parse → materialize → I/O validate → custom-code syntax → graph lint.
 - Workspace is RAM on this server. Never ask for API keys or write secrets.
-- AGENTS.md and examples/few-shot.md are read-only.
+- AGENTS.md and examples/* are read-only.
 - The first user message ALREADY includes AGENTS.md, project.json, and ${js ? "pipeline.js" : "pipeline.json"}. Do not spend a turn only on list_dir or read_file.
 - Blank projects start with Input + Output — REPLACE the pipeline this turn. Do not leave only those two steps.
-- Many same-kind files (receipts, notes, invoices) → one input list[Document] + llm-batch (NOT a single llm).
-- Two different doc kinds (policy + company pack) → two inputs, parse each, then assemble or combine (side file immediately before combine).
 - Non-JSON inputs (text/pdf/word/image/web): structureOut is Document or list[Document]. Typed rows belong on a later llm/llm-batch.
 ${buildVibeTopologyPromptBlock()}
-- run_tests FAILs topology even when I/O is valid — rebuild the named spine; do not call done.
 ${pipelineHint}
 - message.md is future tense ("I'll add…") — the user still has to Approve.
 - After writes, run_tests. Call done only when VALIDATION.md starts with PASS (not Q&A-only).
@@ -224,7 +221,7 @@ function buildHarnessUserPrompt(args: {
   return `Turn ${args.turn + 1}/${VIBE_HARNESS_MAX_TURNS}
 Task: ${args.task}
 ${first ? `${buildVibeTopologyPromptBlock()}\n` : ""}${thinking}${args.extra}
-${first ? "Write files this turn (do not only list_dir / read_file). Replace the stub Input + Output. Pick TOPOLOGY first." : "Continue from the tool results. If VALIDATION.md is FAIL (including FAIL topology), fix files. If PASS, done. Empty tools is not done."}
+${first ? "Write files this turn (do not only list_dir / read_file). Replace the stub Input + Output. Infer TOPOLOGY from the data shape." : "Continue from the tool results. If VALIDATION.md is FAIL, fix I/O / compile / lint. If PASS, done. Empty tools is not done."}
 
 ${first ? "Workspace (already loaded):" : "Last tool results:"}
 ${args.lastResults || "(empty workspace)"}
@@ -232,8 +229,10 @@ ${args.lastResults || "(empty workspace)"}
 }
 
 export function vibeHarnessEnabled(): boolean {
-  // AI : strict flag — SPINE_VIBE_HARNESS=1 on, anything else off (including OpenRouter default).
-  return process.env.SPINE_VIBE_HARNESS === "1"
+  // AI : SPINE_VIBE_HARNESS=0 off; =1 on. Unset = on for live OpenRouter, off for seed (deterministic JSON).
+  if (process.env.SPINE_VIBE_HARNESS === "0") return false
+  if (process.env.SPINE_VIBE_HARNESS === "1") return true
+  return process.env.LLM_PROVIDER !== "seed"
 }
 
 export async function runVibeCodingHarness(args: {

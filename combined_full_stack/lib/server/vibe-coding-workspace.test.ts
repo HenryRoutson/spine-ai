@@ -153,6 +153,9 @@ describe("vibe coding harness tools", () => {
     expect(vibeHarnessEnabled()).toBe(false)
     process.env.SPINE_VIBE_HARNESS = "1"
     expect(vibeHarnessEnabled()).toBe(true)
+    process.env.LLM_PROVIDER = "openrouter"
+    delete process.env.SPINE_VIBE_HARNESS
+    expect(vibeHarnessEnabled()).toBe(true)
     if (prevProvider === undefined) delete process.env.LLM_PROVIDER
     else process.env.LLM_PROVIDER = prevProvider
     if (prevHarness === undefined) delete process.env.SPINE_VIBE_HARNESS

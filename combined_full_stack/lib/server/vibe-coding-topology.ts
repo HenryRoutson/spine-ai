@@ -1,4 +1,4 @@
-// AI : live A/B misses (explode / combine / assemble / fork / llm vs llm-batch) — one block for thinking, harness, JSON.
+// AI : data-shape planning for vibe — generic principles, not eval-task phrases.
 export const VIBE_TOPOLOGIES = [
   "batch-map",
   "explode",
@@ -11,20 +11,15 @@ export const VIBE_TOPOLOGIES = [
 export type VibeTopologyName = (typeof VIBE_TOPOLOGIES)[number]
 
 export function buildVibeTopologyPromptBlock(): string {
-  return `Choose exactly one TOPOLOGY and build that spine (first thinking line: TOPOLOGY: <name>):
-- batch-map — many same-kind files, ONE row each (receipts, invoices): list[Document] + llm-batch. Never a single llm.
-- explode — MANY rows PER file (action items, line items): llm-batch structureOut is a WRAPPER with items: list[Row], then custom-code flatten. Do NOT set llm-batch structureOut to the row type.
-- split-join — one document split into lines, then one report: custom-code split → llm-batch → custom-code join.
-- combine — two RAW document kinds (policy + expenses): process the first on the spine, put the second input immediately before combine. Not fork. Not assemble until both are parsed.
-- assemble — two already-parsed outputs (resumes + job): assembleBindings after both parses. Bind quoted lists to "Link Quotes". Not combine, not a custom-code zip, not a third upload.
-- fork — independent extracts on ONE document (risks / parties / dates): fork product join, then memo. Lane llms structureIn is Document. Not one mega-llm, not parallel.
+  return `Infer the spine from DATA SHAPE (first thinking line: TOPOLOGY: <name>). Do not copy a canned example.
+- batch-map — many files of the same kind, one structured row each: one list[Document] input + llm-batch. Not a single llm over concatenated files.
+- explode — many rows inside each file: llm-batch structureOut is a WRAPPER with a list field, then custom-code flatten. Do not set llm-batch structureOut to the row type (that is one row per file).
+- split-join — split text, map each piece, join a report: custom-code split → llm-batch → custom-code join.
+- combine — two different RAW document kinds: process the first on the spine, put the second input immediately before combine. Not fork. Not assemble until both are parsed.
+- assemble — two already-parsed outputs: assembleBindings after both parses. Bind quoted lists to the auto-inserted Link Quotes label. Not combine, not a custom-code zip, not a third upload.
+- fork — independent extracts on ONE document: fork with product join; each lane llm structureIn is Document. Not one mega-llm, not parallel.
 
-Mistakes that still look I/O-valid — do not ship them:
-- receipts / merchant+date → one llm (must be llm-batch)
-- several action items per note → llm-batch structureOut = ActionItem (must be wrapper + flatten)
-- policy + expenses → fork or assemble (must be combine; side file immediately before combine)
-- resumes + job → combine or a third upload (must be assemble after both parses)
-- independent risks/parties/dates → one ExtractedData llm or parallel (must be fork)`
+The platform already derives Zod, SQL tables, LLM JSON schemas, OCR (pdf/image → text), and Link Quotes from your structures. Prefer sql steps for table reads/writes. Use tuple[text,quote] on copied spans so hosted-site uploads can be quoted. Do not invent {state.X} prompt templates.`
 }
 
 export function parseThinkingTopology(thinking: string): VibeTopologyName | null {
@@ -33,6 +28,7 @@ export function parseThinkingTopology(thinking: string): VibeTopologyName | null
   return (VIBE_TOPOLOGIES as readonly string[]).includes(raw ?? "") ? (raw as VibeTopologyName) : null
 }
 
+// AI : scoring-only for known A/B example prompts. Never inject into live VALIDATION.md or retries.
 export function topologyAdvice(task: string, kinds: string[]): string[] {
   const t = task.toLowerCase()
   const has = (k: string) => kinds.includes(k)
@@ -85,8 +81,7 @@ export function topologyAdvice(task: string, kinds: string[]): string[] {
   return hints
 }
 
-export function formatTopologyRetryErrors(task: string, kinds: string[]): string {
-  const hints = topologyAdvice(task, kinds)
-  if (!hints.length) return ""
-  return `Topology mismatch:\n${hints.map((h) => `- ${h}`).join("\n")}`
+export function formatTopologyRetryErrors(_task: string, _kinds: string[]): string {
+  // AI : live retries must not FAIL I/O-valid pipelines because the user prompt matched a few-shot phrase.
+  return ""
 }

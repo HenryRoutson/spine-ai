@@ -214,7 +214,8 @@ ${examples}
 - Input of pdf/word/image/web/text: \`structureOut\` is Document or \`list[Document]\` — never a parsed model.
 - Many same-kind files → one input with \`list[Document]\` + llm-batch. Two different kinds → process first, then combine (raw side file immediately before combine) **or** assemble after both are parsed. Never a third upload.
 - Independent extracts on one input → fork + product join, not one mega-llm, not parallel. Lane llms \`structureIn\` is Document.
-- custom-code is a **TypeScript arrow** \`(rows) => …\`, never Python. After Link Quotes, quoted fields are \`{ text, quote }\` — use \`.text\`.
+- Hosted websites accept file uploads; those files become documents. Copied spans should use \`tuple[text,quote]\` so Link Quotes can attach offsets across every uploaded file.
+- Prefer \`sql\` steps for table reads/writes — structures already generate SQL tables and Python helpers. custom-code is a **TypeScript arrow** \`(rows) => …\` for reshapes, never Python CRUD.
 
 ## Topology
 ${buildVibeTopologyPromptBlock()}

@@ -143,7 +143,7 @@ Validation error messages and how to fix them:
 - "combine output Foo has no field for the side input" — structureOut needs a document field (or a field whose ref matches the previous step). Do not put a parsed model in the side slot unless that model is what the previous step emits. If both documents are already parsed, use assemble instead of combine.
 - "prior pipeline state is dropped on the spine" — a second input appeared after processing without a join. Use combine (raw side Document immediately before combine) or assemble (zip two parsed outputs). Never add a third upload named "… Document".
 - "input expects Foo, upstream emits Bar" on assemble — assemble is not a linear hop; omit structureIn and set assembleBindings (spine + state["Label"]). Do not copy combine's structureIn onto assemble.
-- "Topology mismatch" — I/O may already be valid; rebuild using the named topology (batch-map / explode / split-join / combine / assemble / fork). Receipts need llm-batch; many rows/file need wrapper+flatten; policy+expenses need combine; resumes+job need assemble; independent extracts need fork with lane structureIn Document.
+- Adjacent I/O mismatches — rebuild from the data shape (list vs single, combine vs assemble vs fork). Do not copy a few-shot example that does not match this task.
 
 Before returning modules, mentally verify spineExpects/spineEmits on each adjacent pair in the current pipeline JSON.`;
 }
@@ -430,13 +430,11 @@ export function isGreenfieldProject(project: Project): boolean {
 /** AI : one user-message shape for landing + in-app greenfield design — keep in sync with buildFewShotPromptBlock. */
 export function buildGreenfieldPipelineUserMessage(task: string): string {
   const trimmed = task.trim();
-  return `Design a complete Spine pipeline to automate this task. Include input step(s), processing (llm / llm-batch / transform / custom-code / combine / assemble / fork as needed), and output step(s). Name structures clearly. Walk the series-parallel spine before returning modules — adjacent steps must match single vs list types.
+  return `Design a complete Spine pipeline to automate this task. Include input step(s), processing (llm / llm-batch / transform / custom-code / combine / assemble / fork / sql as needed), and output step(s). Name structures clearly. Walk the series-parallel spine before returning modules — adjacent steps must match single vs list types.
 
 ${buildVibeTopologyPromptBlock()}
 
-Use combine (not one giant llm) when two different RAW document kinds must merge (side file immediately before combine). Use assemble (Example 4) when both kinds are already parsed — never input → code → second input (that drops spine state). Use fork with product join (Example 5, not one mega-llm) when independent extractions share one input — one lane per extract; each lane llm structureIn is Document. Do not emit new parallel steps; Fork covers LLM-only and mixed-kind lanes. Use llm-batch for one output object PER input item; many rows per file need a wrapper + flatten (Example 1c).
-
-If the goal is a spreadsheet/CSV/Excel of extracted rows, end at list[Row] → output — do NOT add custom-code that folds rows into a CSV string (lists are already CSV/XLSX-exportable in the UI).
+If the goal is a spreadsheet/CSV/Excel of extracted rows, end at list[Row] → output — do NOT add custom-code that folds rows into a CSV string (lists are already CSV/XLSX-exportable in the UI). Hosted websites can upload files; those documents become quote sources automatically when fields use tuple[text,quote].
 
 Also create 1–3 synthetic example inference documents (text or json only, with full realistic content) so the pipeline can be run immediately after you finish — set docs, do not leave docs null.
 
@@ -457,7 +455,7 @@ export function resolveAssistantUserMessage(
 If this is a small fix to existing steps, set modules to null and use modulePatch (0-based index + only changed fields). Emit a full modules array only when the spine topology must change. Do not invent {state.X} / {field} prompt templates — spine JSON is appended at runtime.`;
 }
 
-/** AI : few-shot response shapes — teach valid spine wiring; same block for landing + in-app system prompt. */
+/** AI : few-shot response shapes — optional examples/few-shot.md + A/B catalog; not injected into the live system prompt. */
 export function buildFewShotPromptBlock(): string {
   return `Few-shot examples (match this response JSON shape — structure names not ids; set modulePatch, typeAliases, and proposedActions to null unless needed):
 
@@ -1016,9 +1014,7 @@ ${buildProjectNameRulesPromptBlock(projectName)}
 
 ${buildVibeTopologyPromptBlock()}
 
-${buildFewShotPromptBlock()}
-
-For large-document workflows (contracts, tickets, resumes): design section-aware chunking, then map (llm-batch per item) and reduce (custom-code or llm) — walk the linear spine chain first (see Linear spine I/O); do not assume the whole document fits one context window.
+For large-document workflows: design section-aware chunking, then map (llm-batch per item) and reduce (custom-code or llm) — walk the linear spine chain first (see Linear spine I/O); do not assume the whole document fits one context window.
 
 The user prompt includes current pipeline JSON with spineExpects / spineEmits per step — use it to verify adjacent steps match.
 The user prompt includes current validation errors when present — fix them when revising.

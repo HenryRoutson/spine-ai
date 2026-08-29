@@ -95,7 +95,7 @@ import {
 import { vibeJsAuthoringEnabled } from "./vibe-coding-mode";
 import { compileSpineJs, extractSpineJsSource } from "@/lib/spine-js/compile";
 import { buildSpineJsSystemPrompt, buildSpineJsUserPrompt } from "@/lib/spine-js/prompt";
-import { buildVibeTopologyPromptBlock, formatTopologyRetryErrors, topologyAdvice } from "./vibe-coding-topology";
+import { buildVibeTopologyPromptBlock } from "./vibe-coding-topology";
 
 export type {
   AssistantProposedAction,
@@ -513,9 +513,9 @@ function buildThinkingSystemPrompt(hasValidationErrors: boolean): string {
 
 ${hasValidationErrors
     ? "The live project has pipeline validation errors — diagnose each listed mismatch (structure name vs list[structure] cardinality). Plan exact structureOut/list[...] fixes per step. Do not propose a greenfield architecture."
-    : `First line MUST be: TOPOLOGY: batch-map | explode | split-join | combine | assemble | fork
+    : `First line: TOPOLOGY: batch-map | explode | split-join | combine | assemble | fork
 ${buildVibeTopologyPromptBlock()}
-Then reason thoroughly: (1) structures needed, (2) series-parallel spine with single vs list at each hop, (3) many same-kind files → list[Document] + llm-batch (NOT one llm), (4) two different doc kinds: process first on spine, then either combine (raw side upload immediately before combine) OR assemble after both are parsed — never a third upload, (5) independent mixed-kind sub-pipelines that share one input → Fork (lanes + join; lane structureIn is Document), not Parallel (LLM-only) and not serialize, (6) synthetic test docs. Flag where validation would fail if list-ness is wrong.`}
+Then reason: (1) structures, (2) series-parallel spine with single vs list at each hop, (3) synthetic test docs. Flag where I/O validation would fail.`}
 Budget real reasoning — do not rush. Plain text only after the TOPOLOGY line — no JSON, no markdown headings.`;
 }
 
@@ -823,7 +823,7 @@ export function runVibeWorkspaceChecks(
   project: Project,
   globalModel: ModelId,
   testDocsCatalog: AssistantTestDocCatalogEntry[],
-  task?: string,
+  _task?: string,
 ): string {
   if (draft.errors.length) {
     return `FAIL parse\n${draft.errors.map((e) => `- ${e}`).join("\n")}`;
@@ -863,9 +863,7 @@ export function runVibeWorkspaceChecks(
   );
   const lintErrors = lint.lints.filter((l) => l.severity === "error");
   const ok = !validation && compileErrors.length === 0 && lintErrors.length === 0;
-  const kinds = flattenPipelineModules(proposal.modules).map((m) => m.kind);
-  const topoHints = task ? topologyAdvice(task, kinds) : [];
-  const lines = [ok && !topoHints.length ? "PASS" : topoHints.length && ok ? "FAIL topology" : "FAIL"];
+  const lines = [ok ? "PASS" : "FAIL"];
   if (validation) lines.push("I/O:", validation.trim());
   if (compileErrors.length) lines.push("custom-code:", ...compileErrors.map((e) => `- ${e}`));
   if (lintErrors.length) {
@@ -874,13 +872,7 @@ export function runVibeWorkspaceChecks(
       ...lintErrors.map((l) => `- ${l.stepLabel ?? l.structureName ?? l.code}: ${l.message}`),
     );
   }
-  if (topoHints.length) {
-    lines.push("topology:", ...topoHints.map((h) => `- ${h}`));
-  }
-  if (ok && !topoHints.length) lines.push("I/O valid, custom-code compiled, lint clean.");
-  else if (topoHints.length) {
-    lines.push("Fix: rewrite pipeline.json from examples/few-shot.md for this TOPOLOGY — do not patch a wrong spine.");
-  }
+  if (ok) lines.push("I/O valid, custom-code compiled, lint clean.");
   return lines.join("\n");
 }
 
@@ -1113,7 +1105,7 @@ export async function proposePipelineChange(
       .filter((b) => b.trim())
       .join("\n");
 
-    // AI : SPINE_VIBE_HARNESS=1 turns the file loop on; miss falls back to few-shot JSON.
+    // AI : harness is on for live OpenRouter (unset flag); seed stays JSON unless SPINE_VIBE_HARNESS=1.
     if (!fixErrors && vibeHarnessEnabled()) {
       opts?.onPhase?.("coding");
       try {
@@ -1240,10 +1232,7 @@ export async function proposePipelineChange(
         proposal.models,
         proposal.typeAliases ?? [],
       );
-      const kinds = flattenPipelineModules(proposal.modules).map((m) => m.kind);
-      const validationErrors = [ioErrors.trim(), formatTopologyRetryErrors(effectiveMessage, kinds)]
-        .filter(Boolean)
-        .join("\n\n");
+      const validationErrors = ioErrors.trim();
       if (!validationErrors) break;
 
       retryCount += 1;
