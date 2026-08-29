@@ -35,7 +35,8 @@ import type { SharedLinkRecord } from "@/lib/shared-link-types"
 import type { Project } from "@/lib/types"
 import { spineActionProps } from "@/lib/core/parity"
 import { cn } from "@/lib/utils"
-import { listedWebsitePipelineBindings, websiteDisplayName } from "@/lib/website-pipelines"
+import { listedWebsitePipelineBindings, websiteDisplayName, websitesUsingProject, type pipeline_website_delete_action, type website_dependent } from "@/lib/website-pipelines"
+import { DeletePipelineDialog } from "@/components/delete-pipeline-dialog"
 
 function ProjectRenameInput({
   initialName,
@@ -220,6 +221,10 @@ function PipelineWorkspaceSelector({ embed = false }: { embed?: boolean }) {
   const { isDeleting, isExiting, runDelete, mergeWithGhosts } = useAnimatedRemoval<Project>()
   const quickDelete = useBrowserPrefEvent(PROJECT_DELETE_SETTINGS_CHANGED_EVENT, readQuickProjectDelete)
   const displayProjects = mergeWithGhosts(projects)
+  const [pendingDelete, setPendingDelete] = useState<{
+    project: Project
+    sites: website_dependent[]
+  } | null>(null)
 
   function startRename(id: string, name: string) {
     setEditing({ id, initialName: name })
@@ -242,6 +247,32 @@ function PipelineWorkspaceSelector({ embed = false }: { embed?: boolean }) {
   function handleAllPipelines() {
     clearWebsiteEditor()
     navigateToProjectPicker("pipelines")
+  }
+
+  async function requestDelete(p: Project) {
+    try {
+      const body = await apiJson<{ links: SharedLinkRecord[] }>(API_ROUTES.sharedLinks)
+      const bound = websitesUsingProject(
+        (body.links ?? []).filter((link) => isSiteLinkId(link.id) && !link.revoked),
+        p.id,
+      )
+      if (bound.length > 0) {
+        setPendingDelete({ project: p, sites: bound })
+        return
+      }
+    } catch {
+      // AI : if the site list fails, still allow delete — server 409 will restore on conflict.
+    }
+    void runDelete(p, projects, () => deleteProject(p.id))
+  }
+
+  function confirmPendingDelete(action: pipeline_website_delete_action) {
+    const pending = pendingDelete
+    if (!pending) return
+    setPendingDelete(null)
+    void runDelete(pending.project, projects, () =>
+      deleteProject(pending.project.id, { websiteAction: action }),
+    )
   }
 
   function warmAllProjects() {
@@ -342,7 +373,7 @@ function PipelineWorkspaceSelector({ embed = false }: { embed?: boolean }) {
                             onClick={(e: React.MouseEvent) => {
                               e.stopPropagation()
                               e.preventDefault()
-                              void runDelete(p, projects, () => deleteProject(p.id))
+                              void requestDelete(p)
                             }}
                           />
                         ) : null}
@@ -390,6 +421,14 @@ function PipelineWorkspaceSelector({ embed = false }: { embed?: boolean }) {
             <span className="hidden sm:inline">New pipeline</span>
           </Button>
         </>
+      ) : null}
+      {pendingDelete ? (
+        <DeletePipelineDialog
+          pipelineName={pendingDelete.project.name}
+          sites={pendingDelete.sites}
+          onCancel={() => setPendingDelete(null)}
+          onConfirm={confirmPendingDelete}
+        />
       ) : null}
     </div>
   )

@@ -490,6 +490,12 @@ export const createProjectBodySchema = z
   })
   .strict();
 
+export const deleteProjectBodySchema = z
+  .object({
+    websiteAction: z.enum(["delete", "unbind"]).optional(),
+  })
+  .strict();
+
 const pipelineFunctionPatchSchema = z
   .object({
     id: z.string().max(128),

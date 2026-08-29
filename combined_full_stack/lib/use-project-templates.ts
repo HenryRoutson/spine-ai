@@ -12,6 +12,7 @@ export type ProjectTemplateSummary = {
   moduleCount: number
   inputCount: number
   hasHostedSite?: boolean
+  websiteNames?: string[]
   functionCount?: number
 }
 

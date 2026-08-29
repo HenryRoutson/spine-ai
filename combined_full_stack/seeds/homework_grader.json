@@ -591,5 +591,23 @@
       "label": "training",
       "file": "homework_grader/homework_wrong_grade_testing.json"
     }
-  ]
+  ],
+  "hostedSite": {
+    "brand": {
+      "companyName": "Gradeboard",
+      "tagline": "Rubric once. Every worksheet in parallel.",
+      "primaryColor": "#1d4ed8",
+      "accentColor": "#f59e0b",
+      "backgroundColor": "#f8fafc",
+      "textColor": "#0f172a"
+    },
+    "kicker": "Homework grader",
+    "lede": "Upload the unmarked template and student work. Gradeboard builds a marking schema, then scores each packet.",
+    "cta": "Grade this set",
+    "features": [
+      { "kicker": "01", "title": "Shared rubric", "body": "Questions and ideal working come from the template, not a one-off prompt." },
+      { "kicker": "02", "title": "Parallel packets", "body": "Each student runs as its own typed batch so a large class does not swamp one call." },
+      { "kicker": "03", "title": "Hosted for teachers", "body": "This site is the classroom front door. The pipeline is Homework Grader." }
+    ]
+  }
 }

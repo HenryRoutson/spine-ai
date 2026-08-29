@@ -52,9 +52,13 @@ import {
   listedWebsitePipelineBindings,
   websiteDisplayName,
   websiteNameForCreate,
+  websitesUsingProject,
+  type pipeline_website_delete_action,
+  type website_dependent,
 } from "@/lib/website-pipelines"
 import { consumePendingPickerList, readPickerList, pickerHomeHref, type picker_list_tab } from "@/lib/picker-list"
 import type { Project, ProjectId } from "@/lib/types"
+import { DeletePipelineDialog } from "@/components/delete-pipeline-dialog"
 
 export function ProjectPickerPage() {
   const {
@@ -99,6 +103,10 @@ export function ProjectPickerPage() {
   const [newSiteOpen, setNewSiteOpen] = useState(false)
   const [siteName, setSiteName] = useState("")
   const [sitePipelineIds, setSitePipelineIds] = useState<ProjectId[]>([])
+  const [pendingDelete, setPendingDelete] = useState<{
+    project: Project
+    sites: website_dependent[]
+  } | null>(null)
 
   useEffect(() => {
     warmProjectPrefetches(
@@ -239,6 +247,24 @@ export function ProjectPickerPage() {
     } finally {
       setBusy(null)
     }
+  }
+
+  function requestDelete(p: Project) {
+    const bound = websitesUsingProject(sites, p.id)
+    if (bound.length > 0) {
+      setPendingDelete({ project: p, sites: bound })
+      return
+    }
+    void runDelete(p, sortedProjects, () => deleteProject(p.id))
+  }
+
+  function confirmPendingDelete(action: pipeline_website_delete_action) {
+    const pending = pendingDelete
+    if (!pending) return
+    setPendingDelete(null)
+    void runDelete(pending.project, sortedProjects, () =>
+      deleteProject(pending.project.id, { websiteAction: action }),
+    )
   }
 
   function startEdit(p: Project) {
@@ -628,7 +654,7 @@ export function ProjectPickerPage() {
                           deleting={deleting}
                           label={`Delete ${p.name}`}
                           spineId="project.delete"
-                          onClick={() => void runDelete(p, sortedProjects, () => deleteProject(p.id))}
+                          onClick={() => requestDelete(p)}
                         />
                       ) : null}
                     </div>
@@ -659,6 +685,14 @@ export function ProjectPickerPage() {
           )}
         </div>
       </div>
+      {pendingDelete ? (
+        <DeletePipelineDialog
+          pipelineName={pendingDelete.project.name}
+          sites={pendingDelete.sites}
+          onCancel={() => setPendingDelete(null)}
+          onConfirm={confirmPendingDelete}
+        />
+      ) : null}
     </div>
   )
 }

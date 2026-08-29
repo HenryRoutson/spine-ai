@@ -1,8 +1,10 @@
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { uid } from "../id";
+import { expandSeedHostedSites, websiteNamesFromSeedRaw } from "@/lib/example-pipeline-websites";
 import { resolveModuleNote } from "@/lib/pipeline-module-factory";
 import { UNNAMED_PROJECT_NAME } from "@/lib/project-assistant-types";
+import type { HostedSiteOptions } from "@/lib/shared-link-types";
 import { z } from "zod";
 import { DOCUMENTS_DIR, REPO_ROOT } from "./config";
 import { isUnavailableSeedDoc, unavailableSeedDocMessage } from "../seed-doc";
@@ -79,6 +81,7 @@ const SeedFileSchema = z.object({
   kind: z.string(),
   documentation: z.string().optional(),
   hostedSite: z.unknown().optional(),
+  hostedSites: z.array(z.unknown()).max(8).optional(),
   models: z.array(
     z.object({
       id: z.string(),
@@ -364,7 +367,8 @@ export interface SeedDocSpec {
 export interface ProjectSeed {
   project: Project;
   docSpecs: SeedDocSpec[];
-  hostedSite?: unknown;
+  hostedSite?: HostedSiteOptions;
+  hostedSites: HostedSiteOptions[];
 }
 
 export { isUnavailableSeedDoc, unavailableSeedDocMessage } from "../seed-doc";
@@ -521,6 +525,7 @@ export function loadProjectSeed(path: string): ProjectSeed {
   const activeFunctionId = (raw.activeFunctionId ?? functions?.[0]?.id) as pipeline_function_id | undefined;
   const activeModules =
     functions?.find((fn) => fn.id === activeFunctionId)?.modules ?? forkSynced.modules;
+  const hostedSites = expandSeedHostedSites(raw, raw.id as ProjectId);
   return {
     // AI : zod-validated plain strings → branded contract types
     project: {
@@ -547,7 +552,8 @@ export function loadProjectSeed(path: string): ProjectSeed {
       path: resolveSeedDocPath(d.file),
       relativeFile: d.file,
     })),
-    hostedSite: raw.hostedSite,
+    hostedSites,
+    hostedSite: hostedSites[0],
   };
 }
 
@@ -651,6 +657,7 @@ export type ProjectTemplateSummary = {
   moduleCount: number;
   inputCount: number;
   hasHostedSite: boolean;
+  websiteNames: string[];
   functionCount: number;
 };
 
@@ -661,6 +668,7 @@ const SeedTemplateSummaryFileSchema = z.object({
   kind: z.string(),
   modules: z.array(z.object({ kind: ModuleKindSchema })),
   hostedSite: z.unknown().optional(),
+  hostedSites: z.array(z.unknown()).max(8).optional(),
   functions: z.array(z.object({ id: z.string() })).optional(),
 });
 
@@ -686,7 +694,8 @@ export function projectTemplateSummaryFromFile(filename: string): ProjectTemplat
     kind: raw.kind,
     moduleCount: raw.modules.length,
     inputCount: raw.modules.filter((m) => m.kind === "input").length,
-    hasHostedSite: raw.hostedSite != null,
+    hasHostedSite: raw.hostedSite != null || (raw.hostedSites?.length ?? 0) > 0,
+    websiteNames: websiteNamesFromSeedRaw(raw),
     functionCount: raw.functions?.length ?? 1,
   };
 }

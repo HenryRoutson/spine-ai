@@ -29,6 +29,7 @@ import {
   type ModuleId,
   type PipelineModule,
   type Project,
+  type ProjectId,
   type SharedLinkId,
 } from "./types";
 import { logger } from "./server_logger";
@@ -741,6 +742,41 @@ export async function updateSharedLinkSiteSettings(
       .eq("owner_id", ownerId);
     if (error) {
       if (isServerless() || (!isMissingSchemaError(error) && !/site_options/i.test(error.message))) {
+        throw new Error(error.message);
+      }
+    }
+  }
+  return toPublicRecord(link);
+}
+
+export async function persistWebsitePipelineChange(
+  ownerId: user_id_string,
+  id: SharedLinkId,
+  patch: { siteOptions: HostedSiteOptions; projectId: ProjectId | null },
+): Promise<SharedLinkRecord | null> {
+  const link = await getSharedLink(id);
+  if (!link || link.ownerId !== ownerId) return null;
+  if (!isSiteLinkId(link.id)) return null;
+  link.siteOptions = normalizeHostedSiteOptions(patch.siteOptions);
+  link.projectId = patch.projectId;
+  saveLocalLink(link);
+  const db = await supabaseForSharedLinks();
+  if (db) {
+    const row = {
+      site_options: link.siteOptions,
+      project_id: link.projectId,
+    };
+    let { error } = await db.from("shared_links").update(row).eq("id", id).eq("owner_id", ownerId);
+    if (error && /null|not-null|project_id/i.test(error.message) && link.projectId == null) {
+      const retry = await db
+        .from("shared_links")
+        .update({ ...row, project_id: "" })
+        .eq("id", id)
+        .eq("owner_id", ownerId);
+      error = retry.error;
+    }
+    if (error) {
+      if (isServerless() || (!isMissingSchemaError(error) && !/site_options|project_id/i.test(error.message))) {
         throw new Error(error.message);
       }
     }
