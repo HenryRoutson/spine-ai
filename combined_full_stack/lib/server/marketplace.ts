@@ -29,8 +29,19 @@ import type {
 import type {
   MarketplaceListingCard,
   MarketplaceListingDetail,
+  MarketplaceListingKind,
   MarketplaceListingRecord,
 } from "@/lib/marketplace-types";
+import type { SharedLinkRecord } from "@/lib/shared-link-types";
+import { normalizeHostedSiteOptions } from "@/lib/hosted-site";
+import { storedFunctionsOnProject } from "@/lib/pipeline-functions";
+import {
+  listedWebsitePipelineBindings,
+  nullableProjectId,
+  pageOnlyProjectStub,
+  remapWebsiteProjectId,
+} from "@/lib/website-pipelines";
+import { publishSharedLink } from "@/lib/server/shared_links";
 
 const mktLog = logger("marketplace");
 const MARKETPLACE_PREFIX = "mkt_";
@@ -71,27 +82,51 @@ function snapshotForMarketplace(project: Project): Project {
   };
 }
 
+function listingKindOf(raw: unknown): MarketplaceListingKind {
+  return raw === "website" ? "website" : "pipeline";
+}
+
+function snapshotHasPipeline(snapshot: Project): boolean {
+  if (snapshot.models.length > 0 || snapshot.modules.length > 0) return true;
+  return (snapshot.functions ?? []).some((fn) => fn.modules.length > 0);
+}
+
 function stepKinds(snapshot: Project): ModuleKind[] {
-  return snapshot.modules.map((m) => m.kind);
+  const stored = storedFunctionsOnProject(snapshot).flatMap((fn) => fn.modules);
+  return (stored.length > 0 ? stored : snapshot.modules).map((m) => m.kind);
+}
+
+function listingStepCount(row: StoredListing): number {
+  if (row.kind === "website") {
+    const actions = row.siteOptions?.actions.length ?? 0;
+    const bindings = listedWebsitePipelineBindings(row.siteOptions?.pipelineBindings ?? []).length;
+    if (actions > 0) return actions;
+    if (bindings > 0) return bindings;
+  }
+  const stored = storedFunctionsOnProject(row.snapshot);
+  const n = stored.reduce((sum, fn) => sum + fn.modules.length, 0);
+  return n > 0 ? n : row.snapshot.modules.length;
 }
 
 function toRecord(row: StoredListing): MarketplaceListingRecord {
   return {
     id: row.id,
     projectId: row.projectId,
+    kind: row.kind,
     title: row.title,
     description: row.description,
     priceCents: row.priceCents,
     cloneCount: row.cloneCount,
     createdAt: row.createdAt,
     revoked: row.revoked,
+    ...(row.kind === "website" && row.siteOptions ? { siteOptions: row.siteOptions } : {}),
   };
 }
 
 function toCard(row: StoredListing, viewerId?: user_id_string): MarketplaceListingCard {
   return {
     ...toRecord(row),
-    stepCount: row.snapshot.modules.length,
+    stepCount: listingStepCount(row),
     stepKinds: stepKinds(row.snapshot),
     isOwner: viewerId != null && row.ownerId === viewerId,
   };
@@ -113,7 +148,14 @@ function matchesQuery(row: StoredListing, q: string): boolean {
 function loadLocalListing(id: MarketplaceListingId): StoredListing | null {
   const path = listingFile(id);
   if (!existsSync(path)) return null;
-  return JSON.parse(readFileSync(path, "utf8")) as StoredListing;
+  const raw = JSON.parse(readFileSync(path, "utf8")) as StoredListing;
+  const kind = listingKindOf(raw.kind);
+  return {
+    ...raw,
+    kind,
+    projectId: nullableProjectId(raw.projectId),
+    siteOptions: kind === "website" ? normalizeHostedSiteOptions(raw.siteOptions) : undefined,
+  };
 }
 
 function saveLocalListing(row: StoredListing): void {
@@ -131,10 +173,12 @@ function listLocalListings(): StoredListing[] {
 }
 
 function rowFromSupabase(data: Record<string, unknown>): StoredListing {
+  const kind = listingKindOf(data.kind);
   return {
     id: data.id as MarketplaceListingId,
     ownerId: data.owner_id as user_id_string,
-    projectId: data.project_id as ProjectId,
+    projectId: nullableProjectId(data.project_id),
+    kind,
     title: String(data.title ?? ""),
     description: String(data.description ?? ""),
     priceCents: Number(data.price_cents ?? 0),
@@ -142,6 +186,7 @@ function rowFromSupabase(data: Record<string, unknown>): StoredListing {
     cloneCount: Number(data.clone_count ?? 0),
     createdAt: Number(data.created_at ?? 0),
     revoked: Boolean(data.revoked),
+    siteOptions: kind === "website" ? normalizeHostedSiteOptions(data.site_options) : undefined,
   };
 }
 
@@ -171,8 +216,10 @@ export async function listMarketplaceListings(opts: {
   query?: string;
   viewerId?: user_id_string;
   ownerOnly?: boolean;
+  kind?: MarketplaceListingKind;
 }): Promise<MarketplaceListingCard[]> {
   const q = (opts.query ?? "").trim().toLowerCase();
+  const kindOk = (row: StoredListing) => !opts.kind || row.kind === opts.kind;
   const db = await supabaseForMarketplace();
   if (db) {
     let req = db.from("marketplace_listings").select("*").eq("revoked", false).order("created_at", {
@@ -189,6 +236,7 @@ export async function listMarketplaceListings(opts: {
       return (data ?? [])
         .map((row) => rowFromSupabase(row as Record<string, unknown>))
         .filter((row) => !opts.ownerOnly || row.ownerId === opts.viewerId)
+        .filter((row) => kindOk(row))
         .filter((row) => matchesQuery(row, q))
         .map((row) => toCard(row, opts.viewerId));
     }
@@ -197,6 +245,7 @@ export async function listMarketplaceListings(opts: {
   return listLocalListings()
     .filter((row) => !row.revoked)
     .filter((row) => !opts.ownerOnly || row.ownerId === opts.viewerId)
+    .filter((row) => kindOk(row))
     .filter((row) => matchesQuery(row, q))
     .sort((a, b) => b.createdAt - a.createdAt)
     .map((row) => toCard(row, opts.viewerId));
@@ -204,7 +253,9 @@ export async function listMarketplaceListings(opts: {
 
 export type PublishMarketplaceInput = {
   ownerId: user_id_string;
-  project: Project;
+  project?: Project;
+  kind?: MarketplaceListingKind;
+  siteOptions?: unknown;
   title: string;
   description: string;
   priceCents: number;
@@ -220,18 +271,35 @@ export async function publishMarketplaceListing(
   const title = input.title.trim();
   if (!title) throw new Error("Title is required");
 
+  const kind: MarketplaceListingKind = input.kind === "website" ? "website" : "pipeline";
+  if (kind === "pipeline" && !input.project) throw new Error("project is required");
+  const siteOptions =
+    kind === "website"
+      ? normalizeHostedSiteOptions(
+          input.siteOptions ?? { brand: { companyName: input.project?.name ?? title } },
+        )
+      : undefined;
+  if (kind === "website" && !siteOptions?.brand.companyName.trim()) {
+    throw new Error("Website listing requires a company name");
+  }
+
   const id = newMarketplaceListingId();
+  const snapshot = input.project
+    ? snapshotForMarketplace(input.project)
+    : pageOnlyProjectStub(siteOptions?.brand.companyName ?? title);
   const row: StoredListing = {
     id,
     ownerId: input.ownerId,
-    projectId: input.project.id,
+    projectId: input.project?.id ?? null,
+    kind,
     title,
     description: input.description.trim(),
     priceCents,
-    snapshot: snapshotForMarketplace(input.project),
+    snapshot,
     cloneCount: 0,
     createdAt: Date.now(),
     revoked: false,
+    siteOptions,
   };
 
   if (!isServerless()) saveLocalListing(row);
@@ -244,18 +312,29 @@ export async function publishMarketplaceListing(
     return toRecord(row);
   }
 
-  const { error } = await db.from("marketplace_listings").upsert({
-    id: row.id,
-    owner_id: row.ownerId,
-    project_id: row.projectId,
-    title: row.title,
-    description: row.description,
-    price_cents: row.priceCents,
-    snapshot: row.snapshot,
-    clone_count: 0,
-    created_at: row.createdAt,
-    revoked: false,
-  });
+  const persist = async (projectId: ProjectId | null | "", includeKind: boolean) =>
+    db.from("marketplace_listings").upsert({
+      id: row.id,
+      owner_id: row.ownerId,
+      project_id: projectId,
+      title: row.title,
+      description: row.description,
+      price_cents: row.priceCents,
+      snapshot: row.snapshot,
+      clone_count: 0,
+      created_at: row.createdAt,
+      revoked: false,
+      ...(includeKind ? { kind: row.kind, site_options: row.siteOptions ?? null } : {}),
+    });
+
+  let { error } = await persist(row.projectId, true);
+  if (error && /kind|site_options/i.test(error.message)) {
+    mktLog.warn(`marketplace kind columns missing — upsert without them`, { error: error.message });
+    ({ error } = await persist(row.projectId ?? "", false));
+  }
+  if (error && /null|project_id/i.test(error.message) && row.projectId == null) {
+    ({ error } = await persist("", true));
+  }
   if (error) {
     if (isServerless() || !isMissingSchemaError(error)) {
       throw new Error(`marketplace persistence failed: ${error.message}`);
@@ -301,7 +380,7 @@ export class MarketplaceCloneError extends Error {
         ? "Listing not found"
         : code === "own_listing"
           ? "You already own this listing — open the project from your workspace."
-          : "Not enough credit — top up in Billing to buy this pipeline.",
+          : "Not enough credit — top up in Billing to buy this listing.",
     );
   }
 }
@@ -310,7 +389,7 @@ export async function cloneMarketplaceListing(opts: {
   listingId: MarketplaceListingId;
   buyerId: user_id_string;
   store: Store;
-}): Promise<{ project: Project; chargedCents: number }> {
+}): Promise<{ project?: Project; site?: SharedLinkRecord; chargedCents: number }> {
   const listing = await getMarketplaceListing(opts.listingId);
   if (!listing || listing.revoked) throw new MarketplaceCloneError("not_found");
   if (listing.ownerId === opts.buyerId) throw new MarketplaceCloneError("own_listing");
@@ -335,9 +414,30 @@ export async function cloneMarketplaceListing(opts: {
     await creditCreatorEarnings(listing.ownerId, priceCents);
   }
 
-  const project = migrateProjectModules(cloneProject(listing.snapshot, opts.store.projects()));
-  opts.store.saveProject(project);
-  await opts.store.flush();
+  let project: Project | undefined;
+  if (listing.kind !== "website" || snapshotHasPipeline(listing.snapshot)) {
+    project = migrateProjectModules(cloneProject(listing.snapshot, opts.store.projects()));
+    opts.store.saveProject(project);
+    await opts.store.flush();
+  }
+
+  let site: SharedLinkRecord | undefined;
+  if (listing.kind === "website") {
+    const fromId = listing.projectId ?? nullableProjectId(listing.snapshot.id);
+    const siteOptions = remapWebsiteProjectId(
+      normalizeHostedSiteOptions(listing.siteOptions ?? { brand: { companyName: listing.title } }),
+      fromId,
+      project?.id ?? null,
+    );
+    site = await publishSharedLink({
+      ownerId: opts.buyerId,
+      project,
+      store: opts.store,
+      kind: "site",
+      siteOptions,
+      defaultDocsByModule: {},
+    });
+  }
 
   listing.cloneCount += 1;
   saveLocalListing(listing);
@@ -353,8 +453,9 @@ export async function cloneMarketplaceListing(opts: {
   mktLog.info(`cloned marketplace listing`, {
     listingId: listing.id,
     buyerId: opts.buyerId,
-    projectId: project.id,
+    projectId: project?.id ?? null,
+    siteId: site?.id ?? null,
     chargedCents: priceCents,
   });
-  return { project, chargedCents: priceCents };
+  return { project, site, chargedCents: priceCents };
 }

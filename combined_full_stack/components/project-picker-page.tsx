@@ -9,8 +9,6 @@ import {
   Loader2,
   Pencil,
   RefreshCw,
-  Store,
-  Users,
 } from "lucide-react"
 import { useStorePicker } from "@/lib/store"
 import { AppChromeHeader } from "@/components/app-chrome-header"
@@ -32,13 +30,13 @@ import { sortProjectsForList } from "@/lib/project-active"
 import { AnimatedRemovalItem } from "@/components/animated-removal-item"
 import { DeleteButton } from "@/components/delete-button"
 import { useAnimatedRemoval } from "@/lib/use-animated-removal"
+import { LibraryShelf } from "@/components/library-shelf"
 import {
   BlankProjectButton,
   ExampleTemplateGrid,
 } from "@/components/project-workspace-sections"
 import { MarketplaceBrowsePanel } from "@/components/share/marketplace-browse-panel"
 import { SharedWithMePanel } from "@/components/share/shared-with-me-panel"
-import { ShareTabLabel } from "@/lib/window-panel-meta"
 import { warmProjectPrefetches } from "@/lib/project-state-cache"
 import {
   PROJECT_DELETE_SETTINGS_CHANGED_EVENT,
@@ -150,8 +148,12 @@ export function ProjectPickerPage() {
   const handleOpenWebsite = useCallback(
     (link: SharedLinkRecord) => {
       openWebsiteEditor(link)
-      setOpeningId(link.projectId)
-      openProject(link.projectId)
+      if (link.projectId) {
+        setOpeningId(link.projectId)
+        openProject(link.projectId)
+        return
+      }
+      navigateToBuildMode()
     },
     [openProject, openWebsiteEditor],
   )
@@ -216,17 +218,11 @@ export function ProjectPickerPage() {
     try {
       const name = websiteNameForCreate(siteName)
       const selected = sitePipelineIds
-      let primary = selected[0]
-      if (!primary) {
-        const stub = await addProject({ open: false })
-        renameProject(stub.id, name)
-        primary = stub.id
-      }
       const body = await apiJson<{ url: string; link: SharedLinkRecord }>(API_ROUTES.sharedLinks, {
         method: "POST",
         headers: JSON_HEADERS,
         body: JSON.stringify({
-          projectId: primary,
+          ...(selected[0] ? { projectId: selected[0] } : {}),
           kind: "site",
           siteOptions: normalizeHostedSiteOptions(
             hostedSiteOptionsForCreate({ name, pipelineIds: selected, projects }),
@@ -434,11 +430,7 @@ export function ProjectPickerPage() {
                   </div>
                 </div>
               ) : null}
-              <div className="mb-3 flex items-center gap-2">
-                <Globe className="h-4 w-4 text-primary" />
-                <h3 className="text-sm font-semibold">Your websites</h3>
-                <span className="font-mono text-[10px] text-muted-foreground">({sites.length})</span>
-              </div>
+              <LibraryShelf entity="websites" id="yours" count={sites.length}>
               <ul className="divide-y divide-border rounded-lg border border-border bg-card">
                 {sitesLoading && sites.length === 0 ? (
                   <li className="px-4 py-8 text-center text-sm text-muted-foreground">Loading websites…</li>
@@ -489,15 +481,48 @@ export function ProjectPickerPage() {
                   })
                 )}
               </ul>
+              </LibraryShelf>
+              <LibraryShelf entity="websites" id="shared">
+                <div className="max-w-2xl">
+                  <SharedWithMePanel
+                    embedded
+                    onRun={(id) => {
+                      if (isSiteLinkId(id)) {
+                        void apiJson<{ link: SharedLinkRecord }>(API_ROUTES.sharedLink(id))
+                          .then((body) => handleOpenWebsite(body.link))
+                          .catch((e) => setResyncMsg((e as Error).message))
+                        return
+                      }
+                      handleRunShared(id)
+                    }}
+                  />
+                </div>
+              </LibraryShelf>
+              <LibraryShelf entity="websites" id="marketplace">
+                <p className="mb-2 text-[11px] text-muted-foreground">
+                  First-class website listings — clone a hosted page and any bound functions.
+                </p>
+                <MarketplaceBrowsePanel
+                  embedded
+                  kind="website"
+                  onClonedSite={(site) => {
+                    setSites((prev) => [site, ...prev.filter((s) => s.id !== site.id)])
+                    handleOpenWebsite(site)
+                  }}
+                />
+              </LibraryShelf>
+              <LibraryShelf entity="websites" id="templates">
+                <ExampleTemplateGrid
+                  busyId={busy}
+                  hostedOnly
+                  onClone={(id) => void handleCloneTemplate(id)}
+                  cloneLabel="Clone site"
+                />
+              </LibraryShelf>
             </section>
           ) : (
           <>
-          <section className="mb-8">
-            <div className="mb-3 flex items-center gap-2">
-              <FolderKanban className="h-4 w-4 text-primary" />
-              <h3 className="text-sm font-semibold">Your pipelines</h3>
-              <span className="font-mono text-[10px] text-muted-foreground">({projects.length})</span>
-            </div>
+          <LibraryShelf entity="pipelines" id="yours" count={projects.length}>
             <ul className="divide-y divide-border rounded-lg border border-border bg-card">
               {displayProjects.length === 0 ? (
                 <li className="px-4 py-8 text-center">
@@ -611,47 +636,25 @@ export function ProjectPickerPage() {
                 )
               })}
             </ul>
-          </section>
+          </LibraryShelf>
 
-          <section className="mb-8">
-            <div className="mb-3 flex items-center gap-2">
-              <Users className="h-4 w-4 text-primary" />
-              <h3 className="text-sm font-semibold">{ShareTabLabel.SharedWithMe}</h3>
-            </div>
-            <p className="mb-3 text-xs text-muted-foreground">
-              Paste a share link to run someone else&apos;s pipeline — billing stays in your account.
-            </p>
+          <LibraryShelf entity="pipelines" id="shared">
             <div className="max-w-2xl">
               <SharedWithMePanel embedded onRun={handleRunShared} />
             </div>
-          </section>
+          </LibraryShelf>
 
-          <section className="mb-8">
-            <div className="mb-3 flex items-center gap-2">
-              <Store className="h-4 w-4 text-primary" />
-              <h3 className="text-sm font-semibold">{ShareTabLabel.Marketplace}</h3>
-            </div>
-            <p className="mb-3 text-xs text-muted-foreground">
-              Search pipelines others published — copy one into your workspace to edit independently.
-              Publish your own from Share → Marketplace.
-            </p>
-            <MarketplaceBrowsePanel embedded />
-          </section>
+          <LibraryShelf entity="pipelines" id="marketplace">
+            <MarketplaceBrowsePanel embedded kind="pipeline" />
+          </LibraryShelf>
 
-          <section>
-            <div className="mb-3 flex items-center gap-2">
-              <Copy className="h-4 w-4 text-primary" />
-              <h3 className="text-sm font-semibold">Example templates</h3>
-            </div>
-            <p className="mb-3 text-xs text-muted-foreground">
-              Example templates are read-only until you clone them into your workspace.
-            </p>
+          <LibraryShelf entity="pipelines" id="templates">
             <ExampleTemplateGrid
               busyId={busy}
               onClone={(id) => void handleCloneTemplate(id)}
               cloneLabel="Clone"
             />
-          </section>
+          </LibraryShelf>
           </>
           )}
         </div>

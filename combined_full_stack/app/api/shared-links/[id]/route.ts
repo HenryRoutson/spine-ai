@@ -21,7 +21,8 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string 
   const link = await getSharedLink(linkId);
   if (!link) return apiError("link not found", 404);
   const alias = req.nextUrl.searchParams.get("alias") ?? undefined;
-  return NextResponse.json({ link: await publicLinkViewForAlias(link, alias) });
+  const functionId = req.nextUrl.searchParams.get("functionId") ?? undefined;
+  return NextResponse.json({ link: await publicLinkViewForAlias(link, alias, functionId) });
 }
 
 export async function DELETE(_req: NextRequest, ctx: { params: Promise<{ id: string }> }) {

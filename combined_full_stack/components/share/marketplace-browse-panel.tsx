@@ -17,7 +17,13 @@ import { readMarketplaceSnapshot } from "@/lib/marketplace-snapshot-cache"
 import { seedProjectInStateSnapshot } from "@/lib/state-snapshot-cache"
 import { fetchMarketplaceListings } from "@/lib/warm-run-data"
 import { formatCents } from "@/lib/format"
-import type { MarketplaceListingCard, MarketplaceListingDetail } from "@/lib/marketplace-types"
+import type {
+  MarketplaceListingCard,
+  MarketplaceListingDetail,
+  MarketplaceListingKind,
+} from "@/lib/marketplace-types"
+import type { SharedLinkRecord } from "@/lib/shared-link-types"
+import { listedWebsitePipelineBindings } from "@/lib/website-pipelines"
 import type { Project, ProjectId } from "@/lib/types"
 import { cn } from "@/lib/utils"
 
@@ -28,16 +34,20 @@ function priceLabel(cents: number): string {
 export function MarketplaceBrowsePanel({
   embedded = false,
   simple = false,
+  kind,
+  onClonedSite,
 }: {
   // AI : when true, parent page supplies the section heading (projects tab).
   embedded?: boolean
   simple?: boolean
+  kind?: MarketplaceListingKind
+  onClonedSite?: (site: SharedLinkRecord) => void
 }) {
   const [query, setQuery] = useState("")
   const [listings, setListings] = useState<MarketplaceListingCard[]>(
-    () => readMarketplaceSnapshot() ?? [],
+    () => (kind ? [] : readMarketplaceSnapshot() ?? []),
   )
-  const [loading, setLoading] = useState(() => readMarketplaceSnapshot() == null)
+  const [loading, setLoading] = useState(() => !kind && readMarketplaceSnapshot() == null)
   const [error, setError] = useState<string | null>(null)
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [detail, setDetail] = useState<MarketplaceListingDetail | null>(null)
@@ -47,19 +57,19 @@ export function MarketplaceBrowsePanel({
   const picker = useContext(ProjectPickerContext)
 
   const load = useCallback(async (q: string) => {
-    const cached = !q.trim() ? readMarketplaceSnapshot() : null
+    const cached = !q.trim() && !kind ? readMarketplaceSnapshot() : null
     if (cached) setListings(cached)
     setLoading(!cached && !q.trim())
     setError(null)
     try {
-      const next = await fetchMarketplaceListings(q)
+      const next = await fetchMarketplaceListings(q, kind)
       setListings(next)
     } catch (e) {
       if (!cached) setError((e as Error).message)
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, [kind])
 
   useEffect(() => {
     void load("")
@@ -95,14 +105,17 @@ export function MarketplaceBrowsePanel({
     setBusyId(id)
     setActionError(null)
     try {
-      const body = await apiJson<{ project: Project; chargedCents: number }>(
-        API_ROUTES.marketplaceClone(id),
-        { method: "POST", headers: JSON_HEADERS },
-      )
-      if (picker) picker.ingestCreatedProject(body.project)
-      else seedProjectInStateSnapshot(body.project)
-      // AI : picker embed stays on the gallery; Share/Run marketplace still opens the copy.
-      if (!embedded) openProjectInWorkspace(body.project.id as ProjectId)
+      const body = await apiJson<{
+        project?: Project | null
+        site?: SharedLinkRecord | null
+        chargedCents: number
+      }>(API_ROUTES.marketplaceClone(id), { method: "POST", headers: JSON_HEADERS })
+      if (body.project) {
+        if (picker) picker.ingestCreatedProject(body.project)
+        else seedProjectInStateSnapshot(body.project)
+        if (!embedded && !body.site) openProjectInWorkspace(body.project.id as ProjectId)
+      }
+      if (body.site) onClonedSite?.(body.site)
     } catch (e) {
       setActionError((e as Error).message)
     } finally {
@@ -132,7 +145,9 @@ export function MarketplaceBrowsePanel({
           <p className="mt-0.5 text-xs text-muted-foreground">
             {simple
               ? "Copy a ready-made project into your workspace."
-              : "Search published pipelines and copy one into your workspace to edit independently."}
+              : kind === "website"
+                ? "Search published websites and copy one into your workspace to edit independently."
+                : "Search published pipelines and copy one into your workspace to edit independently."}
           </p>
         </div>
       ) : null}
@@ -188,7 +203,8 @@ export function MarketplaceBrowsePanel({
                       </p>
                     ) : null}
                     <p className={cn("mt-1 text-muted-foreground", simple ? "text-xs" : "font-mono text-[10px]")}>
-                      {row.stepCount} steps · {row.cloneCount} copies
+                      {row.kind === "website" ? "website" : "pipeline"} · {row.stepCount}{" "}
+                      {row.kind === "website" ? "parts" : "steps"} · {row.cloneCount} copies
                       {row.isOwner ? " · yours" : ""}
                     </p>
                   </div>
@@ -218,10 +234,31 @@ export function MarketplaceBrowsePanel({
               </div>
               <p className={cn("text-muted-foreground", simple ? "text-xs" : "font-mono text-[10px]")}>
                 {simple
-                  ? `${detail.stepCount} steps · ${priceLabel(detail.priceCents)}`
-                  : `Snapshot · ${detail.stepCount} steps · ${priceLabel(detail.priceCents)}`}
+                  ? `${detail.stepCount} ${detail.kind === "website" ? "parts" : "steps"} · ${priceLabel(detail.priceCents)}`
+                  : `${detail.kind === "website" ? "Website" : "Snapshot"} · ${detail.stepCount} ${detail.kind === "website" ? "parts" : "steps"} · ${priceLabel(detail.priceCents)}`}
               </p>
-              {simple ? null : (
+              {simple ? null : detail.kind === "website" ? (
+                <ul className="max-h-48 space-y-1 overflow-y-auto rounded-md border border-border bg-muted/20 p-2">
+                  {(detail.siteOptions?.actions ?? []).map((action) => (
+                    <li key={action.alias} className="font-mono text-[10px] text-muted-foreground">
+                      <span className="text-foreground">{action.label || action.alias}</span>
+                      <span className="ml-1 opacity-60">
+                        ({action.functionId ?? action.table ?? "action"})
+                      </span>
+                    </li>
+                  ))}
+                  {listedWebsitePipelineBindings(detail.siteOptions?.pipelineBindings ?? []).map((b) => (
+                    <li key={b.alias} className="font-mono text-[10px] text-muted-foreground">
+                      <span className="text-foreground">{b.alias}</span>
+                      <span className="ml-1 opacity-60">({b.functionId ?? b.projectId})</span>
+                    </li>
+                  ))}
+                  {(detail.siteOptions?.actions ?? []).length === 0 &&
+                  listedWebsitePipelineBindings(detail.siteOptions?.pipelineBindings ?? []).length === 0 ? (
+                    <li className="text-[10px] text-muted-foreground">Page-only site</li>
+                  ) : null}
+                </ul>
+              ) : (
                 <ul className="max-h-48 space-y-1 overflow-y-auto rounded-md border border-border bg-muted/20 p-2">
                   {detail.snapshot.modules.map((m) => (
                     <li key={m.id} className="font-mono text-[10px] text-muted-foreground">

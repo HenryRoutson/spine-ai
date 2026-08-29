@@ -94,7 +94,9 @@ export function PipelineWebsitesPanel({
         }),
       })
       openWebsiteEditor(body.link)
-      if (store && body.link.projectId !== project.id) store.setActiveProjectId(body.link.projectId)
+      if (store && body.link.projectId && body.link.projectId !== project.id) {
+        store.setActiveProjectId(body.link.projectId)
+      }
     } catch (e) {
       setError((e as Error).message)
     } finally {
@@ -104,7 +106,7 @@ export function PipelineWebsitesPanel({
 
   function openSite(site: SharedLinkRecord) {
     openWebsiteEditor(site)
-    if (store && site.projectId !== project.id) store.setActiveProjectId(site.projectId)
+    if (store && site.projectId && site.projectId !== project.id) store.setActiveProjectId(site.projectId)
   }
 
   async function addToWebsite(site: SharedLinkRecord) {

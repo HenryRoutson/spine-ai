@@ -52,6 +52,7 @@ const hostedSiteAssistantResponseSchema = z.object({
           title: z.string().nullable(),
           table: z.string().nullable(),
           pipelineAlias: z.string().nullable(),
+          functionId: z.string().nullable(),
           payload: z.record(z.string(), z.unknown()).nullable(),
         })
         .strict(),
@@ -104,7 +105,7 @@ Return a short message for the publisher, then fields:
 - hideSpineFooter / authEnabled: true/false, or null to leave unchanged
 - authProvider: "spine" (default, handled) or "custom_supabase" (placeholder), or null to leave unchanged
 - reactFilePatches: always null in HTML mode
-- actions: [{ alias, label, title, table, pipelineAlias, payload }] to configure {{action:alias}} buttons, or null to leave unchanged. payload is the JSON the button uploads. Example: { "alias": "add", "label": "Add todo", "title": "Add", "table": "todo", "pipelineAlias": null, "payload": { "action": "add" } }
+- actions: [{ alias, label, title, table, pipelineAlias, functionId, payload }] to configure {{action:alias}} buttons, or null to leave unchanged. functionId is the project function to run (AddTodo, not a mega-DAG). payload is the JSON the button uploads. Example: { "alias": "add", "label": "Add todo", "title": "Add", "table": "todo", "pipelineAlias": null, "functionId": "fn_add", "payload": { "action": "add" } }
 
 Write complete HTML fragments (nav/hero/features; include ${HOSTED_SITE_RUN_SLOT} only when a workspace belongs on the page; sign-in chrome around ${HOSTED_SITE_AUTH_SLOT} only if they asked). A full <!DOCTYPE html> document is ok — the host unwraps body + <style>.
 Keep CSS in customCss or <style> in the HTML. Do not invent backend routes.`
@@ -230,6 +231,7 @@ export function applyHostedSiteAssistantPatch(
             title: row.title ?? undefined,
             table: row.table ?? undefined,
             pipelineAlias: row.pipelineAlias ?? undefined,
+            functionId: row.functionId ?? undefined,
             payload: row.payload ?? { action: row.alias },
           }))
         : base.actions,

@@ -211,6 +211,7 @@ describe("hosted site UI vibe agent prompts", () => {
           title: "Add",
           table: "todo",
           pipelineAlias: null,
+          functionId: "fn_add",
           payload: { action: "add" },
         },
       ],
@@ -222,6 +223,7 @@ describe("hosted site UI vibe agent prompts", () => {
         title: "Add",
         table: "todo",
         pipelineAlias: undefined,
+        functionId: "fn_add",
         payload: { action: "add" },
       },
     ])

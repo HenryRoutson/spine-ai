@@ -11,6 +11,8 @@ export type HostedSiteActionBinding = {
   title?: string
   table?: string
   pipelineAlias?: string
+  // AI : run this function on the bound project — not the active modules copy.
+  functionId?: string
   payload?: Record<string, unknown>
 }
 
@@ -59,11 +61,13 @@ export function normalizeHostedSiteActions(raw: unknown): HostedSiteActionBindin
       typeof rec.pipelineAlias === "string" && rec.pipelineAlias.trim()
         ? rec.pipelineAlias.trim().slice(0, 40)
         : undefined
+    const functionId =
+      typeof rec.functionId === "string" && rec.functionId.trim() ? rec.functionId.trim().slice(0, 128) : undefined
     const payload =
       rec.payload && typeof rec.payload === "object" && !Array.isArray(rec.payload)
         ? (rec.payload as Record<string, unknown>)
         : { action: alias }
-    out.push({ alias, label, title, table, pipelineAlias, payload })
+    out.push({ alias, label, title, table, pipelineAlias, functionId, payload })
   }
   return out
 }

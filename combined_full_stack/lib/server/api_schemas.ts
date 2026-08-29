@@ -768,6 +768,7 @@ export const hostedSiteOptionsSchema = z
           .object({
             alias: z.string().trim().min(1).max(40),
             projectId: projectIdSchema,
+            functionId: z.string().trim().min(1).max(128).optional(),
           })
           .strict(),
       )
@@ -782,6 +783,7 @@ export const hostedSiteOptionsSchema = z
             title: z.string().trim().max(80).optional(),
             table: z.string().trim().max(64).optional(),
             pipelineAlias: z.string().trim().max(40).optional(),
+            functionId: z.string().trim().min(1).max(128).optional(),
             payload: z.record(z.string(), z.unknown()).optional(),
           })
           .strict(),
@@ -846,7 +848,8 @@ export const hostedSiteAssistantBodySchema = z
 
 export const createSharedLinkBodySchema = z
   .object({
-    projectId: projectIdSchema,
+    // AI : optional for kind=site page-only (no stub host pipeline).
+    projectId: z.string().trim().max(128).optional(),
     defaultModel: z.string().max(128).optional(),
     fundingMode: z.enum(["sharer_pays", "viewer_pays", "viewer_signs_in"]).optional(),
     viewerNameRequired: z.boolean().optional(),
@@ -878,16 +881,42 @@ export const createSharedLinkBodySchema = z
         path: ["siteOptions", "brand", "companyName"],
       });
     }
+    if (data.kind !== "site" && !data.projectId) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "projectId is required",
+        path: ["projectId"],
+      });
+    }
   });
 
 export const createMarketplaceListingBodySchema = z
   .object({
-    projectId: projectIdSchema,
+    projectId: projectIdSchema.optional(),
     title: z.string().trim().min(1).max(200),
     description: z.string().trim().max(2_000).optional(),
     priceCents: z.number().int().min(0).max(10_000_000).optional(),
+    kind: z.enum(["pipeline", "website"]).optional(),
+    siteOptions: hostedSiteOptionsSchema.optional(),
   })
-  .strict();
+  .strict()
+  .superRefine((data, ctx) => {
+    const kind = data.kind ?? "pipeline";
+    if (kind === "pipeline" && !data.projectId) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "projectId is required",
+        path: ["projectId"],
+      });
+    }
+    if (kind === "website" && !data.projectId && !data.siteOptions?.brand?.companyName?.trim()) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Website listing requires siteOptions.brand.companyName or a projectId",
+        path: ["siteOptions", "brand", "companyName"],
+      });
+    }
+  });
 
 export const marketplaceSearchQuerySchema = z.object({
   q: z.string().trim().max(200).optional(),
@@ -895,6 +924,7 @@ export const marketplaceSearchQuerySchema = z.object({
     .enum(["1", "true", "0", "false"])
     .optional()
     .transform((v) => v === "1" || v === "true"),
+  kind: z.enum(["pipeline", "website"]).optional(),
 });
 
 export const updateDeploymentSpendLimitBodySchema = z
@@ -934,6 +964,7 @@ export const sharedLinkRunBodySchema = z
     // AI : HMAC from /embed/[id] — never trust client-asserted parentOrigin for allowlist auth.
     embedSessionToken: z.string().min(16).max(512).optional(),
     pipelineAlias: z.string().trim().min(1).max(40).optional(),
+    functionId: z.string().trim().min(1).max(128).optional(),
   })
   .strict();
 

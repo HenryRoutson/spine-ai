@@ -107,7 +107,7 @@ export function HostedSiteActionButton({
 
   useEffect(() => {
     let cancelled = false
-    void fetchSharedLink(linkId, binding.pipelineAlias ?? alias)
+    void fetchSharedLink(linkId, binding.pipelineAlias ?? alias, binding.functionId)
       .then((link) => {
         if (!cancelled) setModules(link.modules)
       })
@@ -115,7 +115,7 @@ export function HostedSiteActionButton({
     return () => {
       cancelled = true
     }
-  }, [alias, binding.pipelineAlias, linkId])
+  }, [alias, binding.functionId, binding.pipelineAlias, linkId])
 
   const run = useCallback(async () => {
     const startN = liveNRef.current
@@ -127,7 +127,7 @@ export function HostedSiteActionButton({
     setPinnedN(startN)
     const pipelineAlias = binding.pipelineAlias ?? alias
     try {
-      const link = await fetchSharedLink(linkId, pipelineAlias)
+      const link = await fetchSharedLink(linkId, pipelineAlias, binding.functionId)
       setModules(link.modules)
       const siteActions = link.siteOptions?.actions ?? actions
       const live = hostedActionBinding(siteActions, alias)
@@ -144,6 +144,7 @@ export function HostedSiteActionButton({
         undefined,
         undefined,
         pipelineAlias,
+        binding.functionId,
       )
       const seenOk = new Set<ModuleId>()
       let revealing = Promise.resolve()

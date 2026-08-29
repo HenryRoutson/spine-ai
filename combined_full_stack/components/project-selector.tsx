@@ -146,7 +146,7 @@ function WebsiteWorkspaceSelector({ embed, site }: { embed: boolean; site: Share
                 key={row.id}
                 onClick={() => {
                   openWebsiteEditor(row)
-                  if (row.projectId !== project.id) setActiveProjectId(row.projectId)
+                  if (row.projectId && row.projectId !== project.id) setActiveProjectId(row.projectId)
                 }}
                 className="flex items-center justify-between gap-2 text-xs"
                 {...spineActionProps("website.open")}

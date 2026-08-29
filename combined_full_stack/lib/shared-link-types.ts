@@ -74,6 +74,8 @@ export type website_pipeline_alias = string & { __brand: "website_pipeline_alias
 export type WebsitePipelineBinding = {
   alias: website_pipeline_alias;
   projectId: Project["id"];
+  // AI : optional — run this function on the bound project (schedules already do this).
+  functionId?: Project["activeFunctionId"];
 };
 
 export type HostedSiteReactFile = {
@@ -90,7 +92,7 @@ export type HostedSiteOptions = {
   authHtml: string;
   // AI : extra pages beyond index (customHtml) + auth.html — empty keeps today's single-page export.
   pages: HostedSitePage[];
-  // AI : empty = the share link's projectId is the only pipeline (legacy 1:1).
+  // AI : empty = page-only site. Do not inject a host pipeline at runtime.
   pipelineBindings: WebsitePipelineBinding[];
   // AI : {{action:alias}} buttons — label / trigger JSON / SQL table. Empty = humanize(alias).
   actions: HostedSiteActionBinding[];
@@ -122,7 +124,8 @@ export const DEFAULT_HOSTED_SITE_OPTIONS: HostedSiteOptions = {
 
 export type SharedLinkRecord = {
   id: SharedLinkId;
-  projectId: Project["id"];
+  // AI : null = page-only site (no host pipeline).
+  projectId: Project["id"] | null;
   name: string;
   description?: string;
   // AI : optional public usage markdown — empty unless the publisher opted in (project Docs stay private).

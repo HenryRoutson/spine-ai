@@ -9,7 +9,7 @@ export {}
 // P0 — Independent lists + bindings on siteOptions
 // ---------------------------------------------------------------------------
 // AI : DONE (websites-m2m-P0-picker) — /pipelines and /websites entry URLs; picker tabs Pipelines | Websites
-// AI : DONE (websites-m2m-P0-bindings) — HostedSiteOptions.pipelineBindings; empty = no pipelines (Lovable page). Viewer still defaults empty → primary for old {{run}} HTML.
+// AI : DONE (websites-m2m-P0-bindings) — HostedSiteOptions.pipelineBindings; empty = page-only. Runtime no longer injects a host pipeline (lib-share-P3-no-inject).
 // AI : DONE (websites-m2m-P0-hydrate) — open website hydrates ShareSiteForm for that site_ id
 // AI : DONE (websites-m2m-P0-slots) — {{run:alias}} parsed; {{run}} still the primary pipeline
 

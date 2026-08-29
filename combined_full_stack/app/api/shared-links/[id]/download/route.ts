@@ -28,7 +28,7 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string }> }
   if (!entry) return apiError("invalid token", 403);
 
   const store = await openStoreForUser(link.ownerId);
-  const run = store.runs(link.projectId).find((r) => r.id === (runId as RunId));
+  const run = store.runs(link.projectId ?? undefined).find((r) => r.id === (runId as RunId));
   if (!run || run.sharedLinkId !== link.id) return apiError("run not found", 404);
 
   if (format === "markdown") {

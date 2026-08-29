@@ -10,6 +10,36 @@ import type {
 
 export const UNNAMED_WEBSITE_NAME = "Untitled Website" as const
 
+export function nullableProjectId(raw: unknown): ProjectId | null {
+  return typeof raw === "string" && raw.trim() ? (raw as ProjectId) : null
+}
+
+// AI : page-only sites persist a stub snapshot so snapshot jsonb stays required.
+export function pageOnlyProjectStub(name: string = UNNAMED_WEBSITE_NAME): Project {
+  return {
+    id: "" as ProjectId,
+    name,
+    kind: "page",
+    models: [],
+    modules: [],
+    strategies: [],
+  }
+}
+
+export function remapWebsiteProjectId(
+  options: HostedSiteOptions,
+  fromId: ProjectId | null,
+  toId: ProjectId | null,
+): HostedSiteOptions {
+  if (!fromId || !toId || fromId === toId) return options
+  return {
+    ...options,
+    pipelineBindings: options.pipelineBindings.map((b) =>
+      b.projectId === fromId ? { ...b, projectId: toId } : b,
+    ),
+  }
+}
+
 // AI : websites are not pipelines — never inherit "Untitled Pipeline" as the page title.
 export function websiteNameForCreate(suggested: string): string {
   const trimmed = suggested.trim()
@@ -49,8 +79,8 @@ export function normalizeWebsitePipelineBindings(raw: unknown): WebsitePipelineB
   const out: WebsitePipelineBinding[] = []
   for (const row of raw.slice(0, 24)) {
     if (!row || typeof row !== "object") continue
-    const rec = row as { alias?: unknown; projectId?: unknown }
-    const projectId = typeof rec.projectId === "string" ? (rec.projectId as ProjectId) : null
+    const rec = row as { alias?: unknown; projectId?: unknown; functionId?: unknown }
+    const projectId = typeof rec.projectId === "string" && rec.projectId.trim() ? (rec.projectId as ProjectId) : null
     if (!projectId || usedProjects.has(projectId)) continue
     let alias = typeof rec.alias === "string" ? rec.alias.trim().toLowerCase() : ""
     if (!isWebsitePipelineAlias(alias) || usedAliases.has(alias)) {
@@ -61,24 +91,26 @@ export function normalizeWebsitePipelineBindings(raw: unknown): WebsitePipelineB
     }
     usedAliases.add(alias)
     usedProjects.add(projectId)
-    out.push({ alias: alias as website_pipeline_alias, projectId })
+    const functionId = typeof rec.functionId === "string" && rec.functionId.trim() ? rec.functionId.trim() : undefined
+    out.push({
+      alias: alias as website_pipeline_alias,
+      projectId,
+      ...(functionId ? { functionId: functionId as WebsitePipelineBinding["functionId"] } : {}),
+    })
   }
   return out
 }
 
 export function resolveWebsitePipelineBindings(
-  primaryProjectId: ProjectId,
+  _primaryProjectId: ProjectId | "" | null | undefined,
   bindings: WebsitePipelineBinding[],
 ): WebsitePipelineBinding[] {
-  const listed = listedWebsitePipelineBindings(bindings)
-  if (listed.length === 0) {
-    return [{ alias: DEFAULT_WEBSITE_PIPELINE_ALIAS, projectId: primaryProjectId }]
-  }
-  if (listed.some((b) => b.projectId === primaryProjectId)) return listed
-  return [
-    { alias: DEFAULT_WEBSITE_PIPELINE_ALIAS, projectId: primaryProjectId },
-    ...listed.filter((b) => b.alias !== DEFAULT_WEBSITE_PIPELINE_ALIAS),
-  ]
+  // AI : empty stays empty — a page-only site has no host pipeline (#18).
+  return listedWebsitePipelineBindings(bindings)
+}
+
+export function websiteHasRunnableBackend(bindings: WebsitePipelineBinding[]): boolean {
+  return listedWebsitePipelineBindings(bindings).length > 0
 }
 
 // AI : stored attachments only — empty means a Lovable-style page with no pipeline backend.
@@ -87,7 +119,7 @@ export function listedWebsitePipelineBindings(bindings: WebsitePipelineBinding[]
 }
 
 export function websiteBoundProjectIds(
-  _primaryProjectId: ProjectId,
+  _primaryProjectId: ProjectId | null | "",
   bindings: WebsitePipelineBinding[],
 ): ProjectId[] {
   return [...new Set(listedWebsitePipelineBindings(bindings).map((b) => b.projectId))]

@@ -11,6 +11,9 @@ import {
   normalizeWebsitePipelineBindings,
   resolveWebsitePipelineBindings,
   stripWebsitePipelineFromCode,
+  nullableProjectId,
+  pageOnlyProjectStub,
+  remapWebsiteProjectId,
   websiteBoundProjectIds,
 } from "@/lib/website-pipelines"
 import type { ProjectId } from "@/lib/types"
@@ -19,10 +22,28 @@ const P1 = "p1" as ProjectId
 const P2 = "p2" as ProjectId
 
 describe("website pipeline bindings", () => {
-  it("treats stored empty bindings as no pipelines; viewer still defaults to primary", () => {
+  it("treats empty and blank project ids as page-only", () => {
+    expect(nullableProjectId("")).toBeNull()
+    expect(nullableProjectId("   ")).toBeNull()
+    expect(nullableProjectId(null)).toBeNull()
+    expect(nullableProjectId(P1)).toBe(P1)
+    expect(pageOnlyProjectStub("Acme").modules).toEqual([])
+    expect(pageOnlyProjectStub("Acme").kind).toBe("page")
+  })
+
+  it("remaps bound project ids onto a cloned pipeline", () => {
+    const options = normalizeHostedSiteOptions({
+      pipelineBindings: [{ alias: "run", projectId: P1, functionId: "fn_double" }],
+    })
+    const next = remapWebsiteProjectId(options, P1, P2)
+    expect(next.pipelineBindings).toEqual([{ alias: "run", projectId: P2, functionId: "fn_double" }])
+    expect(remapWebsiteProjectId(options, null, P2).pipelineBindings[0]?.projectId).toBe(P1)
+  })
+
+  it("treats stored empty bindings as no pipelines at runtime", () => {
     expect(listedWebsitePipelineBindings([])).toEqual([])
     expect(websiteBoundProjectIds(P1, [])).toEqual([])
-    expect(resolveWebsitePipelineBindings(P1, [])).toEqual([{ alias: "run", projectId: P1 }])
+    expect(resolveWebsitePipelineBindings(P1, [])).toEqual([])
   })
 
   it("mints landing HTML when no pipelines are selected", () => {

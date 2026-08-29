@@ -970,7 +970,9 @@ export function buildProjectFunctionsPromptBlock(): string {
 - To ADD another pipeline and keep the current one: set targetFunctionName to a new short name (e.g. "Summarize") and modules to that function's FULL step list. modulePatch MUST be null. Never overwrite the unnamed / active function when the user asked for a second or another function.
 - To EDIT an existing named function: set targetFunctionName to that exact name. Prefer a FULL modules replacement when it is not the active function (modulePatch indexes are for the target function's steps).
 - To edit only the currently active function: set targetFunctionName to null (or that function's name) and change modules/modulePatch as usual.
-- Set targetFunctionName to null when you are not adding or retargeting a function.`;
+- Set targetFunctionName to null when you are not adding or retargeting a function.
+- SQL is the shared structure layer: a model name becomes the table (Todo → todo). Do not invent a second database. Add/complete/delete are SEPARATE functions over the same table, not one if/else mega-DAG.
+- Hosted buttons bind functionId on siteOptions.actions (e.g. AddTodo → {{action:add}}). Tell the user the function name so the page can bind it.`;
 }
 
 export function buildProjectAssistantSystemPrompt(globalModel: ModelId, projectName: string): string {

@@ -31,12 +31,15 @@ export function ExampleTemplateGrid({
   busyId,
   onClone,
   cloneLabel = "Clone",
+  hostedOnly = false,
 }: {
   busyId: string | null
   onClone: (templateId: ProjectId) => void
   cloneLabel?: string
+  hostedOnly?: boolean
 }) {
   const { templates, loading } = useProjectTemplates()
+  const shown = hostedOnly ? templates.filter((t) => t.hasHostedSite) : templates
 
   if (loading && templates.length === 0) {
     return <p className="font-mono text-[11px] text-muted-foreground">Loading templates…</p>
@@ -44,7 +47,7 @@ export function ExampleTemplateGrid({
 
   return (
     <ul className="flex flex-col gap-3">
-      {templates.map((t) => (
+      {shown.map((t) => (
         <li
           key={t.id}
           className="flex flex-wrap items-center gap-3 rounded-lg border border-border bg-card p-4"

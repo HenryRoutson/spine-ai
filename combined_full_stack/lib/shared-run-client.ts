@@ -30,10 +30,16 @@ function withEmbedSession(
   return { ...(headers ?? {}), [EMBED_SESSION_HEADER]: embedSessionToken }
 }
 
-export async function fetchSharedLink(id: string, alias?: string): Promise<SharedLinkPublicView> {
-  const url = alias
-    ? `${API_ROUTES.sharedLink(id)}?alias=${encodeURIComponent(alias)}`
-    : API_ROUTES.sharedLink(id)
+export async function fetchSharedLink(
+  id: string,
+  alias?: string,
+  functionId?: string,
+): Promise<SharedLinkPublicView> {
+  const params = new URLSearchParams()
+  if (alias) params.set("alias", alias)
+  if (functionId) params.set("functionId", functionId)
+  const q = params.toString()
+  const url = q ? `${API_ROUTES.sharedLink(id)}?${q}` : API_ROUTES.sharedLink(id)
   const res = await fetch(url, FETCH_NO_STORE)
   const body = await parseFetchJson<{ link: SharedLinkPublicView; error?: string }>(
     res,
@@ -66,11 +72,12 @@ export async function startSharedRun(
   viewerName?: string,
   embedSessionToken?: string,
   pipelineAlias?: string,
+  functionId?: string,
 ): Promise<{ jobId: RunJobId; progressToken: string }> {
   const res = await fetch(API_ROUTES.sharedLinkRun(linkId), {
     method: "POST",
     headers: withEmbedSession(JSON_HEADERS, embedSessionToken),
-    body: JSON.stringify({ inputDocsByModule, viewerName, pipelineAlias }),
+    body: JSON.stringify({ inputDocsByModule, viewerName, pipelineAlias, functionId }),
   })
   return parseFetchJson<{ jobId: RunJobId; progressToken: string }>(res, "start shared run")
 }

@@ -9,22 +9,28 @@ import { API_ROUTES } from "@/lib/api-routes"
 import { apiJson, JSON_HEADERS } from "@/lib/api-client"
 import { copyTextToClipboard } from "@/lib/clipboard"
 import { formatCents } from "@/lib/format"
-import type { MarketplaceListingRecord } from "@/lib/marketplace-types"
+import type { MarketplaceListingKind, MarketplaceListingRecord } from "@/lib/marketplace-types"
+import type { HostedSiteOptions } from "@/lib/shared-link-types"
 import type { Project } from "@/lib/types"
 import { COPY_FEEDBACK_MS } from "@/lib/ui-timing"
 
 export function MarketplacePublishForm({
   project,
+  kind = "pipeline",
+  siteOptions,
   onCreated,
 }: {
-  project: Project
+  project?: Project | null
+  kind?: MarketplaceListingKind
+  siteOptions?: HostedSiteOptions
   onCreated?: () => void
 }) {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [listing, setListing] = useState<MarketplaceListingRecord | null>(null)
   const [copied, setCopied] = useState(false)
-  const [title, setTitle] = useState(project.name)
+  const defaultTitle = siteOptions?.brand.companyName.trim() || project?.name || ""
+  const [title, setTitle] = useState(defaultTitle)
   const [description, setDescription] = useState("")
   const [priced, setPriced] = useState(false)
   const [priceUsd, setPriceUsd] = useState("5.00")
@@ -47,8 +53,10 @@ export function MarketplacePublishForm({
         method: "POST",
         headers: JSON_HEADERS,
         body: JSON.stringify({
-          projectId: project.id,
-          title: title.trim() || project.name,
+          ...(project ? { projectId: project.id } : {}),
+          kind,
+          ...(kind === "website" && siteOptions ? { siteOptions } : {}),
+          title: title.trim() || defaultTitle,
           description: description.trim(),
           priceCents,
         }),
@@ -74,8 +82,9 @@ export function MarketplacePublishForm({
       <div>
         <h3 className="text-sm font-semibold">Share to marketplace</h3>
         <p className="mt-0.5 text-xs text-muted-foreground">
-          Publish a snapshot others can copy into their workspace — like an example template. Their
-          edits won&apos;t affect yours.
+          {kind === "website"
+            ? "Publish this hosted page (and any bound functions) so others can copy it into their workspace."
+            : "Publish a snapshot others can copy into their workspace — like an example template. Their edits won't affect yours."}
         </p>
       </div>
 
@@ -97,7 +106,7 @@ export function MarketplacePublishForm({
           rows={3}
           maxLength={2000}
           className="w-full resize-y rounded-md border border-border bg-background px-2 py-1.5 text-xs"
-          placeholder="What this pipeline does…"
+          placeholder={kind === "website" ? "What this website does…" : "What this pipeline does…"}
         />
       </div>
 
@@ -144,11 +153,12 @@ export function MarketplacePublishForm({
             ) : null}
           </div>
           <p className="text-[10px] text-muted-foreground">
-            Browse and copy listings from Projects → Marketplace. Their edits won&apos;t affect yours.
+            Browse and copy listings from {kind === "website" ? "Websites" : "Projects"} → Marketplace.
+            Their edits won&apos;t affect yours.
           </p>
         </div>
       ) : (
-        <Button className="w-full gap-2" onClick={() => void publish()} disabled={busy || !title.trim()} spineId="share.marketplace-publish">
+        <Button className="w-full gap-2" onClick={() => void publish()} disabled={busy || !title.trim() || (kind === "pipeline" && !project)} spineId="share.marketplace-publish">
           {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Store className="h-4 w-4" />}
           Share to marketplace
         </Button>

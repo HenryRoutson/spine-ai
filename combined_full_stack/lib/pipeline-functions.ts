@@ -44,10 +44,9 @@ function withLiveModules(project: Project, fns: PipelineFunction[]): PipelineFun
   return fns.map((fn) => (fn.id === activeId ? { ...fn, modules: project.modules } : fn))
 }
 
-export function functionsOnProject(project: Project): PipelineFunction[] {
-  if (project.functions && project.functions.length > 0) {
-    return withLiveModules(project, project.functions)
-  }
+// AI : engine / hosted / SQL — stored functions[].modules only (no live-spine overlay).
+export function storedFunctionsOnProject(project: Project): PipelineFunction[] {
+  if (project.functions && project.functions.length > 0) return project.functions
   return [
     {
       id: DEFAULT_FUNCTION_ID,
@@ -55,6 +54,13 @@ export function functionsOnProject(project: Project): PipelineFunction[] {
       modules: project.modules,
     },
   ]
+}
+
+export function functionsOnProject(project: Project): PipelineFunction[] {
+  if (project.functions && project.functions.length > 0) {
+    return withLiveModules(project, project.functions)
+  }
+  return storedFunctionsOnProject(project)
 }
 
 export function activeFunctionId(project: Project): pipeline_function_id {
@@ -111,8 +117,12 @@ export function ensureNamedFunction(project: Project, name: string): Partial<Pro
 }
 
 export function projectForFunction(project: Project, functionId?: string | null): Project | null {
-  const fns = functionsOnProject(project)
-  const wanted = (functionId as pipeline_function_id | undefined) ?? DEFAULT_FUNCTION_ID
+  const fns = storedFunctionsOnProject(project)
+  const trimmed = functionId?.trim()
+  const wanted =
+    (trimmed ? (trimmed as pipeline_function_id) : undefined) ??
+    project.activeFunctionId ??
+    fns[0]?.id
   const fn = fns.find((row) => row.id === wanted)
   if (!fn) return null
   return {
