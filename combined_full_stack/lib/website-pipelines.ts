@@ -162,12 +162,20 @@ function stripReactRunWidget(source: string, alias: string): string {
 }
 
 function insertReactRunWidget(source: string, alias: string): string {
-  if (source.includes(`alias="${alias}"`) || source.includes(`alias='${alias}'`) || source.includes(`alias: "${alias}"`)) {
-    return source
+  let next = source
+  if (
+    alias === DEFAULT_WEBSITE_PIPELINE_ALIAS &&
+    !next.includes('slot: "docs"') &&
+    next.includes("] as const")
+  ) {
+    next = next.replace("] as const", `  { kind: "slot", slot: "docs" },\n] as const`)
+  }
+  if (next.includes(`alias="${alias}"`) || next.includes(`alias='${alias}'`) || next.includes(`alias: "${alias}"`)) {
+    return next
   }
   const row = `  { kind: "run", alias: ${JSON.stringify(alias)} },\n`
-  if (source.includes("] as const")) return source.replace("] as const", `${row}] as const`)
-  return source.replace(
+  if (next.includes("] as const")) return next.replace("] as const", `${row}] as const`)
+  return next.replace(
     /(<RunPipeline\s+alias=["'][^"']+["']\s*\/>)/,
     `$1\n      <RunPipeline alias=${JSON.stringify(alias)} />`,
   )

@@ -89,6 +89,11 @@ export type HostedSiteRunRowSegment = {
 
 export type HostedSiteRenderSegment = HostedSiteHtmlSegment | HostedSiteActionRowSegment | HostedSiteRunRowSegment
 
+export function hostedSlotTokensIn(html: string): string[] {
+  SLOT_SPLIT_RE.lastIndex = 0
+  return [...html.matchAll(SLOT_SPLIT_RE)].map((m) => m[1] ?? m[0]).filter((t) => t.startsWith("{{"))
+}
+
 export function splitHostedSiteSlots(html: string): HostedSiteHtmlSegment[] {
   const parts = html.split(SLOT_SPLIT_RE)
   const segments: HostedSiteHtmlSegment[] = []

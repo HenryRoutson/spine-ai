@@ -25,6 +25,17 @@ describe("hosted site click-to-edit", () => {
     expect(next).not.toContain("{{tagline}}")
     expect(next).not.toContain("data-hs-id")
   })
+
+  it("preserves {{docs}} when click-to-edit would wipe a container that holds slots", () => {
+    const html = `<section class="hs-run"><div class="hs-workspace-head"><h2>Run</h2></div>\n{{docs}}\n{{run}}\n</section>`
+    const stamped = stampHostedSiteHsIds(html)
+    const section = /data-hs-id="(\d+)"/.exec(stamped)
+    expect(section?.[1]).toBeTruthy()
+    const next = patchHostedSiteHtmlText(html, section![1]!, "wiped")
+    expect(next).toContain("{{docs}}")
+    expect(next).toContain("{{run}}")
+    expect(next).not.toContain("wiped")
+  })
 })
 
 describe("hosted site extra slots", () => {

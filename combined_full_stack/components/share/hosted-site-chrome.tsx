@@ -14,11 +14,13 @@ import {
   groupHostedActionSlots,
   hostedSiteHasPrimarySlot,
   hostedSitePrimarySlot,
+  hostedSlotTokensIn,
   type hosted_site_widget_slot,
 } from "@/lib/hosted-site-slots"
 import {
   HS_PREVIEW_MESSAGE_SOURCE,
   cssPathFromElement,
+  hostedElementInnerHtml,
   postHsPreviewMessage,
   previewHtmlRoot,
   snippetFromElement,
@@ -60,6 +62,7 @@ export function HostedSiteChrome({
   const company = options.brand.companyName.trim() || "Your company"
   const primary = hostedSitePrimarySlot(surface)
   const hasPrimary = hostedSiteHasPrimarySlot(compiled.segments, surface)
+  const editSource = pageHtml != null ? pageHtml : surface === "signin" ? options.authHtml : options.customHtml
 
   function slotNode(slot: hosted_site_widget_slot, alias?: string): ReactNode {
     if (slot === "run") {
@@ -113,6 +116,8 @@ export function HostedSiteChrome({
     e.preventDefault()
     const hsId = tagged.getAttribute("data-hs-id")
     if (!hsId) return
+    const inner = hostedElementInnerHtml(editSource, hsId)
+    if (inner && hostedSlotTokensIn(inner).length) return
     const htmlRoot = previewHtmlRoot(tagged)
     const cssPath = (htmlRoot ? cssPathFromElement(tagged, htmlRoot) : tagged.tagName.toLowerCase()) as hs_preview_css_path
     e.currentTarget.querySelectorAll("[data-hs-selected]").forEach((n) => n.removeAttribute("data-hs-selected"))

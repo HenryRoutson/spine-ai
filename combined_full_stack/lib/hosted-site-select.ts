@@ -1,5 +1,5 @@
 import { escapeHtml } from "@/lib/standalone-html"
-import { HOSTED_SITE_IGNORED_SLOT_SELECTOR } from "@/lib/hosted-site-slots"
+import { HOSTED_SITE_IGNORED_SLOT_SELECTOR, hostedSlotTokensIn } from "@/lib/hosted-site-slots"
 
 export const HS_PREVIEW_MESSAGE_SOURCE = "spine-hosted-site"
 
@@ -45,6 +45,20 @@ export function stripHostedSiteHsIds(html: string): string {
   return html.replace(/\sdata-hs-id="[^"]*"/g, "")
 }
 
+export function hostedElementInnerHtml(sourceHtml: string, hsId: string): string | null {
+  const stamped = stampHostedSiteHsIds(sourceHtml)
+  const openRe = new RegExp(`<([a-zA-Z][a-zA-Z0-9]*)([^>]*\\sdata-hs-id="${hsId}"[^>]*)>`)
+  const m = openRe.exec(stamped)
+  if (!m || m.index == null) return null
+  const tag = m[1]
+  if (!tag) return null
+  const innerStart = m.index + m[0].length
+  const close = `</${tag}>`
+  const innerEnd = stamped.indexOf(close, innerStart)
+  if (innerEnd < 0) return null
+  return stamped.slice(innerStart, innerEnd)
+}
+
 export function patchHostedSiteHtmlText(sourceHtml: string, hsId: string, newText: string): string {
   const stamped = stampHostedSiteHsIds(sourceHtml)
   const openRe = new RegExp(`<([a-zA-Z][a-zA-Z0-9]*)([^>]*\\sdata-hs-id="${hsId}"[^>]*)>`)
@@ -56,6 +70,9 @@ export function patchHostedSiteHtmlText(sourceHtml: string, hsId: string, newTex
   const close = `</${tag}>`
   const innerEnd = stamped.indexOf(close, innerStart)
   if (innerEnd < 0) return sourceHtml
+  const originalInner = stamped.slice(innerStart, innerEnd)
+  // AI : click-to-edit uses textContent; slot tokens were already split out of the preview DOM.
+  if (hostedSlotTokensIn(originalInner).length) return sourceHtml
   const patched = `${stamped.slice(0, innerStart)}${escapeHtml(newText)}${stamped.slice(innerEnd)}`
   return stripHostedSiteHsIds(patched)
 }
