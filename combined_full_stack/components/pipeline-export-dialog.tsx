@@ -23,6 +23,8 @@ type ExportTabId =
   | "rust"
   | "go"
   | "baml"
+  | "windmill"
+  | "json-schema"
   | "proto"
   | "ui"
   | "hosted-html"
@@ -59,6 +61,8 @@ function projectSlug(name: string): string {
 
 const TAB_ORDER: ExportTabId[] = [
   "typescript",
+  "windmill",
+  "json-schema",
   "python",
   "rust",
   "go",
@@ -85,6 +89,8 @@ function setupFileTabMeta(filename: string): { id: ExportTabId; label: string; l
   if (filename.endsWith("_pipeline.rs")) return { id: "rust", label: "Rust", language: "rust" }
   if (filename.endsWith("_pipeline.go")) return { id: "go", label: "Go", language: "go" }
   if (filename.endsWith("_pipeline.baml")) return { id: "baml", label: "BAML", language: "baml" }
+  if (filename.endsWith("_flow.json")) return { id: "windmill", label: "Windmill OpenFlow", language: "json" }
+  if (filename.endsWith("_schema.json")) return { id: "json-schema", label: "JSON Schema", language: "json" }
   switch (filename) {
     case ".env.example":
       return { id: "env", label: ".env.example", language: "plaintext" }

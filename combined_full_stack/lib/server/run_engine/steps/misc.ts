@@ -12,6 +12,7 @@ import { stepEmitsList } from "../../type_expr";
 import { materializeHints, materializeStepOutput, modelById, prevModuleFor, sourceDocumentBlock } from "../helpers";
 import { requireLinearInput } from "../context";
 import { buildAssertResult, jsonStringifyStepValue } from "../results";
+import { runCustomCodeOnWindmill, shouldRunOnWindmill } from "@/lib/windmill/execute";
 import type { ExecResult, RunCtx, RunLogger } from "../engine_types";
 
 // AI : Combine = side doc ⊕ byModel[structureIn]. Multi-LLM zip: Assemble; concurrent LLM join: Parallel.
@@ -53,6 +54,40 @@ export async function execCombineStep(m: PipelineModule, ctx: RunCtx, _log: RunL
   };
 }
 
+async function execAuthoredCodeOnWindmillOrClient(
+  m: PipelineModule,
+  ctx: RunCtx,
+  log: RunLogger,
+  kind: "custom-code" | "transform",
+): Promise<ExecResult> {
+  const { project } = ctx;
+  const input = (ctx.prevModuleId && ctx.outputs.get(ctx.prevModuleId)) ?? null;
+  const entries = customCodeEntriesForModule(m);
+  if (shouldRunOnWindmill(project)) {
+    log.info(`${kind} — Windmill worker`, {
+      moduleId: m.id,
+      primaryLanguage: entries[0]!.language,
+      attempts: entries.length,
+    });
+    const raw = await runCustomCodeOnWindmill(m, input, ctx.byLabel);
+    const out = modelById(project.models, m.outStructureId);
+    const prev = prevModuleFor(project.modules, ctx.prevModuleId);
+    const value = out ? materializeStepOutput(m, project, raw, materializeHints(m, ctx), prev) : raw;
+    return {
+      value,
+      preview: `windmill ${entries[0]!.language} → ${out?.name ?? "json"}`,
+      json: jsonStringifyStepValue(value),
+    };
+  }
+  log.info(`${kind} — deferring to browser`, {
+    moduleId: m.id,
+    primaryLanguage: entries[0]!.language,
+    attempts: entries.length,
+    fallbacks: Math.max(0, entries.length - 1),
+  });
+  throw new ClientStepPendingError(entries, input, ctx.byLabel);
+}
+
 export async function execTransformStep(m: PipelineModule, ctx: RunCtx, log: RunLogger): Promise<ExecResult> {
   const { project } = ctx;
   invariant(ctx.prevModuleId, `transform step ${m.id} has no previous module`);
@@ -60,14 +95,8 @@ export async function execTransformStep(m: PipelineModule, ctx: RunCtx, log: Run
   const out = modelById(project.models, m.outStructureId);
   let value: unknown = input;
 
-  if (m.code) {
-    const entries = customCodeEntriesForModule(m);
-    log.info(`transform code — deferring to browser`, {
-      moduleId: m.id,
-      attempts: entries.length,
-      fallbacks: Math.max(0, entries.length - 1),
-    });
-    throw new ClientStepPendingError(entries, input, ctx.byLabel);
+  if (m.code?.trim()) {
+    return execAuthoredCodeOnWindmillOrClient(m, ctx, log, "transform");
   } else if (out && !stepEmitsList(m) && Array.isArray(input)) {
     if (input.length === 1 && m.inStructureId === m.outStructureId) {
       value = input[0];
@@ -106,13 +135,7 @@ export async function execCustomCodeStep(m: PipelineModule, ctx: RunCtx, log: Ru
     log.warn(`custom-code passthrough (no code)`, { moduleId: m.id });
     return { value: input, preview: "custom step passthrough (no code set)", json: JSON.stringify(input, null, 2) };
   }
-  log.info(`custom-code — deferring to browser`, {
-    moduleId: m.id,
-    primaryLanguage: entries[0]!.language,
-    attempts: entries.length,
-    fallbacks: Math.max(0, entries.length - 1),
-  });
-  throw new ClientStepPendingError(entries, input, ctx.byLabel);
+  return execAuthoredCodeOnWindmillOrClient(m, ctx, log, "custom-code");
 }
 
 export async function execQuoteStep(m: PipelineModule, ctx: RunCtx, log: RunLogger): Promise<ExecResult> {

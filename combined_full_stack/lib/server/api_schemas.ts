@@ -531,6 +531,7 @@ export const projectPatchSchema = z
     llmProviders: z.array(jsonSizeBounded(100_000)).max(20).optional(),
     documentation: z.string().max(MAX_ASSISTANT_MESSAGE_CHARS).optional(),
     langfuseExport: z.boolean().optional(),
+    windmillExecute: z.boolean().optional(),
     // AI : TODO (media-view-C-store) — visualizers[] on project patch (html + inType); not a document upload.
   })
   .strict();
