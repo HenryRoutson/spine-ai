@@ -122,7 +122,8 @@ export function PipelineCanvas({
     : false
 
   const wide = pipelineHasFork(modules)
-  const [view, setView] = useState<"lanes" | "graph">(editMode ? "lanes" : "graph")
+  // AI : React Flow DAG is the default visualization; Lanes stays as insert-slot authoring.
+  const [view, setView] = useState<"lanes" | "graph">("graph")
   const showGraph = view === "graph"
 
   return (
@@ -143,7 +144,7 @@ export function PipelineCanvas({
         <div className="flex w-full flex-col items-stretch gap-3">
           {editMode ? (
             <p className="text-center font-mono text-[10px] text-muted-foreground">
-              Same step cards as Lanes, laid out as a DAG. Run / Schedule / Share attach to Start — not graph nodes. For/while stays in custom-code or llm-batch.
+              React Flow DAG — pan and zoom. Switch to Lanes to insert into fork columns. Run / Schedule / Share attach to Start — not graph nodes. For/while stays in custom-code or llm-batch.
             </p>
           ) : null}
           <PipelineDagGraph
