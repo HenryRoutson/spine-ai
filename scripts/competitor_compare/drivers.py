@@ -95,7 +95,8 @@ def _base44_status(env: dict[str, str]) -> CredentialStatus:
 
 
 def _live_openrouter_key(env: dict[str, str]) -> str:
-    key = env_get(env, "OPENROUTER_API_KEY")
+    # AI : Cursor Cloud secret is often OPENROUTER_KEY; spine-cli still wants OPENROUTER_API_KEY.
+    key = env_get(env, "OPENROUTER_API_KEY", "OPENROUTER_KEY")
     if not key or "placeholder" in key or key.startswith("sk-or-local"):
         return ""
     return key
@@ -252,6 +253,7 @@ def _run_spine(prompt: str, wait_seconds: int, env: dict[str, str], project_name
     for key, value in env.items():
         if value:
             run_env[key] = value
+    run_env["OPENROUTER_API_KEY"] = _live_openrouter_key(env)
     timeout = max(90, wait_seconds + 30)
 
     def spine(*args: str) -> JsonDict:

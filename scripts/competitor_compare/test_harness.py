@@ -2,9 +2,11 @@
 from __future__ import annotations
 
 import json
+import os
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 from competitor_compare.cli import main
 from competitor_compare.drivers import credential_status, run_platform
@@ -126,6 +128,12 @@ class CredentialTests(unittest.TestCase):
         self.assertNotIn("lov_abcdefghij", joined)
         self.assertIn("lov_", joined)
 
+    def test_spine_accepts_openrouter_key_alias(self) -> None:
+        rows = credential_status(env={"OPENROUTER_KEY": "sk-or-v1-abcdefghij"})
+        spine = next(r for r in rows if r.platform == "spine")
+        self.assertTrue(spine.ready)
+        self.assertIn("OPENROUTER_API_KEY", spine.hint)
+
     def test_dry_run_does_not_need_credentials(self) -> None:
         result = run_platform("lovable", "hello", wait_seconds=1, env={}, dry_run=True)
         self.assertTrue(result.ok)
@@ -198,8 +206,21 @@ class CliSmokeTests(unittest.TestCase):
     def test_record_without_credentials_skips(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             out = Path(tmp) / "run"
-            # AI : empty env still reads repo .env — skip path is what we want when keys are absent.
-            code = main(["record", "--prompt", "hello", "--out", str(out), "--wait", "1", "--sequential"])
+            # AI : drop live Cloud secrets so this asserts skip, not a real MCP call.
+            cleaned = {
+                k: v
+                for k, v in os.environ.items()
+                if k
+                not in {
+                    "BASE44_API_KEY",
+                    "OPENROUTER_API_KEY",
+                    "OPENROUTER_KEY",
+                    "LOVABLE_API_KEY",
+                    "REPLIT_MCP_ACCESS_TOKEN",
+                }
+            }
+            with patch.dict(os.environ, cleaned, clear=True):
+                code = main(["record", "--prompt", "hello", "--out", str(out), "--wait", "1", "--sequential"])
             self.assertEqual(code, 0)
             manifest = json.loads((out / "manifest.json").read_text(encoding="utf-8"))
             self.assertEqual(len(manifest["results"]), 3)
