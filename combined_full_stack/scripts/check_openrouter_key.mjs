@@ -8,9 +8,16 @@ const appRoot = join(dirname(fileURLToPath(import.meta.url)), "..");
 config({ path: join(appRoot, ".env.local") });
 config({ path: join(appRoot, "../.env") });
 
-const key = process.env.OPENROUTER_API_KEY?.trim();
-if (!key) {
-  console.error("OPENROUTER_API_KEY missing — set a regular inference key in the repo root .env");
+function isPlaceholder(key) {
+  const k = (key ?? "").trim().toLowerCase();
+  return !k || k.includes("placeholder") || k.startsWith("sk-or-local") || k === "seed";
+}
+
+const api = process.env.OPENROUTER_API_KEY?.trim() ?? "";
+const alt = process.env.OPENROUTER_KEY?.trim() ?? "";
+const key = (!isPlaceholder(api) && api) || (!isPlaceholder(alt) && alt) || api || alt;
+if (!key || isPlaceholder(key)) {
+  console.error("OPENROUTER_API_KEY missing — set OPENROUTER_API_KEY or OPENROUTER_KEY");
   process.exit(1);
 }
 
