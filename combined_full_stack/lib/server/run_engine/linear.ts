@@ -2,8 +2,14 @@ import { invariant } from "@/lib/assert";
 import { isLlmKind, stepNeverCaches, usesPassthroughStructure } from "@/lib/module-kinds";
 import { compactPreview } from "@/lib/text-preview";
 import { labelAsStateKey } from "../pipeline_state";
-import { forkBranchesOf, isIfElseKind } from "@/lib/fork-pipeline";
-import { evalIfCondition, ifElseBranch, ifThenBranch } from "@/lib/if-else-pipeline";
+import { forkBranchesOf } from "@/lib/fork-pipeline";
+import {
+  exclusiveContinues,
+  isExclusiveKind,
+  pickExclusiveBranch,
+  appendSkippedExclusiveArms,
+  appendSkippedSpineAfter,
+} from "@/lib/exclusive-control";
 import { inputTypeLabel } from "../../inference-input";
 import { serializeCtx, resolveStepInputForCheck, requireLinearInput } from "./context";
 import { assertInputMatchesDescription, InputDescriptionRejectedError, shouldCheckInputDescription } from "../input_description_check";
@@ -157,11 +163,10 @@ export async function runLinearStepsFrom(
             );
             ctx.prevModuleId = forkPrev;
           }
-          if (isIfElseKind(m.kind)) {
+          if (isExclusiveKind(m.kind)) {
             const forkPrev = ctx.prevModuleId;
             const inputData = requireLinearInput(m, ctx);
-            const takeThen = evalIfCondition(m.ifCondition, inputData);
-            const branch = takeThen ? ifThenBranch(m) : ifElseBranch(m);
+            const branch = pickExclusiveBranch(m, inputData);
             if (branch?.modules.length) {
               const laneStatus = await runLinearStepsFrom(
                 {
@@ -173,8 +178,9 @@ export async function runLinearStepsFrom(
                 },
                 0,
               );
-              if (laneStatus === "error") throw new Error(`if/else lane "${branch.label}" failed`);
+              if (laneStatus === "error") throw new Error(`exclusive lane "${branch.label}" failed`);
             }
+            appendSkippedExclusiveArms(steps, m, branch);
             ctx.prevModuleId = forkPrev;
           }
           if (cached) {
@@ -246,6 +252,8 @@ export async function runLinearStepsFrom(
             }
           }
         } catch (err) {
+          // AI : nested exclusive/fork client-code already wrapped this — don't pin it on the parent split.
+          if (err instanceof PipelinePausedError) throw err;
           if (err instanceof ClientStepPendingError) {
             const primary = err.entries[0];
             const golden = runGolden();
@@ -449,6 +457,10 @@ export async function runLinearStepsFrom(
     if (status === "error") {
       log.warn(`pipeline aborted after error`, { failedModule: m.id, stepsCompleted: steps.length });
       return "error";
+    }
+    if (isExclusiveKind(m.kind) && !exclusiveContinues(modules, i)) {
+      appendSkippedSpineAfter(steps, modules, i);
+      return "ok";
     }
     if (isSqlModuleKind(m.kind)) await pauseForHostedAnimation(m);
   }

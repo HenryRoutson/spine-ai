@@ -45,13 +45,14 @@ const STATUS_COLOR: Record<string, string> = {
   error: "#dc2626",
   running: "#f59e0b",
   pending: "#475569",
+  skipped: "#94a3b8",
 };
 
 // AI : a row in the high-level progress view; "running"/"pending" only appear in live views.
 export interface LiveStep {
   label: string;
   kind: string;
-  status: "pending" | "running" | "ok" | "cached" | "error";
+  status: "pending" | "running" | "ok" | "cached" | "error" | "skipped";
   ms: number;
   costCents: number;
   detail?: string[]; // e.g. in/out previews shown under the bar
@@ -65,8 +66,8 @@ export function progressHtml(title: string, subtitle: string, steps: LiveStep[],
   const rows = steps
     .map((s) => {
       const color = STATUS_COLOR[s.status] ?? "#64748b";
-      const pct = s.status === "running" ? 100 : s.status === "pending" ? 0 : Math.max(4, Math.round((s.ms / maxMs) * 100));
-      const meta = s.status === "pending" ? "·" : s.status === "running" ? "running…" : `${s.ms}ms · ${s.costCents.toFixed(2)}c · ${s.status}`;
+      const pct = s.status === "running" ? 100 : s.status === "pending" || s.status === "skipped" ? 0 : Math.max(4, Math.round((s.ms / maxMs) * 100));
+      const meta = s.status === "pending" ? "·" : s.status === "running" ? "running…" : s.status === "skipped" ? "skipped" : `${s.ms}ms · ${s.costCents.toFixed(2)}c · ${s.status}`;
       const detail = (s.detail ?? [])
         .map((d) => {
           const sep = d.indexOf(": ");

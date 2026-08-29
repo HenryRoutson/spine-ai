@@ -4,6 +4,7 @@ import { getConnectAction } from "@/lib/connect-catalog"
 import { inputTypesAreAllJsonNative } from "@/lib/inference-input-core"
 import { USER_ADDABLE_MODULE_KINDS, asModuleKind, stepRequiresNote } from "@/lib/module-kinds"
 import { parseStructureHint, structureModelSpecSchema, typeAliasSpecSchema } from "./assistant-shared"
+import { ifConditionSchema } from "@/lib/if-condition"
 import { DocLabel, INPUT_TYPES, InputType, ModuleKind } from "./types"
 
 const MODULE_KINDS = USER_ADDABLE_MODULE_KINDS
@@ -83,20 +84,19 @@ export const moduleSpecSchema = z
       .array(
         z.object({
           label: z.string(),
+          match: z.string().optional().describe("case only — exact match; empty/_/*/default is the fallback arm"),
           modules: z.array(z.any()).max(50),
         }),
       )
       .min(1)
       .max(12)
       .optional()
-      .describe("fork / if-else — linear lanes; if-else is Then then Else (Else may be empty)"),
-    ifCondition: z
-      .discriminatedUnion("kind", [
-        z.object({ kind: z.literal("path"), path: z.string() }),
-        z.object({ kind: z.literal("equals"), path: z.string(), value: z.unknown() }),
-      ])
+      .describe("fork / if-else / case — linear lanes; if-else is Then then Else; case arms set match"),
+    ifCondition: ifConditionSchema
       .optional()
-      .describe("if-else only — bool spine path, or equals path + JSON value"),
+      .describe(
+        "if-else: bool spine path. case: scalar match path. Compute comparisons in custom-code / Python.",
+      ),
     n8nNodeType: z
       .string()
       .optional()
@@ -189,11 +189,14 @@ export const moduleSpecSchema = z
         })
       }
     }
-    if (spec.kind === ModuleKind.IfElse) {
+    if (spec.kind === ModuleKind.IfElse || spec.kind === ModuleKind.Case) {
       if (!spec.ifCondition?.path?.trim()) {
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
-          message: "if-else requires ifCondition.path on the spine",
+          message:
+            spec.kind === ModuleKind.Case
+              ? "case requires ifCondition.path on the spine"
+              : "if-else requires ifCondition.path on the spine",
           path: ["ifCondition"],
         })
       }
@@ -230,12 +233,7 @@ export const modulePatchEntrySchema = z.object({
   model: z.string().optional(),
   inputMinCount: z.number().int().min(1).optional(),
   assembleBindings: assembleBindingsSchema.optional(),
-  ifCondition: z
-    .discriminatedUnion("kind", [
-      z.object({ kind: z.literal("path"), path: z.string() }),
-      z.object({ kind: z.literal("equals"), path: z.string(), value: z.unknown() }),
-    ])
-    .optional(),
+  ifCondition: ifConditionSchema.optional(),
   n8nNodeType: z.string().optional(),
   n8nParameters: z.record(z.string(), z.unknown()).optional(),
   connectActionId: z.string().optional(),

@@ -1,6 +1,10 @@
+import { resolve } from "node:path"
 import { describe, expect, it } from "vitest"
 import { computeInvalid } from "@/lib/validity"
 import { flattenPipelineModules, isNestedLaneKind, deriveIfElseStepTypes } from "@/lib/fork-pipeline"
+import { loadProjectSeed, SEEDS_DIR } from "@/lib/server/seed"
+import { formatModuleSpineOut } from "@/lib/spine-type"
+import { derivePipelineMermaid } from "@/lib/pipeline-mermaid"
 import {
   defaultIfElseBranches,
   evalIfCondition,
@@ -13,6 +17,7 @@ import { syncListOpsModules } from "@/lib/list-ops-steps"
 import { addPipelineStep } from "@/lib/cli/workspace_edits"
 import { createPipelineModule } from "@/lib/pipeline-module-factory"
 import { FieldType, IfConditionKind, ModuleKind, type ModuleId, type PipelineModule, type StructureModel, type StructureModelId } from "@/lib/types"
+import { ifConditionSchema } from "@/lib/if-condition"
 import { TypeExprKind, type TypeExpr } from "@/lib/server/type_expr"
 import { segmentPipeline } from "@/lib/pipeline-layout"
 
@@ -34,6 +39,7 @@ const routeModel: StructureModel = {
   fields: [
     { id: "f_ok", name: "is_legal", type: FieldType.Bool, optional: false, description: "" },
     { id: "f_kind", name: "kind", type: FieldType.Text, optional: false, description: "" },
+    { id: "f_score", name: "score", type: FieldType.Int, optional: false, description: "" },
   ],
 }
 
@@ -53,13 +59,15 @@ describe("if/else step", () => {
     expect(defaultIfElseBranches()).toHaveLength(2)
   })
 
-  it("evaluates bool path and equals", () => {
+  it("evaluates a bool spine path", () => {
     expect(evalIfCondition({ kind: IfConditionKind.Path, path: "is_legal" }, { is_legal: true })).toBe(true)
     expect(evalIfCondition({ kind: IfConditionKind.Path, path: "is_legal" }, { is_legal: false })).toBe(false)
-    expect(evalIfCondition({ kind: IfConditionKind.Equals, path: "kind", value: "legal" }, { kind: "legal" })).toBe(true)
-    expect(evalIfCondition({ kind: IfConditionKind.Equals, path: "kind", value: "legal" }, { kind: "billing" })).toBe(false)
     expect(formatIfCondition({ kind: IfConditionKind.Path, path: "is_legal" })).toBe("is_legal")
-    expect(formatIfCondition({ kind: IfConditionKind.Equals, path: "kind", value: "legal" })).toBe('kind === "legal"')
+  })
+
+  it("coerces legacy comparison kinds to a bool path in the persist schema", () => {
+    expect(ifConditionSchema.safeParse({ kind: "gt", path: "score", value: 80 }).success).toBe(true)
+    expect(ifConditionSchema.safeParse({ kind: "equals", path: "kind" }).data).toEqual({ kind: IfConditionKind.Path, path: "kind" })
   })
 
   it("joins the chosen lane or passthrough", () => {
@@ -173,6 +181,30 @@ describe("if/else step", () => {
     expect(msgs.join(" ")).not.toMatch(/Else/)
   })
 
+  it("type-checks the condition path as bool — comparisons belong in custom-code", () => {
+    const prev = step({
+      id: "in",
+      kind: ModuleKind.Input,
+      label: "In",
+      note: "input",
+      outStructureId: "m_route" as StructureModelId,
+      outType: { kind: TypeExprKind.Ref, modelId: "m_route" as StructureModelId },
+    })
+    const ok = createPipelineModule({ kind: ModuleKind.IfElse, note: "route" }, [routeModel], "deepseek-v4")
+    ok.id = "ife" as ModuleId
+    ok.ifCondition = { kind: IfConditionKind.Path, path: "is_legal" }
+    ok.forkBranches = [
+      { id: "t", label: "Then", modules: [step({ id: "t1", kind: ModuleKind.Output, label: "High", note: "", inStructureId: "m_route" as StructureModelId, outStructureId: "m_route" as StructureModelId })] },
+      { id: "e", label: "Else", modules: [] },
+    ]
+    const okMsgs = [...computeInvalid([prev, ok], [routeModel]).values()].flat().map((i) => ("structureMessage" in i ? i.structureMessage : i.kind))
+    expect(okMsgs.join(" ")).not.toMatch(/must be bool/)
+
+    const bad = { ...ok, ifCondition: { kind: IfConditionKind.Path, path: "score" } }
+    const badMsgs = [...computeInvalid([prev, bad], [routeModel]).values()].flat().map((i) => ("structureMessage" in i ? i.structureMessage : i.kind))
+    expect(badMsgs.join(" ")).toMatch(/must be bool/)
+  })
+
   it("syncs list-ops inside Then", () => {
     const chunk = step({ id: "t1", kind: ModuleKind.Chunk, label: "Split" })
     const inner = step({
@@ -218,5 +250,21 @@ describe("if/else step", () => {
       branchId: "Then",
     })
     expect(holder.modules.find((m) => m.kind === ModuleKind.IfElse)?.forkBranches?.[0]?.modules[0]?.label).toBe("LegalThen")
+  })
+
+  it("Urgent Ticket Route seed unions Then PagerAlert with Else QueueTicket", () => {
+    const { project } = loadProjectSeed(resolve(SEEDS_DIR, "urgent_ticket.json"))
+    const route = project.modules.find((m) => m.kind === ModuleKind.IfElse)
+    expect(route?.ifCondition).toEqual({ kind: IfConditionKind.Path, path: "urgent" })
+    expect(formatModuleSpineOut(route!, project.models)).toBe("PagerAlert | QueueTicket")
+    const thenOut = route?.forkBranches?.[0]?.modules[0]
+    const elseOut = route?.forkBranches?.[1]?.modules[0]
+    expect(formatModuleSpineOut(thenOut!, project.models)).toBe("PagerAlert")
+    expect(formatModuleSpineOut(elseOut!, project.models)).toBe("QueueTicket")
+    const chart = derivePipelineMermaid(project.modules, project.models)
+    expect(chart).toContain("Then")
+    expect(chart).toContain("Else")
+    expect(project.modules.some((m) => m.kind === ModuleKind.ControlJoin)).toBe(false)
+    expect([...computeInvalid(project.modules, project.models).values()].flat()).toHaveLength(0)
   })
 })

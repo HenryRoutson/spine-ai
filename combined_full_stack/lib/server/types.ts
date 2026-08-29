@@ -193,8 +193,12 @@ export enum ModuleKind {
   Parallel = "parallel",
   // AI : nested linear lanes + join (not Parallel LLM-only). See lib/server/fork-roadmap.ts.
   Fork = "fork",
-  // AI : exclusive Then/Else lanes — run one side from a typed bool path or field equals. Else may be empty (passthrough).
+  // AI : exclusive Then/Else lanes — run one side from a bool spine field. Else may be empty (passthrough).
   IfElse = "if-else",
+  // AI : exclusive N-way match on a spine field. Comparisons stay in custom-code; this is switch/case.
+  Case = "case",
+  // AI : optional join after if/case — without it exclusive paths are sinks and the spine stops.
+  ControlJoin = "control-join",
   Combine = "combine",
   Chunk = "chunk", // AI : split text / document into list chunks (generated TS)
   Merge = "merge", // AI : recursive structural merge — dict deep, list concat/union/dedupe, per-path rules
@@ -308,17 +312,16 @@ export type ForkBranch = {
   id: string;
   label: string;
   modules: PipelineModule[];
+  // AI : case arm — exact match on the discriminant. Empty / "_" / "*" / "default" is the default arm.
+  match?: string;
 };
 
-// AI : if-else condition — path must type-check as bool; equals compares a spine field to a JSON value.
+// AI : if-else condition — bool spine path only. Comparisons live in custom-code / Python.
 export enum IfConditionKind {
   Path = "path",
-  Equals = "equals",
 }
 
-export type IfCondition =
-  | { kind: IfConditionKind.Path; path: string }
-  | { kind: IfConditionKind.Equals; path: string; value: unknown };
+export type IfCondition = { kind: IfConditionKind.Path; path: string };
 
 // AI : one language key per entry — e.g. { "typescript": "(input) => input" } or { "python": "..." }.
 export interface CustomCodeEntry { typescript?: string; python?: string };
@@ -606,6 +609,8 @@ export enum RunStepStatus {
   Ok = "ok",
   Cached = "cached",
   Error = "error",
+  // AI : exclusive if/case — arm or post-split spine step that did not run.
+  Skipped = "skipped",
 }
 
 export enum LlmCallStatus {
@@ -941,7 +946,15 @@ export const MODULE_META: Record<ModuleKind, { label: string; description: strin
   },
   [ModuleKind.IfElse]: {
     label: "If / Else",
-    description: "Run Then or Else from a typed spine condition (bool path or field equals). Else may be empty (passthrough).",
+    description: "Exclusive Then/Else on a bool spine field. Subsequent spine steps do not run unless you add a Join. Comparisons stay in custom-code / Python.",
+  },
+  [ModuleKind.Case]: {
+    label: "Case",
+    description: "Exclusive N-way match on a spine field (switch). Add a Join to continue the spine; without it each arm is a sink.",
+  },
+  [ModuleKind.ControlJoin]: {
+    label: "Join",
+    description: "Optional — continue the spine after if/case with the taken branch. Without Join, only the taken arm runs.",
   },
   [ModuleKind.Combine]: { label: "Combine Inputs", description: "Bring in another document and merge it with the spine" },
   [ModuleKind.Chunk]: {
@@ -954,7 +967,7 @@ export const MODULE_META: Record<ModuleKind, { label: string; description: strin
   },
   [ModuleKind.CustomCode]: {
     label: "Custom Code",
-    description: "TypeScript or Python (input) => output with ordered fallbacks on failure",
+    description: "TypeScript or Python (input) => output with ordered fallbacks — for/while loops live here, not as graph nodes",
   },
   [ModuleKind.Assert]: {
     label: "Assert",

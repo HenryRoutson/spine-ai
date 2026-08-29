@@ -2,15 +2,8 @@
 
 import { Input } from "@/components/ui/input"
 import { PipelineField, StaticValue } from "@/components/pipeline-fields/shared"
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select"
-import { formatIfCondition } from "@/lib/if-else-pipeline"
-import { IfConditionKind, type IfCondition, type PipelineModule } from "@/lib/types"
+import { formatIfCondition } from "@/lib/if-condition"
+import { IfConditionKind, type PipelineModule } from "@/lib/types"
 
 type IfElseModuleFieldsProps = {
   selected: PipelineModule
@@ -18,82 +11,30 @@ type IfElseModuleFieldsProps = {
   onUpdate?: (patch: Partial<PipelineModule>) => void
 }
 
-function parseEqualsValue(raw: string): unknown {
-  const t = raw.trim()
-  if (!t) return ""
-  try {
-    return JSON.parse(t) as unknown
-  } catch {
-    return t
-  }
-}
-
 export function IfElseModuleFields({ selected, edit, onUpdate }: IfElseModuleFieldsProps) {
-  const cond = selected.ifCondition
-  const kind = cond?.kind === IfConditionKind.Equals ? IfConditionKind.Equals : IfConditionKind.Path
-  const path = cond?.path ?? ""
-  const valueText =
-    cond?.kind === IfConditionKind.Equals ? JSON.stringify(cond.value) : ""
-
-  function setCondition(next: IfCondition) {
-    onUpdate?.({ ifCondition: next })
-  }
+  const path = selected.ifCondition?.path ?? ""
 
   return (
     <>
       <PipelineField
         label="Condition"
-        hint="Typed path on the previous spine. Path must be bool, or use equals to compare a field to a JSON value."
+        hint="Bool field on the previous spine. Compute gt/equals/contains in custom-code or Python, then branch here. For/while stays in code — the graph is acyclic."
       >
         {edit ? (
-          <div className="flex flex-col gap-2">
-            <Select
-              value={kind}
-              onValueChange={(v) => {
-                if (v === IfConditionKind.Equals) {
-                  setCondition({ kind: IfConditionKind.Equals, path, value: cond?.kind === IfConditionKind.Equals ? cond.value : true })
-                } else {
-                  setCondition({ kind: IfConditionKind.Path, path })
-                }
-              }}
-            >
-              <SelectTrigger className="h-8 font-mono text-xs">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value={IfConditionKind.Path}>bool path</SelectItem>
-                <SelectItem value={IfConditionKind.Equals}>field equals</SelectItem>
-              </SelectContent>
-            </Select>
-            <Input
-              value={path}
-              onChange={(e) =>
-                setCondition(
-                  kind === IfConditionKind.Equals
-                    ? { kind: IfConditionKind.Equals, path: e.target.value, value: cond?.kind === IfConditionKind.Equals ? cond.value : true }
-                    : { kind: IfConditionKind.Path, path: e.target.value },
-                )
-              }
-              className="h-8 font-mono text-xs"
-              placeholder="is_legal"
-            />
-            {kind === IfConditionKind.Equals && (
-              <Input
-                value={valueText}
-                onChange={(e) =>
-                  setCondition({ kind: IfConditionKind.Equals, path, value: parseEqualsValue(e.target.value) })
-                }
-                className="h-8 font-mono text-xs"
-                placeholder='"legal" or true'
-              />
-            )}
-          </div>
+          <Input
+            value={path}
+            onChange={(e) => onUpdate?.({ ifCondition: { kind: IfConditionKind.Path, path: e.target.value } })}
+            className="h-8 font-mono text-xs"
+            placeholder="is_legal"
+          />
         ) : (
-          <StaticValue mono>{formatIfCondition(cond)}</StaticValue>
+          <StaticValue mono>{formatIfCondition(selected.ifCondition)}</StaticValue>
         )}
       </PipelineField>
       <p className="font-mono text-[10px] leading-relaxed text-muted-foreground">
-        Then runs when the condition is true. Else is optional — empty means passthrough of the previous spine.
+        Then runs when the field is true. Else is optional — empty means passthrough of the previous spine.
+        Then and Else may emit different types; add a Join after this box to continue the spine as their union.
+        Without Join, only the taken arm runs.
       </p>
     </>
   )

@@ -305,3 +305,16 @@ fn merge_pair(left: Value, right: Value, policy: &Value) -> Value {
         (_, r) => r,
     }
 }
+
+// AI : if/else — walk JSON by dotted path; branch on a bool field (comparisons belong in user code).
+pub fn spine_dot_path(v: &Value, path: &str) -> Value {
+    let mut cur = v.clone();
+    for p in path.split('.').map(str::trim).filter(|s| !s.is_empty()) {
+        cur = cur.get(p).cloned().unwrap_or(Value::Null);
+    }
+    cur
+}
+
+pub fn eval_if_condition(_kind: &str, got: &Value, _value: &Value) -> bool {
+    got.as_bool() == Some(true)
+}

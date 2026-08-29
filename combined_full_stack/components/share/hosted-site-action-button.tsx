@@ -27,7 +27,11 @@ function holdMs(ms = 900): Promise<void> {
 }
 
 function triggerFile(action: ReturnType<typeof hostedActionTrigger>): File {
-  return new File([JSON.stringify({ action })], "trigger.json", { type: "application/json" })
+  return new File(
+    [JSON.stringify({ action, collatz: action === "collatz" })],
+    "trigger.json",
+    { type: "application/json" },
+  )
 }
 
 function HostedActionCard({

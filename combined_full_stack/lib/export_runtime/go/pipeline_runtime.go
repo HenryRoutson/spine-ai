@@ -450,3 +450,31 @@ func selectRelevant(items []json.RawMessage, description, template string, promp
 	}
 	return out, nil
 }
+
+// AI : if/else — walk JSON by dotted path; branch on a bool field (comparisons belong in user code).
+func MustJSON(raw string) any {
+	var v any
+	_ = json.Unmarshal([]byte(raw), &v)
+	return v
+}
+
+func SpineDotPath(v any, path string) any {
+	cur := v
+	for _, p := range strings.Split(path, ".") {
+		p = strings.TrimSpace(p)
+		if p == "" {
+			continue
+		}
+		m, ok := cur.(map[string]any)
+		if !ok {
+			return nil
+		}
+		cur = m[p]
+	}
+	return cur
+}
+
+func EvalIfCondition(_kind string, got, _value any) bool {
+	b, ok := got.(bool)
+	return ok && b
+}

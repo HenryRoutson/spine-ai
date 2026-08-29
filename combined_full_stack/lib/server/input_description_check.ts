@@ -3,7 +3,8 @@ import { type VisionAttachment } from "./openrouter_llm";
 import { llmStructured, llmVisionString, type CallContext } from "./llm";
 import { structuredLlmPrompt } from "./structure";
 import { type Store } from "./store";
-import { DEFAULT_INPUT_CHECK_MODEL, DEFAULT_VISION_DOC_PARSE_MODEL, InputType, type DocId, type InputDescriptionCheckItem, type InputDescriptionCheckResult, type PipelineModule } from "./types";
+import { DEFAULT_INPUT_CHECK_MODEL, DEFAULT_VISION_DOC_PARSE_MODEL, type DocId, type InputDescriptionCheckItem, type InputDescriptionCheckResult, type PipelineModule } from "./types";
+import { shouldCheckInputDescription } from "@/lib/input-description-gate";
 import { type ServerLogger } from "./server_logger";
 import { loadDocBytesForVision, mimeIsVisionAttachment } from "./doc_to_text";
 import {
@@ -16,6 +17,7 @@ import {
 } from "./input_description_payload";
 
 export type { InputDescriptionCheckListItem } from "./input_description_payload";
+export { shouldCheckInputDescription };
 
 const matchSchema = z.object({
   matches: z.boolean(),
@@ -141,27 +143,6 @@ function parseMatchReply(raw: string): InputDescriptionCheckResult {
 
 function bytesToBase64(bytes: Uint8Array): string {
   return Buffer.from(bytes).toString("base64");
-}
-
-// AI : per-step toggle — default on when a description is set. JSON/Excel parse structurally.
-export function shouldCheckInputDescription(
-  m: Pick<PipelineModule, "kind" | "inputType" | "inputDescription" | "checkInputDescription">,
-): boolean {
-  if (!m.inputDescription?.trim()) return false;
-  if (m.checkInputDescription === false) return false
-  // AI : n8n pieces run local Code-node JS — typed I/O already validates; skip the LLM gate.
-  if (m.kind === "n8n") return false;
-  if (m.kind === "connect") return false;
-  // AI : SQL mutates app_sql_rows locally — typed I/O already validates; skip the LLM gate.
-  if (m.kind === "sql") return false;
-  // AI : if-else / fork only route the spine — typed condition path already validates.
-  if (m.kind === "if-else" || m.kind === "fork") return false;
-  if (m.kind === "output" || m.kind === "assert" || m.kind === "human-review") return false;
-  if (m.kind === "input") {
-    const types = !m.inputType ? [] : Array.isArray(m.inputType) ? m.inputType : [m.inputType];
-    if (types.length > 0 && types.every((t) => t === InputType.Json || t === InputType.Excel)) return false;
-  }
-  return true;
 }
 
 // AI : optional per-step guard — cheap LLM judges incoming data before processing.

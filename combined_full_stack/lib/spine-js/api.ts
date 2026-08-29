@@ -1,5 +1,6 @@
 // AI : each step function takes one Zod-parsed object. Emits JSON IR, then re-parses moduleSpecSchema.
 import { z, type ZodType } from "zod"
+import { ifConditionSchema } from "@/lib/if-condition"
 import { kindAlwaysEmitsList } from "@/lib/module-kinds"
 import {
   assembleBindingsSchema,
@@ -121,10 +122,7 @@ const forkArgsSchema = z.object({
 const ifElseArgsSchema = z.object({
   note: z.string().min(1),
   label: z.string().optional(),
-  when: z.discriminatedUnion("kind", [
-    z.object({ kind: z.literal("path"), path: z.string() }),
-    z.object({ kind: z.literal("equals"), path: z.string(), value: z.unknown() }),
-  ]),
+  when: ifConditionSchema,
   then: z.array(stepHandleSchema).max(50),
   else: z.array(stepHandleSchema).max(50).optional(),
 })

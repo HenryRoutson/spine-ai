@@ -1,0 +1,149 @@
+{
+  "id": "p_status_route",
+  "name": "Status Case Route",
+  "kind": "ops",
+  "models": [
+    {
+      "id": "m_ticket",
+      "name": "Ticket",
+      "description": "Inbound ticket with a status discriminant.",
+      "fields": [
+        { "id": "f_status", "name": "status", "type": "text", "optional": false, "description": "legal, billing, or anything else" },
+        { "id": "f_message", "name": "message", "type": "text", "optional": false, "description": "Ticket body" }
+      ]
+    },
+    {
+      "id": "m_legal",
+      "name": "LegalRoute",
+      "description": "Legal playbook result.",
+      "fields": [
+        { "id": "f_desk", "name": "desk", "type": "text", "optional": false, "description": "Legal desk" },
+        { "id": "f_lmsg", "name": "message", "type": "text", "optional": false, "description": "Ticket body" }
+      ]
+    },
+    {
+      "id": "m_bill",
+      "name": "BillingRoute",
+      "description": "Billing playbook result.",
+      "fields": [
+        { "id": "f_queue", "name": "queue", "type": "text", "optional": false, "description": "Billing queue" },
+        { "id": "f_bmsg", "name": "message", "type": "text", "optional": false, "description": "Ticket body" }
+      ]
+    },
+    {
+      "id": "m_gen",
+      "name": "GeneralRoute",
+      "description": "Default playbook result.",
+      "fields": [
+        { "id": "f_inbox", "name": "inbox", "type": "text", "optional": false, "description": "General inbox" },
+        { "id": "f_gmsg", "name": "message", "type": "text", "optional": false, "description": "Ticket body" }
+      ]
+    }
+  ],
+  "modules": [
+    {
+      "id": "mod_in",
+      "kind": "input",
+      "label": "Ticket",
+      "note": "JSON Ticket with status text",
+      "inputType": "json",
+      "outStructureId": "m_ticket",
+      "inputDescription": "JSON Ticket — status plus message"
+    },
+    {
+      "id": "mod_route",
+      "kind": "case",
+      "label": "Route",
+      "note": "Switch on status — legal, billing, or default. No Join: exclusive sinks.",
+      "inputDescription": "Ticket with status text",
+      "ifCondition": { "kind": "path", "path": "status" },
+      "forkBranches": [
+        {
+          "id": "br_legal",
+          "label": "Legal",
+          "match": "legal",
+          "modules": [
+            {
+              "id": "mod_legal",
+              "kind": "custom-code",
+              "label": "Legal Desk",
+              "note": "status legal → LegalRoute",
+              "inputDescription": "Ticket marked legal",
+              "inStructureId": "m_ticket",
+              "outStructureId": "m_legal",
+              "fallbackList": [
+                { "typescript": "(t)=>({desk:\"legal\",message:t.message})" }
+              ]
+            }
+          ]
+        },
+        {
+          "id": "br_bill",
+          "label": "Billing",
+          "match": "billing",
+          "modules": [
+            {
+              "id": "mod_bill",
+              "kind": "custom-code",
+              "label": "Billing Queue",
+              "note": "status billing → BillingRoute",
+              "inputDescription": "Ticket marked billing",
+              "inStructureId": "m_ticket",
+              "outStructureId": "m_bill",
+              "fallbackList": [
+                { "typescript": "(t)=>({queue:\"billing\",message:t.message})" }
+              ]
+            }
+          ]
+        },
+        {
+          "id": "br_default",
+          "label": "Default",
+          "match": "_",
+          "modules": [
+            {
+              "id": "mod_gen",
+              "kind": "custom-code",
+              "label": "General Inbox",
+              "note": "other status → GeneralRoute",
+              "inputDescription": "Ticket with unmatched status",
+              "inStructureId": "m_ticket",
+              "outStructureId": "m_gen",
+              "fallbackList": [
+                { "typescript": "(t)=>({inbox:\"general\",message:t.message})" }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "strategies": [
+    {
+      "id": "s_cheap",
+      "kind": "cheap-agent",
+      "name": "Agent (Cheap Model)",
+      "enabled": true,
+      "model": "deepseek-v4",
+      "accuracy": 80,
+      "latencyMs": 15000,
+      "costCents": 10,
+      "passRate": 80
+    }
+  ],
+  "docs": [
+    {
+      "name": "ticket_status_legal.json",
+      "type": "json",
+      "label": "inference",
+      "file": "status_route/ticket_status_legal.json"
+    }
+  ],
+  "inferencePresets": [
+    {
+      "name": "Legal desk",
+      "description": "status legal — Legal Desk runs; Billing and Default arms are skipped.",
+      "inputs": { "Ticket": "ticket_status_legal.json" }
+    }
+  ]
+}

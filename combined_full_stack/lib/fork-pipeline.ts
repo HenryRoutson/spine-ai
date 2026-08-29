@@ -9,6 +9,7 @@ import {
 } from "@/lib/assemble-type-expr"
 import { TypeExprKind, typeExprEqual, stepSpineOutType, type TypeExpr } from "@/lib/server/type_expr"
 import {
+  ModuleKind,
   type AssembleSource,
   type ModelField,
   type ModuleId,
@@ -17,6 +18,19 @@ import {
   type StructureModelId,
   type TypeAlias,
 } from "@/lib/types"
+
+export function makeControlJoinModule(note = "continue with the taken branch"): PipelineModule {
+  return {
+    id: uid<ModuleId>("mod_"),
+    kind: ModuleKind.ControlJoin,
+    label: "Join",
+    note,
+    inputDescription: "Taken branch output from the previous if/case",
+    cached: true,
+    avgMs: 0,
+    avgCostCents: 0,
+  }
+}
 
 export const FORK_MIN_BRANCHES = 2
 export const FORK_MAX_BRANCHES = 12
@@ -27,6 +41,7 @@ export type ForkBranch = {
   id: string
   label: string
   modules: PipelineModule[]
+  match?: string
 }
 
 export type ForkModuleLoc = {
@@ -46,8 +61,20 @@ export function isIfElseKind(kind: string): boolean {
   return kind === "if-else"
 }
 
+export function isCaseKind(kind: string): boolean {
+  return kind === "case"
+}
+
+export function isControlJoinKind(kind: string): boolean {
+  return kind === "control-join"
+}
+
+export function isExclusiveKind(kind: string): boolean {
+  return isIfElseKind(kind) || isCaseKind(kind)
+}
+
 export function isNestedLaneKind(kind: string): boolean {
-  return isForkKind(kind) || isIfElseKind(kind)
+  return isForkKind(kind) || isExclusiveKind(kind)
 }
 
 export function forkJoinOf(m: PipelineModule): ForkJoin {
@@ -164,6 +191,21 @@ export function updatePipelineModule(
   })
 }
 
+function withJoinIfNeeded(siblings: PipelineModule[], at: number, fresh: PipelineModule[]): PipelineModule[] {
+  const i = Math.max(0, Math.min(at, siblings.length))
+  const prev = siblings[i - 1]
+  const next = siblings[i]
+  if (
+    prev &&
+    isExclusiveKind(prev.kind) &&
+    !fresh.some((m) => isControlJoinKind(m.kind)) &&
+    !(next && isControlJoinKind(next.kind))
+  ) {
+    return [makeControlJoinModule(), ...fresh]
+  }
+  return fresh
+}
+
 export function insertPipelineModules(
   modules: PipelineModule[],
   at: number,
@@ -171,7 +213,8 @@ export function insertPipelineModules(
   loc?: { forkId: ModuleId | string; branchId: string },
 ): PipelineModule[] {
   if (!loc) {
-    return [...modules.slice(0, at), ...fresh, ...modules.slice(at)]
+    const items = withJoinIfNeeded(modules, at, fresh)
+    return [...modules.slice(0, at), ...items, ...modules.slice(at)]
   }
   return modules.map((m) => {
     if (!isNestedLaneKind(m.kind)) return m
@@ -181,7 +224,8 @@ export function insertPipelineModules(
         forkBranches: forkBranchesOf(m).map((b) => {
           if (b.id !== loc.branchId) return b
           const i = Math.max(0, Math.min(at, b.modules.length))
-          return { ...b, modules: [...b.modules.slice(0, i), ...fresh, ...b.modules.slice(i)] }
+          const items = withJoinIfNeeded(b.modules, i, fresh)
+          return { ...b, modules: [...b.modules.slice(0, i), ...items, ...b.modules.slice(i)] }
         }),
       }
     }
@@ -367,7 +411,7 @@ export function deriveIfElseStepTypes(
   prev: PipelineModule | undefined,
   models: StructureModel[],
 ): { module: PipelineModule; models: StructureModel[] } {
-  if (!isIfElseKind(m.kind)) return { module: m, models }
+  if (!isExclusiveKind(m.kind)) return { module: m, models }
   const spineType = prev ? stepSpineOutType(prev) : m.inType
   let next: PipelineModule = { ...m }
   if (spineType) {
@@ -383,7 +427,9 @@ export function deriveIfElseStepTypes(
     }
   }
   const branches = forkBranchesOf(m)
-  const outType = unionTypeExprs(laneOutOrSpine(branches[0] ?? { modules: [] }, spineType), laneOutOrSpine(branches[1] ?? { modules: [] }, spineType))
+  const outType = branches
+    .map((b) => laneOutOrSpine(b, spineType))
+    .reduce<TypeExpr | undefined>((acc, t) => unionTypeExprs(acc, t), undefined)
   if (outType) {
     next = {
       ...next,
@@ -397,6 +443,36 @@ export function deriveIfElseStepTypes(
     }
   }
   return { module: next, models }
+}
+
+export function deriveControlJoinTypes(
+  m: PipelineModule,
+  prev: PipelineModule | undefined,
+  models: StructureModel[],
+): { module: PipelineModule; models: StructureModel[] } {
+  if (!isControlJoinKind(m.kind)) return { module: m, models }
+  const spineType = prev ? stepSpineOutType(prev) : m.inType
+  if (!spineType) return { module: m, models }
+  return {
+    models,
+    module: {
+      ...m,
+      inType: spineType,
+      outType: spineType,
+      inStructureId:
+        spineType.kind === "ref"
+          ? spineType.modelId
+          : spineType.kind === "list" && spineType.item.kind === "ref"
+            ? spineType.item.modelId
+            : m.inStructureId,
+      outStructureId:
+        spineType.kind === "ref"
+          ? spineType.modelId
+          : spineType.kind === "list" && spineType.item.kind === "ref"
+            ? spineType.item.modelId
+            : undefined,
+    },
+  }
 }
 
 export function syncForkModules(
@@ -415,10 +491,14 @@ export function syncForkModules(
         return { ...b, modules: syncedLane.modules }
       })
       const withLanes = { ...m, forkBranches: nested }
-      const synced = isIfElseKind(m.kind)
+      const synced = isExclusiveKind(m.kind)
         ? deriveIfElseStepTypes(withLanes, prev, scratch)
         : deriveForkStepTypes(withLanes, prev, scratch, typeAliases)
       scratch = synced.models
+      return synced.module
+    }
+    if (isControlJoinKind(m.kind)) {
+      const synced = deriveControlJoinTypes(m, prev, scratch)
       return synced.module
     }
     return m
