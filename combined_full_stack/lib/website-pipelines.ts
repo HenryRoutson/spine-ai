@@ -1,4 +1,5 @@
 import { DEFAULT_HOSTED_SITE_HTML, DEFAULT_HOSTED_SITE_LANDING_HTML } from "@/lib/hosted-site-defaults"
+import { HOSTED_SITE_DOCS_SLOT } from "@/lib/hosted-site-slots"
 import { isUnnamedProjectName } from "@/lib/project-assistant-types"
 import type { Project, ProjectId } from "@/lib/types"
 import type {
@@ -142,8 +143,15 @@ function stripHtmlRunToken(html: string, alias: string): string {
 
 function insertHtmlRunToken(html: string, alias: string): string {
   const token = htmlRunToken(alias)
-  if (html.includes(token)) return html
-  return html.trim() ? `${html.trimEnd()}\n${token}\n` : token
+  const withDocs =
+    alias === DEFAULT_WEBSITE_PIPELINE_ALIAS && !html.includes(HOSTED_SITE_DOCS_SLOT)
+      ? `${HOSTED_SITE_DOCS_SLOT}\n${token}`
+      : token
+  if (html.includes(token)) {
+    if (withDocs === token) return html
+    return html.replace(token, withDocs)
+  }
+  return html.trim() ? `${html.trimEnd()}\n${withDocs}\n` : `${withDocs}\n`
 }
 
 function stripReactRunWidget(source: string, alias: string): string {

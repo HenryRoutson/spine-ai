@@ -218,4 +218,12 @@ export default function App() { return <RunPipeline alias="invoice" /> }
     expect(next.customHtml).toContain("{{run:invoice}}")
     expect(next.reactFiles[0]?.contents).toContain('alias: "invoice"')
   })
+
+  it("adds {{docs}} when attaching the first run slot to a landing page", () => {
+    const options = normalizeHostedSiteOptions({ customHtml: DEFAULT_HOSTED_SITE_LANDING_HTML })
+    const next = insertWebsitePipelineInCode(options, "run")
+    expect(next.customHtml).toContain("{{docs}}")
+    expect(next.customHtml).toContain("{{run}}")
+    expect(next.customHtml.indexOf("{{docs}}")).toBeLessThan(next.customHtml.indexOf("{{run}}"))
+  })
 })
