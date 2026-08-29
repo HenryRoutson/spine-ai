@@ -72,6 +72,7 @@ describe("vibe coding workspace", () => {
     expect(isReadonlyVibePath("AGENTS.md")).toBe(true)
     expect(isWritableVibePath("AGENTS.md")).toBe(false)
     expect(isWritableVibePath("pipeline.json")).toBe(true)
+    expect(isWritableVibePath("pipeline.js")).toBe(true)
     expect(isWritableVibePath("structures/ReceiptRow.json")).toBe(true)
     expect(isWritableVibePath("tests/receipt.txt")).toBe(true)
   })

@@ -1,4 +1,4 @@
-// AI : A/B few-shot Example 1–5 on JSON vs file-harness — reliability (valid + topology) and token cost.
+// AI : A/B JSON vs file-harness. Seed is a notes stub — do not paste few-shot payloads (reward hacking).
 import { afterAll, beforeAll, describe, expect, it } from "vitest"
 import { mkdirSync, writeFileSync } from "node:fs"
 import { resolve } from "node:path"
@@ -188,35 +188,32 @@ describe("vibe json vs file-harness A/B (seed LLM)", () => {
     else process.env.SPINE_VIBE_HARNESS = prevHarness
     clearLlmProviderCache()
     writeAbArtifacts(
-      "vibe-ab-seed",
-      "Vibe JSON vs file-harness A/B (seed LLM, all few-shot examples)",
-      "Seed writes the matching few-shot payload. Flag: SPINE_VIBE_HARNESS=1 on, else off. Reliable = valid AND topology. Capability = proposal + valid×2 + llm + topology + docs.",
+      "vibe-ab-seed-no-lookup",
+      "Vibe JSON vs file-harness A/B (seed LLM, few-shot tasks, no answer-key lookup)",
+      "Seed emits a generic notes stub. Looking up the matching few-shot payload is reward hacking and was removed. Reliable = valid AND topology. Wiring = hasProposal. Coding quality is OpenRouter only.",
       rows,
     )
   })
 
   for (const ex of TASKS) {
-    it(`${ex.id}: json path builds a valid ${ex.topology} pipeline`, async () => {
+    it(`${ex.id}: json path returns a proposal (seed is a stub, not the few-shot answer)`, async () => {
       const json = await runMode("json", ex)
       rows.push(json)
       expect(json.hasProposal, `${ex.id} json proposal`).toBe(true)
-      expect(json.valid, `${ex.id} json valid kinds=${json.kinds.join(",")}`).toBe(true)
-      expect(json.topologyHit, `${ex.id} json topology kinds=${json.kinds.join(",")}`).toBe(true)
-      expect(json.hasLlm, `${ex.id} json has llm`).toBe(true)
+      expect(json.kinds, `${ex.id} json seed stub, not few-shot ${ex.topology}`).toEqual([
+        "input",
+        "llm-batch",
+        "output",
+      ])
     })
 
-    it(`${ex.id}: file harness matches json and uses fewer prompt tokens`, async () => {
+    it(`${ex.id}: file harness returns a proposal without pasting the few-shot answer`, async () => {
       const json = rows.find((r) => r.task === ex.id && r.mode === "json")
       const harness = await runMode("harness", ex)
       rows.push(harness)
       expect(json).toBeTruthy()
       expect(harness.hasProposal, `${ex.id} harness proposal err=${harness.error}`).toBe(true)
       expect(harness.generator, `${ex.id} must use the file loop`).toBe("harness")
-      expect(harness.valid, `${ex.id} harness valid kinds=${harness.kinds.join(",")}`).toBe(true)
-      expect(harness.topologyHit, `${ex.id} harness topology kinds=${harness.kinds.join(",")}`).toBe(true)
-      if (harness.valid && json!.valid) {
-        expect(harness.promptTokens, `${ex.id} harness tokens vs json ${json!.promptTokens}`).toBeLessThan(json!.promptTokens)
-      }
     })
   }
 })

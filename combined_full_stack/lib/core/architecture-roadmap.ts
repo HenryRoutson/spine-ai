@@ -70,6 +70,9 @@
 // AI : DONE (vibe-coding-harness) — in-memory file workspace + write/run_tests loop (OpenCode/Pi-shaped).
 // AI :   SPINE_VIBE_HARNESS=1 turns it on (harness first, JSON fallback). Unset/0 = few-shot JSON only.
 // AI :   OpenRouter stays server-side; no disk, no shell, no secrets in the workspace.
+// AI : DONE (vibe-js-authoring) — SPINE_VIBE_AUTHORING=js: LLM writes spine-js (one Zod object per step),
+// AI :   compileSpineJs → same JSON IR. Direct retry or harness. JSON remains the portable cross-language IR.
+// AI :   Seed must NOT matchVibeExample and paste the few-shot payload — that is reward hacking.
 // AI : DONE (vibe-fewshot-explode) — Example 1c wrapper + flatten; PromptListVsItem warning.
 // AI : DONE (vibe-fewshot-parallel) — Example 5 parallel lanes then memo.
 // AI : DONE (vibe-fewshot-assemble) — greenfield names assemble; Example 4 kept.

@@ -9,6 +9,9 @@ import {
   type AssistantTestDocCatalogEntry,
 } from "./assistant-prompt"
 import { buildVibeTopologyPromptBlock } from "./vibe-coding-topology"
+import { vibeJsAuthoringEnabled } from "./vibe-coding-mode"
+import { compileSpineJs } from "@/lib/spine-js/compile"
+import { buildSpineJsFewShotBlock } from "@/lib/spine-js/prompt"
 import { parseStructureHint } from "./assistant-shared"
 import { inputTypesAreAllJsonNative } from "@/lib/inference-input-core"
 import { isManagedLockedStep } from "./validity-sync"
@@ -174,6 +177,13 @@ function testTypeFromName(name: string): "text" | "json" | "markdown" | "latex" 
 }
 
 export function buildVibeAgentsMarkdown(): string {
+  const js = vibeJsAuthoringEnabled()
+  const pipelineFile = js
+    ? `- \`pipeline.js\` — ordinary JavaScript using the spine-js library (\`export default pipeline(...)\`). Each step function takes one object with a Zod \`schema\`. Caching / DAG / traces come from the library, not JSON fields. \`pipeline.json\` is ignored when pipeline.js is present.`
+    : `- \`pipeline.json\` — FULL modules array for the **target function** (authoring format: names, not ids). Omit auto steps (Convert to text, Parse to structure, Link Quotes).`
+  const examples = js
+    ? `- \`examples/spine-js.md\` — valid JS shapes. Read when unsure.`
+    : `- \`examples/few-shot.md\` — valid JSON shapes. Read when unsure.`
   return `# Spine vibe coding workspace
 
 This is a **file workspace**, not a chat dump. Edit files, then \`run_tests\`. The user still has to Approve — write \`message.md\` in present/future tense ("I'll add…").
@@ -184,7 +194,7 @@ This is a **file workspace**, not a chat dump. Edit files, then \`run_tests\`. T
 - After Approve, \`proposed_actions.json\` may request a live \`run_test\` / \`run_inference\` (those hit the engine + LLM).
 
 ## Files
-- \`pipeline.json\` — FULL modules array for the **target function** (authoring format: names, not ids). Omit auto steps (Convert to text, Parse to structure, Link Quotes).
+${pipelineFile}
 - \`structures/<Name>.json\` — user pydantic models. Built-ins (Document, QuoteSpan, …) are locked — do not redefine.
 - \`aliases.json\` — user type aliases only (not quote_string_t / text_quote_t).
 - \`docs.md\` — project Docs tab markdown. Refresh when pipeline/models change.
@@ -192,7 +202,7 @@ This is a **file workspace**, not a chat dump. Edit files, then \`run_tests\`. T
 - \`project.json\` — name + functions. Set \`targetFunctionName\` to add/edit a named function without replacing Main.
 - \`message.md\` — short user-facing proposal.
 - \`proposed_actions.json\` — optional \`[{ "type": "run_test" }]\` or \`run_inference\`.
-- \`examples/few-shot.md\` — valid JSON shapes. Read when unsure.
+${examples}
 - \`VALIDATION.md\` — last \`run_tests\` output (server-written).
 
 ## Spine I/O (this is what usually fails)
@@ -212,12 +222,13 @@ ${buildVibeTopologyPromptBlock()}
 - Prompts are not templates — no \`{state.X}\`. Previous JSON is appended at runtime.
 
 ## Loop
-1. Read \`AGENTS.md\`, \`project.json\`, \`pipeline.json\`.
+1. Read \`AGENTS.md\`, \`project.json\`, ${js ? "`pipeline.js`" : "`pipeline.json`"}.
 2. Write structures, then pipeline, then tests, then docs.md / message.md.
 3. \`run_tests\`. Fix from \`VALIDATION.md\`. Repeat.
 4. \`done\` when checks are clean (or explain remaining issues in message.md).
 `
 }
+
 
 export function normalizeVibePath(raw: string): string | null {
   const trimmed = raw.trim().replace(/\\/g, "/")
@@ -234,6 +245,7 @@ export function isWritableVibePath(path: string): boolean {
   if (isReadonlyVibePath(path)) return false
   if (
     path === "pipeline.json" ||
+    path === "pipeline.js" ||
     path === "project.json" ||
     path === "aliases.json" ||
     path === "docs.md" ||
@@ -275,6 +287,10 @@ export function seedVibeWorkspace(args: {
 
   files.set("AGENTS.md", buildVibeAgentsMarkdown())
   files.set("examples/few-shot.md", buildFewShotPromptBlock())
+  if (vibeJsAuthoringEnabled()) {
+    files.set("examples/spine-js.md", buildSpineJsFewShotBlock())
+    files.set("pipeline.js", "")
+  }
   files.set(
     "project.json",
     pretty({
@@ -434,31 +450,47 @@ export function parseVibeWorkspaceFiles(files: VibeWorkspaceFiles, seed: Record<
     testPaths(files).some((p) => changedFromSeed(files, seed, p)) ||
     Object.keys(seed).some((p) => p.startsWith("tests/") && !files.has(p))
   const aliasesChanged = changedFromSeed(files, seed, "aliases.json")
-  const pipelineChanged = changedFromSeed(files, seed, "pipeline.json")
+  const pipelineJsonChanged = changedFromSeed(files, seed, "pipeline.json")
+  const pipelineJsChanged = changedFromSeed(files, seed, "pipeline.js")
   const docsChanged = changedFromSeed(files, seed, "docs.md")
   const nameChanged = changedFromSeed(files, seed, "project.json") && !!projectNameUpdate
 
-  const modules = pipeline.ok && Array.isArray(pipeline.value) ? pipeline.value : null
-  const wrappedModules =
-    pipeline.ok && pipeline.value && typeof pipeline.value === "object" && !Array.isArray(pipeline.value)
-      ? (pipeline.value as { modules?: unknown }).modules
-      : null
-  const modulesOut = Array.isArray(modules)
-    ? modules
-    : Array.isArray(wrappedModules)
-      ? wrappedModules
-      : pipelineChanged
-        ? null
-        : null
-
-  if (pipelineChanged && modulesOut === null) {
-    errors.push("pipeline.json must be a JSON array of steps (or { \"modules\": [...] })")
+  let modulesOut: unknown[] | null = null
+  let jsModels: unknown[] | null = null
+  let jsMessage: string | null = null
+  const jsSrc = files.get("pipeline.js")
+  if (jsSrc?.trim() && (pipelineJsChanged || (vibeJsAuthoringEnabled() && !pipelineJsonChanged))) {
+    const compiled = compileSpineJs(jsSrc)
+    if (!compiled.ok) {
+      errors.push(...compiled.errors.map((e) => `pipeline.js: ${e}`))
+    } else {
+      modulesOut = compiled.program.modules
+      jsModels = compiled.program.models
+      if (compiled.program.message) jsMessage = compiled.program.message
+      if (compiled.program.documentationUpdate && !docsChanged) {
+        files.set("docs.md", compiled.program.documentationUpdate)
+      }
+    }
   }
 
+  if (modulesOut === null) {
+    const modules = pipeline.ok && Array.isArray(pipeline.value) ? pipeline.value : null
+    const wrappedModules =
+      pipeline.ok && pipeline.value && typeof pipeline.value === "object" && !Array.isArray(pipeline.value)
+        ? (pipeline.value as { modules?: unknown }).modules
+        : null
+    modulesOut = Array.isArray(modules) ? modules : Array.isArray(wrappedModules) ? wrappedModules : null
+    if (pipelineJsonChanged && modulesOut === null) {
+      errors.push("pipeline.json must be a JSON array of steps (or { \"modules\": [...] })")
+    }
+  }
+
+  const pipelineChanged = pipelineJsonChanged || pipelineJsChanged
+
   return {
-    message: (files.get("message.md") ?? "").trim(),
+    message: (files.get("message.md") ?? "").trim() || jsMessage || "",
     modules: pipelineChanged ? modulesOut : null,
-    models: structuresChanged ? models : null,
+    models: structuresChanged ? models : jsModels,
     typeAliases: aliasesChanged ? (aliases.ok && Array.isArray(aliases.value) ? aliases.value : []) : null,
     docs: testsChanged ? docs : null,
     documentationUpdate: docsChanged ? (files.get("docs.md") ?? "") : null,
