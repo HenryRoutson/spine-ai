@@ -92,6 +92,7 @@ describe("pipeline export dispatch", () => {
     expect(emitStepBody("ts", { m: join, project, inType: "Ticket", outType: "Ticket" })).toMatch(/return input/)
     const src = generatePipelineSourceTs(project)
     expect(src).toMatch(/AfterJoin/)
+    expect(src).toMatch(/await step_control_join\(/)
   })
 
   it("fork merge join uses mergeFold on lane outputs", () => {

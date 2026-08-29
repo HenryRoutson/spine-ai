@@ -9,7 +9,7 @@ import { webhookStepUsesPipelineState } from "@/lib/webhook-step";
 import { quoteFieldPaths } from "./quote_schema";
 import { BUILTIN_DOCUMENT_ID, withSharedModels } from "./builtin_models";
 import { labelAsStateKey } from "./pipeline_state";
-import { forkBranchesOf, forkJoinOf, forkProductField, isControlJoinKind, isExclusiveKind, laneLastModule, locatePipelineModule, flattenPipelineModules } from "@/lib/fork-pipeline";
+import { forkBranchesOf, forkJoinOf, forkProductField, isExclusiveKind, laneLastModule, locatePipelineModule, flattenPipelineModules } from "@/lib/fork-pipeline";
 import { ifElseBranch, ifThenBranch } from "@/lib/if-else-pipeline";
 import { isDefaultCaseMatch } from "@/lib/case-pipeline";
 import { followingControlJoin } from "@/lib/exclusive-control";
@@ -1705,7 +1705,6 @@ function emitTsOrchestratorWalk(
   const lines: string[] = [];
   for (let wi = 0; wi < modules.length; wi++) {
     const m = modules[wi]!;
-    if (isControlJoinKind(m.kind)) continue;
     const i = indexById.get(m.id) ?? 0;
     const fn = stepFnName(m, i);
     const label = labelAsStateKey(m.label);
@@ -1896,7 +1895,6 @@ function emitPyOrchestratorWalk(
   const lines: string[] = [];
   for (let wi = 0; wi < modules.length; wi++) {
     const m = modules[wi]!;
-    if (isControlJoinKind(m.kind)) continue;
     const i = indexById.get(m.id) ?? 0;
     const fn = stepFnName(m, i);
     const label = labelAsStateKey(m.label);
@@ -2032,7 +2030,6 @@ function emitRsOrchestratorWalk(
   const lines: string[] = [];
   for (let wi = 0; wi < modules.length; wi++) {
     const m = modules[wi]!;
-    if (isControlJoinKind(m.kind)) continue;
     const i = indexById.get(m.id) ?? 0;
     const fn = stepFnName(m, i);
     const label = labelAsStateKey(m.label);
@@ -2159,7 +2156,6 @@ function emitGoOrchestratorWalk(
   const lines: string[] = [];
   for (let wi = 0; wi < modules.length; wi++) {
     const m = modules[wi]!;
-    if (isControlJoinKind(m.kind)) continue;
     const i = indexById.get(m.id) ?? 0;
     const fn = stepFnName(m, i);
     const label = labelAsStateKey(m.label);
