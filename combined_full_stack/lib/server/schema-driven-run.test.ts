@@ -75,6 +75,60 @@ function quoteExtractRaw(): AssistantResponseRaw {
   }
 }
 
+function persistBatchRaw(): AssistantResponseRaw {
+  return {
+    message: "I'll extract a vendor row per file and persist each with schema-derived SQL.",
+    modules: [
+      {
+        kind: "input",
+        label: "Files",
+        note: "Upload files.",
+        structureOut: "list[Document]",
+        inputType: "text",
+        inputDescription: "files",
+      },
+      {
+        kind: "llm-batch",
+        label: "Extract",
+        note: "One row per file. Field prompts come from the structure.",
+        structureIn: "Document",
+        structureOut: "PersistRow",
+        prompt: "",
+        inputDescription: "files",
+      },
+      {
+        kind: "sql",
+        label: "Persist",
+        note: "schema-derived insert",
+        structureIn: "PersistRow",
+        structureOut: "PersistRow",
+        inputDescription: "rows",
+      },
+      {
+        kind: "output",
+        label: "Rows",
+        structureIn: "PersistRow",
+        structureOut: "PersistRow",
+        inputDescription: "rows",
+      },
+    ],
+    modulePatch: null,
+    models: [
+      {
+        name: "PersistRow",
+        description: "One persisted row.",
+        fields: [{ name: "vendor", type: "text", optional: false, description: "Vendor copied from the file" }],
+      },
+    ],
+    typeAliases: null,
+    docs: null,
+    documentationUpdate: "# Persist batch\n",
+    projectNameUpdate: "Persist Batch",
+    targetFunctionName: null,
+    proposedActions: null,
+  }
+}
+
 function persistRowRaw(): AssistantResponseRaw {
   return {
     message: "I'll extract a vendor row and persist it with schema-derived SQL.",
@@ -224,6 +278,26 @@ describe("schema-driven quoting and SQL", () => {
     const sqlStep = run.steps.find((s) => s.kind === "sql")
     expect(sqlStep?.inputPreview).toMatch(/^INSERT INTO persist_row /)
     expect(sqlStep?.inputPreview).toContain("Acme Corp billed 42 on Tuesday")
+
+    const rows = await listAppSqlRows(appSqlScopeForProject(project.id), "persist_row")
+    expect(rows).toHaveLength(1)
+    expect(String(rows[0]!.vendor)).toContain("Acme Corp")
+  })
+
+  it("INSERTs each llm-batch row when empty sql follows a list extract", async () => {
+    const project = projectFromRaw(persistBatchRaw())
+    const sqlMod = flattenPipelineModules(project.modules).find((m) => m.kind === "sql")
+    expect(sqlMod?.sql?.trim() ?? "").toBe("")
+    expect(sqlMod?.outType?.kind).toBe("list")
+    expect(sqlMod?.inType?.kind).toBe("list")
+
+    const run = await runWithSource(project, SOURCE)
+    expect(run.status).toBe(RunStatus.Ok)
+    const sqlStep = run.steps.find((s) => s.kind === "sql")
+    expect(sqlStep?.inputPreview).toMatch(/^INSERT INTO persist_row /)
+    const parsed = JSON.parse(sqlStep?.outputJson ?? "null") as unknown[]
+    expect(Array.isArray(parsed)).toBe(true)
+    expect(parsed).toHaveLength(1)
 
     const rows = await listAppSqlRows(appSqlScopeForProject(project.id), "persist_row")
     expect(rows).toHaveLength(1)

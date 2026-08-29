@@ -204,7 +204,7 @@ This is a **file workspace**, not a chat dump. Edit files, then \`run_tests\`. T
 ${pipelineFile}
 - \`structures/<Name>.json\` — user pydantic models. Built-ins (Document, QuoteSpan, …) are locked — do not redefine.
 - \`aliases.json\` — user type aliases only (not quote_string_t / text_quote_t).
-- \`derived/schema.sql\`, \`derived/schema.zod.ts\`, \`derived/models.py\`, \`derived/prompts.md\` — generated from structures (read-only; refreshed on \`run_tests\`). SQL, Zod, and LLM field prompts are not invented. Prefer empty llm prompts (runtime uses \`derived/prompts.md\`). Prefer empty \`sql\` for \`SELECT *\` from the out structure, or omit \`sql\` after an extract of the same structure to INSERT (id is generated when missing). custom-code is a TypeScript arrow \`(rows) => …\` for reshapes, never Python CRUD.
+- \`derived/schema.sql\`, \`derived/schema.zod.ts\`, \`derived/models.py\`, \`derived/prompts.md\` — generated from structures (read-only; refreshed on \`run_tests\`). SQL, Zod, and LLM field prompts are not invented. Prefer empty llm prompts (runtime uses \`derived/prompts.md\`). Prefer empty \`sql\` for \`SELECT *\` from the out structure, or omit \`sql\` after an extract of the same structure to INSERT (id is generated when missing; list extracts INSERT each row). custom-code is a TypeScript arrow \`(rows) => …\` for reshapes, never Python CRUD.
 - \`docs.md\` — project Docs tab markdown. Refresh when pipeline/models change.
 - \`tests/*\` — synthetic inference docs (text/json/markdown only).
 - \`project.json\` — name + functions. Set \`targetFunctionName\` to add/edit a named function without replacing the unnamed / active function.
@@ -223,7 +223,7 @@ ${examples}
 - Many same-kind files → one input with \`list[Document]\` + llm-batch. Two different kinds → process first, then combine (raw side file immediately before combine) **or** assemble after both are parsed. Never a third upload.
 - Independent extracts on one input → fork + product join, not one mega-llm, not parallel. Lane llms \`structureIn\` is Document.
 - Hosted websites accept file uploads; those files become documents. Copied spans should use \`tuple[text,quote]\` so Link Quotes can attach offsets across every uploaded file.
-- Prefer \`sql\` steps for table reads/writes — omit \`sql\` to get \`SELECT *\` from the out structure, or omit \`sql\` after an extract of the same structure to INSERT that row. custom-code is a **TypeScript arrow** \`(rows) => …\` for reshapes, never Python CRUD.
+- Prefer \`sql\` steps for table reads/writes — omit \`sql\` to get \`SELECT *\` from the out structure, or omit \`sql\` after an extract of the same structure to INSERT those rows (list after llm-batch). custom-code is a **TypeScript arrow** \`(rows) => …\` for reshapes, never Python CRUD.
 - Leave llm / llm-batch prompts empty unless you need extra instructions. Runtime appends field prompts from structures.
 
 ## Topology

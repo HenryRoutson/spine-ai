@@ -23,9 +23,10 @@ import { resolveModuleNote } from "@/lib/pipeline-module-factory";
 import { usesPassthroughStructure, isLlmKind } from "@/lib/module-kinds";
 import { assertEntriesForModule, parseAssertReferencedLabels } from "@/lib/assert_steps";
 import { hasQuoteField, listFieldsForWrap } from "./structure";
-import { normalizeStructureModels, stepSpineOutType, stepEmitsList } from "./type_expr";
+import { isListRoot, normalizeStructureModels, stepSpineOutType, stepEmitsList } from "./type_expr";
 import { migrateModulesSpineTypes, patchSpineOutList, refFromType } from "./spine_types";
 import { dedupeInferredModelsByShape } from "@/lib/structure-shape";
+import { shouldDeriveInsertSql } from "@/lib/schema-table-fn";
 
 export { stepEmitsList } from "./type_expr";
 
@@ -368,9 +369,11 @@ export function syncManagedPipelineSteps(
   globalModel: ModelId = DEFAULT_MODEL,
 ): PipelineModule[] {
   const outer = migrateModulesSpineTypes(
-    syncAutoQuoteSteps(
-      syncAutoStructureParseSteps(syncAutoDocToTextSteps(modules), models, globalModel),
-      models,
+    syncDerivedSqlListSpine(
+      syncAutoQuoteSteps(
+        syncAutoStructureParseSteps(syncAutoDocToTextSteps(modules), models, globalModel),
+        models,
+      ),
     ),
   );
   return outer.map((m) => {
@@ -383,6 +386,21 @@ export function syncManagedPipelineSteps(
       })),
     };
   });
+}
+
+// AI : empty INSERT after llm-batch / Link Quotes inherits list spine — same pattern as auto quotes.
+function syncDerivedSqlListSpine(modules: PipelineModule[]): PipelineModule[] {
+  const out = modules.map((m, i) => {
+    if (m.kind !== ModuleKind.Sql) return m;
+    const prev = i > 0 ? modules[i - 1] : undefined;
+    if (!shouldDeriveInsertSql(prev, m) || !stepEmitsList(prev)) return m;
+    const modelId = m.outStructureId;
+    if (!modelId) return m;
+    if (m.outType && isListRoot(m.outType) && m.inType && isListRoot(m.inType)) return m;
+    const spine = structureSpineType(modelId, true);
+    return { ...m, inType: spine, outType: spine };
+  });
+  return modulesEqual(modules, out) ? modules : out;
 }
 
 export function isAutoQuoteStep(m: PipelineModule): boolean {

@@ -119,7 +119,7 @@ export function deriveInType(m: PipelineModule): TypeExpr | undefined {
   const base = refType(m.inStructureId);
   if (!base) return undefined;
   if (m.kind === "llm-batch" || m.kind === "example-select") return listOf(base);
-  if (m.kind === "quote" && m.outType && isListRoot(m.outType)) return listOf(base);
+  if ((m.kind === "quote" || m.kind === "sql") && m.outType && isListRoot(m.outType)) return listOf(base);
   return base;
 }
 

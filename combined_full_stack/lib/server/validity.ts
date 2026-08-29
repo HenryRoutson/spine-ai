@@ -230,6 +230,12 @@ function stepAcceptsSpineType(
     const a = typeExprItemRef(actual);
     return e != null && e === a;
   }
+  // AI : sql INSERT/SELECT of the same row type maps over a list (llm-batch → empty sql).
+  if (m.kind === ModuleKind.Sql) {
+    const e = typeExprItemRef(expected);
+    const a = typeExprItemRef(actual);
+    if (e != null && e === a) return true;
+  }
   // AI : example-select unwraps the sole list[T] field on a combine (or similar) wrapper struct.
   if (isExampleSelectKind(m.kind) && exampleSelectAcceptsWrapper(expected, actual, models)) return true;
   if (!cardinalityMismatch(expected, actual)) return false;
