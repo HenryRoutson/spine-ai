@@ -23,6 +23,7 @@ import {
 } from "../structure-shape";
 import type { StructureModel, TypeAlias } from "./types";
 import { formatParamsGo, formatParamsTs, formatTypeParams } from "../type-params";
+import { allModelsToTableFns } from "@/lib/schema-table-fn";
 
 function typeAliasExportName(name: string): string {
   return modelExportIdentifier(name);
@@ -189,7 +190,8 @@ export function allModelsToPydantic(
   const classes = exportModels.map((m) => modelToPydantic(m, exportModels)).join("\n\n\n");
   const aliasGap = aliasesBlock ? `\n${aliasesBlock}` : "";
   const idGap = idAliases ? `\n${idAliases}` : "";
-  return `${imports}${pydanticBuiltinModels()}${aliasGap}${idGap}\n${classes}\n`;
+  const tables = allModelsToTableFns(models);
+  return `${imports}${pydanticBuiltinModels()}${aliasGap}${idGap}\n${classes}\n\n${tables}`;
 }
 
 function modelToDts(model: StructureModel, models: StructureModel[]): string {
