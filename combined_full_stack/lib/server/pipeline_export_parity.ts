@@ -43,6 +43,7 @@ import {
   type RunId,
   type RunTestReport,
 } from "@/lib/server/types";
+import { applyPipelineModulePatch } from "@/lib/server/pipeline-module-union";
 import type {
   FileContentHash,
   ParserCacheRow,
@@ -131,13 +132,14 @@ function parityProjectOverride(project: Project): Project {
   const model = parityUiModelId();
   return {
     ...project,
-    modules: project.modules.map((m) => ({
-      ...m,
-      cached: false,
-      // AI : force cheap flash on every LLM-bearing step; drop input-desc checks to save calls.
-      model: m.model ? model : m.model,
-      inputDescription: undefined,
-    })),
+    modules: project.modules.map((m) =>
+      applyPipelineModulePatch(m, {
+        cached: false,
+        // AI : force cheap flash on every LLM-bearing step; drop input-desc checks to save calls.
+        model: m.model ? model : m.model,
+        inputDescription: undefined,
+      }),
+    ),
   };
 }
 

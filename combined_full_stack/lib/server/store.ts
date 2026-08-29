@@ -17,6 +17,7 @@ import {
   type SeedDocSpec,
 } from "./seed";
 import { migrateProjectModules, projectWithAuthoredModules, syncManagedPipelineSteps } from "./validity";
+import { applyPipelineModulePatch } from "./pipeline-module-union";
 import { stripSharedModels } from "./builtin_models";
 import type {
   DocId,
@@ -365,15 +366,14 @@ function mergeSeedPipelineIntoProject(existing: Project, seed: Project): Project
   let modules = seed.modules.map((sm) => {
     const em = existing.modules.find((m) => m.id === sm.id);
     if (!em) return structuredClone(sm);
-    return {
-      ...sm,
+    return applyPipelineModulePatch(structuredClone(sm), {
       cached: true,
       model: em.model ?? sm.model,
       prompt: em.prompt ?? sm.prompt,
       inputDescription: em.inputDescription ?? sm.inputDescription,
       useOcr: em.useOcr ?? sm.useOcr,
       note: em.note ?? sm.note,
-    };
+    });
   });
   modules = syncManagedPipelineSteps(modules, models);
   return migrateProjectModules({ ...existing, seedDocNames, expectedOutputs, inferencePresets, models, modules });

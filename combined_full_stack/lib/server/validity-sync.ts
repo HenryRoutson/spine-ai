@@ -25,6 +25,7 @@ import { assertEntriesForModule, parseAssertReferencedLabels } from "@/lib/asser
 import { hasQuoteField, listFieldsForWrap } from "./structure";
 import { normalizeStructureModels, stepSpineOutType, stepEmitsList } from "./type_expr";
 import { migrateModulesSpineTypes, patchSpineOutList, refFromType } from "./spine_types";
+import { applyPipelineModulePatch, normalizePipelineModule } from "./pipeline-module-union";
 import { dedupeInferredModelsByShape } from "@/lib/structure-shape";
 
 export { stepEmitsList } from "./type_expr";
@@ -184,12 +185,11 @@ function foldConvertOcrOntoInput(input: PipelineModule, convert: PipelineModule 
   if (!inputModuleNeedsDocToText(input)) return stripInputOcrConfig(input);
   if (!convert) return input;
   const useOcr = convert.useOcr || undefined;
-  return {
-    ...input,
+  return applyPipelineModulePatch(input, {
     useOcr,
     model: useOcr ? convert.model : undefined,
     prompt: useOcr ? convert.prompt : undefined,
-  };
+  });
 }
 
 // AI : authored graph — Convert to text is derived from inputType, never stored in seeds / DB JSON.
@@ -205,13 +205,14 @@ export function authoredPipelineModules(modules: PipelineModule[]): PipelineModu
       continue;
     }
     if (isNestedLaneKind(m.kind)) {
-      out.push({
-        ...m,
-        forkBranches: (m.forkBranches ?? []).map((b) => ({
-          ...b,
-          modules: authoredPipelineModules(b.modules),
-        })),
-      });
+      out.push(
+        applyPipelineModulePatch(m, {
+          forkBranches: (m.forkBranches ?? []).map((b) => ({
+            ...b,
+            modules: authoredPipelineModules(b.modules),
+          })),
+        }),
+      );
       continue;
     }
     out.push(m);
@@ -580,7 +581,7 @@ export function migrateProjectModules(project: Project): Project {
   const normalized = normalizePassthroughStructureIds(withCache);
   const chatbotPinned = normalizeChatbotStructureIds(normalized);
   const noted = normalizeModuleNotes(chatbotPinned);
-  const spineTyped = migrateModulesSpineTypes(noted);
+  const spineTyped = mapPipelineModules(migrateModulesSpineTypes(noted), normalizePipelineModule);
   const modelsChangedFlag =
     models.length !== project.models.length ||
     models.some((m, i) => {

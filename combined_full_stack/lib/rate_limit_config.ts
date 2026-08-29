@@ -36,7 +36,7 @@ export const RATE_LIMITS: Record<RateLimitTier, { windowMs: number; max: number 
   // AI : authenticated doc upload — parse/OCR/storage is expensive; cap well below the default bucket.
   upload: { windowMs: 60_000, max: 30 },
   // AI : per-link + IP — limits anonymous credit drain on sharer_pays links.
-  // AI : TODO security — IP rotation still drains owner credits; pair with CAPTCHA / spend caps.
+  // AI : TODO (jank-shared-run-abuse) — IP rotation still drains owner credits; pair with CAPTCHA / spend caps.
   shared_run: { windowMs: 600_000, max: 5 },
   // AI : bearer-key pipeline invoke — per-api + IP cap.
   hosted_api: { windowMs: 600_000, max: 30 },

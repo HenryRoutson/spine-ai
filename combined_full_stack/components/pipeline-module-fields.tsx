@@ -14,7 +14,7 @@ import { isLlmKind, isMergeModuleKind, usesPassthroughStructure } from "@/lib/mo
 import { inputDescriptionLlmOptInOnly, shouldCheckInputDescription } from "@/lib/input-description-gate"
 import { flattenPipelineModules, forkJoinOf, forkJoinScopeModules, locatePipelineModule } from "@/lib/fork-pipeline"
 import { formatModuleSpineIn, formatModuleSpineOut } from "@/lib/spine-type"
-import { MODULE_META, ModuleKind, DOC_PARSE_MODES, docParseModeForModule, type PipelineModule, type StructureModel, type TypeAlias } from "@/lib/types"
+import { DEFAULT_VISION_DOC_PARSE_MODEL, MODULE_META, ModuleKind, DOC_PARSE_MODES, docParseModeForModule, type PipelineModule, type StructureModel, type TypeAlias } from "@/lib/types"
 import {
   InvalidKind,
   IoMismatchFixKind,
@@ -178,7 +178,7 @@ export function PipelineModuleFields({
                         onClick={() =>
                           onUpdate({
                             useOcr: mode.value === "llm" ? true : undefined,
-                            model: mode.value === "llm" ? selected.model ?? "gemini-3-flash" : undefined,
+                            model: mode.value === "llm" ? selected.model ?? DEFAULT_VISION_DOC_PARSE_MODEL : undefined,
                             prompt: mode.value === "llm" ? selected.prompt : undefined,
                           })
                         }

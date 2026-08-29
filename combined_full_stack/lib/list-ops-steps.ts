@@ -14,6 +14,8 @@ import {
   ModuleKind,
   type MergeLayerPolicy,
   type MergePolicy,
+  applyPipelineModulePatch,
+  normalizePipelineModule,
   type PipelineModule,
   type StructureModel,
   type StructureModelId,
@@ -195,13 +197,12 @@ export function syncListOpsStepModule(
     return { module: m, models }
   }
 
-  let next: PipelineModule = {
-    ...m,
+  let next: PipelineModule = applyPipelineModulePatch(m, {
     fallbackList: [makeCustomCodeEntry(CustomCodeLanguage.TypeScript, code)],
-  }
+  })
 
   if (m.kind === ModuleKind.Chunk && next.outStructureId) {
-    next = { ...next, ...patchSpineOutList(next, true) }
+    next = applyPipelineModulePatch(next, patchSpineOutList(next, true))
     return { module: next, models }
   }
 
@@ -225,7 +226,7 @@ export function syncListOpsModules(
         scratchModels = syncedLane.models
         return { ...b, modules: syncedLane.modules }
       })
-      return { ...m, forkBranches: nested }
+      return applyPipelineModulePatch(m, { forkBranches: nested })
     }
     const synced = syncListOpsStepModule(m, scratchModels, prev, modules)
     scratchModels = synced.models
@@ -271,5 +272,5 @@ export function migrateListMergeModule(m: PipelineModule): PipelineModule {
       break
   }
   const { listMergeMethod: _lm, listMergeCustom: _lc, ...rest } = legacy
-  return { ...rest, kind: ModuleKind.Merge, mergePolicy, mergeCustom }
+  return normalizePipelineModule({ ...rest, kind: ModuleKind.Merge, mergePolicy, mergeCustom })
 }

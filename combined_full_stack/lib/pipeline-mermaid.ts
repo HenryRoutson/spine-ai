@@ -6,13 +6,21 @@ import { ModuleKind, type PipelineModule, type StructureModel } from "@/lib/type
 
 export type PipelineMermaidTheme = "light" | "dark"
 
+// AI : flip true to restore kind + I/O types in mermaid cells (wide boxes)
+export const MERMAID_VERBOSE_STEP_LABELS = false
+
+export type PipelineMermaidOptions = {
+  verboseStepLabels?: boolean
+}
+
 function mermaidEscape(text: string): string {
   return text.replace(/"/g, "'").replace(/\[/g, "(").replace(/\]/g, ")")
 }
 
 function nodeId(modules: PipelineModule[], moduleId: string): string {
   if (moduleId === DAG_START_ID) return "start"
-  if (moduleId === DAG_END_ID) return "end"
+  // AI : mermaid treats `end` as subgraph-close; never use it as a node id
+  if (moduleId === DAG_END_ID) return "finish"
   if (moduleId.startsWith("__trigger_")) return `trig_${moduleId.slice("__trigger_".length).replace(/\W/g, "_")}`
   const i = flattenPipelineModules(modules).findIndex((m) => m.id === moduleId)
   return i >= 0 ? `n${i}` : `n_${moduleId.replace(/\W/g, "_")}`
@@ -28,9 +36,19 @@ function stepIoLine(m: PipelineModule, models: StructureModel[]): string {
   return `${inT} → ${outT}`
 }
 
-function stepNodeLabel(m: PipelineModule, stepNum: number, models: StructureModel[]): string {
-  const kind = m.kind.replace(/-/g, " ")
-  return `${stepNum}. ${m.label}<br/><small>${kind} · ${stepIoLine(m, models)}</small>`
+function stepNodeLabel(
+  m: PipelineModule,
+  stepNum: number,
+  models: StructureModel[],
+  verbose: boolean,
+): string {
+  if (verbose) {
+    const kind = m.kind.replace(/-/g, " ")
+    return `${stepNum}. ${m.label}<br/><small>${kind} · ${stepIoLine(m, models)}</small>`
+  }
+  // AI : auto convert labels include the input name — too wide for mermaid cells
+  const title = m.kind === ModuleKind.DocToText ? "Convert to text" : m.label
+  return `${stepNum}. ${title}`
 }
 
 const MONO_FONT = "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace"
@@ -87,7 +105,9 @@ export function derivePipelineMermaid(
   modules: PipelineModule[],
   models: StructureModel[],
   theme: PipelineMermaidTheme = "light",
+  opts?: PipelineMermaidOptions,
 ): string {
+  const verbose = opts?.verboseStepLabels ?? MERMAID_VERBOSE_STEP_LABELS
   if (!modules.length) {
     return [
       ...themeFrontmatter(theme),
@@ -106,7 +126,7 @@ export function derivePipelineMermaid(
       continue
     }
     if (n.kind === "end") {
-      nodeDefs.push('  end["End"]:::terminal')
+      nodeDefs.push('  finish["End"]:::terminal')
       continue
     }
     if (n.kind === "trigger") {
@@ -117,7 +137,7 @@ export function derivePipelineMermaid(
     if (!m) continue
     const stepNum = flat.findIndex((x) => x.id === m.id) + 1
     const id = nodeId(modules, m.id)
-    nodeDefs.push(`  ${id}["${mermaidEscape(stepNodeLabel(m, stepNum, models))}"]:::step`)
+    nodeDefs.push(`  ${id}["${mermaidEscape(stepNodeLabel(m, stepNum, models, verbose))}"]:::step`)
   }
 
   const edges: string[] = []
