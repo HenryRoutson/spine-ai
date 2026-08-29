@@ -13,7 +13,7 @@ import {
 } from "@/lib/fork-pipeline"
 import { evalIfCondition, ifElseBranch, ifThenBranch, joinIfElseValue } from "@/lib/if-else-pipeline"
 import { pickCaseBranch } from "@/lib/case-pipeline"
-import { RunStepStatus, type PipelineModule, type RunStep } from "@/lib/types"
+import { applyPipelineModulePatch, RunStepStatus, type PipelineModule, type RunStep } from "@/lib/types"
 
 export { isCaseKind, isControlJoinKind, isExclusiveKind, makeControlJoinModule }
 
@@ -65,13 +65,12 @@ export function syncExclusiveControlJoins(modules: PipelineModule[]): PipelineMo
   for (let i = 0; i < modules.length; i++) {
     const m = modules[i]!
     const next: PipelineModule = isNestedLaneKind(m.kind)
-      ? {
-          ...m,
+      ? applyPipelineModulePatch(m, {
           forkBranches: forkBranchesOf(m).map((b) => ({
             ...b,
             modules: syncExclusiveControlJoins(b.modules),
           })),
-        }
+        })
       : m
     out.push(next)
     if (isExclusiveKind(next.kind)) {

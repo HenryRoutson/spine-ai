@@ -57,6 +57,7 @@ function action(
 }
 
 // AI : keep this list small — vibe picks ids from here; HTTP is the generic hatch.
+// AI : TODO (jank-connect-allowlist) — Slack / Gmail / Sheets / HTTP only; grow when a seed needs an id.
 const BUNDLED: ConnectAction[] = [
   action(
     "slack.postMessage",

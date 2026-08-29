@@ -134,7 +134,7 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
   const linkId = parseSharedLinkId(id);
   if (!linkId) return apiError("link not found", 404);
 
-  // AI : TODO security — sharer_pays credit drain: IP-bucketed shared_run (5/10m) is rotatable;
+  // AI : TODO (jank-shared-run-abuse) — sharer_pays credit drain: IP-bucketed shared_run (5/10m) is rotatable;
   // AI : embed session token blocks spoofed parentOrigin; CAPTCHA / spend caps still needed vs distributed drain.
   const ip = clientIpFromHeaders(req.headers);
   const runLimitKey = `shared-run:${linkId}:${ip}` as RateLimitKey;

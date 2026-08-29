@@ -11,6 +11,7 @@ import { cn } from "@/lib/utils"
 import { INSPECTOR_SECTION_BORDER_CLASS, INSPECTOR_SECTION_TITLE_CLASS, WARNING_TEXT_CLASS } from "@/lib/ui-classes"
 import { uiContextTargetProps } from "@/lib/ui-context-dom"
 import {
+  DEFAULT_VISION_DOC_PARSE_MODEL,
   type PipelineModule,
   type StructureModel,
   type StructureModelId,
@@ -216,11 +217,11 @@ export function OcrExtraFields({
       <PipelineField label="Vision model">
         {edit ? (
           <ModelSelector
-            value={selected.model ?? "gemini-3-flash"}
+            value={selected.model ?? DEFAULT_VISION_DOC_PARSE_MODEL}
             onChange={(v) => onUpdate({ model: v })}
           />
         ) : (
-          <StaticValue mono>{llmModelLabel(selected.model ?? "gemini-3-flash")}</StaticValue>
+          <StaticValue mono>{llmModelLabel(selected.model ?? DEFAULT_VISION_DOC_PARSE_MODEL)}</StaticValue>
         )}
       </PipelineField>
       <PipelineField label="OCR prompt" hint={edit ? "optional — extra transcription instructions" : undefined}>

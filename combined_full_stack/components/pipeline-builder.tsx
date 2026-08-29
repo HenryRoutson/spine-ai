@@ -41,7 +41,7 @@ import { moduleMetrics } from "@/lib/billing"
 import { managedPipelinePairIds } from "@/lib/pipeline-layout"
 import { KindMenuItemIcon, AutoQuoteLock, AutoDocToTextLock, AutoStructureParseLock } from "@/lib/module-ui"
 import { makeModule } from "@/lib/pipeline-module-factory"
-import { MODULE_META, ModuleKind, type PipelineModule, type ModuleId } from "@/lib/types"
+import { applyPipelineModulePatch, MODULE_META, ModuleKind, type ModuleId, type PipelineModule, type PipelineModulePatch } from "@/lib/types"
 import {
   deriveForkStepTypes,
   deriveIfElseStepTypes,
@@ -182,14 +182,16 @@ export function PipelineBuilder() {
     setSelectedId(fresh[fresh.length - 1]!.id)
   }
 
-  function update(id: string, patch: Partial<PipelineModule>) {
+  function update(id: string, patch: PipelineModulePatch) {
     let derivedModels = models
     const loc = locatePipelineModule(modules, id)
     const next = updatePipelineModule(modules, id, (m) => {
-      const updated = { ...m, ...patch }
-      if (updated.kind === ModuleKind.Output && patch.inStructureId) {
-        updated.outStructureId = patch.inStructureId
-      }
+      const updated = applyPipelineModulePatch(m, {
+        ...patch,
+        ...(m.kind === ModuleKind.Output && patch.inStructureId
+          ? { outStructureId: patch.inStructureId }
+          : {}),
+      })
       const prev = loc?.predecessor
       const span = loc?.siblings ?? modules
       const idx = loc?.index ?? span.findIndex((x) => x.id === id)
@@ -236,7 +238,7 @@ export function PipelineBuilder() {
     if (!issue || (issue.kind !== InvalidKind.IoMismatch && issue.kind !== InvalidKind.CardinalityMismatch)) return
     if (kind === IoMismatchFixKind.AdoptUpstream && issue.upstreamEmits) {
       const m = findPipelineModule(modules, moduleId)
-      const patch: Partial<PipelineModule> = { inStructureId: issue.upstreamEmits }
+      const patch: PipelineModulePatch = { inStructureId: issue.upstreamEmits }
       if (m?.kind === ModuleKind.Output) patch.outStructureId = issue.upstreamEmits
       update(moduleId, patch)
       return

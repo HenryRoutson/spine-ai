@@ -27,7 +27,7 @@ describe("hosted pipeline JSON walk", () => {
     const double = flattenPipelineModules(modules).find((m) => m.label === "Double")
     expect(double?.sql).toContain("value * 2")
     expect(valueUpdateExpr(double!)?.kind).toBe("binary")
-    expect(hostedPipelineArithPreview(modules, "double", 1)).toEqual([
+    expect(hostedPipelineArithPreview(modules, "double", 1, { collatz: false })).toEqual([
       { moduleId: "mod_sql", label: "Double", from: 1, to: 2, expr: "1 × 2" },
     ])
   })

@@ -32,5 +32,11 @@ export {
   HostedApiFundingMode,
   RunStatus,
 } from "./server/types";
+export {
+  applyPipelineModulePatch,
+  normalizePipelineModule,
+  normalizePipelineModules,
+  PIPELINE_MODULE_KIND_KEYS,
+} from "./server/pipeline-module-union";
 export * from "./run-types";
 export { JobLogLevel } from "./run-types";
