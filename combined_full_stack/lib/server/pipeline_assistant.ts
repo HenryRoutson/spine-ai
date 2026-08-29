@@ -825,7 +825,7 @@ export function runVibeWorkspaceChecks(
   project: Project,
   globalModel: ModelId,
   testDocsCatalog: AssistantTestDocCatalogEntry[],
-  _task?: string,
+  task?: string,
   workspace?: VibeWorkspace,
 ): string {
   if (draft.errors.length) {
@@ -866,6 +866,16 @@ export function runVibeWorkspaceChecks(
     if (!sql) continue;
     const err = prepareSqliteSql(sql, schemaSql);
     if (err) sqlErrors.push(`${m.label}: ${err}`);
+  }
+  // AI : react to THIS user message — not few-shot task phrases. No sql step when they asked to persist is a miss.
+  if (
+    task &&
+    /\b(sql|sqlite|database|persist|postgres|supabase)\b/i.test(task) &&
+    !flattenPipelineModules(proposal.modules).some((m) => m.kind === ModuleKind.Sql)
+  ) {
+    sqlErrors.push(
+      "pipeline.json has no sql step, but the task asks to persist or query a database. Add a sql step. Omit the sql text after an extract of the same structure to INSERT each previous row, or write JOIN / ? / :name binds yourself.",
+    );
   }
   const lint = lintPipeline(
     {

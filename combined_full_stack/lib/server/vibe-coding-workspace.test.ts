@@ -303,6 +303,18 @@ describe("vibe coding harness tools", () => {
     )
     expect(fail).toMatch(/^FAIL/m)
     expect(fail).toMatch(/^sql:/m)
+    const missing = runVibeWorkspaceChecks(
+      {
+        ...base,
+        modules: modules.filter((m) => m.kind !== "sql"),
+      },
+      session.project!,
+      DEFAULT_MODEL,
+      [],
+      "Persist those rows in a database.",
+    )
+    expect(missing).toMatch(/^FAIL/m)
+    expect(missing).toMatch(/no sql step/)
   })
 
   it("auto run_tests after writes and ignores Q&A PASS / premature done", () => {
