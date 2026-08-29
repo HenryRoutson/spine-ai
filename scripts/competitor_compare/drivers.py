@@ -95,11 +95,13 @@ def _base44_status(env: dict[str, str]) -> CredentialStatus:
 
 
 def _live_openrouter_key(env: dict[str, str]) -> str:
-    # AI : Cursor Cloud secret is often OPENROUTER_KEY; spine-cli still wants OPENROUTER_API_KEY.
-    key = env_get(env, "OPENROUTER_API_KEY", "OPENROUTER_KEY")
-    if not key or "placeholder" in key or key.startswith("sk-or-local"):
-        return ""
-    return key
+    # AI : skip .env placeholders so a Cloud OPENROUTER_KEY still counts as live.
+    for name in ("OPENROUTER_API_KEY", "OPENROUTER_KEY"):
+        key = env.get(name, "").strip()
+        if not key or "placeholder" in key or key.startswith("sk-or-local"):
+            continue
+        return key
+    return ""
 
 
 def _spine_status(env: dict[str, str]) -> CredentialStatus:

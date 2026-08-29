@@ -134,6 +134,16 @@ class CredentialTests(unittest.TestCase):
         self.assertTrue(spine.ready)
         self.assertIn("OPENROUTER_API_KEY", spine.hint)
 
+    def test_spine_skips_placeholder_and_uses_openrouter_key(self) -> None:
+        rows = credential_status(
+            env={
+                "OPENROUTER_API_KEY": "sk-or-local-dev-placeholder",
+                "OPENROUTER_KEY": "sk-or-v1-abcdefghij",
+            }
+        )
+        spine = next(r for r in rows if r.platform == "spine")
+        self.assertTrue(spine.ready)
+
     def test_dry_run_does_not_need_credentials(self) -> None:
         result = run_platform("lovable", "hello", wait_seconds=1, env={}, dry_run=True)
         self.assertTrue(result.ok)
