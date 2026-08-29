@@ -13,7 +13,7 @@ import {
 } from "@/lib/fork-pipeline"
 import { evalIfCondition, ifElseBranch, ifThenBranch, joinIfElseValue } from "@/lib/if-else-pipeline"
 import { pickCaseBranch } from "@/lib/case-pipeline"
-import type { PipelineModule } from "@/lib/types"
+import { RunStepStatus, type PipelineModule, type RunStep } from "@/lib/types"
 
 export { isCaseKind, isControlJoinKind, isExclusiveKind, makeControlJoinModule }
 
@@ -85,4 +85,33 @@ export function syncExclusiveControlJoins(modules: PipelineModule[]): PipelineMo
 export function skippedExclusiveModules(m: PipelineModule, taken?: ForkBranch): PipelineModule[] {
   const takenId = taken?.id
   return forkBranchesOf(m).flatMap((b) => (b.id === takenId ? [] : flattenPipelineModules(b.modules)))
+}
+
+export function skippedRunStep(module: PipelineModule, inputPreview: string): RunStep {
+  return {
+    moduleId: module.id,
+    kind: module.kind,
+    label: module.label,
+    status: RunStepStatus.Skipped,
+    ms: 0,
+    costCents: 0,
+    inputPreview,
+    outputPreview: "skipped",
+  }
+}
+
+export function appendSkippedExclusiveArms(steps: RunStep[], m: PipelineModule, taken?: ForkBranch): void {
+  for (const skipped of skippedExclusiveModules(m, taken)) {
+    if (steps.some((s) => s.moduleId === skipped.id)) continue
+    steps.push(skippedRunStep(skipped, `not taken — ${m.label}`))
+  }
+}
+
+export function appendSkippedSpineAfter(steps: RunStep[], modules: PipelineModule[], exclusiveIndex: number): void {
+  for (let j = exclusiveIndex + 1; j < modules.length; j++) {
+    for (const skipped of flattenPipelineModules([modules[j]!])) {
+      if (steps.some((s) => s.moduleId === skipped.id)) continue
+      steps.push(skippedRunStep(skipped, "spine after if/case without Join"))
+    }
+  }
 }

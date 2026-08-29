@@ -3,13 +3,13 @@ import { resolve } from "node:path"
 import { computeInvalid } from "@/lib/validity"
 import { insertPipelineModules, isControlJoinKind } from "@/lib/fork-pipeline"
 import { pickCaseBranch } from "@/lib/case-pipeline"
-import { exclusiveContinues, pickExclusiveBranch, skippedExclusiveModules } from "@/lib/exclusive-control"
+import { exclusiveContinues, pickExclusiveBranch, skippedExclusiveModules, skippedRunStep, appendSkippedExclusiveArms } from "@/lib/exclusive-control"
 import { parseUserAddableKind } from "@/lib/module-kinds"
 import { createPipelineModule } from "@/lib/pipeline-module-factory"
 import { loadProjectSeed, SEEDS_DIR } from "@/lib/server/seed"
 import { formatModuleSpineOut } from "@/lib/spine-type"
 import { computeWarnings } from "@/lib/validity"
-import { FieldType, IfConditionKind, ModuleKind, type ModuleId, type PipelineModule, type StructureModel, type StructureModelId } from "@/lib/types"
+import { FieldType, IfConditionKind, ModuleKind, type ModuleId, type PipelineModule, type RunStep, type StructureModel, type StructureModelId } from "@/lib/types"
 
 function step(partial: Omit<Partial<PipelineModule>, "id"> & { id: string; kind: PipelineModule["kind"]; label: string }): PipelineModule {
   return {
@@ -68,6 +68,10 @@ describe("case + optional Join", () => {
     })
     const taken = pickCaseBranch(m, { status: "legal" })
     expect(skippedExclusiveModules(m, taken).map((x) => x.id)).toEqual(["b1"])
+    const steps: RunStep[] = []
+    appendSkippedExclusiveArms(steps, m, taken)
+    expect(steps.map((s) => s.moduleId)).toEqual(["b1"])
+    expect(skippedRunStep(m, "x").status).toBe("skipped")
   })
 
   it("continues the spine only when Join follows", () => {

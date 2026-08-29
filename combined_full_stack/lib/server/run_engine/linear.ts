@@ -2,12 +2,13 @@ import { invariant } from "@/lib/assert";
 import { isLlmKind, usesPassthroughStructure } from "@/lib/module-kinds";
 import { compactPreview } from "@/lib/text-preview";
 import { labelAsStateKey } from "../pipeline_state";
-import { forkBranchesOf, flattenPipelineModules } from "@/lib/fork-pipeline";
+import { forkBranchesOf } from "@/lib/fork-pipeline";
 import {
   exclusiveContinues,
   isExclusiveKind,
   pickExclusiveBranch,
-  skippedExclusiveModules,
+  appendSkippedExclusiveArms,
+  appendSkippedSpineAfter,
 } from "@/lib/exclusive-control";
 import { inputTypeLabel } from "../../inference-input";
 import { serializeCtx, resolveStepInputForCheck, requireLinearInput } from "./context";
@@ -178,19 +179,7 @@ export async function runLinearStepsFrom(
               );
               if (laneStatus === "error") throw new Error(`exclusive lane "${branch.label}" failed`);
             }
-            for (const skipped of skippedExclusiveModules(m, branch)) {
-              if (steps.some((s) => s.moduleId === skipped.id)) continue;
-              steps.push({
-                moduleId: skipped.id,
-                kind: skipped.kind,
-                label: skipped.label,
-                status: RunStepStatus.Skipped,
-                ms: 0,
-                costCents: 0,
-                inputPreview: `not taken — ${m.label}`,
-                outputPreview: "skipped",
-              });
-            }
+            appendSkippedExclusiveArms(steps, m, branch);
             ctx.prevModuleId = forkPrev;
           }
           if (cached) {
@@ -262,6 +251,8 @@ export async function runLinearStepsFrom(
             }
           }
         } catch (err) {
+          // AI : nested exclusive/fork client-code already wrapped this — don't pin it on the parent split.
+          if (err instanceof PipelinePausedError) throw err;
           if (err instanceof ClientStepPendingError) {
             const primary = err.entries[0];
             const golden = runGolden();
@@ -467,21 +458,7 @@ export async function runLinearStepsFrom(
       return "error";
     }
     if (isExclusiveKind(m.kind) && !exclusiveContinues(modules, i)) {
-      for (let j = i + 1; j < modules.length; j++) {
-        for (const skipped of flattenPipelineModules([modules[j]!])) {
-          if (steps.some((s) => s.moduleId === skipped.id)) continue;
-          steps.push({
-            moduleId: skipped.id,
-            kind: skipped.kind,
-            label: skipped.label,
-            status: RunStepStatus.Skipped,
-            ms: 0,
-            costCents: 0,
-            inputPreview: "spine after if/case without Join",
-            outputPreview: "skipped",
-          });
-        }
-      }
+      appendSkippedSpineAfter(steps, modules, i);
       return "ok";
     }
   }
