@@ -1,5 +1,6 @@
 import { isAbsolute, resolve } from "node:path"
 import { chdir } from "node:process"
+import { loadMcpEnvFiles } from "./mcp-env-files.js"
 
 // AI : MCP JSON-RPC is stdout. dotenv 17 and other imports log there — keep only JSON-RPC on stdout.
 export function isMcpStdoutChunk(text: string): boolean {
@@ -32,6 +33,8 @@ process.env.SPINE_SESSION_PATH = sessionRaw
     ? sessionRaw
     : resolve(process.cwd(), sessionRaw)
   : resolve(APP_ROOT, ".spine-session.json")
+
+loadMcpEnvFiles(REPO_ROOT, APP_ROOT)
 
 // AI : seed.ts resolves paths from combined_full_stack cwd — set after env is absolute.
 chdir(APP_ROOT)

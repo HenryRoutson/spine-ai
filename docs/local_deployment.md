@@ -34,6 +34,7 @@ python3 scripts/setup_local.py all --start-dev
 | Connect | `nango` | Self-hosted Nango (auth + API proxy) on `:3003` |
 | Pieces | `ap` | Activepieces CE sidecar (typed Connect `ap.*` actions) on `:3080` |
 | Dependencies | `deps` | `npm install` (all apps) + `sync:shared` |
+| Editors (MCP) | `mcp` | optional Claude Code / Cursor — [`docs/mcp_setup.md`](mcp_setup.md) |
 | Seed data | `seeds` | After migrations: `npm run sync-seeds` (writes `public.seed_docs` once — not per user) |
 | Apps | `dev` | `npm run dev:all` |
 
@@ -70,6 +71,7 @@ python3 scripts/setup_local.py env        # .env bootstrap
 python3 scripts/setup_local.py supabase   # start Supabase
 python3 scripts/setup_local.py supabase --reset   # start + db reset
 python3 scripts/setup_local.py deps       # npm install
+python3 scripts/setup_local.py mcp        # optional Claude Code / Cursor MCP
 python3 scripts/setup_local.py seeds      # test user + example projects
 python3 scripts/setup_local.py nango      # start self-hosted Nango
 python3 scripts/setup_local.py ap         # start Activepieces CE sidecar
@@ -89,7 +91,7 @@ python3 scripts/setup_local.py reset      # db reset + re-seed
 
 Required for the main app: `OPENROUTER_API_KEY` in `.env`.
 
-Optional: Stripe keys (billing disabled by default via `NEXT_PUBLIC_STRIPE_ENABLED=false`).
+Optional: `SPINE_API_TOKEN` + `SPINE_API_URL` for Claude Code / Cursor MCP (see [`docs/mcp_setup.md`](mcp_setup.md)). Stripe keys (billing disabled by default via `NEXT_PUBLIC_STRIPE_ENABLED=false`).
 
 Connect (Slack / Gmail / Sheets) needs Nango running. `python3 scripts/setup_local.py nango` writes `NANGO_SECRET_KEY` and starts Docker. Register this OAuth callback on your Slack and Google apps: `http://localhost:3003/oauth/callback`. Then create matching integrations (`slack`, `google-mail`, `google-sheet`) in the Nango dashboard.
 

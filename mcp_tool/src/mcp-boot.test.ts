@@ -1,5 +1,5 @@
 // AI : spawn the real stdio server — vitest imports do not catch tsx ESM / stdout handshake failures.
-import { spawn } from "node:child_process"
+import { spawn, spawnSync } from "node:child_process"
 import { createInterface } from "node:readline"
 import { resolve } from "node:path"
 import { describe, expect, it } from "vitest"
@@ -233,4 +233,21 @@ describe("MCP stdio boot", () => {
       rmSync(dir, { recursive: true, force: true })
     }
   }, 30_000)
+
+  it("launcher prints Claude Code and Cursor client config without booting MCP", () => {
+    const claude = spawnSync(process.execPath, [resolve(MCP_ROOT, "spine-mcp.mjs"), "--claude"], {
+      encoding: "utf8",
+      cwd: process.env.HOME ?? "/",
+    })
+    expect(claude.status, claude.stderr).toBe(0)
+    expect(claude.stdout).toContain("claude mcp add spine")
+    expect(claude.stdout).toContain("spine-mcp.mjs")
+    const cursor = spawnSync(process.execPath, [resolve(MCP_ROOT, "spine-mcp.mjs"), "--cursor"], {
+      encoding: "utf8",
+      cwd: process.env.HOME ?? "/",
+    })
+    expect(cursor.status, cursor.stderr).toBe(0)
+    expect(cursor.stdout).toContain("${workspaceFolder}/mcp_tool/spine-mcp.mjs")
+    expect(cursor.stdout).not.toContain("/Users/")
+  })
 })

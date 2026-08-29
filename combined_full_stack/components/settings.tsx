@@ -56,6 +56,7 @@ import { Switch } from "@/components/ui/switch"
 import { PrivacySettings } from "@/components/privacy-settings"
 import { TeamSettings } from "@/components/team-settings"
 import { LlmProvidersSettingsPage, LlmProvidersSettingsSummary } from "@/components/llm-providers-settings"
+import { McpSetupSettings } from "@/components/mcp-setup-settings"
 import { useOptionalAppShell } from "@/lib/app-shell"
 import { OPEN_LLM_PROVIDERS_EVENT, SCROLL_SETTINGS_SECTION_EVENT } from "@/lib/settings-nav"
 import { isDemoMode } from "@/lib/demo-mode"
@@ -132,6 +133,7 @@ const SETTINGS_SECTIONS = [
   { id: "settings-data-cache", label: "Data cache", keywords: "clear storage browser" },
   { id: "settings-projects", label: "Projects", keywords: "quick delete picker list" },
   { id: "settings-developer", label: "Developer tools", keywords: "build vibe hide structures testing" },
+  { id: "settings-mcp", label: "Editors (MCP)", keywords: "claude code cursor mcp tokens editor vibe" },
   { id: "settings-privacy", label: "Privacy", keywords: "data retention delete account" },
 ] as const
 
@@ -643,6 +645,8 @@ export function Settings() {
             </label>
           </section>
           ) : null}
+
+          {showSection("settings-mcp") ? <McpSetupSettings /> : null}
 
           {showSection("settings-privacy") ? (
           <div id="settings-privacy">

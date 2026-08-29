@@ -17,25 +17,36 @@ if (!existsSync(tsxCli)) {
   process.exit(1)
 }
 
-const env = {
-  ...process.env,
-  DOTENV_CONFIG_QUIET: process.env.DOTENV_CONFIG_QUIET ?? "true",
-  SPINE_REPO_ROOT: process.env.SPINE_REPO_ROOT ?? repoRoot,
-  SPINE_APP_ROOT: process.env.SPINE_APP_ROOT ?? appRoot,
-  SPINE_SESSION_PATH: process.env.SPINE_SESSION_PATH ?? resolve(appRoot, ".spine-session.json"),
+function runTsx(script, extraArgs, env) {
+  const child = spawn(process.execPath, [tsxCli, "--tsconfig", tsconfig, script, ...extraArgs], {
+    cwd: mcpRoot,
+    env,
+    stdio: "inherit",
+  })
+  child.on("exit", (code, signal) => {
+    if (signal) process.kill(process.pid, signal)
+    process.exit(code ?? 1)
+  })
+  child.on("error", (err) => {
+    console.error(err)
+    process.exit(1)
+  })
 }
 
-const child = spawn(process.execPath, [tsxCli, "--tsconfig", tsconfig, entry], {
-  cwd: mcpRoot,
-  env,
-  stdio: "inherit",
-})
-
-child.on("exit", (code, signal) => {
-  if (signal) process.kill(process.pid, signal)
-  process.exit(code ?? 1)
-})
-child.on("error", (err) => {
-  console.error(err)
-  process.exit(1)
-})
+const CONFIG_FLAGS = new Set(["--print-config", "--write-cursor", "--claude", "--cursor", "--cursor-global"])
+const forwarded = process.argv.slice(2)
+if (forwarded.some((flag) => CONFIG_FLAGS.has(flag))) {
+  runTsx(
+    resolve(mcpRoot, "scripts/print-client-config.ts"),
+    forwarded.filter((flag) => flag !== "--print-config"),
+    process.env,
+  )
+} else {
+  runTsx(entry, [], {
+    ...process.env,
+    DOTENV_CONFIG_QUIET: process.env.DOTENV_CONFIG_QUIET ?? "true",
+    SPINE_REPO_ROOT: process.env.SPINE_REPO_ROOT ?? repoRoot,
+    SPINE_APP_ROOT: process.env.SPINE_APP_ROOT ?? appRoot,
+    SPINE_SESSION_PATH: process.env.SPINE_SESSION_PATH ?? resolve(appRoot, ".spine-session.json"),
+  })
+}

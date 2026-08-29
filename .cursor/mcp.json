@@ -1,13 +1,11 @@
 {
   "mcpServers": {
-    "spine-pinpoint": {
+    "spine": {
       "command": "node",
       "args": [
-        "mcp_tool/spine-mcp.mjs"
+        "${workspaceFolder}/mcp_tool/spine-mcp.mjs"
       ],
-      "cwd": ".",
       "env": {
-        "PATH": "/Users/henry/.nvm/versions/node/v20.17.0/bin:/usr/bin:/bin",
         "DOTENV_CONFIG_QUIET": "true",
         "NODE_NO_WARNINGS": "1"
       }

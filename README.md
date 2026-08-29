@@ -10,6 +10,14 @@ python3 scripts/setup_local.py all
 python3 scripts/setup_local.py dev
 ```
 
+## Optional: Claude Code / Cursor (MCP)
+
+In-app Vibe is the default. To use an editor’s token budget on the same project, connect Spine MCP — see [`docs/mcp_setup.md`](docs/mcp_setup.md).
+
+```bash
+python3 scripts/setup_local.py mcp
+```
+
 ## Launch all (app + landing + dashboard)
 
 ```bash
