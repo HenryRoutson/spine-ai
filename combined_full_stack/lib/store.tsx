@@ -286,6 +286,8 @@ interface StoreState {
   setModules: (m: PipelineModule[]) => void
   setActiveFunction: (id: import("@/lib/types").pipeline_function_id) => void
   addPipelineFunction: (name?: string) => void
+  renamePipelineFunction: (id: import("@/lib/types").pipeline_function_id, name: string) => void
+  deletePipelineFunction: (id: import("@/lib/types").pipeline_function_id) => void
   // AI : atomic models+modules patch — avoids stale closure when assistant changes both at once
   applyProjectChanges: (changes: {
     models?: StructureModel[]
@@ -1618,6 +1620,17 @@ export function StoreProvider({
     spineSessionRef.current?.addPipelineFunction(name)
   }, [])
 
+  const renamePipelineFunction = useCallback(
+    (id: import("@/lib/types").pipeline_function_id, name: string) => {
+      spineSessionRef.current?.renamePipelineFunction(id, name)
+    },
+    [],
+  )
+
+  const deletePipelineFunction = useCallback((id: import("@/lib/types").pipeline_function_id) => {
+    spineSessionRef.current?.deletePipelineFunction(id)
+  }, [])
+
   const applyProjectChanges = useCallback(
     (changes: {
       models?: StructureModel[]
@@ -1672,6 +1685,8 @@ export function StoreProvider({
       setModules,
       setActiveFunction,
       addPipelineFunction,
+      renamePipelineFunction,
+      deletePipelineFunction,
       applyProjectChanges,
       strategies: project.strategies,
       setStrategies,
@@ -1718,6 +1733,8 @@ export function StoreProvider({
     setModules,
     setActiveFunction,
     addPipelineFunction,
+    renamePipelineFunction,
+    deletePipelineFunction,
     applyProjectChanges,
     setStrategies,
     setDocumentation,

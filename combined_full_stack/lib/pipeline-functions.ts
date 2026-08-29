@@ -13,6 +13,7 @@ import {
 export type { PipelineFunction, pipeline_function_id }
 
 export const DEFAULT_FUNCTION_ID = "main" as pipeline_function_id
+export const UNNAMED_FUNCTION_NAME = "unnamed function"
 
 export function blankPipelineModules(): PipelineModule[] {
   return [
@@ -50,7 +51,7 @@ export function functionsOnProject(project: Project): PipelineFunction[] {
   return [
     {
       id: DEFAULT_FUNCTION_ID,
-      name: "Main",
+      name: UNNAMED_FUNCTION_NAME,
       modules: project.modules,
     },
   ]
@@ -69,10 +70,11 @@ export function activeFunction(project: Project): PipelineFunction {
 }
 
 export function nextFunctionName(existing: PipelineFunction[]): string {
-  let n = existing.length + 1
   const names = new Set(existing.map((fn) => fn.name.toLowerCase()))
-  while (names.has(`function ${n}`)) n += 1
-  return `Function ${n}`
+  if (!names.has(UNNAMED_FUNCTION_NAME)) return UNNAMED_FUNCTION_NAME
+  let n = 2
+  while (names.has(`${UNNAMED_FUNCTION_NAME} ${n}`)) n += 1
+  return `${UNNAMED_FUNCTION_NAME} ${n}`
 }
 
 export function switchActiveFunction(project: Project, id: pipeline_function_id): Partial<Project> {
@@ -125,7 +127,7 @@ export function functionNameOnProject(project: Project, functionId?: string | nu
   const fns = functionsOnProject(project)
   const match = fns.find((fn) => fn.id === functionId)
   if (match) return match.name
-  if (!functionId || functionId === DEFAULT_FUNCTION_ID) return "Main"
+  if (!functionId || functionId === DEFAULT_FUNCTION_ID) return UNNAMED_FUNCTION_NAME
   return "Unknown function"
 }
 
@@ -143,10 +145,36 @@ export function renamePipelineFunction(
   id: pipeline_function_id,
   name: string,
 ): Partial<Project> {
-  const trimmed = name.trim()
-  if (!trimmed) return {}
-  const fns = functionsOnProject(project).map((fn) => (fn.id === id ? { ...fn, name: trimmed } : fn))
-  return { functions: fns, activeFunctionId: activeFunctionId(project), modules: project.modules }
+  const trimmed = name.trim() || UNNAMED_FUNCTION_NAME
+  const fns = functionsOnProject(project)
+  if (!fns.some((fn) => fn.id === id)) return {}
+  return {
+    functions: fns.map((fn) => (fn.id === id ? { ...fn, name: trimmed } : fn)),
+    activeFunctionId: activeFunctionId(project),
+    modules: project.modules,
+  }
+}
+
+// AI : last function stays — a project always has at least one pipeline.
+export function deletePipelineFunction(
+  project: Project,
+  id: pipeline_function_id,
+): Partial<Project> {
+  const fns = functionsOnProject(project)
+  if (fns.length <= 1) return {}
+  const index = fns.findIndex((fn) => fn.id === id)
+  if (index < 0) return {}
+  const remaining = fns.filter((fn) => fn.id !== id)
+  const active = activeFunctionId(project)
+  const next =
+    id === active
+      ? remaining[Math.max(0, index - 1)]!
+      : remaining.find((fn) => fn.id === active) ?? remaining[0]!
+  return {
+    functions: remaining,
+    activeFunctionId: next.id,
+    modules: next.modules,
+  }
 }
 
 export function syncFunctionsWithModules(project: Project, modules: PipelineModule[]): PipelineFunction[] | undefined {

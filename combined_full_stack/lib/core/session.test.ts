@@ -251,7 +251,7 @@ describe("SpineSession React-like API", () => {
     expect(store.pendingProposal).toBeNull()
   })
 
-  it("applyProposal with targetFunctionName adds a second function and leaves Main", () => {
+  it("applyProposal with targetFunctionName adds a second function and leaves the unnamed function", () => {
     const store = createSpineSession()
     store.addProject({ open: true })
     const mainModules = store.modules
@@ -294,9 +294,9 @@ describe("SpineSession React-like API", () => {
     })
     const fns = store.project?.functions ?? []
     expect(fns).toHaveLength(2)
-    expect(fns.map((fn) => fn.name)).toEqual(["Main", "Summarize"])
+    expect(fns.map((fn) => fn.name)).toEqual(["unnamed function", "Summarize"])
     expect(store.project?.modules[0]?.label).toBe("Notes")
-    const main = fns.find((fn) => fn.name === "Main")
+    const main = fns.find((fn) => fn.name === "unnamed function")
     expect(main?.modules[0]?.id).toBe(mainModules[0]?.id)
   })
 

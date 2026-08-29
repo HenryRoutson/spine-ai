@@ -967,7 +967,7 @@ export function buildProjectFunctionsPromptBlock(): string {
   return `Functions (named pipelines in one project):
 - Structures (models) are SHARED by every function. When you add types, return the full models array.
 - Each function is a separate pipeline (modules). The active function's steps are listed as "Current pipeline". Other functions are listed by name — do not replace them unless the user asked.
-- To ADD another pipeline and keep the current one: set targetFunctionName to a new short name (e.g. "Summarize") and modules to that function's FULL step list. modulePatch MUST be null. Never overwrite Main / the active function when the user asked for a second or another function.
+- To ADD another pipeline and keep the current one: set targetFunctionName to a new short name (e.g. "Summarize") and modules to that function's FULL step list. modulePatch MUST be null. Never overwrite the unnamed / active function when the user asked for a second or another function.
 - To EDIT an existing named function: set targetFunctionName to that exact name. Prefer a FULL modules replacement when it is not the active function (modulePatch indexes are for the target function's steps).
 - To edit only the currently active function: set targetFunctionName to null (or that function's name) and change modules/modulePatch as usual.
 - Set targetFunctionName to null when you are not adding or retargeting a function.`;

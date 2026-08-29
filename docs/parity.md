@@ -697,6 +697,8 @@ Grep an id (example): `rg 'project.add' combined_full_stack docs mcp_tool`.
 | `platform.feed-row` | Send to | TUI has no Feed → input yet [N] | POST /api/docs then POST /api/runs | session_action id=inference.assign-input [P] | session.addDocContent + setInferenceInputDocIds |
 | `pipeline.function-select` | Function | TUI edits project.modules as the active function [N] | PUT /api/projects/:id functions + modules | session_action + patch_project [P] | session.setActiveFunction(id) |
 | `pipeline.function-add` | Function | TUI has no add-function command yet [N] | PUT /api/projects/:id functions + modules | session_action + patch_project [P] | session.addPipelineFunction(name) |
+| `pipeline.function-rename` | Rename function | TUI has no rename-function command yet [N] | PUT /api/projects/:id functions + modules | session_action + patch_project [P] | session.renamePipelineFunction(id, name) |
+| `pipeline.function-delete` | Delete function | TUI has no delete-function command yet [N] | PUT /api/projects/:id functions + modules | session_action + patch_project [P] | session.deletePipelineFunction(id) |
 | `structure.open-function` | Used by | TUI lists structures only [N] | local navigation [n/a] | local navigation [n/a] | openPipeline(moduleId) / setActiveFunction |
 | `structure.view-sql` | Code preview | TUI backend lists tables only [N] | local schema preview [n/a] | local schema preview [n/a] | setView('code') + allModelsToSql |
 | `platform.pay-slot` | Continue to pay | hosted HTML only [N] | share funding mode [n/a] | share funding mode [n/a] | HostedPaySlot on {{pay}} [host] |
