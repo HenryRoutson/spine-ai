@@ -91,7 +91,7 @@ export function invalidStepMessage(
     return "set a webhook URL (HTTPS or env:VAR)";
   }
   if (issue.kind === InvalidKind.MissingSql) {
-    return "set SQL, or an output structure so SELECT * can be derived";
+    return "set SQL, or an output structure so SELECT * / INSERT can be derived";
   }
   if (issue.kind === InvalidKind.MissingN8nNodeType) {
     return "pick a transform piece (Set, Filter, CSV, …)";

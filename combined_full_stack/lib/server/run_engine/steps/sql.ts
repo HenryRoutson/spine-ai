@@ -1,7 +1,11 @@
 import { ModuleKind, type PipelineModule } from "../../types"
 import { pkFieldOf } from "@/lib/sql-id-types"
 import { sqlSeedRowsOf, tableNameForModel } from "@/lib/app-sql"
-import { defaultSelectSqlForModule } from "@/lib/schema-table-fn"
+import {
+  defaultSelectSqlForModule,
+  derivedInsertSqls,
+  shouldDeriveInsertSql,
+} from "@/lib/schema-table-fn"
 import { execAppSql } from "../../app_sql"
 import { materializeHints, materializeStepOutput, modelById, prevModuleFor } from "../helpers"
 import { jsonStringifyStepValue } from "../results"
@@ -17,17 +21,30 @@ export async function pauseForHostedAnimation(m: PipelineModule): Promise<void> 
 }
 
 export async function execSqlStep(m: PipelineModule, ctx: RunCtx, log: RunLogger): Promise<ExecResult> {
-  const sql = m.sql?.trim() || defaultSelectSqlForModule(m, ctx.project.models) || ""
-  if (!sql) throw new Error(`sql step "${m.label}" has no SQL`)
+  const prev = prevModuleFor(ctx.project.modules, ctx.prevModuleId)
+  const prevValue = ctx.prevModuleId ? ctx.outputs.get(ctx.prevModuleId) : undefined
+  const out = modelById(ctx.project.models, m.outStructureId)
+  const sqls: string[] = []
+  if (m.sql?.trim()) {
+    sqls.push(m.sql.trim())
+  } else if (shouldDeriveInsertSql(prev, m) && out && prevValue != null) {
+    sqls.push(...derivedInsertSqls(out, prevValue))
+  }
+  if (!sqls.length) {
+    const select = defaultSelectSqlForModule(m, ctx.project.models)
+    if (select) sqls.push(select)
+  }
+  if (!sqls.length) throw new Error(`sql step "${m.label}" has no SQL`)
   const scope = ctx.appSqlScope
   if (!scope) throw new Error(`sql step "${m.label}" has no app SQL scope`)
-  const out = modelById(ctx.project.models, m.outStructureId)
   const pkField = out ? pkFieldOf(out)?.name ?? "id" : "id"
   const table = out ? tableNameForModel(out) : undefined
-  log.info(`sql step`, { moduleId: m.id, scope, table, sql })
-  const rows = await execAppSql(scope, sql, { seedRows: sqlSeedRowsOf(m), pkField })
-  const raw = stepEmitsList(m) ? rows : (rows[0] ?? {})
-  const prev = prevModuleFor(ctx.project.modules, ctx.prevModuleId)
+  log.info(`sql step`, { moduleId: m.id, scope, table, sql: sqls.join("; ") })
+  const rows: Record<string, unknown>[] = []
+  for (const sql of sqls) {
+    rows.push(...(await execAppSql(scope, sql, { seedRows: sqlSeedRowsOf(m), pkField })))
+  }
+  const raw = stepEmitsList(m) || rows.length > 1 ? rows : (rows[0] ?? {})
   const value = out
     ? materializeStepOutput(m, ctx.project, raw, materializeHints(m, ctx), prev)
     : raw
@@ -35,7 +52,7 @@ export async function execSqlStep(m: PipelineModule, ctx: RunCtx, log: RunLogger
     value,
     preview: table ? `sql ${table} → ${rows.length} row(s)` : `sql → ${rows.length} row(s)`,
     json: jsonStringifyStepValue(value),
-    inputPreview: sql,
+    inputPreview: sqls.join("\n"),
   }
 }
 

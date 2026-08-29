@@ -19,7 +19,7 @@ export function SqlModuleFields({ selected, edit, invalid, onUpdate }: SqlModule
     <>
       <PipelineField
         label="SQL"
-        hint="Hosted-app SQL: SELECT / UPDATE / INSERT on tables from your structures. Demo: UPDATE shared_number SET value = value * 2 WHERE id = 'global' RETURNING *"
+        hint="Hosted-app SQL: SELECT / UPDATE / INSERT on tables from your structures. Leave empty for SELECT * from the output structure, or empty after an extract of that structure to INSERT."
         hintTone={missing ? "error" : undefined}
       >
         {edit ? (
@@ -30,7 +30,7 @@ export function SqlModuleFields({ selected, edit, invalid, onUpdate }: SqlModule
               const trimmed = e.target.value.trim()
               if (trimmed !== (selected.sql ?? "")) onUpdate!({ sql: trimmed || undefined })
             }}
-            placeholder="UPDATE shared_number SET value = value * 2 WHERE id = 'global' RETURNING *"
+            placeholder="Leave empty to derive SELECT * or INSERT from the output structure"
             className="min-h-24 font-mono text-xs"
           />
         ) : selected.sql?.trim() ? (

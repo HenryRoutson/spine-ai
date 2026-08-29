@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vitest"
-import { allModelsToTableFns, tableColumnsForModel } from "@/lib/schema-table-fn"
+import {
+  allModelsToTableFns,
+  defaultInsertSqlForModel,
+  derivedInsertSqls,
+  shouldDeriveInsertSql,
+  sqlLit,
+  tableColumnsForModel,
+} from "@/lib/schema-table-fn"
 import { allModelsToPydantic } from "@/lib/server/pydantic"
 import { FieldType, type StructureModel, type StructureModelId } from "@/lib/types"
 
@@ -39,5 +46,27 @@ describe("schema table helpers", () => {
     expect(modelsPy).toContain("class ReceiptRow(BaseModel)")
     expect(modelsPy).toContain("class ReceiptRowTable:")
     expect(modelsPy).toContain("def _sql_lit(value):")
+  })
+
+  it("derives INSERT from the same columns, flattening quote objects to text", () => {
+    const sql = defaultInsertSqlForModel(
+      receiptRow,
+      { vendor: { text: "Acme", quote: { doc_id: "sha_x", start: 0, end: 4 } }, amount: 12.5 },
+      "row_fixed",
+    )
+    expect(sql).toBe("INSERT INTO receipt_row (id, vendor, amount) VALUES ('row_fixed', 'Acme', 12.5)")
+    expect(sqlLit("O'Brien")).toBe("'O''Brien'")
+    expect(derivedInsertSqls(receiptRow, [{ vendor: "Acme", amount: 1, id: "a" }])).toEqual([
+      "INSERT INTO receipt_row (id, vendor, amount) VALUES ('a', 'Acme', 1)",
+    ])
+    expect(shouldDeriveInsertSql({ kind: "quote", outStructureId: receiptRow.id }, { outStructureId: receiptRow.id })).toBe(
+      true,
+    )
+    expect(shouldDeriveInsertSql({ kind: "sql", outStructureId: receiptRow.id }, { outStructureId: receiptRow.id })).toBe(
+      false,
+    )
+    expect(shouldDeriveInsertSql({ kind: "llm-batch", outStructureId: "other" }, { outStructureId: receiptRow.id })).toBe(
+      false,
+    )
   })
 })
