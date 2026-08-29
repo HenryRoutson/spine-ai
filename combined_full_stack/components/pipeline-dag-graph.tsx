@@ -185,11 +185,12 @@ export function PipelineDagGraph({
     <div
       data-pipeline-dag="reactflow"
       className={cn(
-        "pipeline-rf relative h-[min(36rem,70vh)] min-h-[24rem] w-full overflow-hidden rounded-lg border border-border",
+        "pipeline-rf relative h-[min(36rem,70vh)] min-h-[24rem] w-full overflow-hidden rounded-lg border border-border bg-background",
         className,
       )}
     >
       {mounted ? (
+        // AI : colorMode=dark — RF adds .light/.dark on the wrapper; our .light tokens invert the canvas to white.
         <ReactFlow<PipelineRfNode, PipelineRfLaidEdge>
           nodes={nodes}
           edges={rfEdges}
@@ -210,16 +211,24 @@ export function PipelineDagGraph({
           maxZoom={1.75}
           fitView
           fitViewOptions={{ padding: 0.18 }}
+          colorMode="dark"
           deleteKeyCode={null}
           multiSelectionKeyCode={null}
           autoPanOnNodeDrag={false}
           proOptions={{ hideAttribution: false }}
+          className="bg-background"
           onNodeClick={(_, node) => {
             const moduleId = node.data.module?.id
             if (moduleId) onSelect?.(moduleId)
           }}
         >
-          <Background variant={BackgroundVariant.Dots} gap={18} size={1} />
+          <Background
+            variant={BackgroundVariant.Dots}
+            gap={18}
+            size={1}
+            bgColor="var(--background)"
+            color="color-mix(in oklab, var(--muted-foreground) 35%, transparent)"
+          />
           <Controls showInteractive={false} />
           <FitToPipeline token={structureToken} />
         </ReactFlow>
