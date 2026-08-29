@@ -101,6 +101,7 @@ describe("hosted site export files", () => {
     expect(names).toContain("hosted/app.html")
     const landing = fileOf(files, "hosted/index.html")
     expect(landing).toContain("Landing")
+    expect(landing).not.toContain("hs-run-slot")
     const workspace = fileOf(files, "hosted/app.html")
     expect(workspace).toContain("hs-run-slot")
     expect(workspace).toContain("hs-output-slot")

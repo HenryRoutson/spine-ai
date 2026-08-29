@@ -194,3 +194,13 @@ export function hostedSiteHasPrimarySlot(
     return s.slot === primary && (primary !== "run" || !s.alias || s.alias === "run")
   })
 }
+
+// AI : Lovable landing pages have no {{run}} and no pipelines — do not append a Run widget.
+export function hostedSiteNeedsInjectedPrimarySlot(
+  segments: HostedSiteHtmlSegment[],
+  surface: "app" | "signin",
+  hasPipelines: boolean,
+): boolean {
+  if (hostedSiteHasPrimarySlot(segments, surface)) return false
+  return surface === "signin" || hasPipelines
+}

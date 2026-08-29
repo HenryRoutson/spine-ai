@@ -12,7 +12,7 @@ import {
   HOSTED_SITE_IGNORED_SLOT_SELECTOR,
   HOSTED_SITE_SLOT_CLASS,
   groupHostedActionSlots,
-  hostedSiteHasPrimarySlot,
+  hostedSiteNeedsInjectedPrimarySlot,
   hostedSitePrimarySlot,
   type hosted_site_widget_slot,
 } from "@/lib/hosted-site-slots"
@@ -26,6 +26,7 @@ import {
   type hs_preview_hs_id,
 } from "@/lib/hosted-site-select"
 import type { HostedSiteOptions } from "@/lib/shared-link-types"
+import { listedWebsitePipelineBindings } from "@/lib/website-pipelines"
 
 export function HostedSiteChrome({
   options,
@@ -59,7 +60,11 @@ export function HostedSiteChrome({
   const renderSegments = useMemo(() => groupHostedActionSlots(compiled.segments), [compiled.segments])
   const company = options.brand.companyName.trim() || "Your company"
   const primary = hostedSitePrimarySlot(surface)
-  const hasPrimary = hostedSiteHasPrimarySlot(compiled.segments, surface)
+  const injectPrimary = hostedSiteNeedsInjectedPrimarySlot(
+    compiled.segments,
+    surface,
+    listedWebsitePipelineBindings(options.pipelineBindings).length > 0,
+  )
 
   function slotNode(slot: hosted_site_widget_slot, alias?: string): ReactNode {
     if (slot === "run") {
@@ -193,7 +198,7 @@ export function HostedSiteChrome({
           </div>
         )
       })}
-      {hasPrimary ? null : <div className={HOSTED_SITE_SLOT_CLASS[primary]}>{slotNode(primary)}</div>}
+      {injectPrimary ? <div className={HOSTED_SITE_SLOT_CLASS[primary]}>{slotNode(primary)}</div> : null}
       {options.hideSpineFooter ? null : (
         <p className="hs-foot">
           {company} · pipeline hosted by{" "}

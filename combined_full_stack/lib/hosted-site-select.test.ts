@@ -4,7 +4,7 @@ import {
   stampHostedSiteHsIds,
   stripHostedSiteHsIds,
 } from "@/lib/hosted-site-select"
-import { splitHostedSiteSlots } from "@/lib/hosted-site-slots"
+import { hostedSiteNeedsInjectedPrimarySlot, splitHostedSiteSlots } from "@/lib/hosted-site-slots"
 
 describe("hosted site click-to-edit", () => {
   it("stamps stable data-hs-id on opening tags and strips them", () => {
@@ -38,6 +38,13 @@ describe("hosted site extra slots", () => {
       "output",
       "chatbot",
     ])
+  })
+
+  it("does not inject a Run widget on a page-only site", () => {
+    const landing = splitHostedSiteSlots("<header><h1>Hi</h1></header>")
+    expect(hostedSiteNeedsInjectedPrimarySlot(landing, "app", false)).toBe(false)
+    expect(hostedSiteNeedsInjectedPrimarySlot(landing, "app", true)).toBe(true)
+    expect(hostedSiteNeedsInjectedPrimarySlot(splitHostedSiteSlots("{{run}}"), "app", false)).toBe(false)
   })
 
   it("splits {{pay}} and named {{table:Model}} slots", () => {

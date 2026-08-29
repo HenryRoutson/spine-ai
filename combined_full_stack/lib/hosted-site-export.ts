@@ -9,7 +9,8 @@ import {
   type HostedSiteHtmlParts,
   type hosted_site_surface,
 } from "@/lib/hosted-site"
-import { HOSTED_SITE_SLOT_CLASS, hostedSiteHasPrimarySlot, type hosted_site_widget_slot } from "@/lib/hosted-site-slots"
+import { HOSTED_SITE_SLOT_CLASS, hostedSiteNeedsInjectedPrimarySlot, type hosted_site_widget_slot } from "@/lib/hosted-site-slots"
+import { listedWebsitePipelineBindings } from "@/lib/website-pipelines"
 import type { HostedSiteOptions } from "@/lib/shared-link-types"
 import { escapeHtml } from "@/lib/standalone-html"
 import { generateUploadFormHtml } from "@/lib/hosted-site-upload-ui"
@@ -56,15 +57,27 @@ function slotExportComment(slot: hosted_site_widget_slot): string {
   return "<!-- viewer markdown mounts here -->"
 }
 
-function hostedSiteBodyFromParts(parts: HostedSiteHtmlParts, primary: hosted_site_widget_slot): string {
-  const hasPrimary = hostedSiteHasPrimarySlot(parts.segments, primary === "auth" ? "signin" : "app")
+function hostedSiteBodyFromParts(
+  options: HostedSiteOptions,
+  parts: HostedSiteHtmlParts,
+  primary: hosted_site_widget_slot,
+): string {
+  const surface = primary === "auth" ? "signin" : "app"
   const body = parts.segments
     .map((s) => {
       if (s.kind === "html") return s.html
       return `${slotExportComment(s.slot)}\n    <div class="${HOSTED_SITE_SLOT_CLASS[s.slot]}"></div>`
     })
     .join("\n    ")
-  if (hasPrimary) return body
+  if (
+    !hostedSiteNeedsInjectedPrimarySlot(
+      parts.segments,
+      surface,
+      listedWebsitePipelineBindings(options.pipelineBindings).length > 0,
+    )
+  ) {
+    return body
+  }
   return `${body}\n    ${slotExportComment(primary)}\n    <div class="${HOSTED_SITE_SLOT_CLASS[primary]}"></div>`
 }
 
@@ -89,7 +102,7 @@ function hostedSiteStandaloneFromParts(
 </head>
 <body>
   <div class="hs-root" style="${styleAttr}">
-    ${hostedSiteBodyFromParts(parts, primary)}
+    ${hostedSiteBodyFromParts(options, parts, primary)}
     ${footer}
   </div>
 </body>
@@ -137,5 +150,5 @@ function injectRunSlotWidgets(html: string, modules: Project["modules"]): string
   if (html.includes('class="hs-run-slot"')) {
     return html.replace(/(<div class="hs-run-slot"[^>]*>)/, `$1\n${inner}\n`)
   }
-  return `${html}\n<div class="hs-run-slot">\n${inner}\n</div>`
+  return html
 }
