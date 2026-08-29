@@ -36,6 +36,7 @@ describe("vibe topology cheat-sheet", () => {
     expect(parseThinkingTopology("TOPOLOGY: assemble\nthen zip resumes")).toBe("assemble")
     expect(parseThinkingTopology("  TOPOLOGY: llm-batch")).toBeNull()
     expect(buildVibeTopologyPromptBlock()).toMatch(/TOPOLOGY: <name>/)
+    expect(buildVibeTopologyPromptBlock()).toMatch(/SQLite/)
     expect(buildVibeTopologyPromptBlock()).not.toMatch(/receipts \/ merchant/i)
     expect(buildVibeTopologyPromptBlock()).not.toMatch(/hundreds of unstructured/i)
   })

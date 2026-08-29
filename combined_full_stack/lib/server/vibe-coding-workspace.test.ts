@@ -9,6 +9,7 @@ import { formatPipelineValidationErrors } from "@/lib/server/validity"
 import { SEEDS_DIR } from "@/lib/server/seed"
 import {
   VIBE_HARNESS_MAX_TOKENS,
+  VIBE_HARNESS_MAX_TURNS,
   VIBE_THINKING_MAX_TOKENS,
   isReadonlyVibePath,
   isWritableVibePath,
@@ -63,6 +64,7 @@ describe("vibe coding workspace", () => {
   it("gives thinking enough budget for a real plan", () => {
     expect(VIBE_THINKING_MAX_TOKENS).toBeGreaterThanOrEqual(8192)
     expect(VIBE_HARNESS_MAX_TOKENS).toBeGreaterThanOrEqual(4096)
+    expect(VIBE_HARNESS_MAX_TURNS).toBeGreaterThanOrEqual(16)
   })
 
   it("rejects path traversal and keeps AGENTS.md read-only", () => {
@@ -86,6 +88,8 @@ describe("vibe coding workspace", () => {
     const ws = seedVibeWorkspace({ project: ctx.project, globalModel: DEFAULT_MODEL })
     expect(ws.files.get("AGENTS.md")).toMatch(/run_tests/)
     expect(ws.files.get("AGENTS.md")).toMatch(/derived\/schema\.sql/)
+    expect(ws.files.get("AGENTS.md")).toMatch(/executable SQLite/)
+    expect(ws.files.get("AGENTS.md")).not.toMatch(/Persist is auto-inserted/)
     expect(ws.files.has("pipeline.json")).toBe(true)
     expect(ws.files.get("derived/schema.sql")).toMatch(/CREATE TABLE document/)
     expect(ws.files.get("derived/models.py")).toMatch(/_sql_lit/)
@@ -228,6 +232,77 @@ describe("vibe coding harness tools", () => {
     expect(ws.files.get("derived/models.py")).toMatch(/class ReceiptRowTable/)
     expect(ws.files.get("derived/schema.zod.ts")).toMatch(/export const ReceiptRow/)
     expect(ws.files.get("derived/prompts.md")).toMatch(/## ReceiptRow/)
+  })
+
+  it("prepares authored SQLite including JOIN and fails on syntax errors", () => {
+    const session = createSpineSession()
+    session.addProject({ open: true })
+    const persistRow = {
+      name: "PersistRow",
+      description: "row",
+      fields: [{ name: "vendor", type: "text", optional: false, description: "Vendor" }],
+    }
+    const modules = [
+      {
+        kind: "input",
+        label: "Files",
+        note: "files",
+        structureOut: "list[Document]",
+        inputType: "text",
+        inputDescription: "files",
+      },
+      {
+        kind: "llm-batch",
+        label: "Extract",
+        note: "rows",
+        structureIn: "Document",
+        structureOut: "PersistRow",
+        prompt: "",
+        inputDescription: "files",
+      },
+      {
+        kind: "sql",
+        label: "Persist",
+        note: "join vendors",
+        structureIn: "PersistRow",
+        structureOut: "PersistRow",
+        sql: "SELECT persist_row.vendor FROM persist_row JOIN persist_row AS other ON persist_row.vendor = other.vendor",
+        inputDescription: "rows",
+      },
+      {
+        kind: "output",
+        label: "Rows",
+        structureIn: "PersistRow",
+        structureOut: "PersistRow",
+        inputDescription: "rows",
+      },
+    ]
+    const base = {
+      message: "I'll persist with a JOIN.",
+      modules,
+      models: [persistRow],
+      typeAliases: null,
+      docs: null,
+      documentationUpdate: "# Persist\n",
+      projectNameUpdate: "Persist",
+      targetFunctionName: null,
+      proposedActions: null,
+      errors: [] as string[],
+    }
+    const ok = runVibeWorkspaceChecks(base, session.project!, DEFAULT_MODEL, [])
+    expect(ok).toMatch(/^PASS/m)
+    expect(ok).toMatch(/sql prepared/)
+    const fail = runVibeWorkspaceChecks(
+      {
+        ...base,
+        modules: modules.map((m) => (m.kind === "sql" ? { ...m, sql: "INSERT INTO persist_row (vendor) VALUESS (?)" } : m)),
+      },
+      session.project!,
+      DEFAULT_MODEL,
+      [],
+    )
+    expect(fail).toMatch(/^FAIL/m)
+    expect(fail).toMatch(/^sql:/m)
   })
 
   it("auto run_tests after writes and ignores Q&A PASS / premature done", () => {

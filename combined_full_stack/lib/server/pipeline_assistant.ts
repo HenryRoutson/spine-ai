@@ -87,6 +87,8 @@ import { tryCompileCustomCodeEntry } from "@/lib/custom_code";
 import { customCodeEntriesForModule } from "@/lib/custom_code_entries";
 import { lintPipeline } from "./pipeline_lint";
 import { VIBE_THINKING_MAX_TOKENS, coerceVibePipelineModules, writeVibeDerivedFiles, type VibeWorkspace, type VibeWorkspaceDraft } from "./vibe-coding-workspace";
+import { prepareSqliteSql } from "./app_sqlite";
+import { allModelsToSql } from "@/lib/sql-schema";
 import {
   harnessDraftHasPipelineWork,
   runVibeCodingHarness,
@@ -856,6 +858,15 @@ export function runVibeWorkspaceChecks(
       if (err) compileErrors.push(`${m.label}: ${err}`);
     }
   }
+  const sqlErrors: string[] = [];
+  const schemaSql = allModelsToSql(proposal.models, proposal.modules);
+  for (const m of flattenPipelineModules(proposal.modules)) {
+    if (m.kind !== ModuleKind.Sql) continue;
+    const sql = m.sql?.trim();
+    if (!sql) continue;
+    const err = prepareSqliteSql(sql, schemaSql);
+    if (err) sqlErrors.push(`${m.label}: ${err}`);
+  }
   const lint = lintPipeline(
     {
       ...project,
@@ -866,17 +877,18 @@ export function runVibeWorkspaceChecks(
     { includeExport: false },
   );
   const lintErrors = lint.lints.filter((l) => l.severity === "error");
-  const ok = !validation && compileErrors.length === 0 && lintErrors.length === 0;
+  const ok = !validation && compileErrors.length === 0 && lintErrors.length === 0 && sqlErrors.length === 0;
   const lines = [ok ? "PASS" : "FAIL"];
   if (validation) lines.push("I/O:", validation.trim());
   if (compileErrors.length) lines.push("custom-code:", ...compileErrors.map((e) => `- ${e}`));
+  if (sqlErrors.length) lines.push("sql:", ...sqlErrors.map((e) => `- ${e}`));
   if (lintErrors.length) {
     lines.push(
       "lint:",
       ...lintErrors.map((l) => `- ${l.stepLabel ?? l.structureName ?? l.code}: ${l.message}`),
     );
   }
-  if (ok) lines.push("I/O valid, custom-code compiled, lint clean.");
+  if (ok) lines.push("I/O valid, custom-code compiled, sql prepared, lint clean.");
   return lines.join("\n");
 }
 
@@ -1274,40 +1286,47 @@ export async function proposePipelineChange(
         opts?.onLlmResponse?.(`retry-${retryCount}`, raw);
         continue;
       }
-      raw = await llmStructured(
-        buildUserPrompt(
-          retryProject,
-          effectiveMessage,
-          history,
-          globalModel,
+      try {
+        raw = await llmStructured(
+          buildUserPrompt(
+            retryProject,
+            effectiveMessage,
+            history,
+            globalModel,
+            {
+              ...promptOpts,
+              fixValidationErrors: fixErrors,
+              fixAttempt,
+              uiContext,
+            },
+            thinking,
+            liveValidation,
+            forceFix,
+          ),
+          assistantResponseSchema,
           {
-            ...promptOpts,
-            fixValidationErrors: fixErrors,
-            fixAttempt,
-            uiContext,
+            model: globalModel,
+            ledger,
+            system: buildSystemPrompt(globalModel, project.name),
+            onStructuredFailure: (detail) => {
+              llmAttempt += 1;
+              opts?.onStructuredFailure?.({
+                attempt: llmAttempt,
+                failureKind: detail.kind,
+                error: detail.error,
+              });
+            },
           },
-          thinking,
-          liveValidation,
-          forceFix,
-        ),
-        assistantResponseSchema,
-        {
-          model: globalModel,
-          ledger,
-          system: buildSystemPrompt(globalModel, project.name),
-          onStructuredFailure: (detail) => {
-            llmAttempt += 1;
-            opts?.onStructuredFailure?.({
-              attempt: llmAttempt,
-              failureKind: detail.kind,
-              error: detail.error,
-            });
-          },
-        },
-      );
-      llmAttempt += 1;
-      opts?.onLlmResponse?.(`retry-${retryCount}`, raw);
-      proposal = materializeProposal(raw, retryProject, globalModel, catalog);
+        );
+        llmAttempt += 1;
+        opts?.onLlmResponse?.(`retry-${retryCount}`, raw);
+        const next = materializeProposal(raw, retryProject, globalModel, catalog);
+        if (!next) break;
+        proposal = next;
+      } catch {
+        // AI : keep the last materialized pipeline — live KYC died here on example objects after a valid draft.
+        break;
+      }
     }
 
     const invalidCount = proposal
