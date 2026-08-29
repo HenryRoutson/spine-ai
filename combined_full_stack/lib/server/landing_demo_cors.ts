@@ -1,10 +1,14 @@
 import { NextResponse } from "next/server";
 
 // AI : CORS for landing page → app API calls.
+// AI : DONE (jank-cors-app-origin) — spine-ai-app.dev is the live app host (landing CSP/proxy).
+// AI : TODO (jank-site-urls) — auto-pipeline.dev is a leftover alias; keep until DNS is gone.
 
 const ALLOWED_ORIGINS = new Set([
   "https://www.spine-ai.dev",
   "https://spine-ai.dev",
+  "https://www.spine-ai-app.dev",
+  "https://spine-ai-app.dev",
   "https://www.auto-pipeline.dev",
   "https://auto-pipeline.dev",
   "http://localhost:3000",
@@ -13,7 +17,7 @@ const ALLOWED_ORIGINS = new Set([
   "http://127.0.0.1:3001",
 ]);
 
-function isAllowedOrigin(origin: string | null): origin is string {
+export function isLandingDemoAllowedOrigin(origin: string | null): origin is string {
   if (!origin) return false;
   if (ALLOWED_ORIGINS.has(origin)) return true;
   if (/^http:\/\/localhost:\d+$/.test(origin)) return true;
@@ -23,7 +27,7 @@ function isAllowedOrigin(origin: string | null): origin is string {
 
 export function landingDemoCorsHeaders(req: Request): HeadersInit {
   const origin = req.headers.get("origin");
-  if (!isAllowedOrigin(origin)) return {};
+  if (!isLandingDemoAllowedOrigin(origin)) return {};
   return {
     "Access-Control-Allow-Origin": origin,
     "Access-Control-Allow-Methods": "GET, POST, OPTIONS",

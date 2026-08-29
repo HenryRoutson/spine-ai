@@ -1,11 +1,11 @@
 {
   "mcpServers": {
     "spine-pinpoint": {
-      "command": "/Users/henry/.nvm/versions/node/v20.17.0/bin/node",
+      "command": "node",
       "args": [
-        "/Users/henry/Documents/documents.nosync/Git.nosync/antler_vc_hackathon/mcp_tool/spine-mcp.mjs"
+        "mcp_tool/spine-mcp.mjs"
       ],
-      "cwd": "/Users/henry/Documents/documents.nosync/Git.nosync/antler_vc_hackathon",
+      "cwd": ".",
       "env": {
         "PATH": "/Users/henry/.nvm/versions/node/v20.17.0/bin:/usr/bin:/bin",
         "DOTENV_CONFIG_QUIET": "true",

@@ -104,7 +104,7 @@ function byId(models: StructureModel[]): Map<StructureModelId, StructureModel> {
   return new Map(models.map((m) => [m.id, m]));
 }
 
-export function fieldTypeToExpr(field: ModelFieldLegacyTypePick): TypeExpr { // TODO this looks bad and hardcoded
+export function fieldTypeToExpr(field: ModelFieldLegacyTypePick): TypeExpr { // AI : TODO (jank-pipeline-god-object) — FieldType → TypeExpr table until FieldType is gone.
   switch (field.type) {
     case FieldType.Text:
       return { kind: TypeExprKind.Prim, name: PrimName.Text };

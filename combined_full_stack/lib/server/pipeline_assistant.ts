@@ -80,6 +80,7 @@ import {
   type StructureModelId,
   type TypeAlias,
 } from "./types";
+import { applyPipelineModulePatch } from "./pipeline-module-union";
 import { blankPipelineModules, functionsOnProject, functionsPromptSummary } from "@/lib/pipeline-functions";
 import { ifConditionSchema, parseIfCondition } from "@/lib/if-condition";
 import { flattenPipelineModules, syncForkModules } from "@/lib/fork-pipeline";
@@ -432,8 +433,7 @@ function applyModulePatch(
   const inId = inHint ? resolveStructureIdFromModels(inHint.name ?? patch.structureIn!, lookup) : undefined;
   const outId = outHint ? resolveStructureIdFromModels(outHint.name ?? patch.structureOut!, lookup) : undefined;
   const modelId = patch.model && catalogHasModel(patch.model) ? resolveModelId(patch.model) : undefined;
-  let next: PipelineModule = {
-    ...existing,
+  let next = applyPipelineModulePatch(existing, {
     ...(patch.label !== undefined ? { label: patch.label } : {}),
     ...(patch.note !== undefined ? { note: patch.note } : {}),
     ...(inId !== undefined ? { inStructureId: inId } : {}),
@@ -453,9 +453,9 @@ function applyModulePatch(
     ...(patch.connectParameters !== undefined ? { connectParameters: patch.connectParameters } : {}),
     ...(patch.sql !== undefined ? { sql: patch.sql } : {}),
     ...(patch.sqlSeedRows !== undefined ? { sqlSeedRows: patch.sqlSeedRows } : {}),
-  };
+  });
   if (outHint) {
-    next = { ...next, ...patchSpineOutList(next, kindAlwaysEmitsList(existing.kind) || outHint.isList) };
+    next = applyPipelineModulePatch(next, patchSpineOutList(next, kindAlwaysEmitsList(existing.kind) || outHint.isList));
   }
   return migrateModuleSpineTypes(next);
 }

@@ -3,8 +3,8 @@
 
 import { existsSync, readFileSync, readdirSync } from "node:fs"
 import { join } from "node:path"
-import { FieldType, FIELD_TYPES, ModuleKind } from "@/lib/types"
-import type { FieldRelation, ModelId, PipelineModule, StructureModel, StructureModelId, TypeAlias, TypeAliasId } from "@/lib/types"
+import { applyPipelineModulePatch, FieldType, FIELD_TYPES, ModuleKind } from "@/lib/types"
+import type { FieldRelation, ModelId, PipelineModule, PipelineModulePatch, StructureModel, StructureModelId, TypeAlias, TypeAliasId } from "@/lib/types"
 import type { TypeExpr } from "@/lib/server/type_expr"
 import type { SpineSession } from "@/lib/core/session"
 import { uid } from "@/lib/id"
@@ -308,11 +308,11 @@ export function addTypeAlias(session: SpineSession, name: string, expr: string, 
 export function patchStep(
   session: SpineSession,
   idOrLabel: string,
-  patch: Partial<PipelineModule>,
+  patch: PipelineModulePatch,
 ): PipelineModule {
   const found = flattenPipelineModules(session.modules).find((m) => m.id === idOrLabel || m.label === idOrLabel)
   if (!found) throw new Error(`unknown step ${idOrLabel}`)
-  const next = updatePipelineModule(session.modules, found.id, (m) => ({ ...m, ...patch }))
+  const next = updatePipelineModule(session.modules, found.id, (m) => applyPipelineModulePatch(m, patch))
   session.setModules(next)
   return findPipelineModule(next, found.id) ?? found
 }

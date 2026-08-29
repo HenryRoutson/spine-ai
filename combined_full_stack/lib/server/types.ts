@@ -1,16 +1,18 @@
-// AI : canonical contract shared with the V0 frontend (`ai-pipeline-builder/lib/types.ts`).
-// AI : the frontend stub is presentation-only; this is the real, combinable definition.
-// AI : backend-only additions are marked. Everything else is byte-compatible with the stub.
-// AI : TODO bug — known drift vs the v2 frontend stub to reconcile at merge time:
-// AI :   - frontend ModuleKind/MODULE_META lack "llm-batch" (any Record<ModuleKind,…> in
-// AI :     frontend COMPONENTS will fail to typecheck once these types land),
-// AI :   - frontend DEFAULT_MODEL is "qwen-2.5-72b" (backend: "deepseek-v4"),
-// AI :   - frontend MODEL_CATALOG may drift from backend until merge.
+// AI : canonical Project / PipelineModule / FieldType contract for this repo.
+// AI : DONE (jank-frontend-stub-drift) — no v0 ai-pipeline-builder stub lives here; this file is source of truth.
 
 import type { TypeExpr } from "./type_expr";
 import type { ExampleSelectVerdict } from "@/lib/example-select-verdicts";
+import type { PipelineModule } from "./pipeline-module-union";
 
 export type { TypeExpr } from "./type_expr";
+export type {
+  PipelineModule,
+  PipelineModuleBag,
+  PipelineModuleOf,
+  PipelineModulePatch,
+  PipelineModuleShared,
+} from "./pipeline-module-union";
 
 export type ProjectId = string & { __brand: "ProjectId" };
 export type StructureModelId = string & { __brand: "StructureModelId" };
@@ -338,113 +340,13 @@ export enum LegacyModuleKind {
 }
 export type RunStepKind = ModuleKind | LegacyModuleKind;
 
-// AI : TODO (arch-module-union) — god object; split to a discriminated union per ModuleKind
-// AI :   so exporters/validity/UI stop optional-field soup. Keep kind as discriminant; config payloads per kind.
-export interface PipelineModule {
-  id: ModuleId;
-  kind: ModuleKind;
-  label: string;
-  note: string; // annotation / purpose — required on input, combine, and llm steps
-  // io contract — every step declares the structure it consumes and emits
-  inStructureId?: StructureModelId;
-  outStructureId?: StructureModelId;
-  // AI : explicit spine types — canonical; list[T] vs T lives here, not a separate boolean flag.
-  inType?: TypeExpr;
-  outType?: TypeExpr;
-  // AI : TODO (media-view-B-binding) — view?: ViewBinding on output (or any previewable step).
-  // AI :   Explicit wins over StructureModel.defaultView / mime / TypeExpr. JSON tab always remains.
-  // config
-  inputType?: InputTypeSpec;
-  inputNameContains?: string; // AI : optional filename substring — only matching docs can fill this input slot
-  inputDescription?: string; // AI : optional expected input — LLM guard rejects mismatches before the step runs
-  checkInputDescription?: boolean; // AI : when false, skip the LLM guard even if inputDescription is set
-  // AI : TODO (spec) — outputDescription?: string + checkOutputDescription?: boolean (post-step LLM output guard).
-  // AI : TODO (spec) — dynamicOutputSchema?: boolean on llm steps for variable homework-style marking schemas.
-  inputMinCount?: number; // AI : minimum documents for this input slot (default 1); pair with list outType for N submissions
-  // AI : after both slots have docs, compare extracted keys against an upstream input — distinct from assert / per-doc validity.
-  inputCompatWith?: InputCompatWith;
-  prompt?: string;
-  code?: string; // AI : transform steps with custom code only
-  fallbackList?: CustomCodeEntry[]; // AI : custom-code — ordered attempts, first is primary
-  maxRunMs?: number; // AI : custom-code / assert / transform-code — wall clock; default 60s, profile on overrun
-  model?: ModelId; // per-step model override
-  costLimitCents?: number; // AI : per-llm-step spend cap — defaults to $1 when unset
-  chunkSize?: number; // chunk step — max characters per chunk
-  chunkOverlap?: number; // chunk step — overlap between consecutive chunks
-  chunkTextField?: string; // chunk step — field on input object to split (default content)
-  mergePolicy?: MergePolicy; // merge step — recursive structural policy
-  mergeCustom?: string; // merge step — optional custom TS (input) => … overrides policy
-  mergeStateLabel?: string; // merge step — prior step label whose output is merged with spine input
-  mergeWrapListField?: string; // merge step — when spine is list[T], wrap as { field: T[] } before merge
-  // AI : assemble — field name → spine | state["Label"] | path; auto out model id sm_assemble_<moduleId>
-  assembleBindings?: Record<string, AssembleSource>;
-  // AI : parallel — fixed LLM branches sharing spine input; joined into auto product
-  parallelBranches?: ParallelBranch[];
-  // AI : fork — nested linear lanes; join product | assemble | merge
-  // AI : if-else reuses forkBranches as [Then, Else] (Else may be empty).
-  forkBranches?: ForkBranch[];
-  forkJoin?: ForkJoin;
-  ifCondition?: IfCondition;
-  // AI : example-select — cached-prefix relevance filter (see lib/example-select.ts defaults)
-  exampleContextLabel?: string; // prior step label supplying {description} text
-  exampleContextField?: string; // optional dot path within that step output
-  exampleReasonField?: string; // field on each output item for chain_of_thought (default selection_reason)
-  examplePreFilterMax?: number; // optional cap on candidates before per-item LLM calls
-  // AI : TODO (example-select-view) — examplePromptFields?: string[] (or omit list) so {example}/{input_to_prompt}
-  // AI :   serializes a Pick of the item; inType/outType unchanged. Dual of exampleContextField. Do not put
-  // AI :   {passthrough} in the template — passthrough is the kept spine row, already full object + reason.
-  examplePromptFields?: string[];
-  // AI : TODO (example-select-view) — optional examplePromptItemTemplate for prose (Title: {title}) instead of JSON.
-  // AI : DONE (type-join) — pass 2 {description} auto-spreads context FKs that point at the candidate catalog
-  // AI :   (billed_items.work_item_id → WorkItem). Same inType/outType; {example} + kept rows stay normalized.
-  // AI : TODO (type-join) — optional examplePromptJoins for explicit rightLabel / embedAs; draft prefix later.
-  examplePromptView?: string;
-  useOcr?: boolean; // AI : doc-to-text (legacy: input) — vision OCR when PDF/image is accepted
-  // AI : step result cache toggle — authoring may omit (defaults true via seed/factory).
-  cached: boolean;
-  // AI : webhook — server-side HTTP integration (URL may be literal or env:VAR / ${VAR})
-  webhookUrl?: string;
-  webhookMethod?: WebhookMethod;
-  webhookAuthEnv?: string; // env var name — value sent as Authorization (Bearer added when missing)
-  webhookTimeoutMs?: number;
-  webhookIncludeState?: boolean; // default true — POST { input, state } when body mode is wrap
-  webhookResponsePath?: string; // dot path into the (possibly polled) JSON body
-  webhookBodyMode?: WebhookBodyMode; // AI : raw posts the spine value; wrap keeps { input, state }
-  // AI : poll GET of a URL taken from the submit JSON (e.g. status_url) until a terminal status.
-  // AI :   Pipeline primitive — not a vendor connector. Timeout is webhookTimeoutMs.
-  webhookPollStatusUrlPath?: string;
-  webhookPollStatusPath?: string; // default "status"
-  webhookPollDoneWhen?: string[]; // default ["completed"]
-  webhookPollFailWhen?: string[]; // default ["failed", "nsfw", "canceled", "cancelled"]
-  // AI : fetch a media URL from the terminal JSON into document.blob; spine becomes VideoClip-shaped.
-  webhookIngestUrlPath?: string;
-  webhookIngestInputType?: InputType; // video | audio | image
-  // AI : sql — hosted-app table statement (SELECT/UPDATE/INSERT). Not cached; mutates app_sql_rows.
-  sql?: string;
-  sqlSeedRows?: Record<string, unknown>[];
-  // AI : n8n — typed catalog piece (Activepieces-style). Local Code-node JS; no live Slack/Gmail in-process.
-  n8nNodeType?: string
-  n8nNodeVersion?: number
-  n8nParameters?: Record<string, unknown>
-  n8nCode?: string
-  n8nTimeoutMs?: number
-  // AI : unused local-piece fields — live apps are ModuleKind.Connect (connect-roadmap.ts), not n8n Cloud.
-  n8nResponseMode?: "first" | "all" | "jsonPath"
-  n8nResponsePath?: string
-  // AI : connect — Nango action id + optional connection after in-app OAuth.
-  connectActionId?: string
-  connectConnectionId?: string
-  connectParameters?: Record<string, unknown>
-  // AI : DONE (media-view-D-job) — async media is webhook poll + ingest, not ModuleKind.RemoteJob / Higgsfield step.
-  // AI : chatbot — prompt is spine ChatbotPrompt.prompt (no module.prompt).
-  chatbotMode?: ChatbotMode;
-  maxTurns?: number;
-  // AI : pipeline-managed step — auto-inserted Link Quotes; locked in the builder UI.
-  auto?: boolean;
-  // AI : authoring may omit these — seed/API/factory default them. Live UI metrics use billing.moduleMetrics.
-  avgMs: number;
-  avgCostCents: number;
-}
+// AI : DONE (arch-module-union) — PipelineModule is the per-kind union in pipeline-module-union.ts.
+// AI : TODO (media-view-B-binding) — view?: ViewBinding on output (or any previewable step).
+// AI : TODO (spec) — outputDescription + checkOutputDescription (post-step LLM output guard).
+// AI : TODO (spec) — dynamicOutputSchema on llm steps for variable homework-style marking schemas.
+// AI : TODO (jank-doc-name-match) — inputNameContains filename substring; wrong-but-matching files still bind.
+// AI : TODO (example-select-view) — examplePromptFields / item template; type-join examplePromptJoins.
+
 
 type step_label_string = string;
 type doc_name_string = string;
@@ -974,6 +876,7 @@ export const MODULE_META: Record<ModuleKind, { label: string; description: strin
     description: "Check pipeline state (step[\"Label\"], len) — runs after referenced steps; passthrough",
   },
   [ModuleKind.HumanReview]: {
+    // AI : TODO (jank-human-review-modes) — approve/reject only; chat-until-resolution + text/voice still in TODO.txt.
     label: "Human Review",
     description: "Pause in Inference for approve or reject — passthrough on approval",
   },

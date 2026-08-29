@@ -41,7 +41,7 @@ export {
 export type CustomFn = (input: unknown, state?: PipelineState) => unknown | Promise<unknown>;
 
 const PYODIDE_CDN = "https://cdn.jsdelivr.net/pyodide/v0.27.7/full/";
-// AI : TODO security — Pyodide loads from CDN; pin SRI or self-host to reduce supply-chain risk.
+// AI : TODO (jank-pyodide-cdn) — Pyodide loads from CDN; pin SRI or self-host to reduce supply-chain risk.
 
 export type CustomCodeAttemptFailure = {
   attemptIndex: number;

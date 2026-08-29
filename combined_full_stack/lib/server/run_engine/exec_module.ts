@@ -1,6 +1,5 @@
 import { assertNever } from "@/lib/assert";
 import { ModuleKind, type PipelineModule } from "../types";
-import { isMergeModuleKind } from "@/lib/module-kinds";
 import type { ExecResult, RunCtx, RunLogger } from "./engine_types";
 import { execInputStep } from "./steps/input";
 import { execDocToTextStep } from "./steps/doc_to_text";
@@ -77,10 +76,7 @@ export async function execModule(m: PipelineModule, ctx: RunCtx, log: RunLogger)
       return execConnectStep(m, ctx, log);
     case ModuleKind.Chatbot:
       return execChatbotStep(m, ctx, log);
-    default: {
-      if (isMergeModuleKind(m.kind)) return execCustomCodeStep(m, ctx, log);
-      const unreachable: never = m.kind;
-      return assertNever(unreachable, `unknown module kind: ${(m as PipelineModule).kind}`);
-    }
+    default:
+      return assertNever(m, "unknown module kind");
   }
 }

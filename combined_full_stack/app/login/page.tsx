@@ -1,7 +1,7 @@
 "use client"
 
 // AI : todo §7 — email/password via server actions (GitHub/Google OAuth commented out for now).
-// AI : TODO (spec) — re-enable GitHub/Google OAuth sign-in (callback route exists at /auth/callback).
+// AI : TODO (jank-oauth-login) — re-enable GitHub/Google OAuth sign-in (callback route exists at /auth/callback).
 // AI : A signed-in session makes every API route open the per-user SupabaseStore.
 
 import { useActionState, useEffect, useState } from "react"

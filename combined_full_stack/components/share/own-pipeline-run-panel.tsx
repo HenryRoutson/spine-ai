@@ -39,7 +39,7 @@ import { useWorkspaceBilling } from "@/lib/use-workspace-billing"
 import { computeWorkspaceValidity } from "@/lib/workspace-validity-ui"
 import { modelName } from "@/lib/validity"
 import { formatErrorForClipboard } from "@/lib/error-copy"
-import { DocLabel, type DocId, DocRef, InputType, ModuleId, PipelineModule, PipelineRun, ProjectId } from "@/lib/types"
+import { DEFAULT_MODEL, DocLabel, type DocId, DocRef, InputType, ModuleId, PipelineModule, PipelineRun, ProjectId } from "@/lib/types"
 import { RunPhase } from "@/lib/run-phase"
 
 type OwnPipelineRunPanelProps = {
@@ -57,7 +57,7 @@ export function OwnPipelineRunPanel({
   const consumer = useOptionalConsumerStore()
   const { open: openDoc } = useDocViewer()
   const { billingAccount, refreshBilling } = useWorkspaceBilling()
-  const model = data.builder?.model ?? consumer?.model ?? "openrouter:deepseek-v4"
+  const model = data.builder?.model ?? consumer?.model ?? DEFAULT_MODEL
   const [localInferenceInputDocIds, setLocalInferenceInputDocIds] = useState<
     Partial<Record<ModuleId, DocId | DocId[]>>
   >({})

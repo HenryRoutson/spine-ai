@@ -240,7 +240,7 @@ export const humanReviewAction = defineAction({
   locality: "remote",
   input: z.object({}),
   run: () => {
-    // AI : TODO (mcp-capability) — GUI Inference pause; MCP/CLI fail closed until a Node elicitation host exists.
+    // AI : TODO (mcp-capability) (jank-codehost-node) — GUI Inference pause; MCP/CLI fail closed until a Node elicitation host exists.
     throw new Error("human-review elicitation is GUI-only (run pause in the browser)")
   },
 })
@@ -251,7 +251,7 @@ export const customCodeAction = defineAction({
   locality: "remote",
   input: z.object({}),
   run: () => {
-    // AI : TODO (mcp-capability) — GUI client-step; MCP needs a Node CodeHost to match a human clicking Run.
+    // AI : TODO (mcp-capability) (jank-codehost-node) — GUI client-step; MCP needs a Node CodeHost to match a human clicking Run.
     throw new Error("custom code executes in the browser CodeHost — no Node host yet")
   },
 })
