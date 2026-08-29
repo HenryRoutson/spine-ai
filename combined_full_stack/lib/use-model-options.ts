@@ -2,7 +2,9 @@
 
 import {
   catalogLabel,
+  DEFAULT_MODEL,
   formatRoutedModel,
+  OPENROUTER_PROVIDER_ID,
   parseRoutedModel,
   wireModelId,
 } from "@/lib/types"
@@ -23,8 +25,14 @@ export function modelLabel(id?: string): string {
   return `${parsed.providerId}:${model}`
 }
 
-export function normalizeModelRef(id: string | undefined, defaultProviderId = "openrouter"): string {
-  if (!id) return formatRoutedModel(defaultProviderId, "deepseek-v4")
+export function normalizeModelRef(
+  id: string | undefined,
+  defaultProviderId = OPENROUTER_PROVIDER_ID,
+): string {
+  if (!id) {
+    const fallback = parseRoutedModel(DEFAULT_MODEL)
+    return formatRoutedModel(defaultProviderId, fallback.modelId)
+  }
   const parsed = parseRoutedModel(id)
   return formatRoutedModel(parsed.providerId, parsed.modelId)
 }

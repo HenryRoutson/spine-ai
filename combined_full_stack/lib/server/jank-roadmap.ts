@@ -41,10 +41,8 @@ export {}
 // AI :   upload / typed pairing is the generic fix (TODO.txt).
 // AI : TODO (jank-test-filename) — tests are discovered by *_testing.json suffix, not a
 // AI :   doc label or type. tutoring_* fixtures skip until expectedOutputs exist.
-// AI : TODO (jank-default-model) — UI fallbacks hardcode "gemini-3-flash" / "deepseek-v4"
-// AI :   instead of DEFAULT_MODEL / DEFAULT_VISION_DOC_PARSE_MODEL.
-// AI : TODO (jank-frontend-stub-drift) — types.ts still documents a v0 ai-pipeline-builder
-// AI :   stub (qwen-2.5-72b, missing llm-batch). This repo has no stub to merge.
+// AI : DONE (jank-default-model) — UI fallbacks use DEFAULT_MODEL / DEFAULT_VISION_DOC_PARSE_MODEL.
+// AI : DONE (jank-frontend-stub-drift) — types.ts is the source of truth; no v0 stub in this repo.
 
 // ---------------------------------------------------------------------------
 // Host / surface limits (leave on existing roadmaps; ids for grep)

@@ -1,11 +1,5 @@
-// AI : canonical contract shared with the V0 frontend (`ai-pipeline-builder/lib/types.ts`).
-// AI : the frontend stub is presentation-only; this is the real, combinable definition.
-// AI : backend-only additions are marked. Everything else is byte-compatible with the stub.
-// AI : TODO (jank-frontend-stub-drift) — known drift vs the v2 frontend stub (not in this repo):
-// AI :   - frontend ModuleKind/MODULE_META lack "llm-batch" (any Record<ModuleKind,…> in
-// AI :     frontend COMPONENTS will fail to typecheck once these types land),
-// AI :   - frontend DEFAULT_MODEL is "qwen-2.5-72b" (backend: "deepseek-v4"),
-// AI :   - frontend MODEL_CATALOG may drift from backend until merge.
+// AI : canonical Project / PipelineModule / FieldType contract for this repo.
+// AI : DONE (jank-frontend-stub-drift) — no v0 ai-pipeline-builder stub lives here; this file is source of truth.
 
 import type { TypeExpr } from "./type_expr";
 import type { ExampleSelectVerdict } from "@/lib/example-select-verdicts";
@@ -850,7 +844,6 @@ export interface TokenUsage {
 
 // AI : default to DeepSeek V4 — cheap Chinese model, maps to deepseek/deepseek-chat, fast + reliable
 // AI : for large structured outputs (qwen-2.5-72b on OpenRouter is markedly slower here).
-// AI : TODO (jank-default-model) — UI fallbacks still hardcode gemini-3-flash / deepseek-v4 strings.
 export const DEFAULT_MODEL: ModelId = "openrouter:deepseek-v4";
 
 // AI : default vision model for input OCR — Gemini reads images/PDFs/handwriting well.
