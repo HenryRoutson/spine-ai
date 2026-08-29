@@ -10,8 +10,8 @@ export {}
 // ---------------------------------------------------------------------------
 // AI : DONE (jank-landing-secret) — hosted deploys require LANDING_BUILD_ACCESS_SECRET or
 // AI :   LANDING_DEMO_PROXY_SECRET; never sign with SUPABASE_SERVICE_ROLE_KEY.
-// AI : TODO (jank-redirect-decode) — sanitize_redirect.ts: decode once; reject %2e%2e, control
-// AI :   chars, and protocol-relative / traversal after decode.
+// AI : DONE (jank-redirect-decode) — sanitize_redirect.ts decodes once; rejects %2e%2e, control
+// AI :   chars, leftover encoding, and protocol-relative / traversal after decode.
 // AI : TODO (jank-cors-app-origin) — landing_demo_cors.ts lists spine-ai.dev + auto-pipeline.dev
 // AI :   but not spine-ai-app.dev (the live app host used by landing CSP / proxy).
 // AI : TODO (jank-shared-run-abuse) — rate_limit_config shared_run is IP-bucketed (5/10m);
