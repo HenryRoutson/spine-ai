@@ -4,6 +4,16 @@ A chronological record of product-direction prompts (user voice, not task-demo s
 
 ---
 
+## 2026-08-29 — Base44 prompt to rebuild Spine
+
+Paste-ready spec for giving Base44 (or similar) so it tries to build Spine itself: one type = Zod = SQL, auto OCR + quote-link steps, spreadsheet views, vibe proposes / run executes.
+
+- Index: `docs/base44_rebuild_spine.md`
+- Prompt: `docs/base44_rebuild_spine_prompt.md`
+- Follow-ups: `docs/base44_rebuild_spine_followups.md`
+
+---
+
 ## 2026-08-29 — Store OpenRouter key in Cursor secrets, run live tests
 
 I gave you the openrouter key already, please store it! In secrets on cursor not on git, it’s only got a bit of money I don’t care it’s exposed it’s for testing, run tests : [key redacted]
