@@ -52,7 +52,5 @@ export {}
 // AI : TODO (jank-codehost-node) — custom code + human-review throw on MCP/CLI
 // AI :   (mcp-capability). Browser CodeHost / Pyodide only.
 // AI : TODO (jank-app-sql-join) — app-sql.ts is SELECT/UPDATE/INSERT, equality WHERE, no JOIN.
-// AI : TODO (jank-export-quad) — webhook/orchestrator bodies are copied four times
-// AI :   (arch-export-webhook / arch-export-file).
-// AI : TODO (jank-pipeline-god-object) — PipelineModule is one shape for every kind
-// AI :   (arch-module-union). Dual FieldType + TypeExpr (fieldTypeToExpr).
+// AI : ignored (jank-export-quad) — share → language printers are the export layer; not a bug.
+// AI : DONE (jank-pipeline-god-object) — per-kind union + normalize strips other-kind keys.

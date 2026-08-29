@@ -27,6 +27,7 @@ import { defaultForkBranches } from "@/lib/fork-pipeline"
 import { defaultIfCondition, padIfElseBranches } from "@/lib/if-else-pipeline"
 import { defaultCaseBranches, defaultCaseCondition, padCaseBranches } from "@/lib/case-pipeline"
 import { migrateModuleSpineTypes, patchSpineOutList } from "@/lib/server/spine_types"
+import { normalizePipelineModule, type PipelineModuleBag } from "@/lib/server/pipeline-module-union"
 import type { TypeExpr } from "@/lib/server/type_expr"
 
 export type ModuleFactoryOpts = {
@@ -119,7 +120,7 @@ export function createPipelineModule(
     (outStructureId
       ? patchSpineOutList({ outStructureId } as PipelineModule, spineList).outType
       : undefined)
-  const base = migrateModuleSpineTypes({
+  const bag: PipelineModuleBag = {
     id: opts.id ?? uid<ModuleId>(),
     kind,
     label: opts.label ?? MODULE_META[kind].label,
@@ -210,11 +211,12 @@ export function createPipelineModule(
         (DEFAULT_CHATBOT_MODE === "single" ? ChatbotMode.Single : ChatbotMode.UntilExit))
       : undefined,
     maxTurns: isChatbot ? (opts.maxTurns ?? DEFAULT_CHATBOT_MAX_TURNS) : undefined,
-  })
-  if (kind === ModuleKind.Chunk || kind === ModuleKind.Merge) {
-    return syncListOpsStepModule(base, models).module
   }
-  return base
+  const base = migrateModuleSpineTypes(normalizePipelineModule(bag))
+  if (kind === ModuleKind.Chunk || kind === ModuleKind.Merge) {
+    return normalizePipelineModule(syncListOpsStepModule(base, models).module)
+  }
+  return normalizePipelineModule(base)
 }
 
 export function makeModule(

@@ -24,8 +24,8 @@
 // AI :   Simple vs full vs OSS LoC: lib/server/spine-in-spine-dogfood-roadmap.ts
 // AI : DONE (allow-pipeline-non-linear-fork) — series-parallel Fork step (nested linear lanes + join).
 // AI :   Not React Flow. See lib/server/fork-roadmap.ts. Linear spine + Parallel/Combine/Assemble stay.
-// AI : TODO (arch-module-union) — PipelineModule is a god object; discriminated union per ModuleKind.
-// AI : TODO (jank-pipeline-god-object) — same as arch-module-union; dual FieldType + TypeExpr stays.
+// AI : DONE (arch-module-union) — PipelineModule is a per-kind union (pipeline-module-union.ts).
+// AI :   normalizePipelineModule strips other-kind keys on ingest. Dual FieldType + TypeExpr stays.
 // AI : TODO (arch-store-async) — Store is sync + write-behind RAM; make methods async (JsonStore vs
 // AI :   SupabaseStore should not both be in-memory mirrors).
 // AI : TODO (arch-export-dispatch) — table is pipeline_export_dispatch.ts (ModuleKind × ts/py/go/rs).

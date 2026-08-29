@@ -13,7 +13,7 @@ import { flattenPipelineModules, updatePipelineModule } from "@/lib/fork-pipelin
 import { useAppShell } from "@/lib/app-shell"
 import { AppWindowId } from "@/lib/app-window-id"
 import { useStore } from "@/lib/store"
-import type { ModuleId, PipelineModule } from "@/lib/types"
+import { applyPipelineModulePatch, type ModuleId, type PipelineModule } from "@/lib/types"
 
 type SessionRes = {
   kind?: "nango" | "ap"
@@ -67,7 +67,9 @@ export function ConnectAppsBanner({ modules, simple = false }: { modules: Pipeli
       )
       if (step) {
         setModules(
-          updatePipelineModule(modules, step.id as ModuleId, (m) => ({ ...m, connectConnectionId: connectionId })),
+          updatePipelineModule(modules, step.id as ModuleId, (m) =>
+            applyPipelineModulePatch(m, { connectConnectionId: connectionId }),
+          ),
         )
       }
     } catch (err) {

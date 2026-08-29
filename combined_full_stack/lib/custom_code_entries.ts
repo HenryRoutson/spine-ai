@@ -1,5 +1,5 @@
 import { isMergeModuleKind } from "@/lib/module-kinds";
-import { CustomCodeLanguage } from "@/lib/types";
+import { CustomCodeLanguage, normalizePipelineModule } from "@/lib/types";
 import type { CustomCodeEntry, PipelineModule } from "@/lib/types";
 export type ParsedCustomCodeEntry = { language: CustomCodeLanguage; code: string };
 
@@ -92,5 +92,5 @@ export function migrateCustomCodeModule(m: PipelineModule): PipelineModule {
   }
   const { code: _c, ...rest } = legacy;
   delete (rest as LegacyCustomCodeModule).codeLanguage;
-  return { ...rest, fallbackList: fallbackList.length ? fallbackList : undefined };
+  return normalizePipelineModule({ ...rest, fallbackList: fallbackList.length ? fallbackList : undefined });
 }
