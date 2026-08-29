@@ -16,7 +16,7 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { Input } from "@/components/ui/input"
 import { navigateToProjectPicker } from "@/lib/app-mode-nav"
-import { isAccountWindow } from "@/lib/app-nav-config"
+import { guiDefaultWorkspaceWindow, isAccountWindow } from "@/lib/app-nav-config"
 import { useAppShell } from "@/lib/app-shell"
 import { AppWindowId } from "@/lib/app-window-id"
 import { API_ROUTES } from "@/lib/api-routes"
@@ -35,7 +35,7 @@ import type { SharedLinkRecord } from "@/lib/shared-link-types"
 import type { Project } from "@/lib/types"
 import { spineActionProps } from "@/lib/core/parity"
 import { cn } from "@/lib/utils"
-import { resolveWebsitePipelineBindings, websiteDisplayName } from "@/lib/website-pipelines"
+import { listedWebsitePipelineBindings, websiteDisplayName } from "@/lib/website-pipelines"
 
 function ProjectRenameInput({
   initialName,
@@ -100,7 +100,7 @@ function WebsiteWorkspaceSelector({ embed, site }: { embed: boolean; site: Share
   const hideDeveloperTools = useHideDeveloperTools()
   const [sites, setSites] = useState<SharedLinkRecord[]>([])
   const listedSites = sites.some((row) => row.id === site.id) ? sites : [site, ...sites]
-  const bindings = resolveWebsitePipelineBindings(site.projectId, site.siteOptions.pipelineBindings ?? [])
+  const bindings = listedWebsitePipelineBindings(site.siteOptions.pipelineBindings ?? [])
 
   useEffect(() => {
     let cancelled = false
@@ -118,9 +118,10 @@ function WebsiteWorkspaceSelector({ embed, site }: { embed: boolean; site: Share
   }, [site.id])
 
   function openPipeline(projectId: typeof project.id) {
+    // AI : Leave the Lovable page studio — pipeline workspace owns Inference / Schedule / Structures.
     clearWebsiteEditor()
     if (projectId !== project.id) setActiveProjectId(projectId)
-    setActiveWindow(hideDeveloperTools ? AppWindowId.Vibe : AppWindowId.Structure)
+    setActiveWindow(guiDefaultWorkspaceWindow(hideDeveloperTools, false))
   }
 
   return (
@@ -161,11 +162,16 @@ function WebsiteWorkspaceSelector({ embed, site }: { embed: boolean; site: Share
           <DropdownMenuSeparator />
           <DropdownMenuGroup>
             <DropdownMenuLabel className="font-mono text-[10px] text-muted-foreground">
-              backend
+              backend — open to edit
             </DropdownMenuLabel>
           </DropdownMenuGroup>
           <DropdownMenuGroup>
-            {bindings.map((binding) => {
+            {bindings.length === 0 ? (
+              <DropdownMenuItem disabled className="text-xs text-muted-foreground">
+                Attach a pipeline on the page, then open it here
+              </DropdownMenuItem>
+            ) : (
+              bindings.map((binding) => {
               const name = projects.find((p) => p.id === binding.projectId)?.name ?? binding.alias
               return (
                 <DropdownMenuItem
@@ -179,7 +185,8 @@ function WebsiteWorkspaceSelector({ embed, site }: { embed: boolean; site: Share
                   <span className="font-mono text-[10px] text-muted-foreground">{binding.alias}</span>
                 </DropdownMenuItem>
               )
-            })}
+            })
+            )}
           </DropdownMenuGroup>
         </DropdownMenuContent>
       </DropdownMenu>
@@ -290,7 +297,7 @@ function PipelineWorkspaceSelector({ embed = false }: { embed?: boolean }) {
                     // AI : Pipeline dropdown is L0 for the open pipeline — leave Billing/Settings back into it.
                     if (isAccountWindow(activeWindow)) {
                       setActiveWindow(
-                        readHideDeveloperTools() ? AppWindowId.Vibe : AppWindowId.Structure,
+                        readHideDeveloperTools() ? AppWindowId.Inference : AppWindowId.Structure,
                       )
                     }
                   }}

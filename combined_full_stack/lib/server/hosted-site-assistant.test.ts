@@ -4,7 +4,7 @@ import {
   buildHostedSiteAssistantSystemPrompt,
   buildHostedSiteAssistantUserPrompt,
 } from "@/lib/server/hosted-site-assistant"
-import { DEFAULT_HOSTED_SITE_HTML, HOSTED_SITE_AUTH_SLOT, HOSTED_SITE_CHATBOT_SLOT, HOSTED_SITE_DOCS_SLOT, HOSTED_SITE_OUTPUT_SLOT, HOSTED_SITE_RUN_SLOT } from "@/lib/hosted-site"
+import { DEFAULT_HOSTED_SITE_HTML, DEFAULT_HOSTED_SITE_LANDING_HTML, HOSTED_SITE_AUTH_SLOT, HOSTED_SITE_CHATBOT_SLOT, HOSTED_SITE_DOCS_SLOT, HOSTED_SITE_OUTPUT_SLOT, HOSTED_SITE_RUN_SLOT } from "@/lib/hosted-site"
 import { DEFAULT_HOSTED_SITE_OPTIONS } from "@/lib/shared-link-types"
 import { InputType, ModuleKind, type Project, type ProjectId } from "@/lib/types"
 
@@ -117,6 +117,31 @@ describe("hosted site UI vibe agent prompts", () => {
     expect(next.customHtml).not.toContain(HOSTED_SITE_RUN_SLOT)
   })
 
+  it("does not inject {{run}} onto a page-only site", () => {
+    const current = {
+      ...OPTIONS,
+      customHtml: DEFAULT_HOSTED_SITE_LANDING_HTML,
+      pipelineBindings: [],
+    }
+    const next = applyHostedSiteAssistantPatch(current, {
+      message: "ok",
+      customHtml: "<header><h1>{{company}}</h1></header>",
+      customCss: null,
+      companyName: null,
+      tagline: null,
+      primaryColor: null,
+      accentColor: null,
+      backgroundColor: null,
+      textColor: null,
+      hideSpineFooter: null,
+      authEnabled: null,
+      authProvider: null,
+      authHtml: null,
+      reactFilePatches: null,
+    })
+    expect(next.customHtml).not.toContain(HOSTED_SITE_RUN_SLOT)
+  })
+
   it("expands 3-digit assistant colors to #rrggbb", () => {
     const next = applyHostedSiteAssistantPatch(OPTIONS, {
       message: "ok",
@@ -182,7 +207,9 @@ describe("hosted site UI vibe agent prompts", () => {
       reactFilePatches: [{ path: "src/App.tsx", contents: "export default function App(){return <h1>Hi</h1>}" }],
     })
     expect(next.runtime).toBe("react")
-    expect(next.pipelineBindings).toEqual(current.pipelineBindings)
+    expect(next.pipelineBindings.map((b) => ({ alias: b.alias, projectId: b.projectId }))).toEqual(
+      current.pipelineBindings,
+    )
     expect(next.customHtml).toBe(OPTIONS.customHtml)
     expect(next.reactFiles.find((f) => f.path === "src/App.tsx")?.contents).toContain("Hi")
   })
@@ -191,6 +218,7 @@ describe("hosted site UI vibe agent prompts", () => {
     const system = buildHostedSiteAssistantSystemPrompt("react")
     expect(system).toMatch(/reactFilePatches/)
     expect(system).toContain("RunPipeline")
+    expect(system).toContain("HostedSlot")
     expect(system).not.toContain(HOSTED_SITE_RUN_SLOT)
   })
 })

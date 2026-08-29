@@ -247,6 +247,11 @@ export function WorkspaceView({
           <LoggingPanel logs={logs} selectedRunId={selectedRunId} errorsOnly={errorsOnly} pane={pane} />
         ) : tab === "inference" ? (
           <InferencePanel snap={snap} runBusy={runBusy} />
+        ) : tab === "backend" ? (
+          <AnnotatedLines
+            tab="backend"
+            rows={toStructureView(snap).models.map((m) => `${m.name}  ${m.fields.length} fields`)}
+          />
         ) : tab === "share" ? (
           <AnnotatedLines
             tab="share"

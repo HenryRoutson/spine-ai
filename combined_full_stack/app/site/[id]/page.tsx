@@ -41,6 +41,8 @@ export default async function HostedSitePage({ params }: { params: Promise<{ id:
       siteOptions={link.siteOptions}
       viewerMarkdown={link.viewerMarkdown ?? ""}
       projectId={link.projectId}
+      models={link.snapshot.models}
+      structureRows={link.snapshot.structureRows}
       reactBundle={compiled?.ok ? compiled.bundle : null}
       reactCompileError={compiled && !compiled.ok ? compiled.error : null}
     />

@@ -11,8 +11,9 @@ import {
   listSchedulesForOwner,
 } from "@/lib/server/pipeline_schedules";
 import { scheduleDocsFromByModule } from "@/lib/schedule-types";
-import type { ProjectId } from "@/lib/server/types";
+import type { ProjectId, pipeline_function_id } from "@/lib/server/types";
 import { logger } from "@/lib/server/server_logger";
+import { activeFunctionId, functionsOnProject } from "@/lib/pipeline-functions";
 
 const apiLog = logger("api:schedules");
 // AI : DONE (connect-L-triggers) — Vibe Schedule tab + Inference hint call this API; no node canvas.
@@ -43,6 +44,11 @@ export async function POST(req: NextRequest) {
     throw err;
   }
   try {
+    const functionId =
+      (parsed.functionId as pipeline_function_id | undefined) ?? activeFunctionId(project);
+    if (!functionsOnProject(project).some((fn) => fn.id === functionId)) {
+      return apiError("unknown function", HTTP.BAD_REQUEST);
+    }
     const created = await createSchedule({
       ownerId: ctx.auth.userId,
       projectId: parsed.projectId as ProjectId,
@@ -53,6 +59,7 @@ export async function POST(req: NextRequest) {
       defaultDocs: scheduleDocsFromByModule(parsed.defaultDocsByModule),
       enabled: parsed.enabled,
       tickUrl: parsed.tickUrl,
+      functionId,
     });
     const runtime = await getScheduleRuntime();
     apiLog.info(`created schedule`, { id: created.id, projectId: parsed.projectId });

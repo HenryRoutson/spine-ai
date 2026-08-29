@@ -1,6 +1,8 @@
 // AI : (snapshot) -> ViewModel — React and CLI render; they do not derive.
 // AI : TODO (opt-browser-tui-snapshot) — optional GUI terminal mode renders these same to*View models;
 // AI :   map useStore → SessionSnapshot (also arch-gui-viewmodels).
+// AI : TODO (spine-in-spine-bootstrap-S4-dag) — custom guest slots consume toPipelineView / toStructureView
+// AI :   / toInferenceView / toTestingView / toLogsView — same contract as the TUI. Never useStore.
 
 import { computeInvalid, invalidIssuesForModule } from "@/lib/validity"
 import { computeStructureIssues, structureIssueMessage } from "@/lib/structure-validity"
@@ -279,6 +281,11 @@ export const TUI_TAB_ALIASES: Record<string, TuiTab> = {
   agent: AppWindowId.Vibe,
   tests: AppWindowId.Testing,
   logs: AppWindowId.Logging,
+  supabase: AppWindowId.Backend,
+  schema: AppWindowId.Backend,
+  data: AppWindowId.Backend,
+  tables: AppWindowId.Backend,
+  database: AppWindowId.Backend,
 }
 
 export type TuiArea = BuilderAreaId
@@ -293,6 +300,7 @@ const TUI_TAB_HOTKEY_OVERRIDE: Partial<Record<TuiTab, string>> = {
   billing: "b",
   settings: ",",
   vibe: "a",
+  backend: "k",
 }
 
 function tuiHotkey(tab: TuiTab): string {
@@ -333,6 +341,7 @@ const TUI_TAB_EMPTY: Record<TuiTab, string> = {
   billing: "no account — session pull / SPINE_API_URL",
   settings: "default model",
   vibe: "no chat yet — press a to ask vibe",
+  backend: "no records — types and rows live on Structures; functions live on Pipeline",
 }
 
 const TUI_TAB_DESCRIPTION_OVERRIDE: Partial<Record<TuiTab, string>> = {
@@ -658,6 +667,7 @@ export function compactProposalReview(proposal: ProjectProposal) {
       .filter(([, v]) => v)
       .map(([k]) => k),
     ...(proposal.projectName ? { projectName: proposal.projectName } : {}),
+    ...(proposal.targetFunctionName ? { targetFunctionName: proposal.targetFunctionName } : {}),
     models: proposal.models.map((m) => m.name),
     steps: proposal.modules.map((m) => ({ kind: m.kind, label: m.label })),
     docs: proposal.docs.map((d) => d.name),

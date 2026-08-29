@@ -570,13 +570,14 @@ Grep an id (example): `rg 'project.add' combined_full_stack docs mcp_tool`.
 | `nav.build` | Build | Ink: press 2 (pipeline) | GET /api/state?projectId= | get_project | session.openProject(id) |
 | `nav.billing` | Billing | Ink: press b | GET /api/billing | session_action id=nav.billing → refreshBilling [P] | session.refreshBilling() |
 | `nav.settings` | Settings | Ink: press , | GET /api/account | session_action id=nav.settings → settings snapshot [P] | session.getSnapshot() + setModel |
-| `nav.build.vibe` | Vibe | Ink: press a (ask vibe) or tab-vibe | POST /api/pipeline-assistant | session_action id=nav.build.vibe → get_project | session.getSnapshot() / setActiveWindow vibe |
-| `nav.build.editors` | dev | Ink: press 1–4 for structure/pipeline/testing/inference | PUT /api/projects/:id | session_action id=nav.build.editors → get_project | session.getSnapshot() / setActiveWindow editors |
+| `nav.build.vibe` | Simplified | Ink: press a (ask vibe) or tab-vibe | POST /api/pipeline-assistant | session_action id=nav.build.vibe → get_project | session.getSnapshot() / setActiveWindow vibe |
+| `nav.build.editors` | Full | Ink: press 1–4 for structure/pipeline/testing/inference | PUT /api/projects/:id | session_action id=nav.build.editors → get_project | session.getSnapshot() / setActiveWindow editors |
 | `nav.window.structure` | Structures | Ink: press 1 | PUT /api/projects/:id (models) | validate_project + describe_pipeline_steps | session.setModels / addNamedModel |
 | `nav.window.pipeline` | Pipeline | Ink: press 2 | PUT /api/projects/:id (modules) | describe_pipeline_steps | session.setModules / addPipelineStep |
 | `nav.window.testing` | Testing | Ink: press 3 | POST /api/runs (testing) + POST /api/testing-evaluate | run_test / validate_test | session.runTest(testDocName) |
 | `nav.window.inference` | Inference | Ink: press 4 | POST /api/runs | start_run | session.startRun() |
 | `nav.window.schedule` | Schedule | Ink: press 5 | POST /api/schedules | session_action id=nav.window.schedule lists; schedule.create mints | HTTP /api/schedules via session.createSchedule |
+| `nav.window.backend` | Functions | Ink: press k | GET /api/state?projectId= | session_action id=nav.window.backend → get_project [P] | session.getSnapshot() / setActiveWindow backend |
 | `nav.window.share` | Share | Ink: press 6 | POST /api/shared-links | session_action id=nav.window.share lists; share.create-* mints | session.createShareLink / listShareLinks |
 | `nav.window.earnings` | Earnings | Ink: press 7 | GET /api/earnings | session_action id=earnings.refresh [P] | session.refreshEarnings() |
 | `nav.window.logging` | Logging | Ink: press 8 | GET /api/runs | session_logs | toLogsView(session.getSnapshot()) |
@@ -681,3 +682,21 @@ Grep an id (example): `rg 'project.add' combined_full_stack docs mcp_tool`.
 | `auth.sign-in` | Sign in | no OAuth TUI [host] | Supabase auth (cookie) then GET /api/state | use SPINE_API_TOKEN instead [N] | browser auth [host] |
 | `auth.sign-up` | Sign up | no OAuth TUI [host] | Supabase signUp | no MCP signup [N] | browser auth [host] |
 | `tui.quit` | Quit TUI (no GUI button — Ink q) | Ink: press q | process exit [n/a] | stdio MCP stays up [n/a] | Ink useApp().exit() [n/a] |
+| `platform.share-all` | Share website + link + API | no TUI one-click share hub yet [N] | POST /api/shared-links + POST /api/hosted-apis | session_action share.create-site / share.create-link / share.deploy-api [P] | session.createShareLink / createHostedApi |
+| `platform.copy-all-urls` | Copy all | clipboard is GUI [N] | clipboard [n/a] | clipboard [n/a] | navigator.clipboard [host] |
+| `platform.wire-port` | Connect | TUI backend lists tables only [N] | PUT /api/projects/:id (modules.outStructureId) | session_action + apply_project_changes [P] | useStore.setModules(wireStructureToInput) |
+| `platform.toggle-sql` | View SQL | TUI backend lists tables only [N] | local schema preview [n/a] | local schema preview [n/a] | allModelsToSql(models, modules) |
+| `platform.copy-schema` | Copy schema | clipboard is GUI [N] | clipboard [n/a] | clipboard [n/a] | navigator.clipboard + allModelsToSql [host] |
+| `platform.copy-schema-pack` | Copy schema.sql | clipboard is GUI [N] | clipboard [n/a] | clipboard [n/a] | navigator.clipboard + schemaPackForModels [host] |
+| `platform.backend-tab.schema` | Schema | Ink: press k (backend tab) | local panel [n/a] | local panel [n/a] | setActiveWindow('backend') |
+| `platform.backend-tab.ports` | Connections | Ink: press k (backend tab) | local panel [n/a] | local panel [n/a] | setActiveWindow('backend') |
+| `platform.backend-tab.tables` | Rows | Ink: press k (backend tab) | local panel [n/a] | local panel [n/a] | setActiveWindow('backend') |
+| `platform.backend-tab.run` | Run | Ink: press k then i for inference | POST /api/runs | start_run | session.startRun() |
+| `platform.table-select` | Select table | TUI backend lists tables only [N] | PUT /api/projects/:id structureRows | rows persist on the project [n/a] | patchProject({ structureRows }) / rowsStoreForProject |
+| `platform.table-add-row` | Add record | TUI backend lists tables only [N] | PUT /api/projects/:id structureRows | rows persist on the project [n/a] | addStructureRow |
+| `platform.feed-row` | Send to | TUI has no Feed → input yet [N] | POST /api/docs then POST /api/runs | session_action id=inference.assign-input [P] | session.addDocContent + setInferenceInputDocIds |
+| `pipeline.function-select` | Function | TUI edits project.modules as the active function [N] | PUT /api/projects/:id functions + modules | session_action + patch_project [P] | session.setActiveFunction(id) |
+| `pipeline.function-add` | Function | TUI has no add-function command yet [N] | PUT /api/projects/:id functions + modules | session_action + patch_project [P] | session.addPipelineFunction(name) |
+| `structure.open-function` | Used by | TUI lists structures only [N] | local navigation [n/a] | local navigation [n/a] | openPipeline(moduleId) / setActiveFunction |
+| `structure.view-sql` | Code preview | TUI backend lists tables only [N] | local schema preview [n/a] | local schema preview [n/a] | setView('code') + allModelsToSql |
+| `platform.pay-slot` | Continue to pay | hosted HTML only [N] | share funding mode [n/a] | share funding mode [n/a] | HostedPaySlot on {{pay}} [host] |

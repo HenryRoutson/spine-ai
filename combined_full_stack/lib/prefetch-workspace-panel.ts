@@ -9,6 +9,7 @@ const PREFETCH_CHUNK: Record<AppWindowId, () => Promise<unknown>> = {
   [AppWindowId.Testing]: () => import("@/components/testing"),
   [AppWindowId.Inference]: () => import("@/components/inference"),
   [AppWindowId.Schedule]: () => import("@/components/schedule-page"),
+  [AppWindowId.Backend]: () => import("@/components/platform/backend-workspace"),
   [AppWindowId.Share]: () => import("@/components/share/share-page"),
   [AppWindowId.Earnings]: () => import("@/components/earnings"),
   [AppWindowId.Logging]: () => import("@/components/logging"),

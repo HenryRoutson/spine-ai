@@ -79,6 +79,28 @@ export default function App() {
     expect(renderToStaticMarkup(createElement(App))).toContain("invoice")
   })
 
+  it("mounts HostedSlot for {{table:Lead}} and {{pay}}", () => {
+    const generated = htmlSiteToReactFiles(
+      normalizeHostedSiteOptions({
+        customHtml: "<h1>Acme</h1>{{run}}{{table:Lead}}{{pay}}",
+      }),
+    )
+    expect(generated.some((f) => f.path === "src/components/HostedSlot.tsx")).toBe(true)
+    const compiled = compileHostedSiteReactProject(generated)
+    expect(compiled.ok).toBe(true)
+    if (!compiled.ok) return
+    const App = instantiateHostedSiteReactApp(
+      compiled.bundle,
+      ({ alias }) => createElement("span", null, `pipe:${alias}`),
+      ({ slot }) => createElement("em", null, `slot:${slot}`),
+    )
+    const html = renderToStaticMarkup(createElement(App))
+    expect(html).toContain("Acme")
+    expect(html).toContain("pipe:run")
+    expect(html).toContain("slot:table:Lead")
+    expect(html).toContain("slot:pay")
+  })
+
   it("prepends default hosted CSS when the React tree has none", () => {
     const result = compileHostedSiteReactProject([
       {

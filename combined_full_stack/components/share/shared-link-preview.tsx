@@ -4,7 +4,8 @@ import { Share2, Upload, Zap } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { MarkdownView } from "@/components/highlight"
-import { inputTypeLabel, orderedInputModules } from "@/lib/inference-input"
+import { orderedInputModules } from "@/lib/inference-input"
+import { uploadFieldsFromPipeline } from "@/lib/hosted-site-upload-ui"
 import type { PipelineModule } from "@/lib/types"
 import { cn } from "@/lib/utils"
 
@@ -20,6 +21,7 @@ export function SharedLinkPreview({
   variant?: "page" | "site"
 }) {
   const inputs = orderedInputModules(modules)
+  const fields = uploadFieldsFromPipeline(modules)
   const md = viewerMarkdown.trim()
 
   return (
@@ -49,21 +51,20 @@ export function SharedLinkPreview({
           <p className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
             pipeline inputs · {inputs.length} slot{inputs.length === 1 ? "" : "s"}
           </p>
-          {inputs.map((m) => (
-            <div
-              key={m.id}
-              className="flex items-center gap-2 rounded-md border border-dashed border-border bg-muted/20 px-3 py-2"
-            >
-              <Upload className="h-3.5 w-3.5 text-muted-foreground" />
-              <div className="min-w-0 flex-1">
-                <p className="truncate text-xs font-medium">{m.label}</p>
-                <p className="truncate text-[10px] text-muted-foreground">
-                  {inputTypeLabel(m.inputType)}
-                  {m.note?.trim() ? ` · ${m.note.trim()}` : ""}
-                </p>
+          {(fields.length > 0 ? fields : inputs.map((m) => ({ label: m.label, inputTypes: "", accept: "" }))).map(
+            (f) => (
+              <div
+                key={f.label}
+                className="flex items-center gap-2 rounded-md border border-dashed border-border bg-muted/20 px-3 py-2"
+              >
+                <Upload className="h-3.5 w-3.5 text-muted-foreground" />
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-xs font-medium">{f.label}</p>
+                  <p className="truncate text-[10px] text-muted-foreground">{f.inputTypes || "Any file"}</p>
+                </div>
               </div>
-            </div>
-          ))}
+            ),
+          )}
         </div>
 
         <Button type="button" className="w-full gap-2" disabled>

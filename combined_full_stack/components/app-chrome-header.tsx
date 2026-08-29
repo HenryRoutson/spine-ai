@@ -14,6 +14,7 @@ type AppChromeHeaderProps = {
   onPrimarySectionChange: (section: AppPrimarySection) => void
   openingSection?: AppPrimarySection | null
   projectSlot?: ReactNode
+  functionSlot?: ReactNode
   trailing?: ReactNode
   embed?: boolean
 }
@@ -24,6 +25,7 @@ export function AppChromeHeader({
   onPrimarySectionChange,
   openingSection = null,
   projectSlot,
+  functionSlot,
   trailing,
   embed = false,
 }: AppChromeHeaderProps) {
@@ -54,6 +56,12 @@ export function AppChromeHeader({
       {projectSlot ? (
         <>
           {projectSlot}
+          {functionSlot ? (
+            <>
+              <div className="h-6 w-px shrink-0 bg-border" />
+              {functionSlot}
+            </>
+          ) : null}
           <div className="h-6 w-px shrink-0 bg-border" />
         </>
       ) : null}

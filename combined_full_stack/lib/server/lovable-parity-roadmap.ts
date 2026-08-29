@@ -34,6 +34,6 @@ export {}
 // ---------------------------------------------------------------------------
 // AI : DONE (lovable-F2-pages) — optional HostedSiteOptions.pages[]; default stays one app HTML + auth HTML
 // AI : DONE (lovable-F2-slots) — {{output}} {{chatbot}} {{docs}} mount DataViewPanel / ChatbotPanel / viewerMarkdown
+// AI : DONE (lovable-F2-pay-table) — {{pay}} / {{table:Model}} live on hosted pages via platform widgets
 // AI : DONE (lovable-F2-export) — generateHostedSiteExportFiles emits one HTML per page; dialog tabs stay hosted/*
-// AI : skip {{pay}} / {{table:Model}} — not frontend
 // AI : optional later: drop inference_ui.html into .hs-run-slot in the zip (SETUP already says to do it by hand)

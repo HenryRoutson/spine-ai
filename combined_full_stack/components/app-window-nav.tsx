@@ -42,7 +42,7 @@ export function AppWindowNav({
   return (
     <nav
       aria-label="Workspace"
-      className="flex shrink-0 flex-wrap items-center gap-1 border-b border-border/60 bg-muted/15 px-4 py-2"
+      className="flex shrink-0 items-center gap-1 border-b border-border/60 bg-muted/15 px-4 py-2"
     >
       {leading ? (
         <>
@@ -50,8 +50,9 @@ export function AppWindowNav({
           {showItems ? <div className="mx-1 hidden h-4 w-px shrink-0 bg-border sm:block" aria-hidden /> : null}
         </>
       ) : null}
-      {showItems
-        ? items.map((item) => {
+      {showItems ? (
+        <div className="flex min-w-0 flex-1 flex-wrap items-center gap-1">
+          {items.map((item) => {
             const Icon = item.icon
             const active = activeWindow === item.id
             const issue = validity ? workspaceNavTabIssue(item.id, validity) : null
@@ -94,8 +95,9 @@ export function AppWindowNav({
                 <span>{item.label}</span>
               </button>
             )
-          })
-        : null}
+          })}
+        </div>
+      ) : null}
       {trailing ? <div className="ml-auto flex shrink-0 items-center gap-2">{trailing}</div> : null}
     </nav>
   )

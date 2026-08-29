@@ -504,15 +504,39 @@ export interface InferencePreset {
   expectedOutputs?: Record<step_label_string, unknown>;
 }
 
-// AI : a project owns its own models, pipeline, strategies (mirrors frontend store.tsx Project).
+export type pipeline_function_id = string & { __brand: "pipeline_function_id" };
+
+export type structure_row_id = string & { __brand: "structure_row_id" };
+
+export type structure_row = {
+  id: structure_row_id;
+  modelId: StructureModelId;
+  data: Record<string, unknown>;
+  createdAt: number;
+};
+
+export type project_row_store = Record<string, structure_row[]>;
+
+// AI : one runnable function (pipeline spine) inside a project that shares structures + rows.
+export type PipelineFunction = {
+  id: pipeline_function_id;
+  name: string;
+  modules: PipelineModule[];
+};
+
+// AI : a project owns shared structures and one or more functions (active function = modules).
 export interface Project {
   id: ProjectId;
   name: string;
   kind: string;
   models: StructureModel[];
   typeAliases?: TypeAlias[];
-  // AI : outer spine; Fork nests per-lane modules[]. flattenPipelineModules for logs/cache.
+  // AI : outer spine of the active function; Fork nests per-lane modules[]. flattenPipelineModules for logs/cache.
   modules: PipelineModule[];
+  functions?: PipelineFunction[];
+  activeFunctionId?: pipeline_function_id;
+  // AI : typed rows in projects.data jsonb — dedicated structure_rows table is later.
+  structureRows?: project_row_store;
   strategies: Strategy[];
   seedDocNames?: string[]; // AI : filenames from seeds/*.json — scopes inference inputs to this project
   seedSecretNames?: string[]; // AI : personal secret names linked into this project (like seedDocNames)

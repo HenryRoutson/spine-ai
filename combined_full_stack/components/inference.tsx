@@ -101,6 +101,7 @@ import { ResizableSplit } from "@/components/resizable-split"
 import { inferenceSidebarSplit } from "@/lib/layout-split-settings"
 import { usePersistedLeadingWidth } from "@/lib/use-persisted-leading-width"
 import { findPipelineModule } from "@/lib/fork-pipeline"
+import { activeFunction } from "@/lib/pipeline-functions"
 import { cn } from "@/lib/utils"
 import { DocLabel, InputType } from "@/lib/types"
 import type { DocId, DocRef, ModelId, Project } from "@/lib/types"
@@ -389,15 +390,15 @@ export function Inference({ simple }: { simple?: boolean } = {}) {
 
   const nextRunSubtitle = isSimple
     ? run.phase === "running"
-      ? "This run is still going — you can start another."
-      : "Add a file for each item, then run."
+      ? `${activeFunction(project).name} is still going — you can start another.`
+      : `Running ${activeFunction(project).name}. Add a file for each item, then run.`
     : run.phase === "running"
-      ? "Run in progress — start another anytime, or open a job in Runs for the full-screen trace"
+      ? `${activeFunction(project).name} — run in progress. Start another anytime, or open a job in Runs for the full-screen trace`
       : run.phase === "done"
-        ? "Change files here to run again with different inputs"
+        ? `${activeFunction(project).name} — change files here to run again with different inputs`
         : selected
-          ? `Using setup · ${setupDisplayName(selected.doc.name)}`
-          : "No setup — assign inputs manually, then run"
+          ? `${activeFunction(project).name} · setup · ${setupDisplayName(selected.doc.name)}`
+          : `${activeFunction(project).name} — assign inputs, then run`
 
   const lastRunSubtitle = run.run
     ? isSimple

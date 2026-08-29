@@ -47,9 +47,13 @@ import {
 import { useBrowserPrefEvent } from "@/lib/use-browser-pref-event"
 import { API_ROUTES } from "@/lib/api-routes"
 import { apiJson, JSON_HEADERS } from "@/lib/api-client"
-import { DEFAULT_HOSTED_SITE_HTML, isSiteLinkId, normalizeHostedSiteOptions } from "@/lib/hosted-site"
+import { isSiteLinkId, normalizeHostedSiteOptions } from "@/lib/hosted-site"
 import type { SharedLinkRecord } from "@/lib/shared-link-types"
-import { bindingsFromProjectIds, websiteDisplayName } from "@/lib/website-pipelines"
+import {
+  hostedSiteOptionsForCreate,
+  listedWebsitePipelineBindings,
+  websiteDisplayName,
+} from "@/lib/website-pipelines"
 import { consumePendingPickerList, readPickerList, pickerHomeHref, type picker_list_tab } from "@/lib/picker-list"
 import type { Project, ProjectId } from "@/lib/types"
 
@@ -126,10 +130,9 @@ export function ProjectPickerPage() {
   const siteCountByProject = useMemo(() => {
     const counts = new Map<ProjectId, number>()
     for (const site of sites) {
-      const ids = site.siteOptions.pipelineBindings?.length
-        ? site.siteOptions.pipelineBindings.map((b) => b.projectId)
-        : [site.projectId]
-      for (const id of ids) counts.set(id, (counts.get(id) ?? 0) + 1)
+      for (const id of listedWebsitePipelineBindings(site.siteOptions.pipelineBindings).map((b) => b.projectId)) {
+        counts.set(id, (counts.get(id) ?? 0) + 1)
+      }
     }
     return counts
   }, [sites])
@@ -207,27 +210,26 @@ export function ProjectPickerPage() {
   }
 
   async function handleCreateWebsite() {
-    const ids = sitePipelineIds.length ? sitePipelineIds : sortedProjects[0] ? [sortedProjects[0].id] : []
-    if (!ids.length) {
-      setResyncMsg("Create a pipeline first, then attach it to a website.")
-      return
-    }
     setBusy("website")
     setResyncMsg(null)
     try {
-      const primary = ids[0]
-      const name = siteName.trim() || projects.find((p) => p.id === primary)?.name || "Website"
+      const name = siteName.trim() || "Website"
+      const selected = sitePipelineIds
+      let primary = selected[0]
+      if (!primary) {
+        const stub = await addProject({ open: false })
+        renameProject(stub.id, name)
+        primary = stub.id
+      }
       const body = await apiJson<{ url: string; link: SharedLinkRecord }>(API_ROUTES.sharedLinks, {
         method: "POST",
         headers: JSON_HEADERS,
         body: JSON.stringify({
           projectId: primary,
           kind: "site",
-          siteOptions: normalizeHostedSiteOptions({
-            brand: { companyName: name, tagline: "Run attached pipelines" },
-            customHtml: DEFAULT_HOSTED_SITE_HTML,
-            pipelineBindings: bindingsFromProjectIds(ids, projects),
-          }),
+          siteOptions: normalizeHostedSiteOptions(
+            hostedSiteOptionsForCreate({ name, pipelineIds: selected, projects }),
+          ),
         }),
       })
       setSites((prev) => [body.link, ...prev.filter((s) => s.id !== body.link.id)])
@@ -327,12 +329,7 @@ export function ProjectPickerPage() {
               ) : (
                 <Button
                   size="sm"
-                  onClick={() => {
-                    setNewSiteOpen((v) => !v)
-                    if (!sitePipelineIds.length && sortedProjects[0]) {
-                      setSitePipelineIds([sortedProjects[0].id])
-                    }
-                  }}
+                  onClick={() => setNewSiteOpen((v) => !v)}
                   disabled={busy === "website"}
                   spineId="website.create"
                 >
@@ -394,7 +391,7 @@ export function ProjectPickerPage() {
                 <div className="mb-4 space-y-3 rounded-lg border border-border bg-card p-4">
                   <p className="text-sm font-medium">New website</p>
                   <p className="text-[11px] text-muted-foreground">
-                    Independent of any single pipeline. Attach one or more pipelines this page can run.
+                    Start with a page — like Lovable. Attach pipelines now, or add them later.
                   </p>
                   <Input
                     value={siteName}
@@ -448,14 +445,12 @@ export function ProjectPickerPage() {
                   <li className="px-4 py-8 text-center">
                     <p className="text-sm text-muted-foreground">No websites yet.</p>
                     <p className="mt-1 text-xs text-muted-foreground">
-                      New website attaches pipelines you already have. You can add more later.
+                      New website starts as a page. Attach a pipeline later if you need a run form.
                     </p>
                   </li>
                 ) : (
                   sites.map((site) => {
-                    const bound = site.siteOptions.pipelineBindings?.length
-                      ? site.siteOptions.pipelineBindings
-                      : [{ alias: "run", projectId: site.projectId }]
+                    const bound = listedWebsitePipelineBindings(site.siteOptions.pipelineBindings)
                     const names = bound
                       .map((b) => projects.find((p) => p.id === b.projectId)?.name ?? b.alias)
                       .join(", ")
@@ -471,7 +466,9 @@ export function ProjectPickerPage() {
                             </span>
                           </div>
                           <p className="mt-0.5 font-mono text-[10px] text-muted-foreground">
-                            {bound.length} pipeline{bound.length === 1 ? "" : "s"} · {names}
+                            {bound.length === 0
+                              ? "No pipelines yet"
+                              : `${bound.length} pipeline${bound.length === 1 ? "" : "s"} · ${names}`}
                           </p>
                         </div>
                         <Button

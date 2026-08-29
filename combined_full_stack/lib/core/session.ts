@@ -11,6 +11,7 @@ import type {
   DocId,
   DocRef,
   ModuleId,
+  PipelineFunction,
   PipelineModule,
   PipelineRun,
   Project,
@@ -19,7 +20,9 @@ import type {
   Strategy,
   StructureModel,
   TypeAlias,
+  pipeline_function_id,
 } from "@/lib/types"
+import { addPipelineFunction, switchActiveFunction } from "@/lib/pipeline-functions"
 import {
   attachRealtimePort,
   overlayOptimisticProjects,
@@ -35,6 +38,7 @@ import {
   modulesPatchWithSync,
   patchProjectInList,
   projectPatchFromChanges,
+  proposalGraphPatch,
   renamedProjects,
   typeAliasesPatch,
   withProjectDocumentation,
@@ -422,6 +426,18 @@ export class SpineSession {
     this.patchProject(modulesPatchWithSync(project, m, this.snap.model))
   }
 
+  setActiveFunction(id: pipeline_function_id): void {
+    const project = this.requireProject()
+    this.patchProject(switchActiveFunction(project, id))
+  }
+
+  addPipelineFunction(name?: string): PipelineFunction {
+    const project = this.requireProject()
+    const patch = addPipelineFunction(project, name)
+    this.patchProject(patch)
+    return patch.functions![patch.functions!.length - 1]!
+  }
+
   applyProjectChanges(changes: ProjectPatch): void {
     const project = this.requireProject()
     const patch = projectPatchFromChanges(project, changes, this.snap.model)
@@ -562,13 +578,8 @@ export class SpineSession {
     if (proposal.changed.name && proposal.projectName) {
       this.renameProject(project.id, proposal.projectName)
     }
-    if (proposal.changed.models || proposal.changed.modules || proposal.changed.typeAliases) {
-      this.applyProjectChanges({
-        ...(proposal.changed.models ? { models: proposal.models } : {}),
-        ...(proposal.changed.modules ? { modules: proposal.modules } : {}),
-        ...(proposal.changed.typeAliases ? { typeAliases: proposal.typeAliases } : {}),
-      })
-    }
+    const graph = proposalGraphPatch(this.requireProject(), proposal, this.snap.model)
+    if (graph) this.patchProject(graph)
     if (proposal.changed.documentation) {
       this.setDocumentation(proposal.documentation)
     }

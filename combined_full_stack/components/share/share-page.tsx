@@ -16,9 +16,9 @@ import { ShareEmbedForm } from "@/components/share/share-embed-form"
 import { ShareLinkForm } from "@/components/share/share-link-form"
 import { ShareSiteForm } from "@/components/share/share-site-form"
 import { PipelineWebsitesPanel } from "@/components/share/pipeline-websites-panel"
+import { PlatformShareHub } from "@/components/platform/platform-share-hub"
 import { SharedLinkRunner } from "@/components/share/shared-link-runner"
 import { SharedWithMePanel } from "@/components/share/shared-with-me-panel"
-import { PipelineObserveEmpty } from "@/components/pipeline-observe-empty"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 import { spineActionProps } from "@/lib/core/parity"
@@ -56,9 +56,9 @@ export function SharePage({ simple }: { simple?: boolean } = {}) {
   const isVibe = isVibeWindow(activeWindow)
   // AI : vibe/simple — hosted page studio + mint; Link / API / Embed stay on the full Share page.
   const isSimple = simple === true || isVibe
-  const { typesInvalid, pipelineInvalid, pipelineEmpty, runTabsBlocked } = builder
+  const { typesInvalid, pipelineInvalid, runTabsBlocked } = builder
     ? computeWorkspaceValidity(builder.modules, builder.models, builder.typeAliases)
-    : { typesInvalid: false, pipelineInvalid: false, pipelineEmpty: false, runTabsBlocked: false }
+    : { typesInvalid: false, pipelineInvalid: false, runTabsBlocked: false }
   const [section, setSection] = useState<ShareSection>(
     isConsumer ? ShareSection.MyPipelines : ShareSection.Publish,
   )
@@ -151,14 +151,15 @@ export function SharePage({ simple }: { simple?: boolean } = {}) {
     )
   }
 
-  const publishBlocked = typesInvalid || pipelineInvalid || pipelineEmpty
+  const publishBlocked = typesInvalid || pipelineInvalid
+  const editingSiteOptions = editingWebsite?.siteOptions
   const visibleSection = BUILDER_SHARE_NAV.some((item) => item.id === section)
     ? section
     : ShareSection.Publish
 
   return (
     <div className="flex h-full flex-col">
-      {isSimple ? null : (
+      {isSimple || editingWebsite ? null : (
         <div className="border-b border-border px-5">
           <div className="mx-auto flex max-w-6xl gap-1 py-2">
             {BUILDER_SHARE_NAV.map((item) => (
@@ -177,23 +178,15 @@ export function SharePage({ simple }: { simple?: boolean } = {}) {
         </div>
       )}
 
-      <div className="min-h-0 flex-1 overflow-y-auto p-5">
+      <div className={cn("min-h-0 flex-1", editingWebsite ? "overflow-hidden" : "overflow-y-auto p-5")}>
         {visibleSection === ShareSection.Activity ? (
           <DeploymentActivityPage projectId={builder.project.id} initialFilter={activityFilter} />
-        ) : isSimple && editingWebsite ? (
-          <div className="mx-auto flex max-w-7xl flex-col gap-8">
-            <section className="rounded-lg border border-border bg-card p-4">
-              <ShareSiteForm
-                project={builder.project}
-                docs={builder.docs}
-                inferenceInputDocIds={builder.inferenceInputDocIds}
-                onCreated={() => setRefreshToken((n) => n + 1)}
-              />
-            </section>
-          </div>
-        ) : pipelineEmpty ? (
-          <PipelineObserveEmpty
-            copy={isSimple ? "What do you want to build?" : "Build a pipeline first."}
+        ) : editingWebsite ? (
+          <ShareSiteForm
+            project={builder.project}
+            docs={builder.docs}
+            inferenceInputDocIds={builder.inferenceInputDocIds}
+            onCreated={() => setRefreshToken((n) => n + 1)}
           />
         ) : publishBlocked ? (
           <div className="flex flex-1 flex-col items-center justify-center gap-4 p-8 text-center">
@@ -231,6 +224,13 @@ export function SharePage({ simple }: { simple?: boolean } = {}) {
               />
             </section>
             <section className="rounded-lg border border-border bg-card p-4">
+              <PlatformShareHub
+                project={builder.project}
+                siteOptions={editingSiteOptions}
+                onShared={() => setRefreshToken((n) => n + 1)}
+              />
+            </section>
+            <section className="rounded-lg border border-border bg-card p-4">
               <PipelineWebsitesPanel project={builder.project} projects={builder.projects} />
             </section>
             <section className="rounded-lg border border-border bg-card p-4">
@@ -239,6 +239,15 @@ export function SharePage({ simple }: { simple?: boolean } = {}) {
           </div>
         ) : (
           <>
+            <div className="mx-auto mb-5 max-w-6xl">
+              <section className="rounded-lg border border-border bg-card p-4">
+                <PlatformShareHub
+                  project={builder.project}
+                  siteOptions={editingSiteOptions}
+                  onShared={() => setRefreshToken((n) => n + 1)}
+                />
+              </section>
+            </div>
             <div
               className={cn(
                 "mx-auto grid gap-5",

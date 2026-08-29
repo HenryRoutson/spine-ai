@@ -621,11 +621,11 @@ export function Settings() {
           {showSection("settings-developer") ? (
           <section id="settings-developer" className="rounded-lg border border-border bg-card">
             <div className="border-b border-border px-4 py-3">
-              <h3 className="text-sm font-semibold">Developer tools</h3>
+              <h3 className="text-sm font-semibold">Simplified</h3>
               <p className="mt-0.5 text-xs text-muted-foreground">
-                Optional visual editors under Build — Vibe already has full project control.
+                Hide Testing and other developer pages. Remaining pages use a simpler layout, with the agent on the
+                left.
               </p>
-              {/* AI : TODO (opt-browser-tui-chrome) — optional Terminal mode setting mirroring the header toggle. */}
             </div>
             <label className="flex cursor-pointer items-start gap-3 px-4 py-3">
               <Switch
@@ -634,11 +634,10 @@ export function Settings() {
                 className="mt-0.5"
               />
               <span className="min-w-0 flex-1">
-                <span className="block text-sm font-medium">Hide developer tools</span>
+                <span className="block text-sm font-medium">Simplified</span>
                 <span className="mt-0.5 block text-xs text-muted-foreground">
-                  When on, Structure / Pipeline / Testing stay hidden. Pipelines keep Vibe and Building (visual
-                  editors). Websites stay on the page studio — Building edits page code, or Page / Backend when this
-                  is on.
+                  Same control as the header toggle. On: Structures, Pipeline, Inference, Schedule, and Share — with
+                  the agent open on the left. Off: every workspace page, including Testing.
                 </span>
               </span>
             </label>
