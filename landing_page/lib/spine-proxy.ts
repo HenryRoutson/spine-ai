@@ -18,6 +18,7 @@ export function spineApiUrl(): SpineApiUrl {
   return (
     process.env.SPINE_API_URL ??
     process.env.NEXT_PUBLIC_API_URL ??
+    // AI : TODO (jank-site-urls) — production fallback host; prefer SPINE_API_URL / NEXT_PUBLIC_API_URL.
     (process.env.NODE_ENV === "development"
       ? "http://localhost:3000"
       : "https://www.spine-ai-app.dev")

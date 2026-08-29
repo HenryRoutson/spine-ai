@@ -17,6 +17,7 @@ type AppLoginUrl = string;
 type AppUrl = string;
 type ApiUrl = string;
 
+// AI : TODO (jank-site-urls) — APP_URL / APP_LOGIN_URL / SPINE_API_URL split across three hostnames.
 const APP_URL: AppUrl =
   process.env.NEXT_PUBLIC_APP_URL ??
   (process.env.NODE_ENV === "development" ? "http://localhost:3000" : "https://www.spine-ai-app.dev/");

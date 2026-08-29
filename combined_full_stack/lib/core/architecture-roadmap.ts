@@ -1,4 +1,5 @@
 // AI : Architecture / duplication — grep "TODO (arch" for open work.
+// AI : Hardcoded leftovers — grep "TODO (jank-" / lib/server/jank-roadmap.ts.
 //
 // Keep (do NOT merge):
 //   - Client useStore, server Store, SpineSession stay three stores (docs/parity.md).
@@ -24,6 +25,7 @@
 // AI : DONE (allow-pipeline-non-linear-fork) — series-parallel Fork step (nested linear lanes + join).
 // AI :   Not React Flow. See lib/server/fork-roadmap.ts. Linear spine + Parallel/Combine/Assemble stay.
 // AI : TODO (arch-module-union) — PipelineModule is a god object; discriminated union per ModuleKind.
+// AI : TODO (jank-pipeline-god-object) — same as arch-module-union; dual FieldType + TypeExpr stays.
 // AI : TODO (arch-store-async) — Store is sync + write-behind RAM; make methods async (JsonStore vs
 // AI :   SupabaseStore should not both be in-memory mirrors).
 // AI : TODO (arch-export-dispatch) — table is pipeline_export_dispatch.ts (ModuleKind × ts/py/go/rs).
@@ -31,6 +33,7 @@
 // AI : TODO (arch-export-file) — generatePipelineSource* still assemble sections in 4 files;
 // AI :   one assembler + lang adapters after dispatch is the only kind switch.
 // AI : TODO (arch-export-webhook) — exportWebhookStepBody{Ts,Py,Go,Rust} is the same call shape four times.
+// AI : TODO (jank-export-quad) — same as arch-export-webhook / arch-export-file; grep either.
 // AI : TODO (arch-export-orchestrator) — do not IR-print yet; generateOrchestrator* + generate*StepBody*
 // AI :   still walk the same spine (leave BAML alone). Next after arch-export-file.
 // AI : TODO (arch-export-stubs) — runtime libraries live in lib/export_runtime/{ts,py,go,rs}/ and are copied into zips. Generated pipeline files import them. LLM JSON schemas come from exportLlmSchemaJson.

@@ -37,6 +37,7 @@ export { AppArea } from "@/lib/app-area-windows"
 export type { BuilderAreaId } from "@/lib/app-area-windows"
 
 // AI : marketing site lives on a separate deploy from the app
+// AI : TODO (jank-site-urls) — spine-ai.dev vs spine-ai-app.dev vs app.usespine.com; one constant module.
 export const LANDING_PAGE_URL = "https://www.spine-ai.dev/"
 
 type NavIcon = React.ComponentType<{ className?: string }>

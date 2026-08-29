@@ -1,7 +1,7 @@
 // AI : canonical contract shared with the V0 frontend (`ai-pipeline-builder/lib/types.ts`).
 // AI : the frontend stub is presentation-only; this is the real, combinable definition.
 // AI : backend-only additions are marked. Everything else is byte-compatible with the stub.
-// AI : TODO bug — known drift vs the v2 frontend stub to reconcile at merge time:
+// AI : TODO (jank-frontend-stub-drift) — known drift vs the v2 frontend stub (not in this repo):
 // AI :   - frontend ModuleKind/MODULE_META lack "llm-batch" (any Record<ModuleKind,…> in
 // AI :     frontend COMPONENTS will fail to typecheck once these types land),
 // AI :   - frontend DEFAULT_MODEL is "qwen-2.5-72b" (backend: "deepseek-v4"),
@@ -355,6 +355,7 @@ export interface PipelineModule {
   // AI :   Explicit wins over StructureModel.defaultView / mime / TypeExpr. JSON tab always remains.
   // config
   inputType?: InputTypeSpec;
+  // AI : TODO (jank-doc-name-match) — filename substring only; wrong-but-matching files still bind.
   inputNameContains?: string; // AI : optional filename substring — only matching docs can fill this input slot
   inputDescription?: string; // AI : optional expected input — LLM guard rejects mismatches before the step runs
   checkInputDescription?: boolean; // AI : when false, skip the LLM guard even if inputDescription is set
@@ -849,6 +850,7 @@ export interface TokenUsage {
 
 // AI : default to DeepSeek V4 — cheap Chinese model, maps to deepseek/deepseek-chat, fast + reliable
 // AI : for large structured outputs (qwen-2.5-72b on OpenRouter is markedly slower here).
+// AI : TODO (jank-default-model) — UI fallbacks still hardcode gemini-3-flash / deepseek-v4 strings.
 export const DEFAULT_MODEL: ModelId = "openrouter:deepseek-v4";
 
 // AI : default vision model for input OCR — Gemini reads images/PDFs/handwriting well.
@@ -974,6 +976,7 @@ export const MODULE_META: Record<ModuleKind, { label: string; description: strin
     description: "Check pipeline state (step[\"Label\"], len) — runs after referenced steps; passthrough",
   },
   [ModuleKind.HumanReview]: {
+    // AI : TODO (jank-human-review-modes) — approve/reject only; chat-until-resolution + text/voice still in TODO.txt.
     label: "Human Review",
     description: "Pause in Inference for approve or reject — passthrough on approval",
   },

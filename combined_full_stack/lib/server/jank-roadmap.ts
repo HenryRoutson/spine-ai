@@ -1,0 +1,62 @@
+// AI : Hardcoded / non-generic / leftover — grep "TODO (jank-" / "DONE (jank-".
+// Survey of allowlists, filename heuristics, identity leftovers, and GUI-only hosts.
+// Do NOT expand Connect to hundreds of pieces. Do NOT treat filename "confidential" as ACL.
+// Large product work stays on existing roadmaps (connect, fork, media-view, arch, mcp-capability).
+
+export {}
+
+// ---------------------------------------------------------------------------
+// Security / deploy leftovers
+// ---------------------------------------------------------------------------
+// AI : TODO (jank-landing-secret) — landing_build_access.ts: require LANDING_BUILD_ACCESS_SECRET
+// AI :   or LANDING_DEMO_PROXY_SECRET on hosted deploys; never fall through to a hardcoded
+// AI :   local-dev string or SUPABASE_SERVICE_ROLE_KEY outside NODE_ENV=development.
+// AI : TODO (jank-redirect-decode) — sanitize_redirect.ts: decode once; reject %2e%2e, control
+// AI :   chars, and protocol-relative / traversal after decode.
+// AI : TODO (jank-cors-app-origin) — landing_demo_cors.ts lists spine-ai.dev + auto-pipeline.dev
+// AI :   but not spine-ai-app.dev (the live app host used by landing CSP / proxy).
+// AI : TODO (jank-shared-run-abuse) — rate_limit_config shared_run is IP-bucketed (5/10m);
+// AI :   rotation still drains sharer_pays credits. Pair with CAPTCHA / spend caps.
+// AI : TODO (jank-pyodide-cdn) — custom_code.ts loads Pyodide from jsDelivr; pin SRI or self-host.
+// AI : TODO (jank-confidential-name) — confidential-upload.ts is a filename substring UX hint;
+// AI :   trivial bypass — do not treat as access control.
+
+// ---------------------------------------------------------------------------
+// Identity / URL drift
+// ---------------------------------------------------------------------------
+// AI : TODO (jank-legal-identity) — shared/legal/site.ts controllerName is still
+// AI :   "Spine (Antler hackathon project)". Product rename is a legal copy change.
+// AI : TODO (jank-site-urls) — production hosts are split: spine-ai.dev (marketing),
+// AI :   spine-ai-app.dev (app), app.usespine.com (login), auto-pipeline.dev (legacy CORS).
+// AI :   One constant module + env overrides; do not hardcode a fourth name.
+// AI : DONE (jank-mcp-paths) — .cursor/mcp.json uses PATH `node` + mcp_tool/spine-mcp.mjs (cwd .).
+// AI : TODO (jank-oauth-login) — login page GitHub/Google OAuth is commented out
+// AI :   (callback route exists at /auth/callback).
+
+// ---------------------------------------------------------------------------
+// Allowlists / filename heuristics
+// ---------------------------------------------------------------------------
+// AI : TODO (jank-connect-allowlist) — Connect catalog is Slack + Gmail + Sheets + HTTP
+// AI :   (plus matching AP three). Grow only when a seed needs an id (ap-sidecar-C-grow).
+// AI : TODO (jank-doc-name-match) — inputNameContains is a filename substring. A marking
+// AI :   guide and homework can "match" and still be the wrong documents. Schema-gated
+// AI :   upload / typed pairing is the generic fix (TODO.txt).
+// AI : TODO (jank-test-filename) — tests are discovered by *_testing.json suffix, not a
+// AI :   doc label or type. tutoring_* fixtures skip until expectedOutputs exist.
+// AI : TODO (jank-default-model) — UI fallbacks hardcode "gemini-3-flash" / "deepseek-v4"
+// AI :   instead of DEFAULT_MODEL / DEFAULT_VISION_DOC_PARSE_MODEL.
+// AI : TODO (jank-frontend-stub-drift) — types.ts still documents a v0 ai-pipeline-builder
+// AI :   stub (qwen-2.5-72b, missing llm-batch). This repo has no stub to merge.
+
+// ---------------------------------------------------------------------------
+// Host / surface limits (leave on existing roadmaps; ids for grep)
+// ---------------------------------------------------------------------------
+// AI : TODO (jank-human-review-modes) — HumanReview is approve/reject passthrough.
+// AI :   Chat-until-resolution + single-text (+ optional voice) still in TODO.txt.
+// AI : TODO (jank-codehost-node) — custom code + human-review throw on MCP/CLI
+// AI :   (mcp-capability). Browser CodeHost / Pyodide only.
+// AI : TODO (jank-app-sql-join) — app-sql.ts is SELECT/UPDATE/INSERT, equality WHERE, no JOIN.
+// AI : TODO (jank-export-quad) — webhook/orchestrator bodies are copied four times
+// AI :   (arch-export-webhook / arch-export-file).
+// AI : TODO (jank-pipeline-god-object) — PipelineModule is one shape for every kind
+// AI :   (arch-module-union). Dual FieldType + TypeExpr (fieldTypeToExpr).

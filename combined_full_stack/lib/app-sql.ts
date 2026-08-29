@@ -1,4 +1,5 @@
 // AI : tiny SQL dialect for hosted-app tables — SELECT / UPDATE / INSERT only, no JOIN.
+// AI : TODO (jank-app-sql-join) — no JOIN / multi-sink; keep the subset until hosted rows need it.
 
 import { sqlTableName } from "@/lib/sql-id-types"
 import type { StructureModel } from "@/lib/types"

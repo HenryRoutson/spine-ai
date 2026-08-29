@@ -1,6 +1,7 @@
 export type policy_version_string = string
 export type contact_email_string = string
 
+// AI : TODO (jank-legal-identity) — controllerName still says Antler hackathon; legal copy change.
 export const LEGAL = {
   productName: "Spine",
   controllerName: "Spine (Antler hackathon project)",

@@ -7,8 +7,8 @@ export type landing_build_access_token = string & { __brand: "landing_build_acce
 const TOKEN_TTL_MS = 24 * 60 * 60 * 1000;
 
 function signingSecret(): string {
-  // AI : TODO security — require LANDING_BUILD_ACCESS_SECRET in hosted deploys; never fall through to
-  // AI : the hardcoded local-dev string (or service-role key reuse) outside NODE_ENV=development.
+  // AI : TODO (jank-landing-secret) — require LANDING_BUILD_ACCESS_SECRET in hosted deploys; never fall
+  // AI : through to the hardcoded local-dev string (or service-role key reuse) outside development.
   return (
     process.env.LANDING_BUILD_ACCESS_SECRET?.trim() ||
     process.env.LANDING_DEMO_PROXY_SECRET?.trim() ||
