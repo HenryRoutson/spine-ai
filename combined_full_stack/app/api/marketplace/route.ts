@@ -25,6 +25,7 @@ export async function GET(req: NextRequest) {
   const parsed = marketplaceSearchQuerySchema.safeParse({
     q: url.searchParams.get("q") ?? undefined,
     mine: url.searchParams.get("mine") ?? undefined,
+    kind: url.searchParams.get("kind") ?? undefined,
   });
   if (!parsed.success) return apiError(formatZodError(parsed.error), HTTP.BAD_REQUEST);
 
@@ -32,6 +33,7 @@ export async function GET(req: NextRequest) {
     query: parsed.data.q,
     viewerId: ctx.auth.userId,
     ownerOnly: parsed.data.mine,
+    kind: parsed.data.kind,
   });
   return NextResponse.json({ listings });
 }
@@ -43,19 +45,23 @@ export async function POST(req: NextRequest) {
     const parsed = await parseRequestJson(req, createMarketplaceListingBodySchema);
     if ("validationError" in parsed) return apiError(parsed.validationError, HTTP.BAD_REQUEST);
     const body = parsed;
-    const project = ctx.store.project(body.projectId as ProjectId);
-    if (!project) return apiError(`unknown project ${body.projectId}`, 404);
+    const kind = body.kind ?? "pipeline";
+    const project = body.projectId ? ctx.store.project(body.projectId as ProjectId) : undefined;
+    if (body.projectId && !project) return apiError(`unknown project ${body.projectId}`, 404);
 
     const listing = await publishMarketplaceListing({
       ownerId: ctx.auth.userId,
-      project: migrateProjectModules(project),
+      project: project ? migrateProjectModules(project) : undefined,
+      kind,
+      siteOptions: body.siteOptions,
       title: body.title,
       description: body.description ?? "",
       priceCents: body.priceCents ?? 0,
     });
     apiLog.info(`published marketplace listing`, {
       listingId: listing.id,
-      projectId: body.projectId,
+      projectId: body.projectId ?? null,
+      kind: listing.kind,
       priceCents: listing.priceCents,
     });
     return NextResponse.json({ listing });

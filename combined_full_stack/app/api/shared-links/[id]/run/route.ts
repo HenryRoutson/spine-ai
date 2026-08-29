@@ -74,7 +74,7 @@ import {
 import { optionalAuthSession, type user_id_string } from "@/lib/server/require_auth";
 import { logger } from "@/lib/server/server_logger";
 import { DocLabel, RunSource } from "@/lib/server/types";
-import type { DocId, DocRef, ModuleId, SharedLinkId } from "@/lib/server/types";
+import type { DocId, DocRef, ModuleId, ProjectId, SharedLinkId } from "@/lib/server/types";
 import { MAX_UPLOAD_BYTES } from "@/lib/server/upload_constants";
 
 export const maxDuration = 300;
@@ -302,7 +302,7 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
   after(async () => {
     await withJobLogging(link.ownerId, jobId, jobDb, async () => {
       try {
-        const run = await runPipeline(overlay, link.projectId, primary, {
+        const run = await runPipeline(overlay, link.projectId ?? ("" as ProjectId), primary, {
           model,
           inputDocIds: rest,
           inputDocsByModule: resolvedByModule,

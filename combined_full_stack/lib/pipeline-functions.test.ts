@@ -8,6 +8,7 @@ import {
   ensureNamedFunction,
   functionsOnProject,
   nextFunctionName,
+  storedFunctionsOnProject,
   patchWithSyncedModules,
   projectForFunction,
   renamePipelineFunction,
@@ -127,6 +128,34 @@ describe("pipeline functions", () => {
     const main = projectForFunction(p, DEFAULT_FUNCTION_ID)
     expect(main?.modules[0]?.id).toBe("mod_in")
     expect(projectForFunction(p, "fn_missing")).toBeNull()
+  })
+
+  it("engine reads stored functions[].modules, not the live-spine overlay", () => {
+    const added = addPipelineFunction(project(), "Compile")
+    const compileId = added.functions![1]!.id
+    const dirty = project({
+      functions: added.functions,
+      activeFunctionId: compileId,
+      modules: [
+        {
+          id: "mod_dirty" as ModuleId,
+          kind: ModuleKind.Input,
+          label: "Dirty live spine",
+          note: "",
+          inputType: InputType.Text,
+          cached: true,
+          avgMs: 0,
+          avgCostCents: 0,
+        },
+      ],
+    })
+    expect(functionsOnProject(dirty).find((fn) => fn.id === compileId)?.modules[0]?.id).toBe("mod_dirty")
+    expect(storedFunctionsOnProject(dirty).find((fn) => fn.id === compileId)?.modules[0]?.id).not.toBe(
+      "mod_dirty",
+    )
+    expect(projectForFunction(dirty, compileId)?.modules[0]?.id).not.toBe("mod_dirty")
+    expect(projectForFunction(dirty, DEFAULT_FUNCTION_ID)?.modules[0]?.id).toBe("mod_in")
+    expect(projectForFunction(dirty)?.modules[0]?.id).not.toBe("mod_dirty")
   })
 
   it("renames a function and treats a blank name as unnamed function", () => {

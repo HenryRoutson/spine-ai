@@ -892,12 +892,31 @@ export const createSharedLinkBodySchema = z
 
 export const createMarketplaceListingBodySchema = z
   .object({
-    projectId: projectIdSchema,
+    projectId: projectIdSchema.optional(),
     title: z.string().trim().min(1).max(200),
     description: z.string().trim().max(2_000).optional(),
     priceCents: z.number().int().min(0).max(10_000_000).optional(),
+    kind: z.enum(["pipeline", "website"]).optional(),
+    siteOptions: hostedSiteOptionsSchema.optional(),
   })
-  .strict();
+  .strict()
+  .superRefine((data, ctx) => {
+    const kind = data.kind ?? "pipeline";
+    if (kind === "pipeline" && !data.projectId) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "projectId is required",
+        path: ["projectId"],
+      });
+    }
+    if (kind === "website" && !data.projectId && !data.siteOptions?.brand?.companyName?.trim()) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Website listing requires siteOptions.brand.companyName or a projectId",
+        path: ["siteOptions", "brand", "companyName"],
+      });
+    }
+  });
 
 export const marketplaceSearchQuerySchema = z.object({
   q: z.string().trim().max(200).optional(),
@@ -905,6 +924,7 @@ export const marketplaceSearchQuerySchema = z.object({
     .enum(["1", "true", "0", "false"])
     .optional()
     .transform((v) => v === "1" || v === "true"),
+  kind: z.enum(["pipeline", "website"]).optional(),
 });
 
 export const updateDeploymentSpendLimitBodySchema = z

@@ -1,7 +1,7 @@
 import { API_ROUTES } from "@/lib/api-routes"
 import { apiJson } from "@/lib/api-client"
 import { isDemoMode } from "@/lib/demo-mode"
-import type { MarketplaceListingCard } from "@/lib/marketplace-types"
+import type { MarketplaceListingCard, MarketplaceListingKind } from "@/lib/marketplace-types"
 import {
   readMarketplaceSnapshot,
   writeMarketplaceSnapshot,
@@ -9,10 +9,13 @@ import {
 
 let defaultListingsFetchRef: Promise<MarketplaceListingCard[]> | null = null
 
-export async function fetchMarketplaceListings(query = ""): Promise<MarketplaceListingCard[]> {
+export async function fetchMarketplaceListings(
+  query = "",
+  kind?: MarketplaceListingKind,
+): Promise<MarketplaceListingCard[]> {
   if (isDemoMode()) return readMarketplaceSnapshot() ?? []
   const trimmed = query.trim()
-  if (!trimmed) {
+  if (!trimmed && !kind) {
     if (defaultListingsFetchRef) return defaultListingsFetchRef
     const run = loadMarketplaceListings("")
     defaultListingsFetchRef = run.finally(() => {
@@ -20,16 +23,20 @@ export async function fetchMarketplaceListings(query = ""): Promise<MarketplaceL
     })
     return defaultListingsFetchRef
   }
-  return loadMarketplaceListings(trimmed)
+  return loadMarketplaceListings(trimmed, kind)
 }
 
 export function warmMarketplaceListings(): Promise<void> {
   return fetchMarketplaceListings().then(() => {})
 }
 
-async function loadMarketplaceListings(query: string): Promise<MarketplaceListingCard[]> {
+async function loadMarketplaceListings(
+  query: string,
+  kind?: MarketplaceListingKind,
+): Promise<MarketplaceListingCard[]> {
   const params = new URLSearchParams()
   if (query) params.set("q", query)
+  if (kind) params.set("kind", kind)
   const qs = params.toString()
   const body = await apiJson<{ listings: MarketplaceListingCard[] }>(
     `${API_ROUTES.marketplace}${qs ? `?${qs}` : ""}`,

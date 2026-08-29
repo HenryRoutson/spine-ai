@@ -500,9 +500,16 @@ export function ProjectPickerPage() {
               </LibraryShelf>
               <LibraryShelf entity="websites" id="marketplace">
                 <p className="mb-2 text-[11px] text-muted-foreground">
-                  Website listings are the same marketplace — clone a pipeline that ships a hosted page, or publish from Share.
+                  First-class website listings — clone a hosted page and any bound functions.
                 </p>
-                <MarketplaceBrowsePanel embedded />
+                <MarketplaceBrowsePanel
+                  embedded
+                  kind="website"
+                  onClonedSite={(site) => {
+                    setSites((prev) => [site, ...prev.filter((s) => s.id !== site.id)])
+                    handleOpenWebsite(site)
+                  }}
+                />
               </LibraryShelf>
               <LibraryShelf entity="websites" id="templates">
                 <ExampleTemplateGrid
@@ -638,7 +645,7 @@ export function ProjectPickerPage() {
           </LibraryShelf>
 
           <LibraryShelf entity="pipelines" id="marketplace">
-            <MarketplaceBrowsePanel embedded />
+            <MarketplaceBrowsePanel embedded kind="pipeline" />
           </LibraryShelf>
 
           <LibraryShelf entity="pipelines" id="templates">

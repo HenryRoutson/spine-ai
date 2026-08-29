@@ -40,7 +40,7 @@ export function HostedSiteViewer({
   linkId: string
   siteOptions?: HostedSiteOptions | null
   viewerMarkdown?: string
-  projectId: ProjectId
+  projectId: ProjectId | null
   reactBundle?: hosted_site_react_bundle | null
   reactCompileError?: string | null
   models?: StructureModel[]
@@ -105,7 +105,7 @@ export function HostedSiteViewer({
     return map
   }, [bindings, hasDocsSlot, linkId])
   const tableByAlias = useMemo(
-    () => hostedTableSlotsForProject({ id: projectId, models, structureRows }),
+    () => hostedTableSlotsForProject({ id: projectId ?? ("" as ProjectId), models, structureRows }),
     [projectId, models, structureRows],
   )
 

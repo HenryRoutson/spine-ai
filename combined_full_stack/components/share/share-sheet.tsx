@@ -82,7 +82,7 @@ export function ShareSheet({
               : sharedLinkPublicPath(target.site.id)}
           </p>
           <p className="text-[11px] text-muted-foreground">
-            Attach a function to enable you-pay / I-pay and marketplace clone of a backend.
+            Attach a function to enable you-pay / I-pay. The page can still be listed on the marketplace.
           </p>
         </div>
       ) : null}
@@ -114,8 +114,13 @@ export function ShareSheet({
       {showsWebsiteAttach && project && active === PublishTab.Site ? (
         <PipelineWebsitesPanel project={project} projects={projects} />
       ) : null}
-      {project && active === PublishTab.Marketplace ? (
-        <MarketplacePublishForm project={project} onCreated={onCreated} />
+      {active === PublishTab.Marketplace ? (
+        <MarketplacePublishForm
+          project={project}
+          kind={target.kind === "website" ? "website" : "pipeline"}
+          siteOptions={target.kind === "website" ? target.site.siteOptions : undefined}
+          onCreated={onCreated}
+        />
       ) : null}
     </div>
   )

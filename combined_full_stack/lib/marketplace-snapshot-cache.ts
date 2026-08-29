@@ -10,7 +10,8 @@ function isMarketplaceListingCard(v: unknown): v is MarketplaceListingCard {
   const o = v as MarketplaceListingCard
   return (
     typeof o.id === "string" &&
-    typeof o.projectId === "string" &&
+    (o.projectId == null || typeof o.projectId === "string") &&
+    (o.kind === undefined || o.kind === "pipeline" || o.kind === "website") &&
     typeof o.title === "string" &&
     typeof o.description === "string" &&
     typeof o.priceCents === "number" &&
@@ -30,8 +31,8 @@ export function readMarketplaceSnapshot(): MarketplaceListingCard[] | null {
     if (!raw) return null
     const parsed: unknown = JSON.parse(raw)
     if (!Array.isArray(parsed) || !parsed.every(isMarketplaceListingCard)) return null
-    memorySnapshot = parsed
-    return parsed
+    memorySnapshot = parsed.map((row) => ({ ...row, kind: row.kind ?? "pipeline" }))
+    return memorySnapshot
   } catch {
     return null
   }

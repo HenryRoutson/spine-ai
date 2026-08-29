@@ -29,7 +29,6 @@ import {
   type ModuleId,
   type PipelineModule,
   type Project,
-  type ProjectId,
   type SharedLinkId,
 } from "./types";
 import { logger } from "./server_logger";
@@ -38,7 +37,7 @@ import { DEFAULT_EMBED_OPTIONS } from "@/lib/shared-link-types";
 import { isEmbedLinkId, normalizeEmbedOrigins } from "@/lib/server/embed_origins";
 import { isSiteLinkId, normalizeHostedSiteOptions } from "@/lib/hosted-site";
 import { projectForFunction } from "@/lib/pipeline-functions"
-import { DEFAULT_WEBSITE_PIPELINE_ALIAS, resolveWebsitePipelineBindings, UNNAMED_WEBSITE_NAME } from "@/lib/website-pipelines"
+import { DEFAULT_WEBSITE_PIPELINE_ALIAS, nullableProjectId, pageOnlyProjectStub, resolveWebsitePipelineBindings, UNNAMED_WEBSITE_NAME } from "@/lib/website-pipelines"
 import { isUnnamedProjectName } from "@/lib/project-assistant-types";
 import { normalizeViewerMarkdown } from "@/lib/share-viewer-markdown";
 
@@ -252,6 +251,7 @@ function loadLocalLink(id: SharedLinkId): StoredSharedLink | null {
     embedOptions: normalizeEmbedOptions(row.embedOptions),
     siteOptions: normalizeHostedSiteOptions(row.siteOptions),
     viewerMarkdown: normalizeViewerMarkdown(row.viewerMarkdown),
+    projectId: nullableProjectId(row.projectId),
   };
 }
 
@@ -277,7 +277,7 @@ async function loadSupabaseLink(id: SharedLinkId): Promise<StoredSharedLink | nu
   return {
     id: data.id as SharedLinkId,
     ownerId: data.owner_id as user_id_string,
-    projectId: data.project_id as ProjectId,
+    projectId: nullableProjectId(data.project_id),
     name: (data.snapshot as Project).name,
     description: undefined,
     viewerMarkdown: normalizeViewerMarkdown(data.viewer_markdown),
@@ -336,7 +336,7 @@ export async function listSharedLinksForOwner(ownerId: user_id_string): Promise<
     toPublicRecord({
       id: row.id as SharedLinkId,
       ownerId: row.owner_id as user_id_string,
-      projectId: row.project_id as ProjectId,
+      projectId: nullableProjectId(row.project_id),
       name: (row.snapshot as Project).name,
       description: undefined,
       viewerMarkdown: normalizeViewerMarkdown(row.viewer_markdown),
@@ -429,16 +429,7 @@ export async function publishSharedLink(input: PublishSharedLinkInput): Promise<
     throw new Error("Hosted page requires a company name");
   }
 
-  const source =
-    input.project ??
-    ({
-      id: "" as ProjectId,
-      name: UNNAMED_WEBSITE_NAME,
-      kind: "page",
-      models: [],
-      modules: [],
-      strategies: [],
-    } satisfies Project);
+  const source = input.project ?? pageOnlyProjectStub(siteOptions.brand.companyName || UNNAMED_WEBSITE_NAME);
   const snapshot = projectWithAuthoredModules(migrateProjectModules(structuredClone(source)));
   const defaultDocs: SharedLinkDefaultDoc[] = [];
   mkdirSync(defaultDocsDir(id), { recursive: true });
@@ -476,7 +467,7 @@ export async function publishSharedLink(input: PublishSharedLinkInput): Promise<
   const row: StoredSharedLink = {
     id,
     ownerId: input.ownerId,
-    projectId: (input.project?.id ?? "") as ProjectId,
+    projectId: input.project?.id ?? null,
     name: isSite ? siteOptions.brand.companyName : snapshot.name,
     description: undefined,
     viewerMarkdown: normalizeViewerMarkdown(input.viewerMarkdown),
@@ -508,7 +499,7 @@ export async function publishSharedLink(input: PublishSharedLinkInput): Promise<
     saveLocalLink(row);
     return toPublicRecord(row);
   }
-  const { error } = await db.from("shared_links").upsert({
+  let { error } = await db.from("shared_links").upsert({
     id: row.id,
     owner_id: row.ownerId,
     project_id: row.projectId,
@@ -531,6 +522,32 @@ export async function publishSharedLink(input: PublishSharedLinkInput): Promise<
     site_options: row.siteOptions,
     viewer_markdown: row.viewerMarkdown ?? "",
   });
+  if (error && /null|not-null|project_id/i.test(error.message) && row.projectId == null) {
+    const retryNull = await db.from("shared_links").upsert({
+      id: row.id,
+      owner_id: row.ownerId,
+      project_id: "",
+      snapshot: row.snapshot,
+      default_docs: row.defaultDocs,
+      default_model: row.defaultModel ?? null,
+      funding_mode: row.fundingMode,
+      viewer_name_required: row.viewerNameRequired,
+      spend_limit_cents: row.spendLimitCents ?? null,
+      total_spend_cents: row.totalSpendCents,
+      billing_multiple: row.billingMultiple,
+      markup_fixed_cents: row.flatFeeCents,
+      markup_bps: 0,
+      enabled: true,
+      revoked: false,
+      run_count: 0,
+      created_at: row.createdAt,
+      allowed_origins: row.allowedOrigins,
+      embed_options: row.embedOptions,
+      site_options: row.siteOptions,
+      viewer_markdown: row.viewerMarkdown ?? "",
+    });
+    error = retryNull.error;
+  }
   if (error) {
     // AI : pre-migration DBs lack embed/site columns — retry without them; local JSON still has full row.
     const missingOptionalCols =

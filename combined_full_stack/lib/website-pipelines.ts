@@ -10,6 +10,36 @@ import type {
 
 export const UNNAMED_WEBSITE_NAME = "Untitled Website" as const
 
+export function nullableProjectId(raw: unknown): ProjectId | null {
+  return typeof raw === "string" && raw.trim() ? (raw as ProjectId) : null
+}
+
+// AI : page-only sites persist a stub snapshot so snapshot jsonb stays required.
+export function pageOnlyProjectStub(name: string = UNNAMED_WEBSITE_NAME): Project {
+  return {
+    id: "" as ProjectId,
+    name,
+    kind: "page",
+    models: [],
+    modules: [],
+    strategies: [],
+  }
+}
+
+export function remapWebsiteProjectId(
+  options: HostedSiteOptions,
+  fromId: ProjectId | null,
+  toId: ProjectId | null,
+): HostedSiteOptions {
+  if (!fromId || !toId || fromId === toId) return options
+  return {
+    ...options,
+    pipelineBindings: options.pipelineBindings.map((b) =>
+      b.projectId === fromId ? { ...b, projectId: toId } : b,
+    ),
+  }
+}
+
 // AI : websites are not pipelines — never inherit "Untitled Pipeline" as the page title.
 export function websiteNameForCreate(suggested: string): string {
   const trimmed = suggested.trim()
@@ -89,7 +119,7 @@ export function listedWebsitePipelineBindings(bindings: WebsitePipelineBinding[]
 }
 
 export function websiteBoundProjectIds(
-  _primaryProjectId: ProjectId,
+  _primaryProjectId: ProjectId | null | "",
   bindings: WebsitePipelineBinding[],
 ): ProjectId[] {
   return [...new Set(listedWebsitePipelineBindings(bindings).map((b) => b.projectId))]

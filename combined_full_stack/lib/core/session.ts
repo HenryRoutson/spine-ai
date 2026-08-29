@@ -775,11 +775,20 @@ export class SpineSession {
     title: string
     description?: string
     priceCents?: number
+    kind?: "pipeline" | "website"
+    siteOptions?: unknown
   }): Promise<{ listing: unknown }> {
-    const project = this.requireProject()
+    const project = input.kind === "website" ? this.project : this.requireProject()
     return this.requestJson(
       "/api/marketplace",
-      this.jsonBody("POST", { projectId: project.id, title: input.title, description: input.description, priceCents: input.priceCents }),
+      this.jsonBody("POST", {
+        ...(project ? { projectId: project.id } : {}),
+        title: input.title,
+        description: input.description,
+        priceCents: input.priceCents,
+        kind: input.kind,
+        siteOptions: input.siteOptions,
+      }),
     )
   }
 

@@ -124,7 +124,8 @@ export const DEFAULT_HOSTED_SITE_OPTIONS: HostedSiteOptions = {
 
 export type SharedLinkRecord = {
   id: SharedLinkId;
-  projectId: Project["id"];
+  // AI : null = page-only site (no host pipeline).
+  projectId: Project["id"] | null;
   name: string;
   description?: string;
   // AI : optional public usage markdown — empty unless the publisher opted in (project Docs stay private).

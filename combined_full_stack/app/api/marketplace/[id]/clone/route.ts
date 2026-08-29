@@ -25,11 +25,13 @@ export async function POST(_req: Request, ctx: { params: Promise<{ id: string }>
     });
     apiLog.info(`cloned marketplace listing`, {
       listingId,
-      projectId: result.project.id,
+      projectId: result.project?.id ?? null,
+      siteId: result.site?.id ?? null,
       chargedCents: result.chargedCents,
     });
     return NextResponse.json({
-      project: result.project,
+      project: result.project ?? null,
+      site: result.site ?? null,
       chargedCents: result.chargedCents,
     });
   } catch (err) {
