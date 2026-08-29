@@ -71,6 +71,8 @@ describe("vibe coding workspace", () => {
     expect(normalizeVibePath("structures/../pipeline.json")).toBeNull()
     expect(isReadonlyVibePath("AGENTS.md")).toBe(true)
     expect(isWritableVibePath("AGENTS.md")).toBe(false)
+    expect(isReadonlyVibePath("derived/schema.sql")).toBe(true)
+    expect(isWritableVibePath("derived/models.py")).toBe(false)
     expect(isWritableVibePath("pipeline.json")).toBe(true)
     expect(isWritableVibePath("pipeline.js")).toBe(true)
     expect(isWritableVibePath("structures/ReceiptRow.json")).toBe(true)
@@ -81,8 +83,10 @@ describe("vibe coding workspace", () => {
     const ctx = loadProjectContext(resolve(SEEDS_DIR, "batch_llm_example.json"))
     const ws = seedVibeWorkspace({ project: ctx.project, globalModel: DEFAULT_MODEL })
     expect(ws.files.get("AGENTS.md")).toMatch(/run_tests/)
-    expect(ws.files.get("AGENTS.md")).toMatch(/RAM only/)
+    expect(ws.files.get("AGENTS.md")).toMatch(/derived\/schema\.sql/)
     expect(ws.files.has("pipeline.json")).toBe(true)
+    expect(ws.files.get("derived/schema.sql")).toMatch(/CREATE TABLE document/)
+    expect(ws.files.get("derived/models.py")).toMatch(/_sql_lit/)
     expect(listVibePaths(ws.files, "structures").length).toBeGreaterThan(0)
     const draft = parseVibeWorkspaceFiles(ws.files, ws.seed)
     expect(draft.errors).toEqual([])
@@ -180,6 +184,12 @@ describe("vibe coding harness tools", () => {
       () => "PASS",
     )
     expect(agents).toMatch(/read-only/)
+    const derived = executeVibeHarnessTool(
+      { tool: "write_file", path: "derived/schema.sql", content: "DROP TABLE document;" },
+      ws,
+      () => "PASS",
+    )
+    expect(derived).toMatch(/read-only/)
 
     const wrote = executeVibeHarnessTool(
       { tool: "write_file", path: "message.md", content: "I'll add a receipt pipeline." },
@@ -190,6 +200,28 @@ describe("vibe coding harness tools", () => {
     const tested = executeVibeHarnessTool({ tool: "run_tests" }, ws, () => "PASS\nI/O valid")
     expect(tested).toContain("PASS")
     expect(ws.files.get("VALIDATION.md")).toContain("PASS")
+  })
+
+  it("refreshes derived SQL and Python table helpers after run_tests", () => {
+    const session = createSpineSession()
+    session.addProject({ open: true })
+    const ws = seedVibeWorkspace({ project: session.project!, globalModel: DEFAULT_MODEL })
+    expect(ws.files.get("derived/models.py")).not.toMatch(/ReceiptRowTable/)
+    const row = JSON.stringify({
+      name: "ReceiptRow",
+      description: "One receipt.",
+      fields: [{ name: "vendor", type: "text", optional: false, description: "Vendor" }],
+    })
+    const checks = (draft: Parameters<typeof runVibeWorkspaceChecks>[0]) =>
+      runVibeWorkspaceChecks(draft, session.project!, DEFAULT_MODEL, [], undefined, ws)
+    executeVibeHarnessTool(
+      { tool: "write_file", path: "structures/ReceiptRow.json", content: `${row}\n` },
+      ws,
+      checks,
+    )
+    executeVibeHarnessTool({ tool: "run_tests" }, ws, checks)
+    expect(ws.files.get("derived/schema.sql")).toMatch(/receipt_row/)
+    expect(ws.files.get("derived/models.py")).toMatch(/class ReceiptRowTable/)
   })
 
   it("auto run_tests after writes and ignores Q&A PASS / premature done", () => {

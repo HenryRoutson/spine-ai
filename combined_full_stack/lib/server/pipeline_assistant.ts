@@ -86,7 +86,7 @@ import { flattenPipelineModules, syncForkModules } from "@/lib/fork-pipeline";
 import { tryCompileCustomCodeEntry } from "@/lib/custom_code";
 import { customCodeEntriesForModule } from "@/lib/custom_code_entries";
 import { lintPipeline } from "./pipeline_lint";
-import { VIBE_THINKING_MAX_TOKENS, coerceVibePipelineModules, type VibeWorkspaceDraft } from "./vibe-coding-workspace";
+import { VIBE_THINKING_MAX_TOKENS, coerceVibePipelineModules, writeVibeDerivedFiles, type VibeWorkspace, type VibeWorkspaceDraft } from "./vibe-coding-workspace";
 import {
   harnessDraftHasPipelineWork,
   runVibeCodingHarness,
@@ -824,6 +824,7 @@ export function runVibeWorkspaceChecks(
   globalModel: ModelId,
   testDocsCatalog: AssistantTestDocCatalogEntry[],
   _task?: string,
+  workspace?: VibeWorkspace,
 ): string {
   if (draft.errors.length) {
     return `FAIL parse\n${draft.errors.map((e) => `- ${e}`).join("\n")}`;
@@ -837,6 +838,9 @@ export function runVibeWorkspaceChecks(
   }
   const raw = parsed.raw;
   const proposal = materializeProposal(raw, project, globalModel, testDocsCatalog);
+  if (proposal && workspace) {
+    writeVibeDerivedFiles(workspace.files, proposal.models, proposal.typeAliases, proposal.modules);
+  }
   if (!proposal) {
     return "PASS (no project file changes — Q&A only). Write message.md if the user should see a reply.";
   }
@@ -899,8 +903,8 @@ async function tryVibeFileHarness(args: {
     globalModel: args.globalModel,
     ledger: args.ledger,
     testDocsCatalog: args.testDocsCatalog,
-    runChecks: (draft) =>
-      runVibeWorkspaceChecks(draft, args.project, args.globalModel, args.testDocsCatalog, args.task),
+    runChecks: (draft, workspace) =>
+      runVibeWorkspaceChecks(draft, args.project, args.globalModel, args.testDocsCatalog, args.task, workspace),
     onTurn: args.onTurn,
     onStructuredFailure: args.onStructuredFailure,
   });

@@ -189,7 +189,8 @@ Tools: write_file, read_file, run_tests, list_dir, delete_file, done.
 - No shell, no network, no package installs. run_tests = parse → materialize → I/O validate → custom-code syntax → graph lint.
 - Workspace is RAM on this server. Never ask for API keys or write secrets.
 - AGENTS.md and examples/* are read-only.
-- The first user message ALREADY includes AGENTS.md, project.json, and ${js ? "pipeline.js" : "pipeline.json"}. Do not spend a turn only on list_dir or read_file.
+- The first user message ALREADY includes AGENTS.md, project.json, pipeline.json/js, and derived/schema.sql + derived/models.py. Do not spend a turn only on list_dir or read_file.
+- Prefer sql steps; copy table names / insert helpers from derived/models.py. Do not invent Python CRUD in custom-code.
 - Blank projects start with Input + Output — REPLACE the pipeline this turn. Do not leave only those two steps.
 - Non-JSON inputs (text/pdf/word/image/web): structureOut is Document or list[Document]. Typed rows belong on a later llm/llm-batch.
 ${buildVibeTopologyPromptBlock()}
@@ -261,6 +262,8 @@ export async function runVibeCodingHarness(args: {
     `project.json\n${workspace.files.get("project.json") ?? ""}`,
     `pipeline.json\n${workspace.files.get("pipeline.json") ?? ""}`,
     `pipeline.js\n${workspace.files.get("pipeline.js") ?? "(none)"}`,
+    `derived/schema.sql\n${workspace.files.get("derived/schema.sql") ?? ""}`,
+    `derived/models.py\n${workspace.files.get("derived/models.py") ?? ""}`,
   ].join("\n\n")
   const toolLog: string[] = []
   let llmAttempt = 0
@@ -323,6 +326,8 @@ export async function runVibeCodingHarness(args: {
       `Files: ${listVibePaths(workspace.files).join(", ")}`,
       `pipeline.json\n${workspace.files.get("pipeline.json") ?? "[]"}`,
       `pipeline.js\n${workspace.files.get("pipeline.js") ?? "(none)"}`,
+      `derived/schema.sql\n${workspace.files.get("derived/schema.sql") ?? ""}`,
+      `derived/models.py\n${workspace.files.get("derived/models.py") ?? ""}`,
       `VALIDATION.md\n${workspace.files.get("VALIDATION.md") ?? "(not run)"}`,
       toolLog.slice(-12).join("\n\n"),
     ].join("\n\n")

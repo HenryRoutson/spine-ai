@@ -192,6 +192,8 @@ describe("lovable-style vibe HTML compile", () => {
     expect(report.parts.before).toContain("you@company.com")
     expect(report.parts.before).not.toMatch(/href="#signin"/)
     expect(report.parts.after).toContain("</section>")
+    expect(report.pageHtml).toContain("hs-docs-slot")
+    expect(report.pageHtml).toContain("hs-run-slot")
   })
 
   it("renders HostedSiteChrome around vibe HTML with the pipeline slot in the middle", () => {

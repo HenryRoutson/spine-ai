@@ -17,6 +17,8 @@ import { inputTypesAreAllJsonNative } from "@/lib/inference-input-core"
 import { isManagedLockedStep } from "./validity-sync"
 import { customCodeEntriesForModule } from "@/lib/custom_code_entries"
 import { functionsOnProject, activeFunction } from "@/lib/pipeline-functions"
+import { allModelsToSql } from "@/lib/sql-schema"
+import { allModelsToPydantic } from "@/lib/server/pydantic"
 import {
   ChatbotMode,
   DocLabel,
@@ -197,6 +199,7 @@ This is a **file workspace**, not a chat dump. Edit files, then \`run_tests\`. T
 ${pipelineFile}
 - \`structures/<Name>.json\` — user pydantic models. Built-ins (Document, QuoteSpan, …) are locked — do not redefine.
 - \`aliases.json\` — user type aliases only (not quote_string_t / text_quote_t).
+- \`derived/schema.sql\`, \`derived/models.py\` — generated from structures (read-only; refreshed on \`run_tests\`). Prefer \`sql\` steps using those tables / \`{Model}Table.insert\`. custom-code is a TypeScript arrow \`(rows) => …\` for reshapes, never Python CRUD.
 - \`docs.md\` — project Docs tab markdown. Refresh when pipeline/models change.
 - \`tests/*\` — synthetic inference docs (text/json/markdown only).
 - \`project.json\` — name + functions. Set \`targetFunctionName\` to add/edit a named function without replacing the unnamed / active function.
@@ -215,7 +218,7 @@ ${examples}
 - Many same-kind files → one input with \`list[Document]\` + llm-batch. Two different kinds → process first, then combine (raw side file immediately before combine) **or** assemble after both are parsed. Never a third upload.
 - Independent extracts on one input → fork + product join, not one mega-llm, not parallel. Lane llms \`structureIn\` is Document.
 - Hosted websites accept file uploads; those files become documents. Copied spans should use \`tuple[text,quote]\` so Link Quotes can attach offsets across every uploaded file.
-- Prefer \`sql\` steps for table reads/writes — structures already generate SQL tables and Python helpers. custom-code is a **TypeScript arrow** \`(rows) => …\` for reshapes, never Python CRUD.
+- Prefer \`sql\` steps for table reads/writes — copy SQL from \`derived/schema.sql\` / \`derived/models.py\`. custom-code is a **TypeScript arrow** \`(rows) => …\` for reshapes, never Python CRUD.
 
 ## Topology
 ${buildVibeTopologyPromptBlock()}
@@ -239,7 +242,7 @@ export function normalizeVibePath(raw: string): string | null {
 }
 
 export function isReadonlyVibePath(path: string): boolean {
-  return READONLY_PATHS.has(path) || path.startsWith("examples/")
+  return READONLY_PATHS.has(path) || path.startsWith("examples/") || path.startsWith("derived/")
 }
 
 export function isWritableVibePath(path: string): boolean {
@@ -270,6 +273,16 @@ export function listVibePaths(files: VibeWorkspaceFiles, prefix = ""): string[] 
   const keys = [...files.keys()].sort()
   if (!p || p === ".") return keys
   return keys.filter((k) => k === p || k.startsWith(`${p}/`))
+}
+
+export function writeVibeDerivedFiles(
+  files: VibeWorkspaceFiles,
+  models: StructureModel[],
+  typeAliases: Project["typeAliases"] = [],
+  modules: PipelineModule[] = [],
+): void {
+  files.set("derived/schema.sql", allModelsToSql(models, modules))
+  files.set("derived/models.py", allModelsToPydantic(models, typeAliases ?? []))
 }
 
 export function seedVibeWorkspace(args: {
@@ -316,6 +329,7 @@ export function seedVibeWorkspace(args: {
   )
   files.set("docs.md", project.documentation ?? "")
   files.set("message.md", "")
+  writeVibeDerivedFiles(files, models, project.typeAliases ?? [], project.modules)
   for (const model of userModels) {
     files.set(structureFileName(model.name), pretty(serializeModel(model, models)))
   }
