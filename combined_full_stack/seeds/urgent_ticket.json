@@ -38,7 +38,6 @@
       "label": "Ticket",
       "note": "JSON Ticket with urgent bool",
       "inputType": "json",
-      "inputNameContains": "ticket",
       "outStructureId": "m_ticket",
       "inputDescription": "JSON Ticket — urgent bool plus message"
     },
@@ -104,28 +103,28 @@
   ],
   "docs": [
     {
-      "name": "urgent_true.json",
+      "name": "ticket_urgent_true.json",
       "type": "json",
       "label": "inference",
-      "file": "urgent_ticket/urgent_true.json"
+      "file": "urgent_ticket/ticket_urgent_true.json"
     },
     {
-      "name": "urgent_false.json",
+      "name": "ticket_urgent_false.json",
       "type": "json",
       "label": "inference",
-      "file": "urgent_ticket/urgent_false.json"
+      "file": "urgent_ticket/ticket_urgent_false.json"
     }
   ],
   "inferencePresets": [
     {
       "name": "Urgent page",
       "description": "urgent true — Then/Page Oncall. Else/Enqueue is skipped. No Join: spine stops.",
-      "inputs": { "Ticket": "urgent_true.json" }
+      "inputs": { "Ticket": "ticket_urgent_true.json" }
     },
     {
       "name": "Queue ticket",
       "description": "urgent false — Else/Enqueue. Then/Page Oncall is skipped.",
-      "inputs": { "Ticket": "urgent_false.json" }
+      "inputs": { "Ticket": "ticket_urgent_false.json" }
     }
   ]
 }

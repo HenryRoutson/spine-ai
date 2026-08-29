@@ -47,7 +47,6 @@
       "label": "Ticket",
       "note": "JSON Ticket with status text",
       "inputType": "json",
-      "inputNameContains": "ticket",
       "outStructureId": "m_ticket",
       "inputDescription": "JSON Ticket — status plus message"
     },
@@ -134,17 +133,17 @@
   ],
   "docs": [
     {
-      "name": "status_legal.json",
+      "name": "ticket_status_legal.json",
       "type": "json",
       "label": "inference",
-      "file": "status_route/status_legal.json"
+      "file": "status_route/ticket_status_legal.json"
     }
   ],
   "inferencePresets": [
     {
       "name": "Legal desk",
       "description": "status legal — Legal Desk runs; Billing and Default arms are skipped.",
-      "inputs": { "Ticket": "status_legal.json" }
+      "inputs": { "Ticket": "ticket_status_legal.json" }
     }
   ]
 }
