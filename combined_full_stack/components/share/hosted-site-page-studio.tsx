@@ -2,7 +2,7 @@
 // AI : parity ids — share.site-vibe
 
 import { useCallback, useRef, useState } from "react"
-import { Code2, FileCode2, Plus, Sparkles, X } from "lucide-react"
+import { FileCode2, Plus, X } from "lucide-react"
 import { AssistantChat } from "@/components/assistant-chat"
 import { MonacoCodeEditor } from "@/components/code-viewer"
 import { HtmlPreviewFrame } from "@/components/share/html-preview-frame"
@@ -13,6 +13,7 @@ import { HostedSiteActionPreview } from "@/components/share/hosted-site-action-b
 import { HostedSiteSlotWidgets } from "@/components/share/hosted-site-slot-widgets"
 import { SharedLinkPreview } from "@/components/share/shared-link-preview"
 import { WebsitePipelineBindings } from "@/components/share/website-pipeline-bindings"
+import { SimpleViewToggle } from "@/components/simple-view-toggle"
 import { hostedTableSlotsForProject } from "@/components/platform/hosted-table-slot"
 import { PipelineExportDialog } from "@/components/pipeline-export-dialog"
 import { Button } from "@/components/ui/button"
@@ -303,26 +304,12 @@ export function HostedSitePageStudio({
     <div className={cn(fillHeight ? "flex min-h-0 flex-1 flex-col gap-3 p-4" : "space-y-3")}>
       {hideSurfaceTabs ? null : (
       <div className="flex items-center gap-2">
-      <div className="flex flex-1 gap-1 rounded-md border border-border bg-muted/30 p-1">
-        {(["vibe", "code"] as const).map((id) => {
-          const active = tab === id
-          return (
-            <button
-              key={id}
-              type="button"
-              className={cn(
-                "flex flex-1 items-center justify-center gap-1.5 rounded px-2 py-1.5 text-xs font-medium transition-colors",
-                active ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground",
-              )}
-              onClick={() => setLocalTab(id)}
-              {...(id === "vibe" ? spineActionProps("share.site-vibe") : {})}
-            >
-              {id === "vibe" ? <Sparkles className="h-3.5 w-3.5" /> : <Code2 className="h-3.5 w-3.5" />}
-              {id === "vibe" ? "Vibe" : "Code"}
-            </button>
-          )
-        })}
-      </div>
+      <SimpleViewToggle
+        checked={tab === "vibe"}
+        onCheckedChange={(on) => setLocalTab(on ? "vibe" : "code")}
+        spineId="share.site-vibe"
+        className="max-w-xs flex-1"
+      />
       <div className="flex gap-1 rounded-md border border-border bg-muted/30 p-1" data-spine-id="website.runtime">
         {(["html", "react"] as const).map((id) => {
           const active = value.runtime === id

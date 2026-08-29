@@ -685,7 +685,7 @@ export const PARITY_ROWS: ParityRow[] = [
   row(
     "share.tab.site",
     "share",
-    { label: "Page", file: "components/share/share-page.tsx" },
+    { label: "Website", file: "components/share/share-page.tsx" },
     n("no TUI site mint"),
     y("POST /api/shared-links (site HTML wrapper)", "/api/shared-links"),
     y("session_action id=share.create-site (companyName)", "session_action"),
@@ -694,7 +694,7 @@ export const PARITY_ROWS: ParityRow[] = [
   row(
     "share.site-vibe",
     "share",
-    { label: "Page vibe", file: "components/share/hosted-site-page-studio.tsx" },
+    { label: "Website vibe", file: "components/share/hosted-site-page-studio.tsx" },
     n("no TUI"),
     y("POST /api/hosted-site-assistant", "/api/hosted-site-assistant"),
     n("isolated UI agent — not ask_agent"),
@@ -793,7 +793,7 @@ export const PARITY_ROWS: ParityRow[] = [
   row(
     "share.create-site",
     "share",
-    { label: "Launch hosted page", file: "components/share/share-site-form.tsx" },
+    { label: "Create a website", file: "components/share/pipeline-websites-panel.tsx" },
     n("no TUI"),
     y("POST /api/shared-links (site_ rows)", "/api/shared-links"),
     y("session_action id=share.create-site", "session_action"),
@@ -1303,6 +1303,7 @@ export const PARITY_LABELED_FILES = [
   "components/cache.tsx",
   "components/share/share-embed-form.tsx",
   "components/share/share-site-form.tsx",
+  "components/share/pipeline-websites-panel.tsx",
   "components/share/hosted-site-page-studio.tsx",
   "components/share/html-preview-frame.tsx",
   "components/share/marketplace-browse-panel.tsx",

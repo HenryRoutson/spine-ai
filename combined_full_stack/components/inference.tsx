@@ -78,11 +78,8 @@ import { DiagnosisRunLink } from "@/components/diagnosis-agents/diagnosis-run-li
 import { useProjectSecrets } from "@/lib/use-project-secrets"
 import { runHasErrors } from "@/lib/run-error-log"
 import { runInputDocsSummary } from "@/lib/inference-input"
-import { LOGGING_SETTINGS_CHANGED_EVENT } from "@/lib/logging-settings"
 import { pipelineFinalOutputSteps } from "@/lib/step-doc"
 import { timeAgo } from "@/lib/time-ago"
-import { useRerenderOnEvent } from "@/lib/use-browser-pref-event"
-import { SimpleViewToggle, useSimpleStepTrace } from "@/components/simple-view-toggle"
 import { docTextContent, fetchDocText, invalidateDocText } from "@/lib/doc-text-cache"
 import { docsForProject } from "@/lib/project-docs"
 import {
@@ -154,12 +151,10 @@ export function Inference({ simple }: { simple?: boolean } = {}) {
   const { openJobDetail } = useRunJobs()
   const { maybeAutoDiagnose } = useDiagnosisAgents()
   const { open } = useDocViewer()
-  useRerenderOnEvent(LOGGING_SETTINGS_CHANGED_EVENT)
   const { typesInvalid, pipelineInvalid, pipelineEmpty } = computeWorkspaceValidity(modules, models, typeAliases)
   const isVibe = isVibeWindow(activeWindow)
-  const vibeSimple = simple === true || isVibe
-  const [prefSimple, setSimple] = useSimpleStepTrace(vibeSimple)
-  const isSimple = vibeSimple || prefSimple
+  // AI : Inference simple follows the top Simplified toggle — no local override when that is off.
+  const isSimple = simple === true || isVibe
   const showRunWorkspace = !pipelineEmpty && !typesInvalid && !pipelineInvalid
   const minRunBalanceCents = billingAccount?.minRunBalanceCents ?? MIN_RUN_BALANCE_CENTS
   const insufficientCredit =
@@ -612,9 +607,6 @@ export function Inference({ simple }: { simple?: boolean } = {}) {
           trailing={
             <ScrollArea className="min-h-0 min-w-0 flex-1">
               <div className="mx-auto max-w-6xl space-y-6 p-5">
-              {vibeSimple ? null : (
-                <SimpleViewToggle checked={isSimple} onCheckedChange={setSimple} className="max-w-xs" />
-              )}
               {selected && !isSimple && (
                 <SetupDetail
                   key={selected.doc.id}

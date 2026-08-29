@@ -180,9 +180,8 @@ export const BUILDER_WORKSPACE_NAV_ITEMS: AppNavItem[] = BUILDER_NAV_ITEMS.filte
 
 export const BUILDER_WORKSPACE_WINDOW_IDS: AppWindowId[] = BUILDER_WORKSPACE_NAV_ITEMS.map((item) => item.id)
 
-// AI : Simplified chrome — hide Testing and library/observe developer pages; keep build + run surfaces.
+// AI : Simplified chrome — hide Structures, Testing, and library/observe developer pages.
 export const SIMPLIFIED_WORKSPACE_WINDOW_IDS: AppWindowId[] = [
-  AppWindowId.Structure,
   AppWindowId.Pipeline,
   AppWindowId.Inference,
   AppWindowId.Schedule,
