@@ -4,6 +4,14 @@ A chronological record of product-direction prompts (user voice, not task-demo s
 
 ---
 
+## 2026-08-29 — Store OpenRouter key in Cursor secrets, run live tests
+
+I gave you the openrouter key already, please store it! In secrets on cursor not on git, it’s only got a bit of money I don’t care it’s exposed it’s for testing, run tests : [key redacted]
+
+Store `OPENROUTER_API_KEY` as a Cursor environment secret, never in git. Run the live OpenRouter A/B.
+
+---
+
 ## 2026-08-29 — Seed few-shot lookup is reward hacking (this session)
 
 Ok then it’s not a test, remove this behaviour and test again, note this down that it’s reward hacking to do this

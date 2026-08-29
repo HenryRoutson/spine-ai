@@ -85,6 +85,23 @@ Matching the user task string to few-shot Example 1–5 and emitting that exampl
 
 Seed may emit a generic notes stub so offline tests still return a proposal. Catalog tests (`vibe-coding-examples.test.ts`, `spine-js` round-trip) prove the few-shot graphs are I/O-valid — they are not LLM tests. Seed A/B records wiring and tokens; it must not assert topology. Live OpenRouter is the coding-performance comparison.
 
+### Live OpenRouter (DeepSeek V4, 2026-08-29)
+
+42 live tests passed (`hasProposal`). Reliability = valid **and** topology. `generator` is what actually produced the proposal: `js` means spine-js compiled; `json` means the JSON path (including fallback after a JS miss).
+
+| mode | reliable | valid | topology | sec/task | mean promptTok |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| json-direct | 7/7 | 7/7 | 7/7 | 58.3 | 42073 |
+| json-harness | 7/7 | 7/7 | 7/7 | 110.2 | 31702 |
+| js-direct | 7/7 | 7/7 | 7/7 | 58.3 | 27640 |
+| js-harness | 6/7 | 6/7 | 7/7 | 125.9 | 35425 |
+
+js-direct used `generator=js` on ex1, ex1b, and ex5 only. ex1c, ex2, ex3, ex4 **fell back to JSON**. js-harness missed validity on ex3 (combine) after falling back to JSON. JSON-direct stayed on JSON for every task.
+
+On this model, the library path is cheaper when it sticks (ex1/ex1b/ex5). It does not yet beat JSON on harder spines; JSON fallback is carrying the 7/7. Keep JSON as default.
+
+The older json vs harness A/B (no library) was 7/7 vs 7/7, harness slower.
+
 ## What this does not change
 
 - The UI still edits the JSON/project graph.
