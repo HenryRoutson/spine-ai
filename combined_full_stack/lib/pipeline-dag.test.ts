@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { pipelineDagIsAcyclic, pipelineToDag, DAG_END_ID, DAG_START_ID, PipelineTriggerKind, pipelineTriggerId } from "@/lib/pipeline-dag"
+import { pipelineDagIsAcyclic, pipelineToDag, DAG_END_ID, DAG_START_ID, PipelineTriggerKind, pipelineTriggerId, USE_EXCLUSIVE_DAG_TOPOLOGY } from "@/lib/pipeline-dag"
 import {
   DAG_STEP_SIZE,
   layoutPipelineDag,
@@ -39,7 +39,7 @@ describe("pipeline DAG IR", () => {
     )
   })
 
-  it("fans Then/Else out of an if-else without an implicit join", () => {
+  it("fans Then/Else out of an if-else and joins at the if node", () => {
     const modules = [
       step({ id: "in", kind: ModuleKind.Input, label: "In" }),
       step({
@@ -55,16 +55,15 @@ describe("pipeline DAG IR", () => {
     ]
     const dag = pipelineToDag(modules)
     expect(pipelineDagIsAcyclic(dag)).toBe(true)
+    expect(USE_EXCLUSIVE_DAG_TOPOLOGY).toBe(false)
     expect(dag.edges).toEqual(
       expect.arrayContaining([
-        expect.objectContaining({ source: "in", target: "ife", kind: "spine" }),
-        expect.objectContaining({ source: "ife", target: "t1", kind: "then", label: "Then" }),
-        expect.objectContaining({ source: "ife", target: "e1", kind: "else", label: "Else" }),
-        expect.objectContaining({ source: "t1", target: DAG_END_ID }),
-        expect.objectContaining({ source: "e1", target: DAG_END_ID }),
+        expect.objectContaining({ source: "in", target: "t1", kind: "then", label: "Then" }),
+        expect.objectContaining({ source: "t1", target: "ife", kind: "then" }),
+        expect.objectContaining({ source: "in", target: "e1", kind: "else", label: "Else" }),
+        expect.objectContaining({ source: "e1", target: "ife", kind: "else" }),
       ]),
     )
-    expect(dag.edges.some((e) => e.target === "ife" && e.kind !== "spine")).toBe(false)
     const laid = layoutPipelineDag(dag)
     expect(laid.width).toBeGreaterThan(80)
     expect(laid.height).toBeGreaterThan(80)
@@ -75,7 +74,7 @@ describe("pipeline DAG IR", () => {
     expect(chart).toContain("-->")
   })
 
-  it("keeps empty Else as a skip-edge to End when there is no Join", () => {
+  it("keeps empty Else as a skip-edge to the join", () => {
     const modules = [
       step({ id: "in", kind: ModuleKind.Input, label: "In" }),
       step({
@@ -92,15 +91,13 @@ describe("pipeline DAG IR", () => {
     const dag = pipelineToDag(modules)
     expect(dag.edges).toEqual(
       expect.arrayContaining([
-        expect.objectContaining({ source: "in", target: "ife", kind: "spine" }),
-        expect.objectContaining({ source: "ife", target: "t1", kind: "then" }),
-        expect.objectContaining({ source: "ife", target: DAG_END_ID, kind: "else" }),
-        expect.objectContaining({ source: "t1", target: DAG_END_ID }),
+        expect.objectContaining({ source: "in", target: "ife", kind: "else" }),
+        expect.objectContaining({ source: "t1", target: "ife", kind: "then" }),
       ]),
     )
   })
 
-  it("joins exclusive arms at an optional Join node", () => {
+  it("keeps exclusive fan-out topology behind a flag for later", () => {
     const modules = [
       step({ id: "in", kind: ModuleKind.Input, label: "In" }),
       step({
@@ -116,7 +113,7 @@ describe("pipeline DAG IR", () => {
       step({ id: "join", kind: ModuleKind.ControlJoin, label: "Join", note: "continue" }),
       step({ id: "out", kind: ModuleKind.Output, label: "Out" }),
     ]
-    const dag = pipelineToDag(modules)
+    const dag = pipelineToDag(modules, { exclusiveTopology: true })
     expect(pipelineDagIsAcyclic(dag)).toBe(true)
     expect(dag.edges).toEqual(
       expect.arrayContaining([
@@ -127,7 +124,7 @@ describe("pipeline DAG IR", () => {
     )
   })
 
-  it("fans case arms from the split node", () => {
+  it("joins case arms at the case node", () => {
     const modules = [
       step({ id: "in", kind: ModuleKind.Input, label: "In" }),
       step({
@@ -144,8 +141,10 @@ describe("pipeline DAG IR", () => {
     const dag = pipelineToDag(modules)
     expect(dag.edges).toEqual(
       expect.arrayContaining([
-        expect.objectContaining({ source: "cse", target: "a1", kind: "case", label: "legal" }),
-        expect.objectContaining({ source: "cse", target: "b1", kind: "case" }),
+        expect.objectContaining({ source: "in", target: "a1", kind: "case", label: "legal" }),
+        expect.objectContaining({ source: "a1", target: "cse", kind: "case" }),
+        expect.objectContaining({ source: "in", target: "b1", kind: "case" }),
+        expect.objectContaining({ source: "b1", target: "cse", kind: "case" }),
       ]),
     )
   })

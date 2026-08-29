@@ -12,6 +12,9 @@ import {
 import { followingControlJoin, formatExclusiveCondition, exclusiveLaneKindLabel } from "@/lib/exclusive-control"
 import type { PipelineModule } from "@/lib/types"
 
+// AI : exclusive fan-out (arms → Join or End) is ready but off — diamond join-at-split is the UI until layout is revisited.
+export const USE_EXCLUSIVE_DAG_TOPOLOGY = false
+
 export const DAG_START_ID = "__start"
 export const DAG_END_ID = "__end"
 
@@ -46,6 +49,8 @@ export type PipelineTrigger = {
 
 export type PipelineDagOpts = {
   triggers?: PipelineTrigger[]
+  // AI : off by default — exclusive fan-out is kept for later; UI uses diamond join-at-split.
+  exclusiveTopology?: boolean
 }
 
 export type PipelineDagEdgeKind = "spine" | "then" | "else" | "case" | "lane" | "side-input" | "trigger"
@@ -133,12 +138,48 @@ function pushEdge(edges: Map<EdgeKey, PipelineDagEdge>, edge: PipelineDagEdge): 
   }
 }
 
+// AI : unused while USE_EXCLUSIVE_DAG_TOPOLOGY is false — arms go to Join or End instead of joining at the split.
+function walkExclusiveSplit(
+  m: PipelineModule,
+  modules: PipelineModule[],
+  index: number,
+  pred: string,
+  nodes: Map<string, PipelineDagNode>,
+  edges: Map<EdgeKey, PipelineDagEdge>,
+  exclusiveTopology: boolean,
+): string {
+  const join = followingControlJoin(modules, index)
+  pushEdge(edges, { source: pred, target: m.id, kind: "spine" })
+  const branches = forkBranchesOf(m)
+  for (let bi = 0; bi < branches.length; bi++) {
+    const b = branches[bi]!
+    const kind = laneEdgeKind(m, bi)
+    const label = exclusiveLaneKindLabel(m, bi, b)
+    if (!b.modules.length) {
+      if (join) {
+        addStepNode(nodes, join)
+        pushEdge(edges, { source: m.id, target: join.id, kind, label })
+      } else {
+        pushEdge(edges, { source: m.id, target: DAG_END_ID, kind, label })
+      }
+      continue
+    }
+    const last = walkLinear(b.modules, m.id, nodes, edges, { kind, label }, exclusiveTopology)
+    if (join) {
+      addStepNode(nodes, join)
+      pushEdge(edges, { source: last, target: join.id, kind, label })
+    }
+  }
+  return join ? join.id : m.id
+}
+
 function walkLinear(
   modules: PipelineModule[],
   predId: string,
   nodes: Map<string, PipelineDagNode>,
   edges: Map<EdgeKey, PipelineDagEdge>,
   first?: { kind: PipelineDagEdgeKind; label?: string },
+  exclusiveTopology = USE_EXCLUSIVE_DAG_TOPOLOGY,
 ): string {
   const inGroup = new Set<string>()
   for (let i = 0; i < modules.length; i++) {
@@ -185,37 +226,26 @@ function walkLinear(
 
     addStepNode(nodes, m)
     if (isNestedLaneKind(m.kind)) {
-      const exclusive = isExclusiveKind(m.kind)
-      const join = exclusive ? followingControlJoin(modules, i) : undefined
-      if (exclusive) emit(pred, m.id, "spine")
+      if (exclusiveTopology && isExclusiveKind(m.kind)) {
+        pred = walkExclusiveSplit(m, modules, i, pred, nodes, edges, exclusiveTopology)
+        if (followingControlJoin(modules, i)) i += 1
+        usedFirst = true
+        continue
+      }
       const branches = forkBranchesOf(m)
       for (let bi = 0; bi < branches.length; bi++) {
         const b = branches[bi]!
         const kind = laneEdgeKind(m, bi)
         const label = exclusiveLaneKindLabel(m, bi, b)
-        const from = exclusive ? m.id : pred
         if (!b.modules.length) {
-          if (join) pushEdge(edges, { source: from, target: join.id, kind, label })
-          else if (exclusive) pushEdge(edges, { source: from, target: DAG_END_ID, kind, label })
-          else emit(pred, m.id, kind, label)
-          usedFirst = true
+          emit(pred, m.id, kind, label)
           continue
         }
-        const last = walkLinear(b.modules, from, nodes, edges, exclusive ? { kind, label } : { kind, label })
-        if (join) {
-          addStepNode(nodes, join)
-          pushEdge(edges, { source: last, target: join.id, kind, label })
-        } else if (!exclusive) {
-          pushEdge(edges, { source: last, target: m.id, kind, label })
-        }
+        const last = walkLinear(b.modules, pred, nodes, edges, { kind, label }, exclusiveTopology)
+        pushEdge(edges, { source: last, target: m.id, kind, label })
         usedFirst = true
       }
-      if (join) {
-        pred = join.id
-        i += 1
-      } else {
-        pred = m.id
-      }
+      pred = m.id
       continue
     }
 
@@ -251,7 +281,7 @@ export function pipelineToDag(modules: PipelineModule[], opts?: PipelineDagOpts)
     pushEdge(edges, { source: t.id, target: DAG_START_ID, kind: "trigger" })
   }
 
-  walkLinear(modules, DAG_START_ID, nodes, edges)
+  walkLinear(modules, DAG_START_ID, nodes, edges, undefined, opts?.exclusiveTopology ?? USE_EXCLUSIVE_DAG_TOPOLOGY)
 
   const { indeg } = degreeMaps([...edges.values()])
   for (const id of nodes.keys()) {

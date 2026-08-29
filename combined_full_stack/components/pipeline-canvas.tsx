@@ -243,7 +243,7 @@ function SegmentRow({
   }
 
   if (seg.kind === "fork") {
-    const { fork, index, branches, join } = seg
+    const { fork, index, branches } = seg
     const forkIssue = invalidForModule(invalid ?? new Map(), fork.id)
     const forkInvalid = forkIssue && forkIssue.kind !== "io-mismatch" && forkIssue.kind !== "cardinality-mismatch"
     const forkIoLinked = stepIoMismatchLinked(fork.id, modules, invalid)
@@ -434,27 +434,16 @@ function SegmentRow({
               onSelect={() => onSelect?.(fork.id)}
             />
           )}
-          {isExclusiveKind(fork.kind) && join && (
-            <button
-              type="button"
-              onClick={() => onSelect?.(join.id)}
-              className={cn(
-                "mt-3 w-full rounded-md border border-dashed px-2.5 py-2 text-left transition-colors",
-                selectedId === join.id ? "border-primary bg-primary/5" : "border-chart-4/50 bg-background/60 hover:border-chart-4",
-                stepStatus?.get(join.id) === "skipped" && "opacity-60",
-              )}
-            >
-              <p className="font-mono text-[10px] uppercase tracking-wide text-muted-foreground">
-                join · continue spine as {formatModuleSpineOut(fork, models)}
-              </p>
-              <p className="mt-0.5 font-mono text-[10px] text-muted-foreground">
-                Taken arm only. Without this node, exclusive paths are sinks.
-              </p>
-            </button>
-          )}
-          {isExclusiveKind(fork.kind) && !join && (
+          {isIfElseKind(fork.kind) && (
             <p className="mt-3 rounded-md border border-dashed border-chart-4/50 bg-background/60 px-2.5 py-2 font-mono text-[10px] text-muted-foreground">
-              exclusive — only the taken arm runs. Add a Join after this box to continue the spine.
+              if {formatIfCondition(fork.ifCondition)} → Then, else Else (optional)
+              {" · join "}
+              {formatModuleSpineOut(fork, models)}
+            </p>
+          )}
+          {isCaseKind(fork.kind) && (
+            <p className="mt-3 rounded-md border border-dashed border-chart-4/50 bg-background/60 px-2.5 py-2 font-mono text-[10px] text-muted-foreground">
+              case {fork.ifCondition?.path || "path"} · join {formatModuleSpineOut(fork, models)}
             </p>
           )}
         </div>
