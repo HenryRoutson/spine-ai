@@ -46,7 +46,7 @@ export function useDocViewerData({
       fetchDocText(docId, "parser", docTextOpts).then((parser) =>
         parser.text !== undefined || parser.content !== undefined
           ? parser
-          : { text: `⚠ source not found for ${docId}` },
+          : { text: "Source document could not be loaded." },
       ),
       docTextOpts?.linkId
         ? Promise.resolve({ entries: [] as VisionEntry[] })

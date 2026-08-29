@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest"
 import {
   findQuoteInSources,
+  quoteDisplayText,
   quoteSourcesFromRun,
   resolveQuotesValueFromSources,
 } from "@/lib/server/quotation"
@@ -65,5 +66,16 @@ describe("multi-doc quotation", () => {
     ) as { vendor: { text: string; quote: { doc_id: DocId } } }
     expect(linked.vendor.quote.doc_id).toBe("sha_bbbbbbbbbbbbbbbb")
     expect(linked.vendor.text).toContain("ACME")
+  })
+
+  it("quoteDisplayText shows the copied span and never document ids or offsets", () => {
+    const quote = {
+      text: "Invoice 4412 — $1,240.00",
+      quote: { doc_id: "sha_deadbeef", start: 8, end: 36 },
+    }
+    expect(quoteDisplayText(quote)).toBe("Invoice 4412 — $1,240.00")
+    expect(quoteDisplayText(quote)).not.toMatch(/sha_/)
+    expect(quoteDisplayText(quote)).not.toMatch(/\b8\b/)
+    expect(quoteDisplayText({ vendor: "ACME" })).toBeNull()
   })
 })

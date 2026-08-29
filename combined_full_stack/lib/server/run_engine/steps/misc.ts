@@ -138,7 +138,7 @@ export async function execQuoteStep(m: PipelineModule, ctx: RunCtx, log: RunLogg
   const previewSources = sources.map((s) => sourceDocumentBlock(s.text, s.docId)).join("\n\n");
   return {
     value,
-    preview: `linked ${linked} quote(s) → ${sources.map((s) => s.docId).join(", ")}`,
+    preview: `linked ${linked} quote(s)`,
     json: JSON.stringify(value, null, 2),
     inputPreview: `${previewSources}\n\n── RAW EXTRACTS ──\n${rawJson}`,
     docId: ctx.sourceDocId,

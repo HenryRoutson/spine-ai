@@ -424,6 +424,16 @@ body[data-locked-view="table"]:not([data-fs="1"]) .rp-header { display: none; }
   cursor:pointer; white-space:nowrap; transition:all .12s; font-family:inherit;
 }
 .ref-obj:hover { background:rgba(147,197,253,.18); border-color:rgba(147,197,253,.4); }
+.quote-chip {
+  display:inline-flex; align-items:baseline; gap:1px; max-width:280px;
+  padding:2px 8px; background:rgba(167,139,250,.16); color:#e9d5ff;
+  border:1px solid rgba(167,139,250,.35); border-radius:4px; font-size:11px; font-weight:500;
+  cursor:pointer; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+  transition:all .12s; font-family:inherit; text-align:left;
+}
+.quote-chip:hover { background:rgba(167,139,250,.26); border-color:rgba(167,139,250,.55); }
+.quote-chip .quote-mark { opacity:.7; }
+.quote-chip .quote-text { overflow:hidden; text-overflow:ellipsis; }
 
 /* Schema-as-table */
 .schema-table th { background:#1e293b; }
@@ -1005,6 +1015,59 @@ function unwrapForDisplay(val) {
     if (parsed !== null) return parsed;
   }
   return val;
+}
+
+// AI : linked quotes are { text, quote: { doc_id, start, end } } — show the span, never ids/indexes.
+function isQuoteSpan(v) {
+  if (!v || typeof v !== 'object' || Array.isArray(v)) return false;
+  if (typeof v.doc_id !== 'string' || typeof v.start !== 'number' || typeof v.end !== 'number') return false;
+  return Object.keys(v).every((k) => k === 'doc_id' || k === 'start' || k === 'end' || k === 'href');
+}
+function isTextQuote(v) {
+  return !!(v && typeof v === 'object' && !Array.isArray(v) && typeof v.text === 'string' && isQuoteSpan(v.quote));
+}
+function linkedQuoteOf(v) {
+  if (!v || typeof v !== 'object' || Array.isArray(v)) return null;
+  if (isTextQuote(v)) return { text: v.text, doc_id: v.quote.doc_id, start: v.quote.start, end: v.quote.end };
+  if (typeof v.doc_id === 'string' && typeof v.start === 'number' && typeof v.end === 'number') {
+    return { text: typeof v.text === 'string' ? v.text : '', doc_id: v.doc_id, start: v.start, end: v.end };
+  }
+  return null;
+}
+function quoteRefCell(v, labelKey) {
+  const q = linkedQuoteOf(v);
+  return { $ref: 'quote', $text: q.text, $doc_id: q.doc_id, $start: q.start, $end: q.end, $label: humanize(labelKey) };
+}
+function requestParentOpenQuote(q) {
+  if (window.parent === window) return;
+  const docId = q.$doc_id || q.doc_id;
+  if (!docId) return;
+  try {
+    window.parent.postMessage({
+      type: 'json-viewer:open-quote',
+      doc_id: docId,
+      start: q.$start ?? q.start ?? 0,
+      end: q.$end ?? q.end ?? 0,
+      text: q.$text || q.text || '',
+    }, parentPostOrigin());
+  } catch (err) {
+    console.warn('[JSON Viewer] open-quote postMessage failed:', err);
+  }
+}
+function mkQuoteChip(q) {
+  const btn = document.createElement('button');
+  btn.type = 'button';
+  btn.className = 'quote-chip';
+  const label = String(q.$text || q.text || '').replace(/\s+/g, ' ').trim();
+  if (label) {
+    btn.innerHTML = `<span class="quote-mark">“</span><span class="quote-text">${esc(label)}</span><span class="quote-mark">”</span>`;
+    btn.title = 'Open highlighted source';
+  } else {
+    btn.innerHTML = `<span class="quote-text">View in document</span>`;
+    btn.title = 'Open source document';
+  }
+  btn.onclick = (e) => { e.stopPropagation(); requestParentOpenQuote(q); };
+  return btn;
 }
 
 // AI: human-facing views (tree, table, structure) must never show serialized JSON as a leaf value
@@ -1724,8 +1787,24 @@ function renderTreeView(val, mode) {
 // AI: jsonPath = raw dot-notation key path used by jumpToJson; path = humanized array for breadcrumb
 function renderTreeNode(val, keyName, container, path, isArrayItem, jsonPath) {
   val = unwrapForDisplay(val);
+  const quote = linkedQuoteOf(val);
   const type=inferType(val);
   const label=isArrayItem ? (getNodeTitle(val)||`Item ${keyName}`) : humanize(keyName);
+
+  if (quote) {
+    const node = document.createElement('div'); node.className = 'tree-node';
+    const row=document.createElement('div'); row.className='tree-row t-leaf';
+    row.innerHTML =
+      `<span class="t-spacer"></span>` +
+      `<span class="t-key">${esc(label)}</span>` +
+      `<span class="t-dot"></span>`;
+    row.appendChild(mkQuoteChip(quote));
+    row.addEventListener('mouseenter',()=>updateCrumb(path));
+    row.addEventListener('mouseleave',clearCrumb);
+    node.appendChild(row);
+    container.appendChild(node);
+    return;
+  }
 
   if (type==='object'||type==='array') {
     const isArr=type==='array';
@@ -2061,6 +2140,10 @@ function assignFlattenedValue(cols, fullKey, v, depth, labelKey) {
     cols[fullKey] = v;
     return;
   }
+  if (linkedQuoteOf(v)) {
+    cols[fullKey] = quoteRefCell(v, labelKey);
+    return;
+  }
   if (Array.isArray(v)) {
     cols[fullKey] = { $ref: 'array', $val: v, $count: v.length, $label: humanize(labelKey) };
     return;
@@ -2081,6 +2164,8 @@ function flattenRow(obj, depth=0, prefix='') {
         if (parsed !== null) { assignFlattenedValue(cols, fullKey, parsed, depth, k); continue; }
       }
       cols[fullKey]=v;
+    } else if (linkedQuoteOf(v)) {
+      cols[fullKey] = quoteRefCell(v, k);
     } else if (Array.isArray(v)) {
       cols[fullKey]={ $ref:'array',  $val:v, $count:v.length, $label:humanize(k) };
     } else if (depth<1) {
@@ -2210,6 +2295,8 @@ function buildTableColDefs(rows) {
           refLabel: sinfo.refLabel, refType: sinfo.refType,
         });
       });
+    } else if (info.isRef && info.refType==='quote') {
+      cols.push({ type:'ref-quote', key, name:lbl.name, group:lbl.group, refLabel:info.refLabel, groupKey:null });
     } else if (info.isRef && info.refType==='object') {
       cols.push({ type:'ref-obj', key, name:lbl.name, group:lbl.group, refLabel:info.refLabel, groupKey:null });
     } else if (info.isRef && info.refType==='array') {
@@ -2443,6 +2530,8 @@ function drawDataTable() {
           };
           td.appendChild(btn);
           appendCellJumps(td, cellJsonPath);
+        } else if (val&&typeof val==='object'&&val.$ref==='quote') {
+          td.appendChild(mkQuoteChip(val));
         } else if (val&&typeof val==='object'&&val.$ref==='object') {
           const btn=document.createElement('button'); btn.className='ref-obj';
           btn.style.fontSize='10.5px';
@@ -2504,6 +2593,11 @@ function fillCell(td, val, key, label, cellJsonPath, rowPath) {
     };
     td.appendChild(btn);
     appendCellJumps(td, drillPath);
+    return;
+  }
+  // Linked quote → highlighted span in the source document (parent DocViewer)
+  if (val&&typeof val==='object'&&val.$ref==='quote') {
+    td.appendChild(mkQuoteChip(val));
     return;
   }
   // Object ref → slide-over details
@@ -2625,6 +2719,12 @@ function openDetailPanel(title, obj) {
     return;
   }
 
+  const quote = linkedQuoteOf(obj);
+  if (quote) {
+    requestParentOpenQuote(quote);
+    return;
+  }
+
   function addRow(key, val, indent=0) {
     val = unwrapForDisplay(val);
     const type=inferType(val);
@@ -2633,7 +2733,9 @@ function openDetailPanel(title, obj) {
     const keyEl=document.createElement('span'); keyEl.className='dp-key'; keyEl.textContent=humanize(key);
     row.appendChild(keyEl);
 
-    if (type==='object'||type==='array') {
+    if (linkedQuoteOf(val)) {
+      row.appendChild(mkQuoteChip(linkedQuoteOf(val)));
+    } else if (type==='object'||type==='array') {
       const btn=document.createElement('button');
       btn.className=`${type==='array'?'ref-arr':'ref-obj'} dp-val-ref`;
       btn.style.fontSize='11px';
@@ -2811,6 +2913,8 @@ function downloadBytes(filename, data, mime) {
 
 function cellToExportValue(v) {
   if (v === null || v === undefined) return null;
+  const quote = linkedQuoteOf(v);
+  if (quote) return quote.text || null;
   if (typeof v === 'string' || typeof v === 'number' || typeof v === 'boolean') return v;
   return JSON.stringify(v);
 }
@@ -2819,7 +2923,9 @@ function flattenExportRow(obj, prefix, depth) {
   const cols = {};
   for (const [k, v] of Object.entries(obj)) {
     const key = prefix ? `${prefix}.${k}` : k;
-    if (v !== null && typeof v === 'object' && !Array.isArray(v) && depth < 1) {
+    if (linkedQuoteOf(v)) {
+      cols[key] = cellToExportValue(v);
+    } else if (v !== null && typeof v === 'object' && !Array.isArray(v) && depth < 1) {
       Object.assign(cols, flattenExportRow(v, key, depth + 1));
     } else {
       cols[key] = cellToExportValue(v);

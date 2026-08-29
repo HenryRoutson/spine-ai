@@ -173,6 +173,16 @@ function isLinkedQuote(v: unknown): v is LinkedQuoteValue {
   );
 }
 
+export function isLinkedQuoteValue(v: unknown): v is LinkedQuoteValue {
+  return isLinkedQuote(v);
+}
+
+// AI : user-facing cell text — never doc_id / start / end. Linked quotes show the copied span.
+export function quoteDisplayText(value: unknown): string | null {
+  if (isLinkedQuote(value)) return value.text;
+  return null;
+}
+
 function linkQuoteField(raw: unknown, link: QuoteLinker): unknown {
   if (typeof raw === "string") return link(raw);
   if (isLinkedQuote(raw)) return raw;

@@ -42,8 +42,12 @@ export function DocViewerProvider({ children }: { children: ReactNode }) {
   return <DocViewerContext.Provider value={value}>{children}</DocViewerContext.Provider>
 }
 
+export function useOptionalDocViewer() {
+  return useContext(DocViewerContext)
+}
+
 export function useDocViewer() {
-  const ctx = useContext(DocViewerContext)
+  const ctx = useOptionalDocViewer()
   if (!ctx) throw new Error("useDocViewer must be used within DocViewerProvider")
   return ctx
 }

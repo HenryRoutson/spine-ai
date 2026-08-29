@@ -1,8 +1,8 @@
 "use client"
 
 import { Link2, Files } from "lucide-react"
-import { useDocViewer } from "@/lib/doc-viewer"
-import { useAppShell } from "@/lib/app-shell"
+import { useOptionalDocViewer } from "@/lib/doc-viewer"
+import { useOptionalAppShell } from "@/lib/app-shell"
 import { collectQuotes, type ExportedQuote } from "@/lib/quotes"
 
 export function quotesFromJson(json?: string): ExportedQuote[] {
@@ -15,12 +15,14 @@ export function quotesFromJson(json?: string): ExportedQuote[] {
 }
 
 export function QuoteButton({ quote, className }: { quote: ExportedQuote; className?: string }) {
-  const { open } = useDocViewer()
-  const { openDocuments } = useAppShell()
+  const docViewer = useOptionalDocViewer()
+  const shell = useOptionalAppShell()
   return (
     <span className="inline-flex items-center gap-1">
       <button
-        onClick={() => open({ docId: quote.doc_id, start: quote.start, end: quote.end, text: quote.text })}
+        onClick={() =>
+          docViewer?.open({ docId: quote.doc_id, start: quote.start, end: quote.end, text: quote.text })
+        }
         className={
           className ??
           "inline-flex items-start gap-1 rounded bg-primary/10 px-1.5 py-0.5 text-left font-mono text-[10px] text-primary ring-1 ring-primary/20 transition-colors hover:bg-primary/20"
@@ -29,14 +31,16 @@ export function QuoteButton({ quote, className }: { quote: ExportedQuote; classN
         <Link2 className="mt-0.5 h-3 w-3 shrink-0" />
         <span className="line-clamp-1">&ldquo;{quote.text}&rdquo;</span>
       </button>
-      <button
-        type="button"
-        onClick={() => openDocuments(quote.doc_id)}
-        className="rounded p-0.5 text-muted-foreground hover:text-primary"
-        title="Open in Documents store"
-      >
-        <Files className="h-3 w-3" />
-      </button>
+      {shell ? (
+        <button
+          type="button"
+          onClick={() => shell.openDocuments(quote.doc_id)}
+          className="rounded p-0.5 text-muted-foreground hover:text-primary"
+          title="Open in Documents store"
+        >
+          <Files className="h-3 w-3" />
+        </button>
+      ) : null}
     </span>
   )
 }

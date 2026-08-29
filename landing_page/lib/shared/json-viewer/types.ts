@@ -32,6 +32,15 @@ export const JSON_VIEWER_SETTINGS_CHANGED_EVENT = "json-viewer-settings-changed"
 export const JSON_VIEWER_MESSAGE_LOAD = "json-viewer:load" as const
 export const JSON_VIEWER_MESSAGE_SETTINGS = "json-viewer:settings" as const
 export const JSON_VIEWER_MESSAGE_FULLSCREEN = "json-viewer:fullscreen" as const
+export const JSON_VIEWER_MESSAGE_OPEN_QUOTE = "json-viewer:open-quote" as const
+
+export type JsonViewerOpenQuote = {
+  doc_id: string
+  start: number
+  end: number
+  text?: string
+}
+
 // AI : load/settings may include lockedView to hide tree/json (excel-only embeds)
 
 // AI : sample snippet for settings preview — keep in sync with json-viewer.html preview

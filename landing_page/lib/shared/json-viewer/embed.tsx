@@ -9,7 +9,9 @@ import {
   DEFAULT_JSON_VIEWER_SYNTAX_THEME,
   JSON_VIEWER_MESSAGE_FULLSCREEN,
   JSON_VIEWER_MESSAGE_LOAD,
+  JSON_VIEWER_MESSAGE_OPEN_QUOTE,
   JSON_VIEWER_MESSAGE_SETTINGS,
+  type JsonViewerOpenQuote,
 } from "./types"
 
 export type JsonViewerEmbedProps = {
@@ -26,6 +28,8 @@ export type JsonViewerEmbedProps = {
   readSyntaxTheme?: () => JsonViewerSyntaxThemeId
   // AI : parent hosts a larger viewer (PopupModal) — shows ⛶ next to JSON + latex detail
   onFullscreen?: () => void
+  // AI : quote chips ask the parent to open the document with the span highlighted
+  onOpenQuote?: (quote: JsonViewerOpenQuote) => void
 }
 
 export function JsonViewerEmbed({
@@ -38,10 +42,13 @@ export function JsonViewerEmbed({
   readDefaultView,
   readSyntaxTheme,
   onFullscreen,
+  onOpenQuote,
 }: JsonViewerEmbedProps) {
   const iframeRef = useRef<HTMLIFrameElement>(null)
   const onFullscreenRef = useRef(onFullscreen)
   onFullscreenRef.current = onFullscreen
+  const onOpenQuoteRef = useRef(onOpenQuote)
+  onOpenQuoteRef.current = onOpenQuote
 
   // AI : same-origin only — avoids leaking JSON to arbitrary embedders via postMessage("*").
   function post(payload: object) {
@@ -86,16 +93,26 @@ export function JsonViewerEmbed({
   }, [onSettingsEventName, defaultView, lockedView, syntaxTheme, readDefaultView, readSyntaxTheme])
 
   useEffect(() => {
-    if (!onFullscreen) return
     const onMessage = (e: MessageEvent) => {
       if (e.origin !== window.location.origin) return
       if (e.source !== iframeRef.current?.contentWindow) return
-      if (!e.data || e.data.type !== JSON_VIEWER_MESSAGE_FULLSCREEN) return
-      onFullscreenRef.current?.()
+      if (!e.data || typeof e.data !== "object") return
+      if (e.data.type === JSON_VIEWER_MESSAGE_FULLSCREEN) {
+        onFullscreenRef.current?.()
+        return
+      }
+      if (e.data.type === JSON_VIEWER_MESSAGE_OPEN_QUOTE) {
+        const docId = typeof e.data.doc_id === "string" ? e.data.doc_id : ""
+        const start = typeof e.data.start === "number" ? e.data.start : 0
+        const end = typeof e.data.end === "number" ? e.data.end : 0
+        const text = typeof e.data.text === "string" ? e.data.text : undefined
+        if (!docId) return
+        onOpenQuoteRef.current?.({ doc_id: docId, start, end, text })
+      }
     }
     window.addEventListener("message", onMessage)
     return () => window.removeEventListener("message", onMessage)
-  }, [onFullscreen])
+  }, [])
 
   return (
     <iframe

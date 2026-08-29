@@ -25,6 +25,9 @@ import { hostedActionButtonLabel } from "@/lib/hosted-site-slots"
 import { resolveWebsitePipelineBindings } from "@/lib/website-pipelines"
 import { hostedTableSlotsForProject } from "@/components/platform/hosted-table-slot"
 import { HostedSiteDocsUpload } from "@/components/share/hosted-site-docs-upload"
+import { LazyDocViewer } from "@/components/lazy-doc-viewer"
+import { DocViewerProvider } from "@/lib/doc-viewer"
+import { SharedRunDocScopeProvider } from "@/lib/shared-run-doc-scope"
 import type { Project, ProjectId, StructureModel } from "@/lib/types"
 import type { ReactNode } from "react"
 
@@ -156,32 +159,42 @@ export function HostedSiteViewer({
 
   if (options.runtime === "react") {
     return (
-      <div>
-        {accountBar}
-        <HostedSiteReactPreview
-          options={options}
-          runByAlias={{ ...runByAlias, run: runSlot }}
-          tableByAlias={tableByAlias}
-          slots={{ ...widgets, docs: docsSlot }}
-          bundle={reactBundle}
-          compileError={reactCompileError}
-        />
-      </div>
+      <DocViewerProvider>
+        <SharedRunDocScopeProvider scope={{ linkId }}>
+        <div>
+          {accountBar}
+          <HostedSiteReactPreview
+            options={options}
+            runByAlias={{ ...runByAlias, run: runSlot }}
+            tableByAlias={tableByAlias}
+            slots={{ ...widgets, docs: docsSlot }}
+            bundle={reactBundle}
+            compileError={reactCompileError}
+          />
+        </div>
+        <LazyDocViewer />
+        </SharedRunDocScopeProvider>
+      </DocViewerProvider>
     )
   }
 
   return (
-    <HostedSiteChrome
-      options={options}
-      slots={{
-        ...widgets,
-        docs: docsSlot,
-        run: runSlot,
-      }}
-      runByAlias={{ ...runByAlias, run: runSlot }}
-      sqlByTable={sqlByTable}
-      actionByAlias={actionByAlias}
-      tableByAlias={tableByAlias}
-    />
+    <DocViewerProvider>
+      <SharedRunDocScopeProvider scope={{ linkId }}>
+      <HostedSiteChrome
+        options={options}
+        slots={{
+          ...widgets,
+          docs: docsSlot,
+          run: runSlot,
+        }}
+        runByAlias={{ ...runByAlias, run: runSlot }}
+        sqlByTable={sqlByTable}
+        actionByAlias={actionByAlias}
+        tableByAlias={tableByAlias}
+      />
+      <LazyDocViewer />
+      </SharedRunDocScopeProvider>
+    </DocViewerProvider>
   )
 }

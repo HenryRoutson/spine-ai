@@ -3,7 +3,11 @@ import {
   collectQuotesForModel,
   resolveQuotesForModel,
   type LinkedQuoteValue,
+  isLinkedQuoteValue,
+  quoteDisplayText,
 } from "./quote_schema";
+
+export { isLinkedQuoteValue, quoteDisplayText };
 
 type Normalized = string;
 

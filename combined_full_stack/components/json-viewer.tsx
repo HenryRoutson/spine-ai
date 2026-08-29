@@ -9,6 +9,7 @@ import {
   readJsonViewerSyntaxTheme,
   type JsonViewerHumanViewId,
 } from "@/lib/json-viewer"
+import { useOptionalDocViewer } from "@/lib/doc-viewer"
 import { cn } from "@/lib/utils"
 
 interface JsonViewerEmbedProps {
@@ -27,6 +28,7 @@ export function JsonViewerEmbed({
   lockedView,
   onFullscreen,
 }: JsonViewerEmbedProps) {
+  const docViewer = useOptionalDocViewer()
   return (
     <SharedJsonViewerEmbed
       json={json}
@@ -34,6 +36,17 @@ export function JsonViewerEmbed({
       defaultView={defaultView}
       lockedView={lockedView}
       onFullscreen={onFullscreen}
+      onOpenQuote={
+        docViewer
+          ? (q) =>
+              docViewer.open({
+                docId: q.doc_id,
+                start: q.start,
+                end: q.end,
+                text: q.text,
+              })
+          : undefined
+      }
       onSettingsEventName={JSON_VIEWER_SETTINGS_CHANGED_EVENT}
       readDefaultView={readJsonViewerDefaultView}
       readSyntaxTheme={readJsonViewerSyntaxTheme}

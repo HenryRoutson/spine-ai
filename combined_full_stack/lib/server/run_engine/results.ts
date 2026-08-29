@@ -30,8 +30,8 @@ export function resultFromCache(m: PipelineModule, cached: StepCacheArtifact, ct
     preview = `loaded ${inputTypeLabel(m.inputType)} → ${docId}`;
   } else if (m.kind === "doc-to-text" && docId) {
     preview = `convert to text → ${docId}${inputUsesVisionOcr(m) ? " · OCR" : " · parser"}`;
-  } else if (m.kind === "quote" && docId) {
-    preview = `linked quote(s) → ${docId}`;
+  } else if (m.kind === "quote") {
+    preview = "linked quote(s)";
   }
 
   const json =

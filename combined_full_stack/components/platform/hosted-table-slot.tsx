@@ -4,6 +4,8 @@ import type { ReactNode } from "react"
 import { Table2 } from "lucide-react"
 import { rowsForModel, rowsStoreForProject, type project_row_store } from "@/lib/platform-row-store"
 import { friendlyFieldName } from "@/lib/platform-row-fields"
+import { QuoteButton } from "@/components/quote-links"
+import { isLinkedQuoteValue, quoteDisplayText, quoteHref } from "@/lib/quotes"
 import type { Project, StructureModel } from "@/lib/types"
 
 // AI : {{table:Model}} — live rows from the project structure store, shared across frontends.
@@ -80,14 +82,31 @@ export function hostedTableSlotsForProject(
   return out
 }
 
-function formatCell(value: unknown): string {
+function formatCell(value: unknown): ReactNode {
+  if (isLinkedQuoteValue(value)) {
+    return (
+      <QuoteButton
+        quote={{
+          text: value.text,
+          doc_id: value.quote.doc_id,
+          start: value.quote.start,
+          end: value.quote.end,
+          href: quoteHref({ docId: value.quote.doc_id, start: value.quote.start, end: value.quote.end }),
+        }}
+      />
+    )
+  }
+  const quoted = quoteDisplayText(value)
+  if (quoted != null) return quoted
   if (value == null) return "—"
   if (Array.isArray(value) && value.length === 0) return "—"
   if (typeof value === "object" && !Array.isArray(value) && Object.keys(value as object).length === 0) return "—"
   if (typeof value === "string") return value
   if (typeof value === "number" || typeof value === "boolean") return String(value)
   try {
-    return JSON.stringify(value)
+    const json = JSON.stringify(value)
+    if (/"doc_id"\s*:/.test(json)) return "—"
+    return json
   } catch {
     return String(value)
   }

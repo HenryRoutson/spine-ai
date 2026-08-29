@@ -7,6 +7,8 @@ import { useOptionalStore } from "@/lib/store"
 import { resolveSpan } from "@/lib/doc-span"
 import { useDocViewerData } from "@/lib/use-doc-viewer-data"
 import { useDocFetchScope } from "@/lib/use-doc-fetch-scope"
+import { useSharedRunDocScope } from "@/lib/shared-run-doc-scope"
+import { getSharedRunDocCache } from "@/lib/shared-run-doc-cache"
 import { OpenInDocumentsLink } from "@/components/open-in-documents"
 import { DocViewerLoading } from "@/components/doc-viewer-loading"
 import { DocEditDialog } from "@/components/doc-edit-dialog"
@@ -53,6 +55,10 @@ export function DocViewer() {
 
   const docId = target?.docId ?? null
   const docRef = docId ? docs.find((d) => d.id === docId) : undefined
+  const sharedScope = useSharedRunDocScope()
+  const cachedSharedDoc =
+    docId && sharedScope ? getSharedRunDocCache(sharedScope.linkId, docId, sharedScope.sessionId) : null
+  const displayName = docRef?.name ?? cachedSharedDoc?.name ?? "Source document"
 
   const {
     hasPdf,
@@ -151,11 +157,14 @@ export function DocViewer() {
           <div className="flex items-center gap-2">
             <FileText className="h-4 w-4 text-primary" />
             <div className="leading-tight">
-              <p className="text-sm font-semibold">{docRef?.name ?? "Source Document"}</p>
-              <p className="font-mono text-[10px] text-muted-foreground">
-                {target.docId}
-                {span.start !== span.end ? ` · offset ${span.start}–${span.end}` : showPdf ? " · original PDF" : ""}
-              </p>
+              <p className="text-sm font-semibold">{displayName}</p>
+              {quote ? (
+                <p className="line-clamp-1 text-[11px] text-muted-foreground">
+                  &ldquo;{quote}&rdquo;
+                </p>
+              ) : showPdf ? (
+                <p className="font-mono text-[10px] text-muted-foreground">original PDF</p>
+              ) : null}
             </div>
           </div>
           <div className="flex items-center gap-2">
@@ -207,7 +216,7 @@ export function DocViewer() {
           // AI : TODO security — same-origin inline PDF iframe; sandbox viewer or attachment disposition.
           <iframe
             src={docFileUrl(target.docId)}
-            title={`PDF ${target.docId}`}
+            title={`PDF ${displayName}`}
             className="min-h-0 flex-1 bg-white"
           />
         ) : view === "json" ? (
