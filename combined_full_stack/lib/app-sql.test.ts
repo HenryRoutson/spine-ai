@@ -6,7 +6,7 @@ import { loadProjectSeed, SEEDS_DIR } from "@/lib/server/seed"
 import { shouldCheckInputDescription } from "@/lib/server/input_description_check"
 import { computeInvalid, migrateProjectModules } from "@/lib/server/validity"
 import { flattenPipelineModules } from "@/lib/fork-pipeline"
-import { hostedActionButtonLabel } from "@/lib/hosted-site-slots"
+import { hostedActionButtonLabel } from "@/lib/hosted-site-actions"
 import { ModuleKind } from "@/lib/types"
 import { compileHostedSiteLooksOk, normalizeHostedSiteOptions } from "@/lib/hosted-site"
 
@@ -17,7 +17,7 @@ describe("parseAppSql", () => {
       kind: "update",
       table: "shared_number",
       set: [{ field: "value", expr: { kind: "binary", op: "*", left: { kind: "col", name: "value" }, right: { kind: "lit", value: 2 } } }],
-      where: { field: "id", value: "global" },
+      where: [{ field: "id", value: "global" }],
       returning: true,
     })
   })
@@ -46,8 +46,25 @@ describe("parseAppSql", () => {
       kind: "update",
       table: "shared_number",
       set: [{ field: "odd", expr: { kind: "binary", op: "%", left: { kind: "col", name: "value" }, right: { kind: "lit", value: 2 } } }],
-      where: { field: "id", value: "global" },
+      where: [{ field: "id", value: "global" }],
       returning: true,
+    })
+  })
+
+  it("parses AND where and DELETE", () => {
+    expect(parseAppSql("SELECT * FROM todos WHERE done = false AND owner = 'me'")).toEqual({
+      kind: "select",
+      table: "todos",
+      columns: "*",
+      where: [
+        { field: "done", value: false },
+        { field: "owner", value: "me" },
+      ],
+    })
+    expect(parseAppSql("DELETE FROM todos WHERE id = 't1'")).toEqual({
+      kind: "delete",
+      table: "todos",
+      where: [{ field: "id", value: "t1" }],
     })
   })
 
@@ -73,8 +90,12 @@ describe("evalSqlExpr", () => {
   })
 
   it("matches where on string ids", () => {
-    expect(sqlWhereMatches({ id: "global", value: 1 }, { field: "id", value: "global" })).toBe(true)
-    expect(sqlWhereMatches({ id: "other", value: 1 }, { field: "id", value: "global" })).toBe(false)
+    expect(sqlWhereMatches({ id: "global", value: 1 }, [{ field: "id", value: "global" }])).toBe(true)
+    expect(sqlWhereMatches({ id: "other", value: 1 }, [{ field: "id", value: "global" }])).toBe(false)
+    expect(sqlWhereMatches({ id: "t1", done: false, owner: "me" }, [
+      { field: "done", value: false },
+      { field: "owner", value: "me" },
+    ])).toBe(true)
   })
 })
 
@@ -110,6 +131,16 @@ describe("execAppSql", () => {
     const plusOne = await execAppSql(scope, "UPDATE shared_number SET value = value + 1 WHERE id = 'global' RETURNING *")
     expect(plusOne).toEqual([{ id: "global", value: 4, odd: 1 }])
   })
+
+  it("inserts then deletes a row", async () => {
+    const scope = "project:p_todos"
+    await execAppSql(scope, "INSERT INTO todos (id, title) VALUES ('t1', 'Buy milk')")
+    const listed = await execAppSql(scope, "SELECT * FROM todos")
+    expect(listed).toEqual([{ id: "t1", title: "Buy milk" }])
+    const removed = await execAppSql(scope, "DELETE FROM todos WHERE id = 't1'")
+    expect(removed).toEqual([{ id: "t1", title: "Buy milk" }])
+    expect(await execAppSql(scope, "SELECT * FROM todos")).toEqual([])
+  })
 })
 
 describe("double shared number seed", () => {
@@ -131,10 +162,10 @@ describe("double shared number seed", () => {
     expect(html).toContain("{{sql:shared_number}}")
     expect(html).toContain("{{action}}")
     expect(html).toContain("{{action:collatz}}")
-    expect(hostedActionButtonLabel("collatz")).toBe("3n + 1")
-    const report = compileHostedSiteLooksOk(
-      normalizeHostedSiteOptions(seed.hostedSite as Parameters<typeof normalizeHostedSiteOptions>[0]),
-    )
+    const site = normalizeHostedSiteOptions(seed.hostedSite as Parameters<typeof normalizeHostedSiteOptions>[0])
+    expect(hostedActionButtonLabel("collatz", site.actions)).toBe("3n + 1")
+    expect(hostedActionButtonLabel(undefined, site.actions)).toBe("Double it")
+    const report = compileHostedSiteLooksOk(site)
     expect(report.ok, report.issues.map((i) => `${i.level}:${i.code} ${i.message}`).join("\n")).toBe(true)
     expect(report.pageHtml).toContain("hs-sql-slot")
     expect(report.pageHtml).toContain("hs-action-slot")

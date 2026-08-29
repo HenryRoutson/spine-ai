@@ -117,7 +117,7 @@ export const moduleSpecSchema = z
     sql: z
       .string()
       .optional()
-      .describe("sql steps only — SELECT / UPDATE / INSERT against the hosted app SQL store"),
+      .describe("sql steps only — SELECT / UPDATE / INSERT / DELETE against the hosted app SQL store"),
     sqlSeedRows: z
       .array(z.record(z.string(), z.unknown()))
       .max(64)

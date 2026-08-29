@@ -13,6 +13,7 @@ import { HostedSiteActionPreview } from "@/components/share/hosted-site-action-b
 import { HostedSiteSlotWidgets } from "@/components/share/hosted-site-slot-widgets"
 import { SharedLinkPreview } from "@/components/share/shared-link-preview"
 import { WebsitePipelineBindings } from "@/components/share/website-pipeline-bindings"
+import { WebsiteActionBindings } from "@/components/share/website-action-bindings"
 import { SimpleViewToggle } from "@/components/simple-view-toggle"
 import { hostedTableSlotsForProject } from "@/components/platform/hosted-table-slot"
 import { PipelineExportDialog } from "@/components/pipeline-export-dialog"
@@ -190,10 +191,20 @@ export function HostedSitePageStudio({
         ),
       }}
       runByAlias={runByAlias}
-      actionByAlias={{
-        run: <HostedSiteActionPreview />,
-        collatz: <HostedSiteActionPreview alias="collatz" />,
-      }}
+      actionByAlias={Object.fromEntries(
+        [
+          ...value.actions.map((a) => a.alias),
+          "run",
+        ].map((alias) => [
+          alias,
+          <HostedSiteActionPreview
+            key={alias}
+            alias={alias === "run" ? undefined : alias}
+            actions={value.actions}
+            modules={project.modules}
+          />,
+        ]),
+      )}
       tableByAlias={tableByAlias}
       editable={value.runtime !== "react"}
     />
@@ -347,6 +358,7 @@ export function HostedSitePageStudio({
         options={value}
         onChange={onChange}
       />
+      <WebsiteActionBindings options={value} models={project.models} onChange={onChange} />
 
       {runtimeConfirm ? (
         <div className="flex flex-wrap items-center gap-2 rounded-md border border-border bg-muted/20 px-3 py-2 text-[11px]">

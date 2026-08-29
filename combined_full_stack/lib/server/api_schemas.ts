@@ -773,6 +773,21 @@ export const hostedSiteOptionsSchema = z
       )
       .max(24)
       .optional(),
+    actions: z
+      .array(
+        z
+          .object({
+            alias: z.string().trim().min(1).max(40),
+            label: z.string().trim().max(80).optional(),
+            title: z.string().trim().max(80).optional(),
+            table: z.string().trim().max(64).optional(),
+            pipelineAlias: z.string().trim().max(40).optional(),
+            payload: z.record(z.string(), z.unknown()).optional(),
+          })
+          .strict(),
+      )
+      .max(24)
+      .optional(),
     runtime: z.enum(["html", "react"]).optional(),
     reactFiles: z
       .array(

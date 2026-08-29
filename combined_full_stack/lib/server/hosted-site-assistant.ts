@@ -43,6 +43,21 @@ const hostedSiteAssistantResponseSchema = z.object({
     .array(z.object({ path: z.string(), contents: z.string() }).strict())
     .max(32)
     .nullable(),
+  actions: z
+    .array(
+      z
+        .object({
+          alias: z.string(),
+          label: z.string(),
+          title: z.string().nullable(),
+          table: z.string().nullable(),
+          pipelineAlias: z.string().nullable(),
+          payload: z.record(z.string(), z.unknown()).nullable(),
+        })
+        .strict(),
+    )
+    .max(24)
+    .nullable(),
 })
 
 export type HostedSiteAssistantResult = {
@@ -78,9 +93,9 @@ You ONLY change the public webpage: custom HTML, extra CSS, brand colors/copy, s
 You MUST NOT change the pipeline, structures, prompts, code, project Docs, test files, or funding.
 You MUST NOT invent a custom Supabase URL or anon key — that stays a publisher placeholder.
 
-The run form is injected where you place ${HOSTED_SITE_RUN_SLOT}. If the current HTML already has that token, keep exactly one. If the page has no run slot (no pipeline attached yet), do not add one unless they asked for a workspace. You may use {{action}} as the primary button instead (SQL-backed pages).
+The run form is injected where you place ${HOSTED_SITE_RUN_SLOT}. If the current HTML already has that token, keep exactly one. If the page has no run slot (no pipeline attached yet), do not add one unless they asked for a workspace. You may use {{action}} or {{action:alias}} as buttons that run a bound pipeline with a JSON trigger.
 The sign-in form is injected where you place ${HOSTED_SITE_AUTH_SLOT}. If authEnabled is true, keep exactly one ${HOSTED_SITE_AUTH_SLOT} on the sign-in page.
-Optional widgets (existing runtimes, not new backends): ${HOSTED_SITE_OUTPUT_SLOT} (result viewer), ${HOSTED_SITE_CHATBOT_SLOT} (chat), ${HOSTED_SITE_DOCS_SLOT} (viewer markdown), {{sql:table}} (live SQL rows from the app store), {{action}} (button that runs the bound pipeline), ${HOSTED_SITE_PAY_SLOT} (checkout), ${HOSTED_SITE_TABLE_SLOT} / {{table:ModelName}} (live structure table). Keep {{sql:shared_number}} + {{action}} for a shared counter. Keep those tokens if they are already on the page.
+Optional widgets (existing runtimes, not new backends): ${HOSTED_SITE_OUTPUT_SLOT} (result viewer), ${HOSTED_SITE_CHATBOT_SLOT} (chat), ${HOSTED_SITE_DOCS_SLOT} (viewer markdown), {{sql:table}} (live SQL rows — table name from a structure, e.g. todo), {{action:alias}} (button; configure actions[]), ${HOSTED_SITE_PAY_SLOT} (checkout), ${HOSTED_SITE_TABLE_SLOT} / {{table:ModelName}} (live structure table). Keep existing tokens if they are already on the page. Do not invent shared_number unless that table exists.
 Tokens: {{company}}, {{tagline}}, {{logo}}, {{email}} fill from brand fields. Default nav shows {{email}} as the signed-in account. Scripts, iframes, and event handlers are stripped.
 
 Return a short message for the publisher, then fields:
@@ -89,6 +104,7 @@ Return a short message for the publisher, then fields:
 - hideSpineFooter / authEnabled: true/false, or null to leave unchanged
 - authProvider: "spine" (default, handled) or "custom_supabase" (placeholder), or null to leave unchanged
 - reactFilePatches: always null in HTML mode
+- actions: [{ alias, label, title, table, pipelineAlias, payload }] to configure {{action:alias}} buttons, or null to leave unchanged. payload is the JSON the button uploads. Example: { "alias": "add", "label": "Add todo", "title": "Add", "table": "todo", "pipelineAlias": null, "payload": { "action": "add" } }
 
 Write complete HTML fragments (nav/hero/features; include ${HOSTED_SITE_RUN_SLOT} only when a workspace belongs on the page; sign-in chrome around ${HOSTED_SITE_AUTH_SLOT} only if they asked). A full <!DOCTYPE html> document is ok — the host unwraps body + <style>.
 Keep CSS in customCss or <style> in the HTML. Do not invent backend routes.`
@@ -121,6 +137,9 @@ ${current.authHtml.trim() || DEFAULT_HOSTED_SITE_AUTH_HTML}
 
 Current extra CSS:
 ${current.customCss.trim() || "(none)"}
+
+Current actions:
+${current.actions.length ? JSON.stringify(current.actions, null, 2) : "(none)"}
 ${
   current.runtime === "react"
     ? `\nReact project files:\n${current.reactFiles.map((f) => `--- ${f.path} ---\n${f.contents}`).join("\n")}\n`
@@ -203,6 +222,17 @@ export function applyHostedSiteAssistantPatch(
         : base.authHtml || (authEnabled ? DEFAULT_HOSTED_SITE_AUTH_HTML : ""),
     pages: base.pages,
     pipelineBindings: base.pipelineBindings,
+    actions:
+      patch.actions != null
+        ? patch.actions.map((row) => ({
+            alias: row.alias,
+            label: row.label,
+            title: row.title ?? undefined,
+            table: row.table ?? undefined,
+            pipelineAlias: row.pipelineAlias ?? undefined,
+            payload: row.payload ?? { action: row.alias },
+          }))
+        : base.actions,
     runtime: base.runtime,
     reactFiles: reactMode ? mergeReactFilePatches(base.reactFiles, patch.reactFilePatches) : base.reactFiles,
   })

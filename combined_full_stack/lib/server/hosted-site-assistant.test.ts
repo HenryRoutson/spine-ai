@@ -91,6 +91,7 @@ describe("hosted site UI vibe agent prompts", () => {
       authProvider: null,
       authHtml: null,
       reactFilePatches: null,
+      actions: null,
     })
     expect(next.customHtml).toContain(HOSTED_SITE_RUN_SLOT)
     expect(next.brand.companyName).toBe("Northwind")
@@ -112,6 +113,7 @@ describe("hosted site UI vibe agent prompts", () => {
       authProvider: null,
       authHtml: null,
       reactFilePatches: null,
+      actions: null,
     })
     expect(next.customHtml).toContain("{{action}}")
     expect(next.customHtml).not.toContain(HOSTED_SITE_RUN_SLOT)
@@ -138,6 +140,7 @@ describe("hosted site UI vibe agent prompts", () => {
       authProvider: null,
       authHtml: null,
       reactFilePatches: null,
+      actions: null,
     })
     expect(next.customHtml).not.toContain(HOSTED_SITE_RUN_SLOT)
   })
@@ -158,6 +161,7 @@ describe("hosted site UI vibe agent prompts", () => {
       authProvider: null,
       authHtml: null,
       reactFilePatches: null,
+      actions: null,
     })
     expect(next.brand.primaryColor).toBe("#aabbcc")
   })
@@ -178,9 +182,50 @@ describe("hosted site UI vibe agent prompts", () => {
       authProvider: "spine",
       authHtml: "<section><h1>Welcome</h1></section>",
       reactFilePatches: null,
+      actions: null,
     })
     expect(next.auth.enabled).toBe(true)
     expect(next.authHtml).toContain(HOSTED_SITE_AUTH_SLOT)
+  })
+
+  it("applies vibe-configured SQL actions", () => {
+    const next = applyHostedSiteAssistantPatch(OPTIONS, {
+      message: "ok",
+      customHtml: "{{sql:todo}}{{action:add}}",
+      customCss: null,
+      companyName: null,
+      tagline: null,
+      primaryColor: null,
+      accentColor: null,
+      backgroundColor: null,
+      textColor: null,
+      hideSpineFooter: null,
+      authEnabled: null,
+      authProvider: null,
+      authHtml: null,
+      reactFilePatches: null,
+      actions: [
+        {
+          alias: "add",
+          label: "Add todo",
+          title: "Add",
+          table: "todo",
+          pipelineAlias: null,
+          payload: { action: "add" },
+        },
+      ],
+    })
+    expect(next.actions).toEqual([
+      {
+        alias: "add",
+        label: "Add todo",
+        title: "Add",
+        table: "todo",
+        pipelineAlias: undefined,
+        payload: { action: "add" },
+      },
+    ])
+    expect(next.customHtml).toContain("{{action:add}}")
   })
 
   it("keeps pipeline bindings and merges react file patches", () => {

@@ -1,6 +1,7 @@
 import { evalSqlExpr, parseAppSql, type SqlExpr } from "@/lib/app-sql"
 import { ifElseBranch, ifThenBranch, evalIfCondition } from "@/lib/if-else-pipeline"
-import { parseHostedNumber, type hosted_action_kind, type hosted_arith_step, type hosted_preview_line } from "@/lib/hosted-collatz"
+import { parseHostedNumber, type hosted_arith_step, type hosted_preview_line } from "@/lib/hosted-collatz"
+import { hostedActionPayload, type HostedSiteActionBinding } from "@/lib/hosted-site-actions"
 import { ModuleKind, type ModuleId, type PipelineModule } from "@/lib/types"
 import type { StepUiState } from "@/lib/run-engine"
 
@@ -44,28 +45,37 @@ export function valueUpdateExpr(m: PipelineModule): SqlExpr | null {
 
 export type hosted_pipeline_step = hosted_arith_step & { moduleId: ModuleId }
 
-// AI : walk the pipeline JSON the same way the engine does — if-else + SQL — no extra Collatz math.
+// AI : walk pipeline JSON — if/else + SQL. Trigger fields come from the action binding.
 export function hostedPipelineArithPreview(
   modules: PipelineModule[],
-  action: hosted_action_kind,
+  action: string,
   n: number,
+  payload: Record<string, unknown> = {},
 ): hosted_pipeline_step[] {
-  // AI : if/else is bool-path only — collatz vs double and odd vs even are bools on this synthetic spine.
   const row: Record<string, unknown> = { id: "global", value: n, odd: n % 2 === 1 }
   const steps: hosted_pipeline_step[] = []
-  walk(modules, action, row, steps)
+  walk(modules, action, payload, row, steps)
   return steps
+}
+
+export function hostedPipelineArithPreviewForBinding(
+  modules: PipelineModule[],
+  binding: HostedSiteActionBinding,
+  n: number,
+): hosted_pipeline_step[] {
+  return hostedPipelineArithPreview(modules, binding.alias, n, hostedActionPayload(binding))
 }
 
 function walk(
   modules: PipelineModule[],
-  action: hosted_action_kind,
+  action: string,
+  payload: Record<string, unknown>,
   row: Record<string, unknown>,
   steps: hosted_pipeline_step[],
 ): void {
   for (const m of modules) {
     if (isIfElse(m)) {
-      const spine = { ...row, action, collatz: action === "collatz" }
+      const spine = { ...row, action, ...payload }
       let takeThen = false
       try {
         takeThen = evalIfCondition(m.ifCondition, spine)
@@ -73,7 +83,7 @@ function walk(
         continue
       }
       const branch = takeThen ? ifThenBranch(m) : ifElseBranch(m)
-      if (branch) walk(branch.modules, action, row, steps)
+      if (branch) walk(branch.modules, action, payload, row, steps)
       continue
     }
     if (!isSql(m)) continue
@@ -100,11 +110,12 @@ function walk(
 
 export function hostedPipelinePreviewLines(
   modules: PipelineModule[],
-  action: hosted_action_kind,
+  action: string,
   n: number | null,
+  payload: Record<string, unknown> = {},
 ): hosted_preview_line[] {
   if (n == null || modules.length === 0) return []
-  return hostedPipelineArithPreview(modules, action, n).map((step) => ({
+  return hostedPipelineArithPreview(modules, action, n, payload).map((step) => ({
     expr: step.expr,
     result: String(step.to),
   }))

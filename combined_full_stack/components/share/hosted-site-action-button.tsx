@@ -5,16 +5,16 @@ import { HostedSiteSimpleTrace } from "@/components/share/hosted-site-simple-tra
 import { useHostedSqlRows } from "@/components/share/hosted-site-sql-widget"
 import { paintHostedSqlValue, releaseHostedSqlPaint } from "@/lib/hosted-sql-channel"
 import { awaitSharedRun, fetchSharedLink, startSharedRun, uploadSharedDoc } from "@/lib/shared-run-client"
-import { hostedActionButtonLabel, hostedActionTrigger } from "@/lib/hosted-site-slots"
 import {
+  hostedActionBinding,
   hostedActionCardTitle,
-  hostedPreviewLines,
-  parseHostedNumber,
-  type hosted_action_kind,
-  type hosted_preview_line,
-} from "@/lib/hosted-collatz"
+  hostedActionPayload,
+  hostedActionTable,
+  type HostedSiteActionBinding,
+} from "@/lib/hosted-site-actions"
+import { parseHostedNumber, type hosted_preview_line } from "@/lib/hosted-collatz"
 import {
-  hostedPipelineArithPreview,
+  hostedPipelineArithPreviewForBinding,
   hostedPipelinePreviewLines,
   type hosted_pipeline_step,
 } from "@/lib/hosted-pipeline-trace"
@@ -26,16 +26,12 @@ function holdMs(ms = 900): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms))
 }
 
-function triggerFile(action: ReturnType<typeof hostedActionTrigger>): File {
-  return new File(
-    [JSON.stringify({ action, collatz: action === "collatz" })],
-    "trigger.json",
-    { type: "application/json" },
-  )
+function triggerFile(payload: Record<string, unknown>): File {
+  return new File([JSON.stringify(payload)], "trigger.json", { type: "application/json" })
 }
 
 function HostedActionCard({
-  kind,
+  title,
   lines,
   buttonLabel,
   busy,
@@ -44,7 +40,7 @@ function HostedActionCard({
   preview,
   trace,
 }: {
-  kind: hosted_action_kind
+  title: string
   lines: hosted_preview_line[]
   buttonLabel: string
   busy?: boolean
@@ -55,14 +51,18 @@ function HostedActionCard({
 }) {
   return (
     <div className="hs-action-widget hs-action-card" data-spine-id="site.sql-action">
-      <p className="hs-action-card-title">{hostedActionCardTitle(kind)}</p>
+      <p className="hs-action-card-title">{title}</p>
       <div className="hs-action-preview">
-        {lines.map((line) => (
-          <div key={`${line.expr}:${line.result}`} className="hs-action-eq">
-            <span className="hs-action-eq-expr">{line.expr}</span>
-            <span className="hs-action-eq-to">{line.result}</span>
-          </div>
-        ))}
+        {lines.length === 0 ? (
+          <p className="text-xs text-muted-foreground">Runs the bound pipeline</p>
+        ) : (
+          lines.map((line) => (
+            <div key={`${line.expr}:${line.result}`} className="hs-action-eq">
+              <span className="hs-action-eq-expr">{line.expr}</span>
+              <span className="hs-action-eq-to">{line.result}</span>
+            </div>
+          ))
+        )}
       </div>
       <button type="button" className="hs-action-btn" disabled={preview || busy} onClick={onClick}>
         {busy ? "Running…" : buttonLabel}
@@ -77,14 +77,17 @@ export function HostedSiteActionButton({
   linkId,
   alias,
   label,
+  actions = [],
 }: {
   linkId: string
   alias?: string
   label?: string
+  actions?: HostedSiteActionBinding[]
 }) {
-  const kind = hostedActionTrigger(alias)
-  const shown = label ?? hostedActionButtonLabel(alias)
-  const { rows } = useHostedSqlRows(linkId, "shared_number")
+  const binding = hostedActionBinding(actions, alias)
+  const shown = label ?? binding.label
+  const table = hostedActionTable(binding)
+  const { rows } = useHostedSqlRows(linkId, table ?? "")
   const liveN = parseHostedNumber(rows?.[0]?.value)
   const liveNRef = useRef(liveN)
   liveNRef.current = liveN
@@ -98,15 +101,13 @@ export function HostedSiteActionButton({
   const [pinnedN, setPinnedN] = useState<number | null>(null)
 
   const previewN = pinnedN ?? liveN
-  // AI : idle equations come from walking the pipeline JSON; JS Collatz math is studio-only fallback.
+  const payload = hostedActionPayload(binding)
   const lines =
-    modules.length > 0
-      ? hostedPipelinePreviewLines(modules, kind, previewN)
-      : hostedPreviewLines(kind, previewN)
+    modules.length > 0 ? hostedPipelinePreviewLines(modules, binding.alias, previewN, payload) : []
 
   useEffect(() => {
     let cancelled = false
-    void fetchSharedLink(linkId, alias)
+    void fetchSharedLink(linkId, binding.pipelineAlias ?? alias)
       .then((link) => {
         if (!cancelled) setModules(link.modules)
       })
@@ -114,7 +115,7 @@ export function HostedSiteActionButton({
     return () => {
       cancelled = true
     }
-  }, [alias, linkId])
+  }, [alias, binding.pipelineAlias, linkId])
 
   const run = useCallback(async () => {
     const startN = liveNRef.current
@@ -124,20 +125,25 @@ export function HostedSiteActionButton({
     setStepStates(new Map())
     setPlanned([])
     setPinnedN(startN)
+    const pipelineAlias = binding.pipelineAlias ?? alias
     try {
-      const link = await fetchSharedLink(linkId, alias)
+      const link = await fetchSharedLink(linkId, pipelineAlias)
       setModules(link.modules)
-      const preview = startN != null ? hostedPipelineArithPreview(link.modules, kind, startN) : []
+      const siteActions = link.siteOptions?.actions ?? actions
+      const live = hostedActionBinding(siteActions, alias)
+      const paintTable = hostedActionTable(live, link.modules)
+      const preview =
+        startN != null ? hostedPipelineArithPreviewForBinding(link.modules, live, startN) : []
       setPlanned(preview)
       const input = link.modules.find((m) => m.kind === "input")
       if (!input) throw new Error("This page has no input step")
-      const uploaded = await uploadSharedDoc(linkId, input.id, triggerFile(hostedActionTrigger(alias)))
+      const uploaded = await uploadSharedDoc(linkId, input.id, triggerFile(hostedActionPayload(live)))
       const { jobId, progressToken } = await startSharedRun(
         linkId,
         { [input.id]: [uploaded.id] },
         undefined,
         undefined,
-        alias,
+        pipelineAlias,
       )
       const seenOk = new Set<ModuleId>()
       let revealing = Promise.resolve()
@@ -156,11 +162,10 @@ export function HostedSiteActionButton({
               const arith = preview.find((row) => row.moduleId === step.moduleId)
               if (arith) fresh.push(arith)
             }
-            if (fresh.length === 0) return
-            // AI : reveal each JSON SQL UPDATE in order so 1→3 can paint before 4.
+            if (fresh.length === 0 || !paintTable) return
             revealing = revealing.then(async () => {
               for (const row of fresh) {
-                paintHostedSqlValue(linkId, "shared_number", row.to)
+                paintHostedSqlValue(linkId, paintTable, row.to)
                 await holdMs()
               }
             })
@@ -174,15 +179,16 @@ export function HostedSiteActionButton({
       setError((err as Error).message)
       setPhase(RunPhase.Idle)
     } finally {
-      releaseHostedSqlPaint(linkId, "shared_number")
+      const paintTable = hostedActionTable(binding, modules)
+      if (paintTable) releaseHostedSqlPaint(linkId, paintTable)
       setPinnedN(null)
       setBusy(false)
     }
-  }, [alias, kind, linkId])
+  }, [actions, alias, binding, linkId, modules])
 
   return (
     <HostedActionCard
-      kind={kind}
+      title={hostedActionCardTitle(binding)}
       lines={lines}
       buttonLabel={shown}
       busy={busy}
@@ -196,16 +202,21 @@ export function HostedSiteActionButton({
 export function HostedSiteActionPreview({
   alias,
   label,
+  actions = [],
+  modules = [],
 }: {
   alias?: string
   label?: string
+  actions?: HostedSiteActionBinding[]
+  modules?: PipelineModule[]
 }) {
-  const kind = hostedActionTrigger(alias)
+  const binding = hostedActionBinding(actions, alias)
+  const lines = hostedPipelinePreviewLines(modules, binding.alias, 1, hostedActionPayload(binding))
   return (
     <HostedActionCard
-      kind={kind}
-      lines={hostedPreviewLines(kind, 1)}
-      buttonLabel={label ?? hostedActionButtonLabel(alias)}
+      title={hostedActionCardTitle(binding)}
+      lines={lines}
+      buttonLabel={label ?? binding.label}
       preview
     />
   )

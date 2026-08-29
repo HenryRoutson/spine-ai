@@ -2,12 +2,7 @@ import { describe, expect, it } from "vitest"
 import { createSpineSession } from "@/lib/core/session"
 import { DEFAULT_MODEL } from "@/lib/types"
 import { runVibeWorkspaceChecks } from "@/lib/server/pipeline_assistant"
-import {
-  buildVibeTopologyPromptBlock,
-  formatTopologyRetryErrors,
-  parseThinkingTopology,
-  topologyAdvice,
-} from "@/lib/server/vibe-coding-topology"
+import { buildVibeTopologyPromptBlock, parseThinkingTopology } from "@/lib/server/vibe-coding-topology"
 import type { VibeWorkspaceDraft } from "@/lib/server/vibe-coding-workspace"
 
 function draft(modules: unknown[], models: unknown[]): VibeWorkspaceDraft {
@@ -31,41 +26,16 @@ const receiptRow = {
   fields: [{ name: "vendor", type: "text", optional: false, description: "vendor" }],
 }
 
-describe("vibe topology cheat-sheet", () => {
+describe("vibe topology prompt", () => {
   it("requires TOPOLOGY: as the first thinking line", () => {
     expect(parseThinkingTopology("TOPOLOGY: assemble\nthen zip resumes")).toBe("assemble")
     expect(parseThinkingTopology("  TOPOLOGY: llm-batch")).toBeNull()
     expect(buildVibeTopologyPromptBlock()).toMatch(/TOPOLOGY: <name>/)
+    expect(buildVibeTopologyPromptBlock()).not.toMatch(/hundreds of unstructured receipts/)
+    expect(buildVibeTopologyPromptBlock()).not.toMatch(/risks, parties, and dates/)
   })
 
-  it("flags live A/B misses by task phrasing", () => {
-    expect(topologyAdvice("Extract merchant and date from receipts with quotes; amount as a number", ["llm"])).toEqual(
-      expect.arrayContaining([expect.stringMatching(/llm-batch/)]),
-    )
-    expect(
-      topologyAdvice("Each meeting note has several action items — one spreadsheet row per item", ["llm-batch"]),
-    ).toEqual(expect.arrayContaining([expect.stringMatching(/flatten/)]))
-    expect(topologyAdvice("Check expense line items against a policy table", ["fork", "llm"])).toEqual(
-      expect.arrayContaining([expect.stringMatching(/combine/)]),
-    )
-    expect(topologyAdvice("Check expense line items against a policy table", ["combine", "llm"])).toEqual(
-      expect.arrayContaining([expect.stringMatching(/custom-code/)]),
-    )
-    expect(topologyAdvice("Many resumes plus one job description → spreadsheet of skill matches", ["combine", "llm"])).toEqual(
-      expect.arrayContaining([expect.stringMatching(/assemble/)]),
-    )
-    expect(
-      topologyAdvice("Many resumes plus one job description → spreadsheet of skill matches", ["assemble", "llm-batch"]),
-    ).toEqual(expect.arrayContaining([expect.stringMatching(/flatten/)]))
-    expect(
-      topologyAdvice("From one contract extract risks, parties, and dates independently, then write a memo", ["llm"]),
-    ).toEqual(expect.arrayContaining([expect.stringMatching(/fork/)]))
-    expect(formatTopologyRetryErrors("Convert hundreds of unstructured receipts into a single Excel file", ["llm-batch"])).toBe(
-      "",
-    )
-  })
-
-  it("FAIL topology when I/O is valid but receipts used a single llm", () => {
+  it("PASS when I/O is valid — does not fail from task phrasing", () => {
     const session = createSpineSession()
     session.addProject({ open: true })
     const report = runVibeWorkspaceChecks(
@@ -103,7 +73,7 @@ describe("vibe topology cheat-sheet", () => {
       [],
       "Convert hundreds of unstructured receipts into a single Excel file",
     )
-    expect(report).toMatch(/^FAIL topology/m)
-    expect(report).toMatch(/llm-batch/)
+    expect(report).toMatch(/^PASS/m)
+    expect(report).not.toMatch(/FAIL topology/)
   })
 })

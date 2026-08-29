@@ -7,16 +7,12 @@ export const HOSTED_SITE_ACTION_SLOT = "{{action}}"
 export const HOSTED_SITE_PAY_SLOT = "{{pay}}"
 export const HOSTED_SITE_TABLE_SLOT = "{{table}}"
 
-export type hosted_action_alias = string
-export type hosted_action_trigger = "double" | "collatz"
-
-export function hostedActionButtonLabel(alias?: hosted_action_alias): string {
-  return alias === "collatz" ? "3n + 1" : "Double it"
-}
-
-export function hostedActionTrigger(alias?: hosted_action_alias): hosted_action_trigger {
-  return alias === "collatz" ? "collatz" : "double"
-}
+export type { hosted_action_alias, HostedSiteActionBinding } from "@/lib/hosted-site-actions"
+export {
+  hostedActionButtonLabel,
+  hostedActionBinding,
+  humanizeActionAlias,
+} from "@/lib/hosted-site-actions"
 
 // AI : TODO (spine-in-spine-bootstrap-S4-dag) — parse {{slot:<widget>}} like {{table:Model}}
 // AI :   (pipeline-dag | type-expr | step-trace | code). Do not add a second slot tokenizer.
