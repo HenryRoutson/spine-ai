@@ -234,8 +234,8 @@ export function MarketplaceBrowsePanel({
               </div>
               <p className={cn("text-muted-foreground", simple ? "text-xs" : "font-mono text-[10px]")}>
                 {simple
-                  ? `${detail.stepCount} steps · ${priceLabel(detail.priceCents)}`
-                  : `Snapshot · ${detail.stepCount} steps · ${priceLabel(detail.priceCents)}`}
+                  ? `${detail.stepCount} ${detail.kind === "website" ? "parts" : "steps"} · ${priceLabel(detail.priceCents)}`
+                  : `${detail.kind === "website" ? "Website" : "Snapshot"} · ${detail.stepCount} ${detail.kind === "website" ? "parts" : "steps"} · ${priceLabel(detail.priceCents)}`}
               </p>
               {simple ? null : detail.kind === "website" ? (
                 <ul className="max-h-48 space-y-1 overflow-y-auto rounded-md border border-border bg-muted/20 p-2">
