@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest"
 import { htmlSiteToReactFiles, parseReactPreviewTree } from "@/lib/hosted-site-react"
-import { groupHostedActionSlots, splitHostedSiteSlots } from "@/lib/hosted-site-slots"
+import { groupHostedActionSlots, hostedSqlTableNames, splitHostedSiteSlots } from "@/lib/hosted-site-slots"
 import { normalizeHostedSiteOptions } from "@/lib/hosted-site"
 import { DEFAULT_HOSTED_SITE_HTML, DEFAULT_HOSTED_SITE_LANDING_HTML } from "@/lib/hosted-site-defaults"
 import {
@@ -22,7 +22,7 @@ import {
   websitesUsingProject,
 } from "@/lib/website-pipelines"
 import type { SharedLinkRecord } from "@/lib/shared-link-types"
-import type { ProjectId } from "@/lib/types"
+import { ModuleKind, type PipelineModule, type ProjectId } from "@/lib/types"
 
 const P1 = "p1" as ProjectId
 const P2 = "p2" as ProjectId
@@ -160,6 +160,18 @@ describe("named run slots", () => {
       { kind: "slot", slot: "sql", alias: "shared_number" },
       { kind: "slot", slot: "action" },
     ])
+  })
+
+  it("collects SQL tables from slots and steps, not a hardcoded demo table", () => {
+    expect(hostedSqlTableNames(["{{sql:todo}}{{action}}"])).toEqual(["todo"])
+    expect(
+      hostedSqlTableNames(["{{run}}"], [{ alias: "add", label: "Add", table: "items" }]),
+    ).toEqual(["items"])
+    const modules = [
+      { id: "m1", kind: ModuleKind.Sql, label: "Add", sql: "SELECT * FROM notes" },
+    ] as PipelineModule[]
+    expect(hostedSqlTableNames(["{{run}}"], [], modules)).toEqual(["notes"])
+    expect(hostedSqlTableNames(["{{sql:todo}}"])).not.toContain("shared_number")
   })
 
   it("parses {{action:collatz}} as a named action slot", () => {

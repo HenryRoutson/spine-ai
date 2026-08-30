@@ -191,8 +191,8 @@ Tools: write_file, read_file, run_tests, list_dir, delete_file, done.
 - AGENTS.md and examples/few-shot.md are read-only.
 - The first user message ALREADY includes AGENTS.md, project.json, and ${js ? "pipeline.js" : "pipeline.json"}. Do not spend a turn only on list_dir or read_file.
 - Blank projects start with Input + Output — REPLACE the pipeline this turn. Do not leave only those two steps.
-- Many same-kind files (receipts, notes, invoices) → one input list[Document] + llm-batch (NOT a single llm).
-- Two different doc kinds (policy + company pack) → two inputs, parse each, then assemble or combine (side file immediately before combine).
+- Many same-kind files → one input list[Document] + llm-batch (NOT a single llm).
+- Two different doc kinds → two inputs, parse each, then assemble or combine (side file immediately before combine).
 - Non-JSON inputs (text/pdf/word/image/web): structureOut is Document or list[Document]. Typed rows belong on a later llm/llm-batch.
 ${buildVibeTopologyPromptBlock()}
 - run_tests FAILs when I/O, custom-code, or lint is invalid — fix files; do not call done.
