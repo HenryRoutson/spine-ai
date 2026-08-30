@@ -32,6 +32,29 @@ export function humanizeActionAlias(alias: string): string {
     .join(" ")
 }
 
+export function slugActionAlias(raw: string, used: Iterable<string> = []): hosted_action_alias {
+  const taken = new Set(used)
+  const stripped = raw
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .replace(/^[^a-z]+/, "")
+  let core: string = stripped.slice(0, 40)
+  if (!isHostedActionAlias(core)) core = "action"
+  if (!taken.has(core)) return core
+  for (let n = 2; n < 100; n++) {
+    const suffix = `-${n}`
+    const next = `${core.slice(0, Math.max(1, 40 - suffix.length))}${suffix}`
+    if (isHostedActionAlias(next) && !taken.has(next)) return next
+  }
+  return "action"
+}
+
+export function actionPageTag(alias: string): string {
+  return `{{action:${alias}}}`
+}
+
 export function defaultHostedAction(alias: string): HostedSiteActionBinding {
   const key = isHostedActionAlias(alias) ? alias : "run"
   return {

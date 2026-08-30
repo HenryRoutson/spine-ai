@@ -1,11 +1,13 @@
 import { describe, expect, it } from "vitest"
 import {
+  actionPageTag,
   hostedActionBinding,
   hostedActionButtonLabel,
   hostedActionPayload,
   hostedActionTable,
   inferSqlTableFromModules,
   normalizeHostedSiteActions,
+  slugActionAlias,
 } from "@/lib/hosted-site-actions"
 import { ModuleKind, type PipelineModule } from "@/lib/types"
 
@@ -38,6 +40,13 @@ describe("hosted site actions", () => {
   it("humanizes an unknown alias instead of forcing Double", () => {
     expect(hostedActionButtonLabel("checkout")).toBe("Checkout")
     expect(hostedActionPayload(hostedActionBinding([], "checkout"))).toEqual({ action: "checkout" })
+  })
+
+  it("slugs a function name into a unique page tag", () => {
+    expect(slugActionAlias("Double")).toBe("double")
+    expect(slugActionAlias("3n + 1")).toBe("n-1")
+    expect(slugActionAlias("Double", ["double"])).toBe("double-2")
+    expect(actionPageTag("collatz")).toBe("{{action:collatz}}")
   })
 
   it("infers the SQL table from a step", () => {
