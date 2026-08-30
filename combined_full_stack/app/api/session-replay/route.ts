@@ -13,7 +13,8 @@ import { SESSION_REPLAY_ENABLED } from "@/lib/session-replay-enabled";
 
 // AI : rrweb chunk ingest — disclosed in Privacy Policy for early-user ops debugging.
 export async function POST(req: NextRequest) {
-  if (!SESSION_REPLAY_ENABLED) return apiError("Session replay is disabled", HTTP.UNAVAILABLE);
+  // AI : kill switch is not an outage — 503 spammed the browser console on every flush.
+  if (!SESSION_REPLAY_ENABLED) return NextResponse.json({ ok: true, disabled: true });
 
   const auth = await requireAuth();
   if (!isAuthSession(auth)) return auth;

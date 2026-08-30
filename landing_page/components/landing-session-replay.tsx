@@ -2,6 +2,7 @@
 
 import { useEffect, useRef } from "react";
 import type { demo_email_string } from "@/lib/demo-email";
+import { SESSION_REPLAY_ENABLED } from "@/lib/session-replay-enabled";
 import {
   createReplayMetaBuffer,
   currentPagePath,
@@ -48,7 +49,7 @@ export function LandingSessionReplayRecorder({
   }, [buildId]);
 
   useEffect(() => {
-    if (!enabled || !email) return;
+    if (!SESSION_REPLAY_ENABLED || !enabled || !email) return;
     let cancelled = false;
     metaRef.current.recordPage(currentPagePath());
 
@@ -76,10 +77,23 @@ export function LandingSessionReplayRecorder({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
         keepalive: isFinal,
+      }).then(async (res) => {
+        // AI : stop flushing on kill switch — 503 used to spam the console every 8s.
+        if (!res.ok) {
+          cancelled = true;
+          return;
+        }
+        try {
+          const data = (await res.json()) as { disabled?: boolean };
+          if (data.disabled) cancelled = true;
+        } catch {
+          /* non-JSON success */
+        }
       }).catch(() => {});
     };
 
     const flush = (isFinal = false) => {
+      if (cancelled) return;
       const events = bufferRef.current.splice(0, MAX_BUFFER);
       // AI : still flush when click/page meta accumulated without a full rrweb buffer.
       if (events.length === 0 && !isFinal && !metaRef.current.hasPending()) return;

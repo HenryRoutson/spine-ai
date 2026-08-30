@@ -26,10 +26,18 @@ function loadRepoRootEnv(): void {
 
 loadRepoRootEnv();
 
+const sessionReplayEnabled =
+  process.env.SESSION_REPLAY_ENABLED ??
+  process.env.NEXT_PUBLIC_SESSION_REPLAY_ENABLED ??
+  "false";
+
 const nextConfig: NextConfig = {
   // AI : repo root — shared/legal lives outside this app dir; Turbopack blocks parent imports otherwise.
   turbopack: {
     root: path.join(__dirname, ".."),
+  },
+  env: {
+    NEXT_PUBLIC_SESSION_REPLAY_ENABLED: sessionReplayEnabled,
   },
   // AI : browsers still request /favicon.ico; metadata only emits /icon.svg (prod 404).
   async rewrites() {

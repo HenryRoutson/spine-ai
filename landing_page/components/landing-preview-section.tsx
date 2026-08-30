@@ -15,6 +15,7 @@ import { LandingLoggingTrace } from "./landing-run-trace";
 import { LandingSessionReplayRecorder } from "./landing-session-replay";
 import { copyTextToClipboard } from "@/lib/clipboard";
 import { readDemoEmail, writeDemoEmail, type demo_email_string } from "@/lib/demo-email";
+import { SESSION_REPLAY_ENABLED } from "@/lib/session-replay-enabled";
 import {
   readLandingDemoBuildStream,
   type LandingBuildResult,
@@ -248,7 +249,7 @@ export function LandingBuildProvider({
       {children}
       <LandingSessionReplayRecorder
         email={demoEmail}
-        enabled={emailRegistered && demoPrivacyAccepted}
+        enabled={SESSION_REPLAY_ENABLED && emailRegistered && demoPrivacyAccepted}
         buildId={buildId}
       />
       <LandingDemoConsentBanner
