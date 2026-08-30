@@ -19,18 +19,27 @@ sudo chmod 660 /var/run/docker.sock 2>/dev/null || true
 # AI : .env bootstrap + generated local secrets (dashboard access / landing proxy / ip salt).
 python3 scripts/setup_local.py env || true
 
-# AI : OpenRouter — real inference needs a billed OPENROUTER_API_KEY secret, but any non-empty value
-# AI : boots the app and lets you build pipelines, so fall back to a placeholder when the secret is unset.
-OPENROUTER_API_KEY="${OPENROUTER_API_KEY:-sk-or-local-dev-placeholder}" python3 - <<'PY'
+# AI : OpenRouter — Cursor injects OPENROUTER_KEY; the app reads OPENROUTER_API_KEY from .env.
+# AI : Prefer a real secret over the local placeholder so billed inference works in cloud agents.
+OPENROUTER_API_KEY="${OPENROUTER_API_KEY:-${OPENROUTER_KEY:-sk-or-local-dev-placeholder}}" python3 - <<'PY'
 import os, pathlib
-key = os.environ.get("OPENROUTER_API_KEY") or "sk-or-local-dev-placeholder"
+
+def is_missing(v: str) -> bool:
+    s = v.strip().strip('"')
+    return not s or s.startswith("sk-or-local")
+
+key = (
+    os.environ.get("OPENROUTER_API_KEY")
+    or os.environ.get("OPENROUTER_KEY")
+    or "sk-or-local-dev-placeholder"
+)
 env = pathlib.Path(".env")
 lines = env.read_text().splitlines() if env.exists() else []
 out, done = [], False
 for line in lines:
     if line.startswith("OPENROUTER_API_KEY="):
         current = line.split("=", 1)[1].strip().strip('"')
-        out.append(line if current else f'OPENROUTER_API_KEY="{key}"')
+        out.append(line if not is_missing(current) else f'OPENROUTER_API_KEY="{key}"')
         done = True
     else:
         out.append(line)
