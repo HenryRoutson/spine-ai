@@ -2,6 +2,8 @@ import { createElement } from "react"
 import { renderToStaticMarkup } from "react-dom/server"
 import { describe, expect, it } from "vitest"
 import { HostedSiteChrome } from "@/components/share/hosted-site-chrome"
+import { HostedSiteSlotWidgets } from "@/components/share/hosted-site-slot-widgets"
+import { HostedSiteSqlPreview } from "@/components/share/hosted-site-sql-widget"
 import {
   compileHostedSiteHtml,
   compileHostedSiteLooksOk,
@@ -213,6 +215,42 @@ describe("lovable-style vibe HTML compile", () => {
     expect(html.indexOf("pipeline form")).toBeLessThan(html.indexOf("©"))
     expect(html).not.toMatch(/<script\b/i)
     expect(html).not.toMatch(/<!doctype|<html\b|<head\b|<body\b/i)
+  })
+
+  it("sql preview uses the named table, not Collatz shared_number", () => {
+    const html = renderToStaticMarkup(
+      createElement(HostedSiteChrome, {
+        options: vibeOptions({ customHtml: "{{sql:todo}}" }),
+        sqlByTable: { todo: createElement(HostedSiteSqlPreview, { table: "todo" }) },
+        slots: HostedSiteSlotWidgets({
+          projectName: "Northwind",
+          viewerMarkdown: "",
+          modules: [],
+          hideDocsInRun: false,
+        }),
+      }),
+    )
+    expect(html).toContain("No rows in todo")
+    expect(html).not.toMatch(/shared_number/)
+    expect(html).not.toMatch(/hs-sql-value/)
+  })
+
+  it("unnamed sql slot does not fall back to shared_number", () => {
+    const slots = HostedSiteSlotWidgets({
+      projectName: "Northwind",
+      viewerMarkdown: "",
+      modules: [],
+      hideDocsInRun: false,
+    })
+    expect(slots.sql).toBeUndefined()
+    const html = renderToStaticMarkup(
+      createElement(HostedSiteChrome, {
+        options: vibeOptions({ customHtml: "{{sql:todo}}" }),
+        slots,
+      }),
+    )
+    expect(html).toContain("SQL · todo")
+    expect(html).not.toMatch(/shared_number/)
   })
 })
 

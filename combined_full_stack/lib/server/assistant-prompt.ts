@@ -143,7 +143,7 @@ Validation error messages and how to fix them:
 - "combine output Foo has no field for the side input" — structureOut needs a document field (or a field whose ref matches the previous step). Do not put a parsed model in the side slot unless that model is what the previous step emits. If both documents are already parsed, use assemble instead of combine.
 - "prior pipeline state is dropped on the spine" — a second input appeared after processing without a join. Use combine (raw side Document immediately before combine) or assemble (zip two parsed outputs). Never add a third upload named "… Document".
 - "input expects Foo, upstream emits Bar" on assemble — assemble is not a linear hop; omit structureIn and set assembleBindings (spine + state["Label"]). Do not copy combine's structureIn onto assemble.
-- "Topology mismatch" — I/O may already be valid; rebuild using the named topology (batch-map / explode / split-join / combine / assemble / fork). Receipts need llm-batch; many rows/file need wrapper+flatten; policy+expenses need combine; resumes+job need assemble; independent extracts need fork with lane structureIn Document.
+- "Topology mismatch" — I/O may already be valid; rebuild using the named topology from TOPOLOGY: (batch-map / explode / split-join / combine / assemble / fork).
 
 Before returning modules, mentally verify spineExpects/spineEmits on each adjacent pair in the current pipeline JSON.`;
 }
@@ -207,14 +207,14 @@ export function buildMultiDocumentWorkflowPromptBlock(): string {
 - custom-code code field: TypeScript arrow expression only, e.g. (docs) => docs.map(...). Never Python def/class syntax — it will not compile.
 - Every structureIn / structureOut name MUST appear in your models array — do not reference structures you forgot to define.
 - llm-batch requires list[structureIn] on the spine — the step before it must emit a list (often the input with list[Document], or custom-code with list[Row]).
-- Two different document kinds (policy + expense report) = two input steps + combine — not the same as many receipts in one slot.
+- Two different document kinds = two input steps + combine — not the same as many files of one kind in one slot.
 - Reference: Batch LLM Example seed (Wrap → List → llm-batch → Unwrap); Example Select Demo (context label + example-select → draft); homework grader Student Submissions (list[Document] input); Web Research Scraper (n8n-shaped JSON hits → Python scrape → llm-batch extract).`;
 }
 
 /** AI : two (or more) document KINDS — combine merges pipeline state with a new upload. */
 export function buildCombineInputsPromptBlock(): string {
   return `Combine Inputs — multiple document KINDS (not many files of the same kind):
-Use combine when the task needs TWO OR MORE DIFFERENT inputs that play different roles — e.g. policy + expense report, marking schema + student homework, contract + amendment. Do NOT use combine for "hundreds of receipts" — use one input with list[Document] instead.
+Use combine when the task needs TWO OR MORE DIFFERENT inputs that play different roles — e.g. a rulebook plus a case file, a schema plus submissions, a contract plus an amendment. Do NOT use combine for many files of the same kind — use one input with list[Document] instead.
 
 How combine works at runtime:
 1. Earlier steps run on the linear spine and accumulate pipeline state keyed by step label (e.g. "Parse Policy Table" → list[TableRow]).

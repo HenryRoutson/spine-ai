@@ -11,6 +11,7 @@ import { HostedSiteReactPreview } from "@/components/share/hosted-site-react-pre
 import { HostedSiteSignInCard } from "@/components/share/hosted-site-sign-in"
 import { HostedSiteActionPreview } from "@/components/share/hosted-site-action-button"
 import { HostedSiteSlotWidgets } from "@/components/share/hosted-site-slot-widgets"
+import { HostedSiteSqlPreview } from "@/components/share/hosted-site-sql-widget"
 import { SharedLinkPreview } from "@/components/share/shared-link-preview"
 import { WebsitePipelineBindings } from "@/components/share/website-pipeline-bindings"
 import { WebsiteActionBindings } from "@/components/share/website-action-bindings"
@@ -35,7 +36,7 @@ import {
   sanitizeHostedSiteHtml,
   unwrapVibeCodedHtml,
 } from "@/lib/hosted-site"
-import { HOSTED_SITE_DOCS_SLOT } from "@/lib/hosted-site-slots"
+import { HOSTED_SITE_DOCS_SLOT, hostedSqlTableNames } from "@/lib/hosted-site-slots"
 import { htmlSiteToReactFiles } from "@/lib/hosted-site-react"
 import { functionsOnProject } from "@/lib/pipeline-functions"
 import { listedWebsitePipelineBindings } from "@/lib/website-pipelines"
@@ -167,6 +168,13 @@ export function HostedSitePageStudio({
   )
 
   const tableByAlias = hostedTableSlotsForProject(project)
+  const sqlByTable = Object.fromEntries(
+    hostedSqlTableNames(
+      [activeSourceHtml(), value.customHtml, value.authHtml, ...value.pages.map((p) => p.html)],
+      value.actions,
+      project.modules,
+    ).map((table) => [table, <HostedSiteSqlPreview key={table} table={table} />]),
+  )
   const preview =
     value.runtime === "react" && resolvedTarget.kind !== "signin" ? (
       <HostedSiteReactPreview
@@ -207,6 +215,7 @@ export function HostedSitePageStudio({
         ]),
       )}
       tableByAlias={tableByAlias}
+      sqlByTable={sqlByTable}
       editable={value.runtime !== "react"}
     />
     )
