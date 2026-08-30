@@ -17,7 +17,9 @@ import {
   unbindProjectFromWebsite,
   nullableProjectId,
   pageOnlyProjectStub,
+  studioProjectForWebsite,
   websiteBoundProjectIds,
+  websiteStudioHostProjectId,
   websiteUsesProject,
   websitesUsingProject,
 } from "@/lib/website-pipelines"
@@ -35,6 +37,45 @@ describe("website pipeline bindings", () => {
     expect(nullableProjectId(P1)).toBe(P1)
     expect(pageOnlyProjectStub("Acme").modules).toEqual([])
     expect(pageOnlyProjectStub("Acme").kind).toBe("page")
+  })
+
+  it("opens a page-only site without a host pipeline", () => {
+    const none = hostedSiteOptionsForCreate({ name: "Acme", pipelineIds: [], projects: [] })
+    expect(
+      websiteStudioHostProjectId({
+        projectId: null,
+        siteOptions: normalizeHostedSiteOptions(none),
+      }),
+    ).toBeNull()
+    expect(studioProjectForWebsite({ activeProject: undefined, pageOnlyStudio: false })).toBeUndefined()
+    const stub = studioProjectForWebsite({
+      activeProject: undefined,
+      pageOnlyStudio: true,
+      siteName: "Acme",
+    })
+    expect(stub?.kind).toBe("page")
+    expect(stub?.name).toBe("Acme")
+    expect(stub?.id).toBe("")
+  })
+
+  it("uses the bound pipeline as the studio host when present", () => {
+    const withRun = hostedSiteOptionsForCreate({
+      name: "Desk",
+      pipelineIds: [P1],
+      projects: [{ id: P1, name: "Ops" }],
+    })
+    expect(
+      websiteStudioHostProjectId({
+        projectId: null,
+        siteOptions: normalizeHostedSiteOptions(withRun),
+      }),
+    ).toBe(P1)
+    expect(
+      websiteStudioHostProjectId({
+        projectId: P2,
+        siteOptions: normalizeHostedSiteOptions(withRun),
+      }),
+    ).toBe(P2)
   })
 
   it("remaps bound project ids onto a cloned pipeline", () => {

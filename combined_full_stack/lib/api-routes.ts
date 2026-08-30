@@ -41,6 +41,7 @@ export const API_ROUTES = {
   testingAssistant: "/api/testing-assistant",
   hostedSiteAssistant: "/api/hosted-site-assistant",
   hostedSiteCompile: "/api/hosted-site/compile",
+  hostedSiteCloneUrl: "/api/hosted-site/clone-url",
   testingEvaluate: "/api/testing-evaluate",
   docsContent: "/api/docs/content",
   feedback: "/api/feedback",

@@ -815,6 +815,13 @@ export const hostedSiteOptionsSchema = z
   })
   .strict();
 
+export const hostedSiteCloneUrlBodySchema = z
+  .object({
+    url: z.string().trim().min(1).max(2000),
+    siteOptions: hostedSiteOptionsSchema,
+  })
+  .strict();
+
 export const hostedSiteCompileBodySchema = z
   .object({
     files: z
@@ -840,7 +847,8 @@ export const hostedSiteCompileBodySchema = z
 
 export const hostedSiteAssistantBodySchema = z
   .object({
-    projectId: projectIdSchema,
+    // AI : omitted on page-only sites (no host pipeline).
+    projectId: projectIdSchema.optional(),
     message: z.string().trim().min(1).max(MAX_ASSISTANT_MESSAGE_CHARS),
     history: z
       .array(

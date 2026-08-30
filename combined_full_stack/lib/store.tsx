@@ -54,7 +54,13 @@ import {
   readApiErrorBody,
 } from "@/lib/api-client"
 import { API_ROUTES } from "@/lib/api-routes"
-import type { pipeline_website_delete_action } from "@/lib/website-pipelines"
+import {
+  studioProjectForWebsite,
+  websiteDisplayName,
+  UNNAMED_WEBSITE_NAME,
+  type pipeline_website_delete_action,
+} from "@/lib/website-pipelines"
+import { readEditingWebsiteSession } from "@/lib/editing-website-session"
 import { migrateProjectModules } from "@/lib/quote-steps"
 import { authoredPipelineModules, syncManagedPipelineSteps } from "@/lib/structure-parse-steps"
 import { functionsOnProject } from "@/lib/pipeline-functions"
@@ -454,6 +460,11 @@ export function StoreProvider({
       return DEMO_DEFAULT_PROJECT_ID
     }
     return mode === StoreMode.Workspace ? workspaceActiveProjectFromSession() : ""
+  })
+  // AI : page-only website studio — StoreContext needs a stub Project when there is no host pipeline.
+  const [pageOnlyStudio, setPageOnlyStudio] = useState(() => {
+    if (typeof window === "undefined") return false
+    return !!readEditingWebsiteSession() && !workspaceActiveProjectFromSession()
   })
   const [model, setModel] = useState<string>(DEFAULT_MODEL)
   const [projectLoading, setProjectLoading] = useState(false)
@@ -920,15 +931,23 @@ export function StoreProvider({
   useEffect(() => {
     registerStoreNavigationBridge({
       enterBuilder: (id: ProjectId) => {
+        setPageOnlyStudio(false)
         selectActiveProject(id)
       },
       leaveBuilder: () => {
+        setPageOnlyStudio(false)
         clearActiveProjectSession()
         setActiveProjectId("")
       },
       enterPicker: () => {
+        setPageOnlyStudio(false)
         clearActiveProjectSession()
         setActiveProjectId("")
+      },
+      enterWebsiteStudio: () => {
+        clearActiveProjectSession()
+        setActiveProjectId("")
+        setPageOnlyStudio(true)
       },
     })
     return () => registerStoreNavigationBridge(null)
@@ -1146,20 +1165,29 @@ export function StoreProvider({
     [projects],
   )
   const project = useMemo(
-    () => migratedProjects.find((p) => p.id === activeProjectId),
-    [migratedProjects, activeProjectId],
+    () =>
+      studioProjectForWebsite({
+        activeProject: migratedProjects.find((p) => p.id === activeProjectId),
+        pageOnlyStudio,
+        siteName: (() => {
+          const site = pageOnlyStudio ? readEditingWebsiteSession() : null
+          return site ? websiteDisplayName(site) : UNNAMED_WEBSITE_NAME
+        })(),
+      }),
+    [migratedProjects, activeProjectId, pageOnlyStudio],
   )
 
   // AI : activeProjectId can outlive a deleted project — leave builder shell before WarmShellSlot skeletons stick.
   useEffect(() => {
     if (mode !== StoreMode.Workspace || !state || projectLoading || stateSyncing) return
+    if (pageOnlyStudio) return
     if (!activeProjectId || project) return
     if (createdProjectsRef.current.has(activeProjectId)) return
     if (peekPendingPickerList()) return
     setActiveProjectId("")
     clearActiveProjectSession()
     navigateToProjectPicker()
-  }, [mode, state, projectLoading, stateSyncing, activeProjectId, project])
+  }, [mode, state, projectLoading, stateSyncing, activeProjectId, project, pageOnlyStudio])
 
   // AI : project patches go through SpineSession — persist port owns debounced PUT (parity.md §8.5).
   const patchProject = useCallback((patch: Partial<Project>) => {
