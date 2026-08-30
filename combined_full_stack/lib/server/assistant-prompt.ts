@@ -74,7 +74,7 @@ export function buildFieldTypesPromptBlock(): string {
 export function buildInputTypesPromptBlock(): string {
   // AI : TODO (media-view-B-assistant) — view bindings on output steps. Visualizer HTML via defaultView, not custom-code.
   return `${INPUT_TYPES.map((t) => `- ${t.value}: ${t.label}`).join("\n")}
-JSON-native (direct parse in input when ONLY these types are selected): excel, json
+JSON-native (direct parse in input when ONLY these types are selected): excel, json — structureOut MUST be a typed model, never Document
 Plain text (already instantiated Document.content; LLM parse only when structureOut is not Document): text, markdown, latex
 Needs convert-to-text (auto locked "Convert to text" step; then "Parse to structure" if structureOut is not Document): pdf, word, image, web
 Media (blob in Documents, play in the viewer — do NOT convert-to-text; output VideoClip/AudioClip, never base64 in JSON): audio, video
@@ -144,6 +144,7 @@ Validation error messages and how to fix them:
 - "prior pipeline state is dropped on the spine" — a second input appeared after processing without a join. Use combine (raw side Document immediately before combine) or assemble (zip two parsed outputs). Never add a third upload named "… Document".
 - "input expects Foo, upstream emits Bar" on assemble — assemble is not a linear hop; omit structureIn and set assembleBindings (spine + state["Label"]). Do not copy combine's structureIn onto assemble.
 - "Topology mismatch" — I/O may already be valid; rebuild using the named topology (batch-map / explode / split-join / combine / assemble / fork). Receipts need llm-batch; many rows/file need wrapper+flatten; policy+expenses need combine; resumes+job need assemble; independent extracts need fork with lane structureIn Document.
+- "Excel/JSON-only inputs must use a structure" — inputType is only excel and/or json, so Document is invalid. Define a typed model in models and set that input's structureOut to it (or list[ThatModel]). Do NOT keep Document. Parsing is the input step itself (no Convert to text / Parse to structure). If the files are actually PDFs or prose, change inputType to pdf/text instead.
 
 Before returning modules, mentally verify spineExpects/spineEmits on each adjacent pair in the current pipeline JSON.`;
 }
@@ -181,7 +182,7 @@ Common mistakes that fail validation:
 3. list → single object without a reshape — e.g. list[ExtractedRow] → SummaryRow needs custom-code, or a SummaryRow model with a list[model] field + transform, not a bare transform.
 4. Map-reduce on paper but linear types not wired — design the spine chain first: Document → list[Chunk] → list[Candidate] → list[Extracted] → Summary.
 5. LLM with list output followed by a bare transform — if the output structure has a list[model] field (ref = input structure or upstream list item type), bare transform auto-wraps list[T] → { field: T[] }. Bare transform Foo → list[Bar] flattens Foo's list[model] field (ref Bar). Otherwise use custom-code, or keep list[T] on the spine via list[structureOut] on the transform.
-6. Input structureOut set to a parsed model — input only ever emits Document; parsing belongs in the next custom-code or llm step.
+6. Input structureOut set to a parsed model on a non-JSON input — pdf/word/image/web/text/markdown/latex inputs emit Document (parsing is the next custom-code or auto Parse to structure step). Exception: excel/json-ONLY inputs MUST structureOut a typed model — Document is invalid ("Excel/JSON-only inputs must use a structure").
 7. structureIn/structureOut names not in models array — every referenced structure must be defined in models.
 8. custom-code without list output after a list-emitting step — downstream llm-batch then fails with "expects list[X], upstream emits X".
 9. input → processing → second input without combine/assemble — the spine only carries the last step's output; prior input state is dropped unless you merge. Raw side file: combine (side input immediately before combine). Both kinds already parsed: assemble (zip spine + state[label]) — never a third upload. Validation error: "prior pipeline state is dropped on the spine".
@@ -195,7 +196,7 @@ export function buildMultiDocumentWorkflowPromptBlock(): string {
 - One input step per kind of document (e.g. "Receipts"). Do NOT create hundreds of separate input steps.
 - Non-JSON input types always structureOut Document on the input step. PDF/word/image/web get a locked "Convert to text" step (parser or OCR, cached per doc). A locked "Parse to structure" LLM step is auto-inserted when you pick a target structure that is not Document. Do NOT emit those auto steps yourself.
 - Text/markdown/latex are already text — no Convert to text step. Parse to structure still auto-inserts when structureOut is not Document.
-- Excel/json-only inputs may structureOut a typed model directly (JSON parse in the input step) — no auto LLM step.
+- Excel/json-only inputs MUST structureOut a typed model (or list[ThatModel]) — JSON parse runs in the input step; Document is invalid and there is no auto LLM parse step.
 - When many files of the same kind upload into one slot, use list[structureOut] on that input ("Emit list output"). Without it, inference only allows one file and the spine stays single Document.
 - Set inputMinCount: 2+ when the task implies batch uploads (hundreds, many, each, all).
 - Typical "many unstructured docs → one spreadsheet" spine (list rows are already CSV/XLSX-exportable in the UI — do NOT hand-fold CSV):
@@ -325,7 +326,7 @@ ${listConnectActions()
   After Approve, the human taps Connect {App}. Nango ids open a Slack/Google popup. ap.* ids open the CE sidecar — still no node canvas and no pasted tokens from the chat. Prefer connect over webhook for those apps. HTTP connect (http.request) is the generic hatch.
 - sql: hosted-app table statement (SELECT / UPDATE / INSERT / DELETE, AND in WHERE, no JOIN). Tables come from structures (Todo → todo). Set sql + sqlSeedRows. cached is always false — mutations are not idempotent. On the website, add {{sql:table}} and {{action:alias}} plus siteOptions.actions[{ alias, label, table, payload }]. payload is the JSON file the button uploads to the input step. Do not hardcode Collatz or shared_number unless the user asked for that demo.
 - llm steps with tuple[text,quote] outputs get a Link Quotes step auto-inserted after them — do NOT emit quote steps yourself.
-- PDF/word/image/web inputs get a locked Convert to text step auto-inserted after the input (parser or OCR). Omit it from modules JSON and seeds — do NOT emit it yourself. A locked Parse to structure LLM step is auto-inserted when structureOut is not Document — do NOT emit that either.
+- PDF/word/image/web inputs get a locked Convert to text step auto-inserted after the input (parser or OCR). Omit it from modules JSON and seeds — do NOT emit it yourself. A locked Parse to structure LLM step is auto-inserted when structureOut is not Document — do NOT emit that either. Excel/json-only inputs skip both auto steps and MUST structureOut a typed model (Document is invalid).
 - transform reshapes upstream data. When a list feeds a single-object output, include a list field on that structure (prefer list[model] ref = input structure) so transform can wrap items automatically, or use custom-code.
 - Add output steps wherever a named artifact snapshot is needed — pipelines may have several.
 - Use model ids from:\n${buildModelOptionsPromptBlock()}
