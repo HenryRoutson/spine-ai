@@ -10,6 +10,7 @@ import {
 // AI : same model codegen as pipeline export (py / ts / rust / go / baml).
 import { allModelsToBaml, allModelsToDts, allModelsToGo, allModelsToPydantic, allModelsToRust } from "@/lib/pydantic"
 import { allModelsToSql } from "@/lib/sql-schema"
+import { allModelsToJsonSchemaText } from "@/lib/windmill/schema"
 // AI : DONE (sql-id-ref) — branded types in TS/py tabs via allModelsToDts / pydantic.
 // AI : TODO (sql-id-ref) — later: SQL tab jump REFERENCES work_item(id) to that model.
 import type { PipelineModule, StructureModel, TypeAlias } from "@/lib/types"
@@ -30,6 +31,12 @@ export function StructureCodeView({
         label: CODE_LANG_LABEL.sql,
         filename: "schema.sql",
         content: allModelsToSql(models, modules),
+      },
+      {
+        language: "json",
+        label: CODE_LANG_LABEL.json,
+        filename: "schema.json",
+        content: allModelsToJsonSchemaText(models, typeAliases),
       },
       {
         language: "python",

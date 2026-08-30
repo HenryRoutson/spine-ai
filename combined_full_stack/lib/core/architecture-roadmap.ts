@@ -23,7 +23,7 @@
 // AI :   Steps: lib/server/spine-in-spine-bootstrap-roadmap.ts (grep TODO (spine-in-spine-bootstrap).
 // AI :   Simple vs full vs OSS LoC: lib/server/spine-in-spine-dogfood-roadmap.ts
 // AI : DONE (allow-pipeline-non-linear-fork) — series-parallel Fork step (nested linear lanes + join).
-// AI :   Not React Flow. See lib/server/fork-roadmap.ts. Linear spine + Parallel/Combine/Assemble stay.
+// AI :   Authoring is insert-slot Lanes; DAG view is React Flow. Linear spine + Parallel/Combine/Assemble stay. See lib/server/fork-roadmap.ts.
 // AI : DONE (arch-module-union) — PipelineModule is a per-kind union (pipeline-module-union.ts).
 // AI :   normalizePipelineModule strips other-kind keys on ingest. Dual FieldType + TypeExpr stays.
 // AI : TODO (arch-store-async) — Store is sync + write-behind RAM; make methods async (JsonStore vs
@@ -73,9 +73,9 @@
 // AI : DONE (vibe-coding-harness) — in-memory file workspace + write/run_tests loop (OpenCode/Pi-shaped).
 // AI :   SPINE_VIBE_HARNESS=1 turns it on (harness first, JSON fallback). Unset/0 = few-shot JSON only.
 // AI :   OpenRouter stays server-side; no disk, no shell, no secrets in the workspace.
-// AI : DONE (vibe-js-authoring) — SPINE_VIBE_AUTHORING=js: LLM writes spine-js (one Zod object per step),
-// AI :   compileSpineJs → same JSON IR. Direct retry or harness. JSON remains the portable cross-language IR.
-// AI :   Seed must NOT matchVibeExample and paste the few-shot payload — that is reward hacking.
+// AI : DONE (vibe-js-authoring) — default SPINE_VIBE_AUTHORING=js: LLM writes workflow()/task() TypeScript
+// AI :   (Windmill workflows-as-code). compileSpineJs → JSON IR. Compile errors retry before JSON fallback.
+// AI :   SPINE_VIBE_AUTHORING=json is the old graph-JSON LLM path. Seed must NOT paste few-shot payloads.
 // AI : DONE (vibe-fewshot-explode) — Example 1c wrapper + flatten; PromptListVsItem warning.
 // AI : DONE (vibe-fewshot-parallel) — Example 5 parallel lanes then memo.
 // AI : DONE (vibe-fewshot-assemble) — greenfield names assemble; Example 4 kept.

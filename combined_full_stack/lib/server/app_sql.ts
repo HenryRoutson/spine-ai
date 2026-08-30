@@ -1,5 +1,4 @@
-// AI : hosted-app SQL rows — Postgres when available, file+memory otherwise.
-
+import type { SupabaseClient } from "@supabase/supabase-js"
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs"
 import { dirname, join } from "node:path"
 import { dataDir } from "./config"
@@ -20,12 +19,37 @@ import {
 type sql_row = Record<string, unknown>
 type table_map = Map<app_sql_row_id, sql_row>
 type scope_map = Map<string, table_map>
+export type AppSqlDb = Pick<SupabaseClient, "from">
 
 const memory = new Map<string, scope_map>()
 let testMode = false
 let fileLoaded = false
 
 const log = logger("app-sql")
+
+export class AppSqlUnavailableError extends Error {
+  readonly code = "app_sql_unavailable" as const
+  constructor(detail?: string, opts?: { isolated?: boolean }) {
+    super(
+      opts?.isolated
+        ? detail ?? "Hosted SQL is unavailable — this website's isolated Supabase is not ready."
+        : detail
+          ? `Hosted SQL is unavailable (${detail}). Apply pending Supabase migrations including public.app_sql_rows.`
+          : "Hosted SQL is unavailable. Apply pending Supabase migrations including public.app_sql_rows.",
+    )
+    this.name = "AppSqlUnavailableError"
+  }
+}
+
+// AI : Vercel /tmp is per-instance — never pretend file+memory is a durable website store.
+export function appSqlAllowsEphemeralFallback(): boolean {
+  return !process.env.VERCEL
+}
+
+function requireDurableAppSql(detail?: string): void {
+  if (testMode || appSqlAllowsEphemeralFallback()) return
+  throw new AppSqlUnavailableError(detail)
+}
 
 export function resetAppSqlForTests(): void {
   testMode = true
@@ -92,17 +116,41 @@ function memTable(scope: string, table: string): table_map {
   return rows
 }
 
-async function dbList(scope: string, table: string): Promise<sql_row[] | null> {
+function refuseSpineForHostedSite(scope: string, db?: AppSqlDb | null): void {
+  if (db) return
+  if (typeof scope === "string" && scope.startsWith("site:") && !appSqlAllowsEphemeralFallback()) {
+    throw new AppSqlUnavailableError("this website has no isolated Supabase yet", { isolated: true })
+  }
+}
+
+async function resolveAdmin(db?: AppSqlDb | null): Promise<AppSqlDb | null> {
+  if (db) return db
   if (testMode) return null
-  const db = await createAdminClient()
-  if (!db) return null
-  const { data, error } = await db
+  return createAdminClient()
+}
+
+async function dbList(scope: string, table: string, db?: AppSqlDb | null): Promise<sql_row[] | null> {
+  refuseSpineForHostedSite(scope, db)
+  if (testMode && !db) return null
+  const admin = await resolveAdmin(db)
+  if (!db && !admin) {
+    requireDurableAppSql("no service-role client")
+    return null
+  }
+  const client = db ?? admin
+  if (!client) return null
+  const { data, error } = await client
     .from("app_sql_rows")
     .select("row_id, data")
     .eq("scope", scope)
     .eq("table_name", table)
   if (error) {
-    if (!isMissingSchemaError(error)) log.warn(`list failed`, { error: error.message })
+    if (isMissingSchemaError(error)) {
+      requireDurableAppSql(error.message)
+      return null
+    }
+    log.warn(`list failed`, { error: error.message })
+    requireDurableAppSql(error.message)
     return null
   }
   return (data ?? []).map((row) => ({
@@ -111,28 +159,43 @@ async function dbList(scope: string, table: string): Promise<sql_row[] | null> {
   }))
 }
 
-async function dbDelete(scope: string, table: string, rowId: string): Promise<boolean> {
-  if (testMode) return false
-  const db = await createAdminClient()
-  if (!db) return false
-  const { error } = await db
+async function dbDelete(scope: string, table: string, rowId: string, db?: AppSqlDb | null): Promise<boolean> {
+  refuseSpineForHostedSite(scope, db)
+  if (testMode && !db) return false
+  const admin = await resolveAdmin(db)
+  const client = db ?? admin
+  if (!client) {
+    requireDurableAppSql("no service-role client")
+    return false
+  }
+  const { error } = await client
     .from("app_sql_rows")
     .delete()
     .eq("scope", scope)
     .eq("table_name", table)
     .eq("row_id", rowId)
   if (error) {
-    if (!isMissingSchemaError(error)) log.warn(`delete failed`, { error: error.message })
+    if (isMissingSchemaError(error)) {
+      requireDurableAppSql(error.message)
+      return false
+    }
+    log.warn(`delete failed`, { error: error.message })
+    requireDurableAppSql(error.message)
     return false
   }
   return true
 }
 
-async function dbUpsert(scope: string, table: string, rowId: string, data: sql_row): Promise<boolean> {
-  if (testMode) return false
-  const db = await createAdminClient()
-  if (!db) return false
-  const { error } = await db.from("app_sql_rows").upsert(
+async function dbUpsert(scope: string, table: string, rowId: string, data: sql_row, db?: AppSqlDb | null): Promise<boolean> {
+  refuseSpineForHostedSite(scope, db)
+  if (testMode && !db) return false
+  const admin = await resolveAdmin(db)
+  const client = db ?? admin
+  if (!client) {
+    requireDurableAppSql("no service-role client")
+    return false
+  }
+  const { error } = await client.from("app_sql_rows").upsert(
     {
       scope,
       table_name: table,
@@ -143,14 +206,23 @@ async function dbUpsert(scope: string, table: string, rowId: string, data: sql_r
     { onConflict: "scope,table_name,row_id" },
   )
   if (error) {
-    if (!isMissingSchemaError(error)) log.warn(`upsert failed`, { error: error.message })
+    if (isMissingSchemaError(error)) {
+      requireDurableAppSql(error.message)
+      return false
+    }
+    log.warn(`upsert failed`, { error: error.message })
+    requireDurableAppSql(error.message)
     return false
   }
   return true
 }
 
-export async function listAppSqlRows(scope: app_sql_scope | string, table: string): Promise<sql_row[]> {
-  const fromDb = await dbList(scope, table)
+export async function listAppSqlRows(
+  scope: app_sql_scope | string,
+  table: string,
+  db?: AppSqlDb | null,
+): Promise<sql_row[]> {
+  const fromDb = await dbList(scope, table, db)
   if (fromDb) {
     const rows = memTable(scope, table)
     rows.clear()
@@ -171,11 +243,15 @@ export async function deleteAppSqlRow(
   table: string,
   row: sql_row,
   pkField = "id",
+  db?: AppSqlDb | null,
 ): Promise<sql_row> {
   const id = rowIdOf(row, pkField)
   memTable(scope, table).delete(id)
-  const ok = await dbDelete(scope, table, id)
-  if (!ok) persistFile()
+  const ok = await dbDelete(scope, table, id, db)
+  if (!ok) {
+    requireDurableAppSql()
+    persistFile()
+  }
   return row
 }
 
@@ -184,12 +260,16 @@ export async function upsertAppSqlRow(
   table: string,
   row: sql_row,
   pkField = "id",
+  db?: AppSqlDb | null,
 ): Promise<sql_row> {
   const id = rowIdOf(row, pkField)
   const next = { ...row }
   memTable(scope, table).set(id, next)
-  const ok = await dbUpsert(scope, table, id, next)
-  if (!ok) persistFile()
+  const ok = await dbUpsert(scope, table, id, next, db)
+  if (!ok) {
+    requireDurableAppSql()
+    persistFile()
+  }
   return next
 }
 
@@ -198,11 +278,12 @@ export async function ensureAppSqlSeed(
   table: string,
   seedRows: sql_row[],
   pkField = "id",
+  db?: AppSqlDb | null,
 ): Promise<sql_row[]> {
-  const existing = await listAppSqlRows(scope, table)
+  const existing = await listAppSqlRows(scope, table, db)
   if (existing.length > 0 || seedRows.length === 0) return existing
   const out: sql_row[] = []
-  for (const row of seedRows) out.push(await upsertAppSqlRow(scope, table, row, pkField))
+  for (const row of seedRows) out.push(await upsertAppSqlRow(scope, table, row, pkField, db))
   return out
 }
 
@@ -213,38 +294,39 @@ function applySelect(stmt: Extract<ParsedAppSql, { kind: "select" }>, rows: sql_
 export async function execAppSql(
   scope: app_sql_scope | string,
   sql: string,
-  opts?: { seedRows?: sql_row[]; pkField?: string },
+  opts?: { seedRows?: sql_row[]; pkField?: string; db?: AppSqlDb | null },
 ): Promise<sql_row[]> {
   const stmt = parseAppSql(sql)
   const pkField = opts?.pkField ?? "id"
+  const db = opts?.db
   if (stmt.kind === "select") {
-    await ensureAppSqlSeed(scope, stmt.table, opts?.seedRows ?? [], pkField)
-    return applySelect(stmt, await listAppSqlRows(scope, stmt.table))
+    await ensureAppSqlSeed(scope, stmt.table, opts?.seedRows ?? [], pkField, db)
+    return applySelect(stmt, await listAppSqlRows(scope, stmt.table, db))
   }
   if (stmt.kind === "insert") {
     const row: sql_row = {}
     stmt.columns.forEach((col, i) => {
       row[col] = stmt.values[i] ?? null
     })
-    return [await upsertAppSqlRow(scope, stmt.table, row, pkField)]
+    return [await upsertAppSqlRow(scope, stmt.table, row, pkField, db)]
   }
   if (stmt.kind === "delete") {
-    await ensureAppSqlSeed(scope, stmt.table, opts?.seedRows ?? [], pkField)
-    const rows = (await listAppSqlRows(scope, stmt.table)).filter((row) => sqlWhereMatches(row, stmt.where))
-    for (const row of rows) await deleteAppSqlRow(scope, stmt.table, row, pkField)
+    await ensureAppSqlSeed(scope, stmt.table, opts?.seedRows ?? [], pkField, db)
+    const rows = (await listAppSqlRows(scope, stmt.table, db)).filter((row) => sqlWhereMatches(row, stmt.where))
+    for (const row of rows) await deleteAppSqlRow(scope, stmt.table, row, pkField, db)
     return rows
   }
-  await ensureAppSqlSeed(scope, stmt.table, opts?.seedRows ?? [], pkField)
-  let rows = (await listAppSqlRows(scope, stmt.table)).filter((row) => sqlWhereMatches(row, stmt.where))
+  await ensureAppSqlSeed(scope, stmt.table, opts?.seedRows ?? [], pkField, db)
+  let rows = (await listAppSqlRows(scope, stmt.table, db)).filter((row) => sqlWhereMatches(row, stmt.where))
   if (rows.length === 0 && (opts?.seedRows?.length ?? 0) > 0) {
-    await ensureAppSqlSeed(scope, stmt.table, opts!.seedRows!, pkField)
-    rows = (await listAppSqlRows(scope, stmt.table)).filter((row) => sqlWhereMatches(row, stmt.where))
+    await ensureAppSqlSeed(scope, stmt.table, opts!.seedRows!, pkField, db)
+    rows = (await listAppSqlRows(scope, stmt.table, db)).filter((row) => sqlWhereMatches(row, stmt.where))
   }
   const updated: sql_row[] = []
   for (const row of rows) {
     const next = { ...row }
     for (const assignment of stmt.set) next[assignment.field] = evalSqlExpr(assignment.expr, next)
-    updated.push(await upsertAppSqlRow(scope, stmt.table, next, pkField))
+    updated.push(await upsertAppSqlRow(scope, stmt.table, next, pkField, db))
   }
   return stmt.returning ? updated : updated
 }

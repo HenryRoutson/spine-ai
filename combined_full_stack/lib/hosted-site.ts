@@ -167,6 +167,24 @@ export function applyHostedSiteTokens(html: string, brand: HostedSiteBrand): str
     .replaceAll("{{email}}", email)
 }
 
+// AI : cloned pages put the title in {{company}} / {{tagline}} — click-to-edit must patch brand, not inner HTML.
+export function patchHostedSiteBrandCopy(
+  options: HostedSiteOptions,
+  previousText: string,
+  nextText: string,
+): HostedSiteOptions | null {
+  const prev = previousText.trim()
+  const next = nextText.trim()
+  if (!prev || prev === next) return null
+  if (options.brand.companyName.trim() === prev) {
+    return { ...options, brand: { ...options.brand, companyName: next } }
+  }
+  if (options.brand.tagline.trim() === prev) {
+    return { ...options, brand: { ...options.brand, tagline: next } }
+  }
+  return null
+}
+
 export type HostedSiteHtmlParts = {
   before: string
   after: string
@@ -418,6 +436,12 @@ export function normalizeHostedSiteBrand(raw: unknown): HostedSiteBrand {
   }
 }
 
+function normalizeAllocStatus(raw: unknown): HostedSiteAuth["allocStatus"] {
+  return raw === "pending" || raw === "ready" || raw === "error" || raw === "skipped" || raw === "idle"
+    ? raw
+    : "idle"
+}
+
 function normalizeHostedSiteAuth(raw: unknown): HostedSiteAuth {
   const o = (raw && typeof raw === "object" ? raw : {}) as Partial<HostedSiteAuth>
   const provider: HostedSiteAuthProvider = o.provider === "custom_supabase" ? "custom_supabase" : "spine"
@@ -426,6 +450,9 @@ function normalizeHostedSiteAuth(raw: unknown): HostedSiteAuth {
     provider,
     customSupabaseUrl: typeof o.customSupabaseUrl === "string" ? o.customSupabaseUrl.trim().slice(0, 2048) : "",
     customSupabaseAnonKey: typeof o.customSupabaseAnonKey === "string" ? o.customSupabaseAnonKey.trim().slice(0, 2048) : "",
+    projectRef: typeof o.projectRef === "string" ? o.projectRef.trim().slice(0, 64) : "",
+    allocStatus: normalizeAllocStatus(o.allocStatus),
+    allocError: typeof o.allocError === "string" ? o.allocError.trim().slice(0, 2000) : "",
   }
 }
 

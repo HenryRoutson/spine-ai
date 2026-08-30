@@ -40,7 +40,7 @@ Do **not** add a Data tab that duplicates Structures. SQL preview and stored row
 
 **Next:** `public.structure_rows` with RLS, queryable per model, not bloating project JSON.
 
-**Later:** isolated Supabase per hosted site; marketplace listings for a storage pack; live SQL instead of JSON maps at run time (`allModelsToSql` is still an annotation until the run engine reads tables).
+**Later:** isolated Supabase per hosted site (Management API); marketplace listings for a storage pack; live SQL instead of JSON maps at run time (`allModelsToSql` is still an annotation until the run engine reads tables). Hosted websites with SQL/auth/actions already get a new Cloud project — rows go there, not onto Spine `app_sql_rows`.
 
 ## Share / marketplace (later)
 
@@ -60,7 +60,7 @@ See `combined_full_stack/lib/server/platform-roadmap.ts`.
 | P5 | Data tab — **removed**. SQL + rows + function links live on Structures | This revision |
 | P12 | Multiple functions per project + selector + Vibe inference picker | This revision |
 | P13 | Rows on `projects.data` jsonb | This revision |
-| P7 | Isolated Supabase alloc | Later |
+| P7 | Isolated Supabase alloc | This revision |
 | P9 | IDE/repo sync | Later |
 | P10 | Async Store | Later |
 | P14 | `structure_rows` table + RLS | Later |

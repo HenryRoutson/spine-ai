@@ -17,11 +17,12 @@ type AppLoginUrl = string;
 type AppUrl = string;
 type ApiUrl = string;
 
-// AI : TODO (jank-site-urls) — APP_URL / SPINE_API_URL still hardcoded; login is derived from APP_URL.
+// AI : TODO (jank-site-urls) — APP_URL / SPINE_API_URL still hardcoded; login is NEXT_PUBLIC_APP_LOGIN_URL or {APP_URL}/login.
 const APP_URL: AppUrl =
   process.env.NEXT_PUBLIC_APP_URL ??
   (process.env.NODE_ENV === "development" ? "http://localhost:3000" : "https://www.spine-ai-app.dev/");
-const APP_LOGIN_URL: AppLoginUrl = `${APP_URL.replace(/\/$/, "")}/login?next=%2F`;
+const APP_LOGIN_URL: AppLoginUrl =
+  process.env.NEXT_PUBLIC_APP_LOGIN_URL ?? `${APP_URL.replace(/\/$/, "")}/login?next=%2F`;
 const SPINE_API_URL: ApiUrl =
   process.env.SPINE_API_URL ??
   process.env.NEXT_PUBLIC_API_URL ??

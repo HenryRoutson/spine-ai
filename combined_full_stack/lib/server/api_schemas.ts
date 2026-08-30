@@ -531,6 +531,7 @@ export const projectPatchSchema = z
     llmProviders: z.array(jsonSizeBounded(100_000)).max(20).optional(),
     documentation: z.string().max(MAX_ASSISTANT_MESSAGE_CHARS).optional(),
     langfuseExport: z.boolean().optional(),
+    windmillExecute: z.boolean().optional(),
     // AI : TODO (media-view-C-store) — visualizers[] on project patch (html + inType); not a document upload.
   })
   .strict();
@@ -753,6 +754,9 @@ export const hostedSiteOptionsSchema = z
         provider: z.enum(["spine", "custom_supabase"]).optional(),
         customSupabaseUrl: z.string().max(2048).optional(),
         customSupabaseAnonKey: z.string().max(2048).optional(),
+        projectRef: z.string().max(64).optional(),
+        allocStatus: z.enum(["idle", "pending", "ready", "error", "skipped"]).optional(),
+        allocError: z.string().max(2000).optional(),
       })
       .strict()
       .optional(),
@@ -811,6 +815,13 @@ export const hostedSiteOptionsSchema = z
   })
   .strict();
 
+export const hostedSiteCloneUrlBodySchema = z
+  .object({
+    url: z.string().trim().min(1).max(2000),
+    siteOptions: hostedSiteOptionsSchema,
+  })
+  .strict();
+
 export const hostedSiteCompileBodySchema = z
   .object({
     files: z
@@ -836,7 +847,8 @@ export const hostedSiteCompileBodySchema = z
 
 export const hostedSiteAssistantBodySchema = z
   .object({
-    projectId: projectIdSchema,
+    // AI : omitted on page-only sites (no host pipeline).
+    projectId: projectIdSchema.optional(),
     message: z.string().trim().min(1).max(MAX_ASSISTANT_MESSAGE_CHARS),
     history: z
       .array(

@@ -170,8 +170,8 @@
 // AI : =============================================================================
 // AI : UI schema.sql TAB
 // AI : =============================================================================
-// AI : code-viewer.tsx: CodeViewerLanguage |= "sql"; CODE_LANG_LABEL.sql = "SQL"; CODE_LANG_LINT_HINT.sql = "annotation"
-// AI :   Do NOT add "sql" to CODE_VIEWER_LANGUAGES array (pipeline export dialog iterates that).
+// AI : code-viewer.tsx: CodeViewerLanguage |= "sql" | "json"; labels SQL / JSON Schema.
+// AI :   Do NOT add "sql" or "json" to CODE_VIEWER_LANGUAGES array (pipeline export dialog iterates that).
 // AI : structure-code-view: allModelsToSql(models, modules); defaultLanguage sql so Code preview opens the table DDL.
 // AI : structure-builder.tsx: <StructureCodeView models={…} typeAliases={…} modules={project?.modules} />
 // AI : type_codegen GeneratedPipelineTypes.schemaSql; generatePipelineTypes fills it

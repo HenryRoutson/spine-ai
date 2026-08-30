@@ -13,6 +13,8 @@ import { generatePipelineSourceGo } from "./pipeline_go_export";
 import { generatePipelineSourcePy } from "./pipeline_py_export";
 import { generatePipelineSourceRust } from "./pipeline_rs_export";
 import { generatePipelineSourceTs } from "./pipeline_ts_export";
+import { generateOpenFlowJson } from "@/lib/windmill/compile";
+import { allModelsToJsonSchemaText } from "@/lib/windmill/schema";
 import type { Project } from "./types";
 
 // AI : full zip contents — must stay server-side (fs for documents + runtime libraries).
@@ -24,6 +26,8 @@ export function generatePipelineExportBundle(project: Project, siteOptions?: unk
     { filename: `${slug}_pipeline.rs`, content: generatePipelineSourceRust(project), mime: "text/x-rust" },
     { filename: `${slug}_pipeline.go`, content: generatePipelineSourceGo(project), mime: "text/x-go" },
     { filename: `${slug}_pipeline.baml`, content: generatePipelineSourceBaml(project), mime: "text/plain" },
+    { filename: `${slug}_flow.json`, content: generateOpenFlowJson(project), mime: "application/json" },
+    { filename: `${slug}_schema.json`, content: allModelsToJsonSchemaText(project.models, project.typeAliases ?? []), mime: "application/json" },
   ];
   const setupFiles = generatePipelineSetupFiles(project);
   const connectorFiles = generatePipelineConnectorFiles(project);

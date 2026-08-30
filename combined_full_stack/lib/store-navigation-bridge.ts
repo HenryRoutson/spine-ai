@@ -5,6 +5,8 @@ export type StoreNavigationBridge = {
   enterBuilder: (projectId: ProjectId) => void
   leaveBuilder: () => void
   enterPicker: () => void
+  // AI : Lovable page-only site — builder chrome without a host pipeline.
+  enterWebsiteStudio: () => void
 }
 
 let bridge: StoreNavigationBridge | null = null

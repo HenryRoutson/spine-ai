@@ -24,7 +24,7 @@ export {}
 // AI : DONE (platform-P2-schema) — components/platform/supabase-backend-panel.tsx
 // AI : shows allModelsToSql schema, pipeline bindings, shared state keys
 // AI : DONE (platform-P2-connect) — lib/supabase-site-provision.ts validates BYO URL/anon key + schema pack
-// AI : TODO (platform-P2-provision) — allocate an isolated Supabase project (BYO keys work; Spine-hosted alloc does not)
+// AI : DONE (platform-P2-provision) — isolated Cloud project per website lives in platform-P7
 
 // ---------------------------------------------------------------------------
 // P3 — Auto-generated upload frontend
@@ -54,10 +54,11 @@ export {}
 // AI : remember Vibe vs Building across reloads
 
 // ---------------------------------------------------------------------------
-// P7 — Per-site Supabase (BYO, not allocated)
+// P7 — Per-site Supabase (allocated Cloud project, not Spine prod)
 // ---------------------------------------------------------------------------
 // AI : DONE (platform-P7-supabase-byo) — schema pack + URL/key validation (Structures SQL / TUI backend)
-// AI : TODO (platform-P7-supabase-alloc) — allocate isolated Supabase project per hosted site
+// AI : DONE (platform-P7-supabase-alloc) — Management API creates one project per website with backend logic
+// AI : DONE (platform-P7-sql-no-tmp) — Vercel hosted SQL throws if app_sql_rows is missing (no /tmp fallback)
 
 // ---------------------------------------------------------------------------
 // P8 — Payment and table slots

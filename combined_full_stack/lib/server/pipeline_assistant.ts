@@ -97,6 +97,7 @@ import { vibeJsAuthoringEnabled } from "./vibe-coding-mode";
 import { compileSpineJs, extractSpineJsSource } from "@/lib/spine-js/compile";
 import { buildSpineJsSystemPrompt, buildSpineJsUserPrompt } from "@/lib/spine-js/prompt";
 import { buildVibeTopologyPromptBlock } from "./vibe-coding-topology";
+import { vibeContractIssues } from "./vibe-coding-contract";
 
 export type {
   AssistantProposedAction,
@@ -167,6 +168,7 @@ export type PipelineAssistantOpts = {
 };
 
 const MAX_VALIDATION_RETRIES = 2;
+const MAX_JS_COMPILE_RETRIES = 2;
 
 export type { ChatTurn };
 
@@ -862,7 +864,9 @@ export function runVibeWorkspaceChecks(
     { includeExport: false },
   );
   const lintErrors = lint.lints.filter((l) => l.severity === "error");
-  const ok = !validation && compileErrors.length === 0 && lintErrors.length === 0;
+  const kinds = flattenPipelineModules(proposal.modules).map((m) => m.kind);
+  const contract = vibeContractIssues({ kinds, docs: draft.docs });
+  const ok = !validation && compileErrors.length === 0 && lintErrors.length === 0 && contract.length === 0;
   const lines = [ok ? "PASS" : "FAIL"];
   if (validation) lines.push("I/O:", validation.trim());
   if (compileErrors.length) lines.push("custom-code:", ...compileErrors.map((e) => `- ${e}`));
@@ -872,7 +876,11 @@ export function runVibeWorkspaceChecks(
       ...lintErrors.map((l) => `- ${l.stepLabel ?? l.structureName ?? l.code}: ${l.message}`),
     );
   }
-  if (ok) lines.push("I/O valid, custom-code compiled, lint clean.");
+  if (contract.length) {
+    lines.push("contract:", ...contract.map((e) => `- ${e}`));
+    lines.push("Schema-valid is not done. Use a transforming step and distinct sample inputs.");
+  }
+  if (ok) lines.push("I/O valid, custom-code compiled, lint clean, contract ok.");
   return lines.join("\n");
 }
 
@@ -932,56 +940,74 @@ async function tryJsDirectAuthoring(args: {
   raw: z.infer<typeof assistantResponseSchema>;
   proposal: PipelineAssistantProposal;
 } | null> {
-  let text: string;
-  try {
-    text = await llmStreamString(
-      buildSpineJsUserPrompt({
-        task: args.task,
-        thinking: args.thinking,
-        extra: args.extraPrompt,
-        fixErrors: args.fixErrors,
-      }),
-      {
-        model: args.globalModel,
-        ledger: args.ledger,
-        system: buildSpineJsSystemPrompt(),
-        maxTokens: VIBE_THINKING_MAX_TOKENS,
-        onStructuredFailure: (detail) => {
-          args.onStructuredFailure?.({
-            attempt: detail.attempt,
-            failureKind: detail.kind,
-            error: detail.error,
-          });
+  let fix = args.fixErrors;
+  const attempts = MAX_JS_COMPILE_RETRIES + 1;
+  for (let attempt = 1; attempt <= attempts; attempt++) {
+    let text: string;
+    try {
+      text = await llmStreamString(
+        buildSpineJsUserPrompt({
+          task: args.task,
+          thinking: args.thinking,
+          extra: args.extraPrompt,
+          fixErrors: fix,
+        }),
+        {
+          model: args.globalModel,
+          ledger: args.ledger,
+          system: buildSpineJsSystemPrompt(),
+          maxTokens: VIBE_THINKING_MAX_TOKENS,
+          onStructuredFailure: (detail) => {
+            args.onStructuredFailure?.({
+              attempt: detail.attempt,
+              failureKind: detail.kind,
+              error: detail.error,
+            });
+          },
         },
-      },
-      args.onDelta ?? (() => {}),
-    );
-  } catch {
-    return null;
+        args.onDelta ?? (() => {}),
+      );
+    } catch {
+      return null;
+    }
+    let source: string;
+    try {
+      source = extractSpineJsSource(text);
+    } catch (err) {
+      const error = (err as Error).message;
+      args.onStructuredFailure?.({
+        attempt,
+        failureKind: "json_parse",
+        error,
+      });
+      fix = error;
+      continue;
+    }
+    const compiled = compileSpineJs(source);
+    if (!compiled.ok) {
+      const error = compiled.errors.join("; ");
+      args.onStructuredFailure?.({
+        attempt,
+        failureKind: "schema",
+        error,
+      });
+      // AI : compile error is the tool result — next attempt heals, like Windmill create/update.
+      fix = compiled.errors.join("\n");
+      continue;
+    }
+    const proposal = materializeProposal(compiled.raw, args.project, args.globalModel, args.testDocsCatalog);
+    if (!proposal) {
+      args.onStructuredFailure?.({
+        attempt,
+        failureKind: "schema",
+        error: "compile succeeded but the pipeline could not be materialized",
+      });
+      fix = "compile succeeded but the pipeline could not be materialized";
+      continue;
+    }
+    return { raw: compiled.raw, proposal };
   }
-  let source: string;
-  try {
-    source = extractSpineJsSource(text);
-  } catch (err) {
-    args.onStructuredFailure?.({
-      attempt: 1,
-      failureKind: "json_parse",
-      error: (err as Error).message,
-    });
-    return null;
-  }
-  const compiled = compileSpineJs(source);
-  if (!compiled.ok) {
-    args.onStructuredFailure?.({
-      attempt: 1,
-      failureKind: "schema",
-      error: compiled.errors.join("; "),
-    });
-    return null;
-  }
-  const proposal = materializeProposal(compiled.raw, args.project, args.globalModel, args.testDocsCatalog);
-  if (!proposal) return null;
-  return { raw: compiled.raw, proposal };
+  return null;
 }
 
 export async function proposePipelineChange(

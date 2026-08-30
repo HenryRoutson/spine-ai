@@ -19,6 +19,8 @@ import {
   siteOptionsFromPersistence,
   stripHostedSiteFromSnapshot,
   withHostedSiteOnSnapshot,
+  hostedSiteSecretsFromSnapshot,
+  type HostedSiteSecrets,
 } from "./shared-link-persist";
 import { LOCAL_DEV_USER_ID, isLocalDevMode, type user_id_string } from "./require_auth";
 import {
@@ -43,6 +45,7 @@ import type { SharedLinkDefaultDoc, SharedLinkRecord, EmbedOptions, HostedSiteBr
 import { DEFAULT_EMBED_OPTIONS } from "@/lib/shared-link-types";
 import { isEmbedLinkId, normalizeEmbedOrigins } from "@/lib/server/embed_origins";
 import { isSiteLinkId, normalizeHostedSiteOptions } from "@/lib/hosted-site";
+import { markPendingIsolatedAlloc, mergePreservedSiteAlloc } from "@/lib/website-supabase-need";
 import { projectForFunction } from "@/lib/pipeline-functions"
 import { DEFAULT_WEBSITE_PIPELINE_ALIAS, nullableProjectId, pageOnlyProjectStub, resolveWebsitePipelineBindings, UNNAMED_WEBSITE_NAME } from "@/lib/website-pipelines"
 import { isUnnamedProjectName } from "@/lib/project-assistant-types";
@@ -132,9 +135,10 @@ async function supabaseForSharedLinks(): Promise<SupabaseClient | null> {
   return createAdminClient();
 }
 
-type StoredSharedLink = SharedLinkRecord & {
+export type StoredSharedLink = SharedLinkRecord & {
   ownerId: user_id_string;
   snapshot: Project;
+  hostedSiteSecrets?: HostedSiteSecrets;
 };
 
 type ProgressTokenEntry = {
@@ -259,6 +263,7 @@ function loadLocalLink(id: SharedLinkId): StoredSharedLink | null {
     siteOptions: siteOptionsFromPersistence(row.siteOptions, row.snapshot),
     viewerMarkdown: normalizeViewerMarkdown(row.viewerMarkdown),
     projectId: nullableProjectId(row.projectId),
+    hostedSiteSecrets: row.hostedSiteSecrets ?? hostedSiteSecretsFromSnapshot(row.snapshot),
   };
 }
 
@@ -267,8 +272,10 @@ function saveLocalLink(row: StoredSharedLink): void {
   writeFileSync(linkFile(row.id), JSON.stringify(row, null, 2));
 }
 
-function persistSnapshot(row: Pick<StoredSharedLink, "id" | "snapshot" | "siteOptions">): Project {
-  return isSiteLinkId(row.id) ? withHostedSiteOnSnapshot(row.snapshot, row.siteOptions) : row.snapshot;
+function persistSnapshot(row: Pick<StoredSharedLink, "id" | "snapshot" | "siteOptions" | "hostedSiteSecrets">): Project {
+  return isSiteLinkId(row.id)
+    ? withHostedSiteOnSnapshot(row.snapshot, row.siteOptions, row.hostedSiteSecrets ?? null)
+    : row.snapshot;
 }
 
 function storedFromDbRow(data: Record<string, unknown>): StoredSharedLink {
@@ -301,6 +308,7 @@ function storedFromDbRow(data: Record<string, unknown>): StoredSharedLink {
     allowedOrigins: originsFromRow(data.allowed_origins),
     embedOptions: normalizeEmbedOptions(data.embed_options),
     siteOptions: siteOptionsFromPersistence(data.site_options, snapshotRaw),
+    hostedSiteSecrets: hostedSiteSecretsFromSnapshot(snapshotRaw),
   };
 }
 
@@ -434,7 +442,7 @@ export async function publishSharedLink(input: PublishSharedLinkInput): Promise<
   const flatFeeCents = normalizeFlatFeeCents(input.flatFeeCents);
   assertValidSharedLinkPricing(fundingMode, billingMultiple, flatFeeCents);
   const embedOptions = normalizeEmbedOptions(isEmbed ? input.embedOptions : undefined);
-  const siteOptions = normalizeHostedSiteOptions(isSite ? input.siteOptions : undefined);
+  let siteOptions = normalizeHostedSiteOptions(isSite ? input.siteOptions : undefined);
   if (isSite && isUnnamedProjectName(siteOptions.brand.companyName)) {
     siteOptions.brand = { ...siteOptions.brand, companyName: UNNAMED_WEBSITE_NAME }
   }
@@ -444,6 +452,7 @@ export async function publishSharedLink(input: PublishSharedLinkInput): Promise<
 
   const source = input.project ?? pageOnlyProjectStub(siteOptions.brand.companyName || UNNAMED_WEBSITE_NAME);
   const snapshot = projectWithAuthoredModules(migrateProjectModules(structuredClone(source)));
+  if (isSite) siteOptions = markPendingIsolatedAlloc(siteOptions, snapshot);
   const defaultDocs: SharedLinkDefaultDoc[] = [];
   // AI : Vercel /tmp is optional — jsonb default_docs is the source of truth. A local write must not fail publish.
   const persistLocalFiles = !isServerless();
@@ -673,10 +682,11 @@ export async function updateSharedLinkSiteSettings(
     ...patch,
     brand: { ...link.siteOptions.brand, ...patch.brand },
   });
+  next.auth = mergePreservedSiteAlloc(link.siteOptions.auth, next.auth)
   if (!next.brand.companyName.trim()) {
     throw new Error("Hosted page requires a company name");
   }
-  link.siteOptions = next;
+  link.siteOptions = markPendingIsolatedAlloc(next, link.snapshot);
   saveLocalLink(link);
   const db = await supabaseForSharedLinks();
   if (db) {
@@ -701,7 +711,14 @@ export async function persistWebsitePipelineChange(
   const link = await getSharedLink(id);
   if (!link || link.ownerId !== ownerId) return null;
   if (!isSiteLinkId(link.id)) return null;
-  link.siteOptions = normalizeHostedSiteOptions(patch.siteOptions);
+  link.siteOptions = markPendingIsolatedAlloc(
+    (() => {
+      const next = normalizeHostedSiteOptions(patch.siteOptions)
+      next.auth = mergePreservedSiteAlloc(link.siteOptions.auth, next.auth)
+      return next
+    })(),
+    link.snapshot,
+  );
   link.projectId = patch.projectId;
   saveLocalLink(link);
   const db = await supabaseForSharedLinks();
@@ -728,6 +745,35 @@ export async function persistWebsitePipelineChange(
     }
   }
   return toPublicRecord(link);
+}
+
+export async function patchSiteSupabaseState(
+  id: SharedLinkId,
+  authPatch: Partial<HostedSiteOptions["auth"]>,
+  secrets?: HostedSiteSecrets | null,
+): Promise<StoredSharedLink | null> {
+  const link = await getSharedLink(id);
+  if (!link || !isSiteLinkId(link.id)) return null;
+  link.siteOptions = {
+    ...link.siteOptions,
+    auth: { ...link.siteOptions.auth, ...authPatch },
+  };
+  if (secrets === null) link.hostedSiteSecrets = undefined;
+  else if (secrets) link.hostedSiteSecrets = secrets;
+  saveLocalLink(link);
+  const db = await supabaseForSharedLinks();
+  if (db) {
+    const { error } = await persistOmittingUnknownColumns(
+      (payload) => db.from("shared_links").update(payload).eq("id", id),
+      { site_options: link.siteOptions, snapshot: persistSnapshot(link) },
+    );
+    if (error) {
+      if (isServerless() || (!isMissingSchemaError(error) && !/site_options/i.test(error.message ?? ""))) {
+        throw new Error(error.message);
+      }
+    }
+  }
+  return link;
 }
 
 export async function incrementSharedLinkRunCount(id: SharedLinkId): Promise<void> {

@@ -3,6 +3,7 @@ import { createSpineSession } from "@/lib/core/session"
 import { DEFAULT_MODEL } from "@/lib/types"
 import { runVibeWorkspaceChecks } from "@/lib/server/pipeline_assistant"
 import { buildVibeTopologyPromptBlock, parseThinkingTopology } from "@/lib/server/vibe-coding-topology"
+import { buildPipelineValidationErrorsPromptBlock } from "@/lib/server/assistant-prompt"
 import type { VibeWorkspaceDraft } from "@/lib/server/vibe-coding-workspace"
 
 function draft(modules: unknown[], models: unknown[]): VibeWorkspaceDraft {
@@ -33,6 +34,9 @@ describe("vibe topology prompt", () => {
     expect(buildVibeTopologyPromptBlock()).toMatch(/TOPOLOGY: <name>/)
     expect(buildVibeTopologyPromptBlock()).not.toMatch(/hundreds of unstructured receipts/)
     expect(buildVibeTopologyPromptBlock()).not.toMatch(/risks, parties, and dates/)
+    expect(buildPipelineValidationErrorsPromptBlock()).not.toMatch(/Receipts need/)
+    expect(buildPipelineValidationErrorsPromptBlock()).not.toMatch(/policy\+expenses/)
+    expect(buildPipelineValidationErrorsPromptBlock()).not.toMatch(/resumes\+job/)
   })
 
   it("PASS when I/O is valid — does not fail from task phrasing", () => {

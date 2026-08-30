@@ -19,6 +19,7 @@ export {}
 // AI : DONE (websites-m2m-P1-vibe) — website vibe = page studio full-width; pipeline Share is create/add website, not nested studio
 // AI : DONE (websites-m2m-P1-runtime) — public /site/{id} resolves alias → bound pipeline run
 // AI : DONE (websites-m2m-P1-workspace) — website chrome is Lovable (chat + preview + bindings). Inference/Schedule/Structures only after opening a bound pipeline.
+// AI : DONE (websites-m2m-P1-page-only-open) — picker Open on a site with no projectId enters website studio (stub project), not the pipelines tab
 
 // ---------------------------------------------------------------------------
 // P2 — HTML | React switch

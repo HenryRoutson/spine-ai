@@ -96,8 +96,10 @@ export async function recordAssistantBilling(
     throw err;
   }
 
-  input.store.addRun(input.projectId, buildAssistantRun(input));
-  await input.store.flush();
+  if (input.projectId) {
+    input.store.addRun(input.projectId, buildAssistantRun(input));
+    await input.store.flush();
+  }
   billLog.info(`assistant billed`, { projectId: input.projectId, usageCents });
   return usageCents;
 }

@@ -101,8 +101,9 @@ export function BackendWorkspace({
               <SupabaseConnectFields auth={siteAuth} onChange={onSiteAuthChange} />
             ) : (
               <p className="text-[10px] text-muted-foreground">
-                Bind your own Supabase from a hosted website&apos;s sign-in settings. These tables stay shared
-                across every website on this project.
+                Bind your own Supabase from a hosted website&apos;s sign-in settings, or let Spine
+                allocate a new Cloud project per website. Hosted SQL rows use that project
+                (`site:…`); builder runs still use `project:…` locally.
               </p>
             )}
           </div>
