@@ -58,6 +58,7 @@ export {}
 // ---------------------------------------------------------------------------
 // AI : DONE (platform-P7-supabase-byo) — schema pack + URL/key validation (Structures SQL / TUI backend)
 // AI : TODO (platform-P7-supabase-alloc) — allocate isolated Supabase project per hosted site
+// AI : DONE (platform-P7-sql-no-tmp) — Vercel hosted SQL throws if app_sql_rows is missing (no /tmp fallback)
 
 // ---------------------------------------------------------------------------
 // P8 — Payment and table slots

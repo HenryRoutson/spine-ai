@@ -6,7 +6,7 @@ import type { RateLimitKey } from "@/lib/rate_limit_config"
 import { parseSharedLinkId } from "@/lib/server/api_schemas"
 import { getSharedLink } from "@/lib/server/shared_links"
 import { appSqlScopeForSite, sqlSeedRowsOf, tableNameForModel } from "@/lib/app-sql"
-import { ensureAppSqlSeed, listAppSqlRows } from "@/lib/server/app_sql"
+import { AppSqlUnavailableError, ensureAppSqlSeed, listAppSqlRows } from "@/lib/server/app_sql"
 import { flattenPipelineModules } from "@/lib/fork-pipeline"
 import { storedFunctionsOnProject } from "@/lib/pipeline-functions"
 import { pkFieldOf } from "@/lib/sql-id-types"
@@ -41,7 +41,14 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string 
     : link.snapshot.models.find((row) => tableNameForModel(row) === table)
   const pkField = model ? pkFieldOf(model)?.name ?? "id" : "id"
   const seedRows = sqlMod ? sqlSeedRowsOf(sqlMod) : []
-  const rows = await ensureAppSqlSeed(scope, table, seedRows, pkField)
-  const listed = rows.length ? rows : await listAppSqlRows(scope, table)
-  return NextResponse.json({ table, rows: listed })
+  try {
+    const rows = await ensureAppSqlSeed(scope, table, seedRows, pkField)
+    const listed = rows.length ? rows : await listAppSqlRows(scope, table)
+    return NextResponse.json({ table, rows: listed })
+  } catch (err) {
+    if (err instanceof AppSqlUnavailableError) {
+      return apiError(err.message, HTTP.UNAVAILABLE, err.code)
+    }
+    throw err
+  }
 }

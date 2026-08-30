@@ -101,8 +101,9 @@ export function BackendWorkspace({
               <SupabaseConnectFields auth={siteAuth} onChange={onSiteAuthChange} />
             ) : (
               <p className="text-[10px] text-muted-foreground">
-                Bind your own Supabase from a hosted website&apos;s sign-in settings. These tables stay shared
-                across every website on this project.
+                Bind your own Supabase from a hosted website&apos;s sign-in settings. Hosted SQL
+                rows are scoped per website (`site:…`); builder runs use `project:…`. BYO keys are
+                stored, not used for auth or rows yet.
               </p>
             )}
           </div>

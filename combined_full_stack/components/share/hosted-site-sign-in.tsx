@@ -32,8 +32,9 @@ export function HostedSiteSignInCard({
     <div className="hs-auth-card">
       {custom ? (
         <p className="hs-auth-note">
-          Custom sign-in and data on a separate Supabase is not allocated yet. Project URL and keys are stored as
-          placeholders. Until a project instance is provisioned, Spine sign-in is used.
+          Custom sign-in on a separate Supabase is stored here but not used yet. Until we
+          provision a project per website, visitors still sign in with Spine. Hosted SQL
+          rows live in Spine `app_sql_rows` (scope `site:…`), not this BYO project.
         </p>
       ) : null}
       <form action={preview ? undefined : formAction} className="flex flex-col gap-3" onSubmit={preview ? (e) => e.preventDefault() : undefined}>

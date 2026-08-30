@@ -17,6 +17,7 @@ import { isMissingSchemaError } from "./supabase_store";
 import {
   persistOmittingUnknownColumns,
   siteOptionsFromPersistence,
+  SNAPSHOT_HOSTED_SITE_KEY,
   stripHostedSiteFromSnapshot,
   withHostedSiteOnSnapshot,
 } from "./shared-link-persist";
@@ -88,8 +89,19 @@ function snapshotForMarketplace(project: Project): Project {
   };
 }
 
-function listingKindOf(raw: unknown): MarketplaceListingKind {
-  return raw === "website" ? "website" : "pipeline";
+// AI : prod marketplace_listings.kind may not exist yet — website rows still carry snapshot.hostedSite.
+export function listingKindFromPersistence(raw: unknown, snapshot?: unknown): MarketplaceListingKind {
+  if (raw === "website") return "website";
+  if (raw === "pipeline") return "pipeline";
+  if (
+    snapshot &&
+    typeof snapshot === "object" &&
+    SNAPSHOT_HOSTED_SITE_KEY in (snapshot as object) &&
+    (snapshot as { hostedSite?: unknown }).hostedSite != null
+  ) {
+    return "website";
+  }
+  return "pipeline";
 }
 
 function snapshotHasPipeline(snapshot: Project): boolean {
@@ -155,7 +167,7 @@ function loadLocalListing(id: MarketplaceListingId): StoredListing | null {
   const path = listingFile(id);
   if (!existsSync(path)) return null;
   const raw = JSON.parse(readFileSync(path, "utf8")) as StoredListing;
-  const kind = listingKindOf(raw.kind);
+  const kind = listingKindFromPersistence(raw.kind, raw.snapshot);
   return {
     ...raw,
     kind,
@@ -179,7 +191,7 @@ function listLocalListings(): StoredListing[] {
 }
 
 function rowFromSupabase(data: Record<string, unknown>): StoredListing {
-  const kind = listingKindOf(data.kind);
+  const kind = listingKindFromPersistence(data.kind, data.snapshot);
   return {
     id: data.id as MarketplaceListingId,
     ownerId: data.owner_id as user_id_string,

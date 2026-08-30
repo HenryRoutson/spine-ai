@@ -21,7 +21,11 @@ type ApiUrl = string;
 const APP_URL: AppUrl =
   process.env.NEXT_PUBLIC_APP_URL ??
   (process.env.NODE_ENV === "development" ? "http://localhost:3000" : "https://www.spine-ai-app.dev/");
-const APP_LOGIN_URL: AppLoginUrl = "https://app.usespine.com/login?next=%2F";
+const APP_LOGIN_URL: AppLoginUrl =
+  process.env.NEXT_PUBLIC_APP_LOGIN_URL ??
+  (process.env.NODE_ENV === "development"
+    ? "http://localhost:3000/login?next=%2F"
+    : "https://www.spine-ai-app.dev/login?next=%2F");
 const SPINE_API_URL: ApiUrl =
   process.env.SPINE_API_URL ??
   process.env.NEXT_PUBLIC_API_URL ??

@@ -511,7 +511,7 @@ export function HostedSitePageStudio({
             {value.auth.provider === "custom_supabase" ? (
               <div className="grid gap-2 sm:grid-cols-2">
                 <div className="space-y-1">
-                  <Label className="text-[10px] text-muted-foreground">Project URL (placeholder)</Label>
+                  <Label className="text-[10px] text-muted-foreground">Project URL (stored, not allocated)</Label>
                   <Input
                     value={value.auth.customSupabaseUrl}
                     onChange={(e) => patchAuth({ customSupabaseUrl: e.target.value })}
@@ -520,17 +520,18 @@ export function HostedSitePageStudio({
                   />
                 </div>
                 <div className="space-y-1">
-                  <Label className="text-[10px] text-muted-foreground">Anon key (placeholder)</Label>
+                  <Label className="text-[10px] text-muted-foreground">Anon key (stored, not used)</Label>
                   <Input
                     value={value.auth.customSupabaseAnonKey}
                     onChange={(e) => patchAuth({ customSupabaseAnonKey: e.target.value })}
                     className="h-8 font-mono text-xs"
-                    placeholder="stored, not allocated yet"
+                    placeholder="eyJ..."
                   />
                 </div>
                 <p className="text-[10px] text-muted-foreground sm:col-span-2">
-                  Custom sign-in and data on a separate Supabase instance are not allocated yet. Keys are stored only.
-                  Live auth still uses Spine until a project instance is provisioned.
+                  Custom Supabase URL and anon key are stored on the website but not used for
+                  sign-in or SQL yet. Visitors still use Spine auth; hosted rows stay in Spine
+                  `app_sql_rows` (scope `site:…`).
                 </p>
               </div>
             ) : null}

@@ -27,6 +27,28 @@ let fileLoaded = false
 
 const log = logger("app-sql")
 
+export class AppSqlUnavailableError extends Error {
+  readonly code = "app_sql_unavailable" as const
+  constructor(detail?: string) {
+    super(
+      detail
+        ? `Hosted SQL is unavailable (${detail}). Apply pending Supabase migrations including public.app_sql_rows.`
+        : "Hosted SQL is unavailable. Apply pending Supabase migrations including public.app_sql_rows.",
+    )
+    this.name = "AppSqlUnavailableError"
+  }
+}
+
+// AI : Vercel /tmp is per-instance — never pretend file+memory is a durable website store.
+export function appSqlAllowsEphemeralFallback(): boolean {
+  return !process.env.VERCEL
+}
+
+function requireDurableAppSql(detail?: string): void {
+  if (testMode || appSqlAllowsEphemeralFallback()) return
+  throw new AppSqlUnavailableError(detail)
+}
+
 export function resetAppSqlForTests(): void {
   testMode = true
   fileLoaded = true
@@ -95,14 +117,22 @@ function memTable(scope: string, table: string): table_map {
 async function dbList(scope: string, table: string): Promise<sql_row[] | null> {
   if (testMode) return null
   const db = await createAdminClient()
-  if (!db) return null
+  if (!db) {
+    requireDurableAppSql("no service-role client")
+    return null
+  }
   const { data, error } = await db
     .from("app_sql_rows")
     .select("row_id, data")
     .eq("scope", scope)
     .eq("table_name", table)
   if (error) {
-    if (!isMissingSchemaError(error)) log.warn(`list failed`, { error: error.message })
+    if (isMissingSchemaError(error)) {
+      requireDurableAppSql(error.message)
+      return null
+    }
+    log.warn(`list failed`, { error: error.message })
+    requireDurableAppSql(error.message)
     return null
   }
   return (data ?? []).map((row) => ({
@@ -114,7 +144,10 @@ async function dbList(scope: string, table: string): Promise<sql_row[] | null> {
 async function dbDelete(scope: string, table: string, rowId: string): Promise<boolean> {
   if (testMode) return false
   const db = await createAdminClient()
-  if (!db) return false
+  if (!db) {
+    requireDurableAppSql("no service-role client")
+    return false
+  }
   const { error } = await db
     .from("app_sql_rows")
     .delete()
@@ -122,7 +155,12 @@ async function dbDelete(scope: string, table: string, rowId: string): Promise<bo
     .eq("table_name", table)
     .eq("row_id", rowId)
   if (error) {
-    if (!isMissingSchemaError(error)) log.warn(`delete failed`, { error: error.message })
+    if (isMissingSchemaError(error)) {
+      requireDurableAppSql(error.message)
+      return false
+    }
+    log.warn(`delete failed`, { error: error.message })
+    requireDurableAppSql(error.message)
     return false
   }
   return true
@@ -131,7 +169,10 @@ async function dbDelete(scope: string, table: string, rowId: string): Promise<bo
 async function dbUpsert(scope: string, table: string, rowId: string, data: sql_row): Promise<boolean> {
   if (testMode) return false
   const db = await createAdminClient()
-  if (!db) return false
+  if (!db) {
+    requireDurableAppSql("no service-role client")
+    return false
+  }
   const { error } = await db.from("app_sql_rows").upsert(
     {
       scope,
@@ -143,7 +184,12 @@ async function dbUpsert(scope: string, table: string, rowId: string, data: sql_r
     { onConflict: "scope,table_name,row_id" },
   )
   if (error) {
-    if (!isMissingSchemaError(error)) log.warn(`upsert failed`, { error: error.message })
+    if (isMissingSchemaError(error)) {
+      requireDurableAppSql(error.message)
+      return false
+    }
+    log.warn(`upsert failed`, { error: error.message })
+    requireDurableAppSql(error.message)
     return false
   }
   return true
@@ -175,7 +221,10 @@ export async function deleteAppSqlRow(
   const id = rowIdOf(row, pkField)
   memTable(scope, table).delete(id)
   const ok = await dbDelete(scope, table, id)
-  if (!ok) persistFile()
+  if (!ok) {
+    requireDurableAppSql()
+    persistFile()
+  }
   return row
 }
 
@@ -189,7 +238,10 @@ export async function upsertAppSqlRow(
   const next = { ...row }
   memTable(scope, table).set(id, next)
   const ok = await dbUpsert(scope, table, id, next)
-  if (!ok) persistFile()
+  if (!ok) {
+    requireDurableAppSql()
+    persistFile()
+  }
   return next
 }
 
