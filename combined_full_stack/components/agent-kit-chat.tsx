@@ -142,13 +142,18 @@ export function AgentKitChat(props: AgentKitChatProps) {
     }
     chat.setMessages(toAgentUiMessages(props.messages))
     hydratedChatIdRef.current = props.chatId
-  }, [chat, props.chatId, props.messages])
+  }, [chat.messages.length, chat.setMessages, props.chatId, props.messages])
 
   const busy = chat.status === "submitted" || chat.status === "streaming"
+  const onLoadingChangeRef = useRef(props.onLoadingChange)
+  onLoadingChangeRef.current = props.onLoadingChange
+  const lastBusyRef = useRef<boolean | null>(null)
 
   useEffect(() => {
-    props.onLoadingChange?.(busy)
-  }, [busy, props.onLoadingChange])
+    if (lastBusyRef.current === busy) return
+    lastBusyRef.current = busy
+    onLoadingChangeRef.current?.(busy)
+  }, [busy])
 
   useEffect(() => {
     if (!busy) {

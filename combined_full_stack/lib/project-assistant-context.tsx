@@ -656,13 +656,14 @@ export function ProjectAssistantProvider({ children }: { children: ReactNode }) 
         const setAssistantBusy = (busy: boolean) => {
           const targetId = resolveChatId(chatId)
           setAssistantBusyByChat((prev) => {
-            if (!busy && !(targetId in prev)) return prev
-            if (!busy) {
-              const next = { ...prev }
-              delete next[targetId]
-              return next
+            if (busy) {
+              if (prev[targetId]) return prev
+              return { ...prev, [targetId]: true }
             }
-            return { ...prev, [targetId]: true }
+            if (!(targetId in prev)) return prev
+            const next = { ...prev }
+            delete next[targetId]
+            return next
           })
         }
 
