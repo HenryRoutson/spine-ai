@@ -191,6 +191,7 @@ function serializeProjectPutBody(p: Project): string {
     llmProviders: p.llmProviders,
     documentation: p.documentation,
     langfuseExport: p.langfuseExport,
+    windmillExecute: p.windmillExecute,
     functions: p.functions?.length
       ? functionsOnProject(p).map((fn) => ({
           id: fn.id,

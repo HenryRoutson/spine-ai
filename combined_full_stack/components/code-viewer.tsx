@@ -24,6 +24,7 @@ export const CODE_LANG_LABEL: Record<CodeViewerLanguage, string> = {
   go: "Go",
   baml: "BAML",
   sql: "SQL",
+  json: "JSON Schema",
 }
 
 export const CODE_LANG_LINT_HINT: Record<CodeViewerLanguage, string> = {
@@ -33,6 +34,7 @@ export const CODE_LANG_LINT_HINT: Record<CodeViewerLanguage, string> = {
   go: "go build",
   baml: "baml generate",
   sql: "annotation",
+  json: "jsonschema",
 }
 
 export const MONACO_CODE_THEME = MONACO_VS_DARK_THEME

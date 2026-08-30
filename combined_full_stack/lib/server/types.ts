@@ -452,6 +452,7 @@ export interface Project {
   lastOpenedAt?: number; // AI : ms since epoch — updated when user opens/switches to this project
   documentation?: string; // AI : freeform markdown — prepended to every agent/assistant prompt call to prevent regressions
   langfuseExport?: boolean; // AI : when true + LANGFUSE_* env set, pipeline runs mirror to Langfuse as secondary telemetry
+  windmillExecute?: boolean; // AI : when true + WINDMILL_* env set, n8n/custom-code run on Windmill workers
   teamId?: import("@/lib/team-types").team_id_string; // AI : shared pointer — team members view/run this owner row; bills team owner
   teamReadOnly?: boolean; // AI : runtime — true when loaded via another member's ownership (pointer)
   teamProjectOwnerId?: import("./require_auth").user_id_string; // AI : runtime — owner's user_id for shared-pointer projects
