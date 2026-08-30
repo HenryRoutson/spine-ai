@@ -5,6 +5,7 @@ import { HTTP } from "@/lib/server/api-errors"
 import { cloneHostedSiteFromUrl, HostedSiteCloneError } from "@/lib/hosted-site-clone"
 import { normalizeHostedSiteOptions } from "@/lib/hosted-site"
 
+// AI : keep in sync with ROUTE_MAX_DURATION_ASSISTANT in lib/server/route-config.ts.
 export const maxDuration = 120
 
 export async function POST(req: NextRequest) {
