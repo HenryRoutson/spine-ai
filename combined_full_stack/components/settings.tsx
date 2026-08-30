@@ -76,6 +76,12 @@ import {
   readHideDeveloperTools,
   writeHideDeveloperTools,
 } from "@/lib/developer-tools-settings"
+import {
+  AGENT_CHAT_UI_KIT_META,
+  AGENT_CHAT_UI_KITS,
+  writeAgentChatUiKit,
+  useAgentChatUiKit,
+} from "@/lib/agent-chat-ui-settings"
 import { AppPrimarySection } from "@/lib/app-primary-section-labels"
 import { useMarkPrimarySectionReady } from "@/lib/primary-section-opening"
 
@@ -133,6 +139,7 @@ const SETTINGS_SECTIONS = [
   { id: "settings-data-cache", label: "Data cache", keywords: "clear storage browser" },
   { id: "settings-projects", label: "Projects", keywords: "quick delete picker list" },
   { id: "settings-developer", label: "Developer tools", keywords: "build vibe hide structures testing" },
+  { id: "settings-agent-chat", label: "Agent chat UI", keywords: "assistant-ui vercel ai sdk usechat thread current" },
   { id: "settings-mcp", label: "Editors (MCP)", keywords: "claude code cursor mcp tokens editor vibe" },
   { id: "settings-privacy", label: "Privacy", keywords: "data retention delete account" },
 ] as const
@@ -163,6 +170,7 @@ export function Settings() {
   const [colorScheme, setColorScheme] = useState<ColorSchemeId>(DEFAULT_COLOR_SCHEME)
   const [quickProjectDelete, setQuickProjectDelete] = useState(DEFAULT_QUICK_PROJECT_DELETE)
   const [hideDeveloperTools, setHideDeveloperTools] = useState(DEFAULT_HIDE_DEVELOPER_TOOLS)
+  const agentChatUiKit = useAgentChatUiKit()
   const [llmProvidersOpen, setLlmProvidersOpen] = useState(false)
   const [sectionQuery, setSectionQuery] = useState("")
   const { width: navWidth, setWidth: setNavWidth, commitWidth: commitNavWidth } =
@@ -643,6 +651,41 @@ export function Settings() {
                 </span>
               </span>
             </label>
+          </section>
+          ) : null}
+
+          {showSection("settings-agent-chat") ? (
+          <section id="settings-agent-chat" className="rounded-lg border border-border bg-card">
+            <div className="border-b border-border px-4 py-3">
+              <h3 className="text-sm font-semibold">Agent chat UI</h3>
+              <p className="mt-0.5 text-xs text-muted-foreground">
+                Compare chat chrome on the agent tabs. All three call the same billed pipeline agent; only the
+                stream protocol and widgets change. Current stays the default.
+              </p>
+            </div>
+            <div className="flex flex-col gap-1 p-2">
+              {AGENT_CHAT_UI_KITS.map((id) => {
+                const meta = AGENT_CHAT_UI_KIT_META[id]
+                const active = agentChatUiKit === id
+                return (
+                  <button
+                    key={id}
+                    type="button"
+                    onClick={() => writeAgentChatUiKit(id)}
+                    className={cn(
+                      "flex items-start gap-3 rounded-md px-3 py-2.5 text-left transition-colors",
+                      active ? "bg-secondary" : "hover:bg-secondary/50",
+                    )}
+                  >
+                    <span className="min-w-0 flex-1">
+                      <span className="block text-sm font-medium">{meta.label}</span>
+                      <span className="mt-0.5 block text-xs text-muted-foreground">{meta.description}</span>
+                    </span>
+                    {active && <Check className="mt-0.5 h-4 w-4 shrink-0 text-primary" />}
+                  </button>
+                )
+              })}
+            </div>
           </section>
           ) : null}
 

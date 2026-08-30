@@ -1130,6 +1130,27 @@ const chatTurnSchema = z.object({
   content: z.string().max(MAX_ASSISTANT_MESSAGE_CHARS),
 });
 
+const pendingProposalBodySchema = z
+  .object({
+    modules: z.array(z.unknown()).optional(),
+    models: z.array(z.unknown()).optional(),
+    typeAliases: z.array(z.unknown()).optional(),
+    docs: z.array(z.unknown()).optional(),
+    documentation: z.string().optional(),
+    projectName: z.string().optional(),
+    proposedActions: z.array(z.unknown()).optional(),
+    changed: z.object({
+      modules: z.boolean(),
+      models: z.boolean(),
+      typeAliases: z.boolean(),
+      docs: z.boolean(),
+      documentation: z.boolean(),
+      name: z.boolean().optional(),
+      actions: z.boolean().optional(),
+    }),
+  })
+  .optional();
+
 // AI : Paste chips serialize client-side into message as <pasted>…</pasted> (no schema field).
 export const assistantRequestBodySchema = z
   .object({
@@ -1141,32 +1162,26 @@ export const assistantRequestBodySchema = z
     uiContext: z.array(uiContextRefSchema).max(MAX_UI_CONTEXT_ITEMS).optional(),
     // AI : Vibe vs Build — prompt awareness only; never gates agent write power.
     humanSurface: z.enum(["vibe", "build"]).optional(),
-    pendingProposal: z
-      .object({
-        modules: z.array(z.unknown()).optional(),
-        models: z.array(z.unknown()).optional(),
-        typeAliases: z.array(z.unknown()).optional(),
-        docs: z.array(z.unknown()).optional(),
-        documentation: z.string().optional(),
-        projectName: z.string().optional(),
-        proposedActions: z.array(z.unknown()).optional(),
-        changed: z.object({
-          modules: z.boolean(),
-          models: z.boolean(),
-          typeAliases: z.boolean(),
-          docs: z.boolean(),
-          documentation: z.boolean(),
-          name: z.boolean().optional(),
-          actions: z.boolean().optional(),
-        }),
-      })
-      .optional(),
+    pendingProposal: pendingProposalBodySchema,
   })
   .strict()
   .refine(
     (d) => d.message.trim().length > 0 || (d.uiContext?.length ?? 0) > 0,
     { message: "message or uiContext required" },
   );
+
+// AI : Vercel AI SDK / assistant-ui POST — UIMessage[] plus Spine extras. Agent loop is unchanged.
+export const assistantChatSdkRequestBodySchema = z
+  .object({
+    id: z.string().max(128).optional(),
+    messages: z.array(z.unknown()).min(1).max(200),
+    projectId: projectIdSchema,
+    model: z.string().max(128).optional(),
+    humanSurface: z.enum(["vibe", "build"]).optional(),
+    message: z.string().max(MAX_ASSISTANT_MESSAGE_CHARS).optional(),
+    uiContext: z.array(uiContextRefSchema).max(MAX_UI_CONTEXT_ITEMS).optional(),
+    pendingProposal: pendingProposalBodySchema,
+  });
 
 export function formatZodError(err: z.ZodError): string {
   return err.issues.map((i) => i.message).join("; ") || "Invalid request body";

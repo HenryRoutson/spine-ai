@@ -16,6 +16,9 @@ import { formatSizeKb, sizeKbFromChars } from "@/lib/doc-size"
 import { DocLabel, ModuleKind, MODULE_META } from "@/lib/types"
 import { simpleKindBlurb } from "@/lib/plain-step-description"
 import { AssistantChat, type AssistantChatMessage } from "@/components/assistant-chat"
+import { AgentKitChat } from "@/components/agent-kit-chat"
+import { useAgentChatUiKit } from "@/lib/agent-chat-ui-settings"
+import { withProposalReviewFrom, liveProposalReviewFrom } from "@/lib/project-assistant-proposal"
 import { UiContextChip } from "@/components/ui-context-chip"
 import { Badge } from "@/components/ui/badge"
 import { buildAssistantMentionOptions, uiContextRefFromDoc } from "@/lib/assistant-mentions"
@@ -94,6 +97,7 @@ export function ProjectAssistant({ className, chatId, simple = false }: ProjectA
   // AI : Vibe vs Build — prompt awareness only; agent write power stays identical.
   const isVibe = simple || activeWindow === AppWindowId.Vibe
   const humanSurface = isVibe ? "vibe" : "build"
+  const chatUiKit = useAgentChatUiKit()
   const [filesUploading, setFilesUploading] = useState(false)
   const [uploadError, setUploadError] = useState<string | null>(null)
 
@@ -274,6 +278,7 @@ export function ProjectAssistant({ className, chatId, simple = false }: ProjectA
 
   return (
     <div className={cn("flex h-full flex-col", className)}>
+      {chatUiKit === "current" ? (
       <AssistantChat<ProjectProposal>
         key={chatId}
         chatId={resolvedChatId}
@@ -393,32 +398,89 @@ export function ProjectAssistant({ className, chatId, simple = false }: ProjectA
             void refresh()
           }
           if (data.proposal) {
-            data.proposal = {
-              ...data.proposal,
-              typeAliases: data.proposal.typeAliases ?? [],
-              docs: data.proposal.docs ?? [],
-              documentation: data.proposal.documentation ?? "",
-              reviewFrom: {
-                models,
-                modules,
-                typeAliases,
-              },
-              changed: data.proposal.changed ?? {
-                modules: true,
-                models: true,
-                typeAliases: (data.proposal.typeAliases?.length ?? 0) > 0,
-                docs: (data.proposal.docs?.length ?? 0) > 0,
-                documentation: false,
-                name: !!data.proposal.projectName,
-                actions: (data.proposal.proposedActions?.length ?? 0) > 0,
-              },
-              proposedActions: data.proposal.proposedActions,
-            }
+            data.proposal = withProposalReviewFrom(
+              data.proposal,
+              liveProposalReviewFrom({ models, modules, typeAliases }),
+            )
           }
           return data
         }}
         renderProposal={(m) => <ProjectProposalPreview msg={m} simple={isVibe} />}
       />
+      ) : (
+      <AgentKitChat
+        key={`${resolvedChatId}-${chatUiKit}`}
+        kit={chatUiKit}
+        chatId={resolvedChatId}
+        projectId={project.id}
+        model={globalModel}
+        humanSurface={humanSurface}
+        simple={isVibe}
+        readOnly={!isMine}
+        readOnlyHint={
+          teammateLabel ? `View only — ${teammateLabel}'s chat. Start a new chat to reply.` : undefined
+        }
+        initialMessage={PROJECT_ASSISTANT_INITIAL_MESSAGE}
+        placeholder="What do you want to build?"
+        loadingLabel={(phase) =>
+          isVibe
+            ? phase === "coding"
+              ? "writing files…"
+              : phase === "retrying"
+                ? "checking…"
+                : "working…"
+            : phase === "retrying"
+              ? "retrying…"
+              : phase === "coding"
+                ? "writing files…"
+                : phase === "structuring"
+                ? "designing project…"
+                : phase === "observing"
+                  ? "reading runs…"
+                  : "thinking…"
+        }
+        messages={messages}
+        onMessagesChange={setMessages}
+        onStreamingDraftChange={setStreamingDraft}
+        onLoadingChange={setAssistantBusy}
+        uiContextPins={uiContextPins}
+        canSendWithoutText={uiContextPins.length > 0}
+        onComposerAttachmentsConsumed={clearUiContextPins}
+        mentionOptions={isVibe ? undefined : mentionOptions}
+        onMentionPick={(option) => {
+          if (option.action === "select_ui") {
+            setOpen(true)
+            setSelectMode(true)
+            return
+          }
+          if (option.ref) pinUiContext(option.ref)
+        }}
+        onFilesSelected={(files) => void handleComposerFiles(files)}
+        filesUploading={filesUploading}
+        composerAttachments={
+          uiContextPins.length > 0 || uploadError ? (
+            <div className="space-y-1.5 border-b border-border bg-secondary/20 px-3 py-2">
+              {uploadError ? (
+                <p className="font-mono text-[10px] text-destructive">{uploadError}</p>
+              ) : null}
+              {uiContextPins.length > 0 ? (
+                <div className="flex flex-wrap gap-1.5">
+                  {uiContextPins.map((pin) => (
+                    <UiContextChip key={pin.id} pin={pin} onRemove={unpinUiContext} />
+                  ))}
+                </div>
+              ) : null}
+            </div>
+          ) : undefined
+        }
+        onApprove={async (msg) => {
+          if (!msg.proposal) return
+          await applyProposal(msg.proposal)
+        }}
+        onReject={() => {}}
+        renderProposal={(m) => <ProjectProposalPreview msg={m} simple={isVibe} />}
+      />
+      )}
     </div>
   )
 }
@@ -429,7 +491,7 @@ function changeKindLabel(kind: StructureModelDiffEntry["kind"]): string {
   return "modified"
 }
 
-function ProjectProposalPreview({
+export function ProjectProposalPreview({
   msg,
   simple = false,
 }: {

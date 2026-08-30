@@ -30,6 +30,7 @@ export const API_ROUTES = {
   cacheEntry: (key: string) => `/api/cache/${encodeURIComponent(key)}`,
   abtest: "/api/abtest",
   projectAssistant: "/api/project-assistant",
+  assistantChatSdk: "/api/assistant-chat-sdk",
   pipelineAssistant: "/api/pipeline-assistant",
   structureAssistant: "/api/structure-assistant",
   assistantChats: "/api/assistant-chats",

@@ -190,7 +190,7 @@ type ChatInputProps = {
   /** AI : allow send when textarea empty but chips exist. */
   canSend?: boolean
   // AI : Cursor-style paste chips — long/multiline paste → removable chip (not inline wrap).
-  // AI : Uses @assistant-ui/react SimpleTextAttachmentAdapter via pasted-attachment.ts.
+  // AI : Uses paste chips from pasted-attachment.ts (id + <pasted> wire form).
   // AI : Also consider: Prompt Kit PromptInput; TipTap atoms; Lexical DecoratorNode;
   // AI :   full ComposerPrimitive.Attachments once we migrate off this textarea.
   pastes?: PastedAttachment[]

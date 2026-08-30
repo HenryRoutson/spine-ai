@@ -2,6 +2,9 @@
 @import 'tw-animate-css';
 @import 'shadcn/tailwind.css';
 
+@source '../node_modules/@assistant-ui/react/dist/**/*.js';
+@source '../node_modules/@assistant-ui/core/dist/**/*.js';
+
 @custom-variant dark (&:is(.dark *));
 
 @theme inline {

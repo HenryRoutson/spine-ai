@@ -1,10 +1,6 @@
 // AI : Cursor-style paste chips for agent chat — UI chips, LLM sees <pasted>…</pasted>.
-// AI : Uses @assistant-ui/react SimpleTextAttachmentAdapter for id/name/pending shape (text File).
-// AI : Also consider later: Prompt Kit PromptInput attachments; TipTap atoms; Lexical DecoratorNode
-// AI :   (full ComposerRuntime / AttachmentPrimitive UI deferred — we keep textarea + chip row).
-// AI : adapter.send() wraps as <attachment> — we re-serialize as <pasted> for our prompt contract.
 
-import { SimpleTextAttachmentAdapter } from "@assistant-ui/react"
+import { uid } from "@/lib/id"
 
 export type PastedAttachmentId = string & { readonly __brand: "PastedAttachmentId" }
 
@@ -16,8 +12,6 @@ export type PastedAttachment = {
 
 /** AI : short pastes stay in the textarea; longer / multiline become chips. */
 export const PASTE_CHIP_MIN_CHARS = 20
-
-const textPasteAdapter = new SimpleTextAttachmentAdapter()
 
 export function shouldChipPaste(text: string): boolean {
   const t = text.replace(/\r\n/g, "\n")
@@ -32,11 +26,9 @@ function pasteFileName(text: string): string {
 
 export async function pastedAttachmentFromClipboardText(text: string): Promise<PastedAttachment> {
   const normalized = text.replace(/\r\n/g, "\n")
-  const file = new File([normalized], pasteFileName(normalized), { type: "text/plain" })
-  const pending = await textPasteAdapter.add({ file })
   return {
-    id: pending.id as PastedAttachmentId,
-    name: pending.name,
+    id: uid<PastedAttachmentId>("paste_"),
+    name: pasteFileName(normalized),
     text: normalized,
   }
 }

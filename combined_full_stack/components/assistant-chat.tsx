@@ -39,7 +39,7 @@ import {
   PastedChip,
 } from "@/components/ui/chat"
 
-// AI : pastes: Cursor-style chips via @assistant-ui/react SimpleTextAttachmentAdapter; wire form uses <pasted>.
+// AI : pastes: Cursor-style chips; wire form uses <pasted>.
 export type AssistantChatMessage<TProposal> = {
   id: string
   role: AssistantChatRole

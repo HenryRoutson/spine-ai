@@ -28,7 +28,9 @@
     "seed-llm": "tsx scripts/seed_llm_server.ts"
   },
   "dependencies": {
-    "@assistant-ui/react": "^0.15.13",
+    "@ai-sdk/react": "^4.0.87",
+    "@assistant-ui/ai-sdk": "^0.0.3",
+    "@assistant-ui/react": "^0.15.17",
     "@base-ui/react": "^1.5.0",
     "@langfuse/otel": "^5.10.0",
     "@langfuse/tracing": "^5.10.0",
@@ -41,6 +43,7 @@
     "@upstash/ratelimit": "^2.0.8",
     "@upstash/redis": "^1.38.0",
     "acorn": "^8.18.0",
+    "ai": "^7.0.84",
     "astring": "^1.9.0",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",

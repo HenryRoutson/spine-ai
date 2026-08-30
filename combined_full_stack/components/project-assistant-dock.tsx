@@ -16,6 +16,7 @@ import {
   useProjectAssistantSession,
   type AssistantChatSummary,
 } from "@/lib/project-assistant-context"
+import { AgentChatUiSwitcher } from "@/components/agent-chat-ui-switcher"
 import { PROJECT_ASSISTANT_INITIAL_MESSAGE } from "@/lib/project-assistant-types"
 import { useStore } from "@/lib/store"
 import { COPY_FEEDBACK_MS } from "@/lib/ui-timing"
@@ -174,6 +175,7 @@ export function ProjectAssistantDockPanel({ embedded = false }: ProjectAssistant
               {ownerSubtitle}
             </p>
           ) : null}
+          <AgentChatUiSwitcher compact />
           {embedded ? null : (
             <Button
               type="button"
