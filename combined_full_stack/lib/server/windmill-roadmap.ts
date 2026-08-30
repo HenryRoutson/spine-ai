@@ -13,5 +13,7 @@
 // AI : DONE (windmill-B-openflow) — compileProjectToOpenFlow (llm → aiagent output_schema, batch → forloopflow)
 // AI : DONE (windmill-C-sandbox) — n8n + custom-code/transform preview on Windmill when windmillExecute + WINDMILL_* set
 // AI : DONE (windmill-D-export) — {slug}_flow.json + schema.json in the pipeline zip; Structures JSON Schema tab
+// AI : DONE (vibe-workflow-as-code) — vibe authors Windmill-shaped TS (workflow/task/step); OpenFlow remains
+// AI :   the execution IR via compileProjectToOpenFlow. The model never emits the node/edge document.
 //
 export {}

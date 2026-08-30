@@ -4,6 +4,20 @@ A chronological record of product-direction prompts (user voice, not task-demo s
 
 ---
 
+## 2026-08-30 — Vibe authors TypeScript workflows as code, not OpenFlow JSON (this session)
+
+please rebuild the vibe coding logic. structured decoding isn't the issue, it's the errors and mistakes the model makes with a json format it's not familiar with. so that the model only has to output in javascript and not some random json schema.
+
+Diagnosis (keep these separate):
+
+- The IR has no prior. Models are fluent at typed TypeScript; they have seen almost none of the OpenFlow-shaped node/edge schema, so every generation is reasoned out fresh. Examples were supplying the prior pretraining never gave.
+- The success signal was too weak. "Validates against Zod" is not "does the thing." Empty flows, passthroughs, and hardcoded returns game a schema checker. Schema-validity is a weak proxy for correctness.
+- Recursive JSON Schema (branches holding arrays of nodes, nodes pointing at other IDs) is a sharp edge for the model and for structured-output tooling.
+
+Highest-leverage fix: stop asking the model to emit OpenFlow-shaped JSON. Have it write ordinary async TypeScript in the Windmill workflows-as-code shape (`workflow()`, `task()`, `step()`, plus familiar `generateObject({ schema, prompt })`). Compile/run/verify; compile errors come back until it is right. Only the typed run contract (OpenAPI / `.d.ts`) crosses to the React/Lovable-style frontend — never the internal IR. Close reward-hacking by running against two or three different inputs. Retrieve 1–3 nearest past-good examples per request instead of dumping the catalog. JSON IR stays the portable compile target (UI, exports, Python/Rust/Go); the model does not emit it.
+
+---
+
 ## 2026-08-29 — Full AI product spec (this session)
 
 ok combined_full_stack_specification.md Ln 1–80 is hand coded mostly, but i want a full AI version which is in complete detail. please build this

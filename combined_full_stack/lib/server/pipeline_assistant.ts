@@ -95,6 +95,7 @@ import {
 } from "./vibe-coding-harness";
 import { vibeJsAuthoringEnabled } from "./vibe-coding-mode";
 import { compileSpineJs, extractSpineJsSource } from "@/lib/spine-js/compile";
+import { semanticCheckProgram } from "@/lib/spine-js/semantic-check";
 import { buildSpineJsSystemPrompt, buildSpineJsUserPrompt } from "@/lib/spine-js/prompt";
 import { buildVibeTopologyPromptBlock } from "./vibe-coding-topology";
 
@@ -872,7 +873,34 @@ export function runVibeWorkspaceChecks(
       ...lintErrors.map((l) => `- ${l.stepLabel ?? l.structureName ?? l.code}: ${l.message}`),
     );
   }
-  if (ok) lines.push("I/O valid, custom-code compiled, lint clean.");
+  if (ok) {
+    const docs = (draft.docs ?? testDocsCatalog ?? []).map((d) => ({
+      name: "name" in d && typeof d.name === "string" ? d.name : "doc.txt",
+      content: "content" in d && typeof d.content === "string" ? d.content : "preview" in d && typeof d.preview === "string" ? d.preview : "",
+    }));
+    const suppliedDocs = Array.isArray(draft.docs);
+    const semantic = semanticCheckProgram({
+      program: {
+        modules: raw.modules ?? [],
+        models: raw.models ?? [],
+        message: raw.message,
+        docs: raw.docs,
+        documentationUpdate: raw.documentationUpdate,
+        projectNameUpdate: raw.projectNameUpdate,
+        targetFunctionName: raw.targetFunctionName ?? null,
+      },
+      docs: docs.length
+        ? docs
+        : [
+            { name: "a.txt", content: "alpha unique sample one" },
+            { name: "b.txt", content: "beta unique sample two" },
+          ],
+    }).filter((e) => suppliedDocs || !/two test files/i.test(e));
+    if (semantic.length) {
+      return `FAIL semantic\n${semantic.map((e) => `- ${e}`).join("\n")}`;
+    }
+    lines.push("I/O valid, custom-code compiled, lint clean.");
+  }
   return lines.join("\n");
 }
 
@@ -932,56 +960,82 @@ async function tryJsDirectAuthoring(args: {
   raw: z.infer<typeof assistantResponseSchema>;
   proposal: PipelineAssistantProposal;
 } | null> {
-  let text: string;
-  try {
-    text = await llmStreamString(
-      buildSpineJsUserPrompt({
-        task: args.task,
-        thinking: args.thinking,
-        extra: args.extraPrompt,
-        fixErrors: args.fixErrors,
-      }),
-      {
-        model: args.globalModel,
-        ledger: args.ledger,
-        system: buildSpineJsSystemPrompt(),
-        maxTokens: VIBE_THINKING_MAX_TOKENS,
-        onStructuredFailure: (detail) => {
-          args.onStructuredFailure?.({
-            attempt: detail.attempt,
-            failureKind: detail.kind,
-            error: detail.error,
-          });
+  // AI : compile errors come back as the next prompt — same loop Windmill wires into createScript.
+  let fix = args.fixErrors;
+  for (let attempt = 0; attempt < MAX_VALIDATION_RETRIES + 1; attempt++) {
+    let text: string;
+    try {
+      text = await llmStreamString(
+        buildSpineJsUserPrompt({
+          task: args.task,
+          thinking: args.thinking,
+          extra: args.extraPrompt,
+          fixErrors: fix,
+        }),
+        {
+          model: args.globalModel,
+          ledger: args.ledger,
+          system: buildSpineJsSystemPrompt(args.task),
+          maxTokens: VIBE_THINKING_MAX_TOKENS,
+          onStructuredFailure: (detail) => {
+            args.onStructuredFailure?.({
+              attempt: detail.attempt,
+              failureKind: detail.kind,
+              error: detail.error,
+            });
+          },
         },
-      },
-      args.onDelta ?? (() => {}),
-    );
-  } catch {
-    return null;
-  }
-  let source: string;
-  try {
-    source = extractSpineJsSource(text);
-  } catch (err) {
-    args.onStructuredFailure?.({
-      attempt: 1,
-      failureKind: "json_parse",
-      error: (err as Error).message,
+        args.onDelta ?? (() => {}),
+      );
+    } catch {
+      return null;
+    }
+    let source: string;
+    try {
+      source = extractSpineJsSource(text);
+    } catch (err) {
+      const error = (err as Error).message;
+      args.onStructuredFailure?.({
+        attempt: attempt + 1,
+        failureKind: "json_parse",
+        error,
+      });
+      fix = error;
+      continue;
+    }
+    const compiled = compileSpineJs(source);
+    if (!compiled.ok) {
+      const error = compiled.errors.join("\n");
+      args.onStructuredFailure?.({
+        attempt: attempt + 1,
+        failureKind: "schema",
+        error,
+      });
+      fix = error;
+      continue;
+    }
+    const semantic = semanticCheckProgram({
+      program: compiled.program,
+      docs: (compiled.program.docs ?? []).map((d) => ({ name: d.name, content: d.content })),
     });
-    return null;
+    if (semantic.length) {
+      const error = semantic.join("\n");
+      args.onStructuredFailure?.({
+        attempt: attempt + 1,
+        failureKind: "schema",
+        error,
+      });
+      fix = error;
+      continue;
+    }
+    const proposal = materializeProposal(compiled.raw, args.project, args.globalModel, args.testDocsCatalog);
+    if (!proposal) {
+      fix = "compile produced no pipeline — export const main = workflow(...)";
+      continue;
+    }
+    return { raw: compiled.raw, proposal };
   }
-  const compiled = compileSpineJs(source);
-  if (!compiled.ok) {
-    args.onStructuredFailure?.({
-      attempt: 1,
-      failureKind: "schema",
-      error: compiled.errors.join("; "),
-    });
-    return null;
-  }
-  const proposal = materializeProposal(compiled.raw, args.project, args.globalModel, args.testDocsCatalog);
-  if (!proposal) return null;
-  return { raw: compiled.raw, proposal };
+  return null;
 }
 
 export async function proposePipelineChange(
@@ -1105,7 +1159,7 @@ export async function proposePipelineChange(
       .filter((b) => b.trim())
       .join("\n");
 
-    // AI : SPINE_VIBE_HARNESS=1 turns the file loop on; miss falls back to few-shot JSON.
+    // AI : SPINE_VIBE_HARNESS=1 turns the file loop on; miss falls through to JS (default) or JSON (opt-out).
     if (!fixErrors && vibeHarnessEnabled()) {
       opts?.onPhase?.("coding");
       try {
@@ -1132,7 +1186,7 @@ export async function proposePipelineChange(
           if (raw.message && opts?.onMessageDelta) opts.onMessageDelta(raw.message);
         }
       } catch {
-        // AI : harness miss — few-shot JSON still runs so the flag cannot ship an empty reply.
+        // AI : harness miss — JS authoring still runs when enabled; JSON only when opted out.
       }
     }
 
@@ -1162,11 +1216,11 @@ export async function proposePipelineChange(
           opts?.onLlmResponse?.("js-authoring", { sourceChars: raw.message.length });
         }
       } catch {
-        // AI : JS miss — few-shot JSON still runs.
+        // AI : JS miss — do not fall back to OpenFlow JSON (that's the no-prior failure mode).
       }
     }
 
-    if (!harnessUsed && !jsUsed) {
+    if (!harnessUsed && !jsUsed && !vibeJsAuthoringEnabled()) {
       opts?.onPhase?.("structuring");
       const msgExtractor = opts?.onMessageDelta
         ? makeMessageExtractor(opts.onMessageDelta)
@@ -1221,7 +1275,21 @@ export async function proposePipelineChange(
     }
 
     if (!raw) {
-      throw new Error("assistant produced no response");
+      raw = {
+        message: vibeJsAuthoringEnabled()
+          ? "I couldn't compile a TypeScript workflow from that request. The next turn should fix the compile errors rather than emitting JSON."
+          : "I couldn't produce a valid pipeline JSON. Try the request again.",
+        modules: null,
+        modulePatch: null,
+        models: null,
+        typeAliases: null,
+        docs: null,
+        documentationUpdate: null,
+        projectNameUpdate: null,
+        targetFunctionName: null,
+        proposedActions: null,
+      };
+      proposal = null;
     }
 
     let retryCount = 0;

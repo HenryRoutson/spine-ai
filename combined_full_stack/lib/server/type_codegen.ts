@@ -9,6 +9,8 @@ import {
   pipelineStateTsInterface,
 } from "./pipeline_state";
 import type { Project, PipelineModule } from "./types";
+import { ModuleKind } from "./types";
+import { orderedInputModules } from "@/lib/inference-input";
 import {
   formatTypeExpr,
   labelToPyKey,
@@ -110,4 +112,20 @@ export function formatPipelineTypeSummary(project: Project): string {
     lines.push(`  ${field.label}: ${field.type ? formatTypeExpr(field.type, project.models) : "?"}`);
   }
   return lines.join("\n");
+}
+
+// AI : Lovable-style frontend contract — run() types only, never the node/edge IR.
+export function buildRunContractPromptBlock(project: Project): string {
+  const modelsDts = generateModelsDts(project.models, project.typeAliases ?? []);
+  const first = orderedInputModules(project.modules)[0];
+  const last = [...project.modules].reverse().find((m) => m.kind === ModuleKind.Output);
+  const inType = first ? stepSpineOutType(first) : undefined;
+  const outType = last ? stepSpineOutType(last) : undefined;
+  const inTs = inType ? typeExprToTs(inType, project.models) : "unknown";
+  const outTs = outType ? typeExprToTs(outType, project.models) : "unknown";
+  return `Typed backend contract (call run(); do not inspect the pipeline graph):
+${modelsDts}
+export type RunInput = ${inTs};
+export type RunOutput = ${outTs};
+export declare function run(input: RunInput): Promise<RunOutput>;`;
 }

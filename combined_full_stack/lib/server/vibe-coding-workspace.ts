@@ -11,6 +11,7 @@ import {
 import { buildVibeTopologyPromptBlock } from "./vibe-coding-topology"
 import { vibeJsAuthoringEnabled } from "./vibe-coding-mode"
 import { compileSpineJs } from "@/lib/spine-js/compile"
+import { programToContractDts, programToOpenApiJson } from "@/lib/spine-js/contract"
 import { buildSpineJsFewShotBlock } from "@/lib/spine-js/prompt"
 import { parseStructureHint } from "./assistant-shared"
 import { inputTypesAreAllJsonNative } from "@/lib/inference-input-core"
@@ -35,7 +36,7 @@ export const VIBE_HARNESS_MAX_FILE_CHARS = 48_000
 export const VIBE_HARNESS_MAX_FILES = 48
 export const VIBE_HARNESS_MAX_TOOLS_PER_TURN = 12
 
-const READONLY_PATHS = new Set(["AGENTS.md", "examples/few-shot.md"])
+const READONLY_PATHS = new Set(["AGENTS.md", "examples/few-shot.md", "contract.d.ts", "openapi.json"])
 
 export type VibeWorkspaceFiles = Map<string, string>
 
@@ -179,11 +180,29 @@ function testTypeFromName(name: string): "text" | "json" | "markdown" | "latex" 
 export function buildVibeAgentsMarkdown(): string {
   const js = vibeJsAuthoringEnabled()
   const pipelineFile = js
-    ? `- \`pipeline.js\` — ordinary JavaScript using the spine-js library (\`export default pipeline(...)\`). Each step function takes one object with a Zod \`schema\`. Caching / DAG / traces come from the library, not JSON fields. \`pipeline.json\` is ignored when pipeline.js is present.`
+    ? `- \`pipeline.ts\` — ordinary TypeScript: \`export const main = workflow(async (files) => { ... await task(fn)(file) })\`. Use \`generateObject({ schema, prompt })\` for LLM steps, \`task()\` for checkpointed jobs, \`step(name, fn)\` for custom-code. Do not write a JSON modules array. \`pipeline.json\` is ignored when pipeline.ts / pipeline.js is present.`
     : `- \`pipeline.json\` — FULL modules array for the **target function** (authoring format: names, not ids). Omit auto steps (Convert to text, Parse to structure, Link Quotes).`
   const examples = js
-    ? `- \`examples/spine-js.md\` — valid JS shapes. Read when unsure.`
+    ? `- \`examples/workflow.md\` — valid TypeScript shapes. Read when unsure. Full JSON schema is not in this file — compile errors come back from \`run_tests\`.`
     : `- \`examples/few-shot.md\` — valid JSON shapes. Read when unsure.`
+  const io = js
+    ? `- Linear left-to-right. Adjacent steps must agree on structure name and single vs list.
+- Write TypeScript — the compiler infers list vs item from \`for\` loops and \`Promise.all\`.
+- Blank projects already have Input + Output. Replace that pipeline; do not treat it as finished.
+- Input of pdf/word/image/web/text: Document, never a parsed model on the upload.
+- Many same-kind files → \`for (const file of files) rows.push(await task(fn)(file))\`.
+- Two different kinds → two workflow arguments.
+- Independent extracts → \`Promise.all([task(a)(doc), task(b)(doc)])\`.
+- custom-code via \`step("name", () => ...)\` is a TypeScript arrow. After quotes, use \`.text\`.`
+    : `- Linear left-to-right. Step N+1 consumes exactly what step N emits (name + single vs list).
+- \`structureIn\` is the **item** name (never \`list[...]\`).
+- \`structureOut\` for llm-batch / example-select / chunk: item name only (kind already emits a list).
+- \`structureOut\` for input / llm / custom-code: write \`list[Name]\` when the step emits a list.
+- Blank projects already have Input + Output. Replace that pipeline; do not treat it as finished.
+- Input of pdf/word/image/web/text: \`structureOut\` is Document or \`list[Document]\` — never a parsed model.
+- Many same-kind files → one input with \`list[Document]\` + llm-batch. Two different kinds → process first, then combine (raw side file immediately before combine) **or** assemble after both are parsed. Never a third upload.
+- Independent extracts on one input → fork + product join, not one mega-llm, not parallel. Lane llms \`structureIn\` is Document.
+- custom-code is a **TypeScript arrow** \`(rows) => …\`, never Python. After Link Quotes, quoted fields are \`{ text, quote }\` — use \`.text\`.`
   return `# Spine vibe coding workspace
 
 This is a **file workspace**, not a chat dump. Edit files, then \`run_tests\`. The user still has to Approve — write \`message.md\` in present/future tense ("I'll add…").
@@ -202,19 +221,12 @@ ${pipelineFile}
 - \`project.json\` — name + functions. Set \`targetFunctionName\` to add/edit a named function without replacing the unnamed / active function.
 - \`message.md\` — short user-facing proposal.
 - \`proposed_actions.json\` — optional \`[{ "type": "run_test" }]\` or \`run_inference\`.
+- \`contract.d.ts\` / \`openapi.json\` — typed \`run()\` contract for the frontend (server-written after compile). Read-only.
 ${examples}
-- \`VALIDATION.md\` — last \`run_tests\` output (server-written).
+- \`VALIDATION.md\` — last \`run_tests\` output (server-written). Compile errors are the tool result — fix the TypeScript.
 
 ## Spine I/O (this is what usually fails)
-- Linear left-to-right. Step N+1 consumes exactly what step N emits (name + single vs list).
-- \`structureIn\` is the **item** name (never \`list[...]\`).
-- \`structureOut\` for llm-batch / example-select / chunk: item name only (kind already emits a list).
-- \`structureOut\` for input / llm / custom-code: write \`list[Name]\` when the step emits a list.
-- Blank projects already have Input + Output. Replace that pipeline; do not treat it as finished.
-- Input of pdf/word/image/web/text: \`structureOut\` is Document or \`list[Document]\` — never a parsed model.
-- Many same-kind files → one input with \`list[Document]\` + llm-batch. Two different kinds → process first, then combine (raw side file immediately before combine) **or** assemble after both are parsed. Never a third upload.
-- Independent extracts on one input → fork + product join, not one mega-llm, not parallel. Lane llms \`structureIn\` is Document.
-- custom-code is a **TypeScript arrow** \`(rows) => …\`, never Python. After Link Quotes, quoted fields are \`{ text, quote }\` — use \`.text\`.
+${io}
 
 ## Topology
 ${buildVibeTopologyPromptBlock()}
@@ -222,7 +234,7 @@ ${buildVibeTopologyPromptBlock()}
 - Prompts are not templates — no \`{state.X}\`. Previous JSON is appended at runtime.
 
 ## Loop
-1. Read \`AGENTS.md\`, \`project.json\`, ${js ? "`pipeline.js`" : "`pipeline.json`"}.
+1. Read \`AGENTS.md\`, \`project.json\`, ${js ? "`pipeline.ts`" : "`pipeline.json`"}.
 2. Write structures, then pipeline, then tests, then docs.md / message.md.
 3. \`run_tests\`. Fix from \`VALIDATION.md\`. Repeat.
 4. \`done\` when checks are clean (or explain remaining issues in message.md).
@@ -246,6 +258,7 @@ export function isWritableVibePath(path: string): boolean {
   if (
     path === "pipeline.json" ||
     path === "pipeline.js" ||
+    path === "pipeline.ts" ||
     path === "project.json" ||
     path === "aliases.json" ||
     path === "docs.md" ||
@@ -288,7 +301,8 @@ export function seedVibeWorkspace(args: {
   files.set("AGENTS.md", buildVibeAgentsMarkdown())
   files.set("examples/few-shot.md", buildFewShotPromptBlock())
   if (vibeJsAuthoringEnabled()) {
-    files.set("examples/spine-js.md", buildSpineJsFewShotBlock())
+    files.set("examples/workflow.md", buildSpineJsFewShotBlock())
+    files.set("pipeline.ts", "")
     files.set("pipeline.js", "")
   }
   files.set(
@@ -452,17 +466,23 @@ export function parseVibeWorkspaceFiles(files: VibeWorkspaceFiles, seed: Record<
   const aliasesChanged = changedFromSeed(files, seed, "aliases.json")
   const pipelineJsonChanged = changedFromSeed(files, seed, "pipeline.json")
   const pipelineJsChanged = changedFromSeed(files, seed, "pipeline.js")
+  const pipelineTsChanged = changedFromSeed(files, seed, "pipeline.ts")
   const docsChanged = changedFromSeed(files, seed, "docs.md")
   const nameChanged = changedFromSeed(files, seed, "project.json") && !!projectNameUpdate
 
   let modulesOut: unknown[] | null = null
   let jsModels: unknown[] | null = null
   let jsMessage: string | null = null
+  let jsDocs: VibeWorkspaceDraft["docs"] | null = null
+  const tsSrc = files.get("pipeline.ts")
   const jsSrc = files.get("pipeline.js")
-  if (jsSrc?.trim() && (pipelineJsChanged || (vibeJsAuthoringEnabled() && !pipelineJsonChanged))) {
-    const compiled = compileSpineJs(jsSrc)
+  const authoringSrc = tsSrc?.trim() ? tsSrc : jsSrc
+  const authoringPath = tsSrc?.trim() ? "pipeline.ts" : "pipeline.js"
+  const authoringChanged = pipelineTsChanged || pipelineJsChanged
+  if (authoringSrc?.trim() && (authoringChanged || (vibeJsAuthoringEnabled() && !pipelineJsonChanged))) {
+    const compiled = compileSpineJs(authoringSrc)
     if (!compiled.ok) {
-      errors.push(...compiled.errors.map((e) => `pipeline.js: ${e}`))
+      errors.push(...compiled.errors.map((e) => `${authoringPath}: ${e}`))
     } else {
       modulesOut = compiled.program.modules
       jsModels = compiled.program.models
@@ -470,6 +490,15 @@ export function parseVibeWorkspaceFiles(files: VibeWorkspaceFiles, seed: Record<
       if (compiled.program.documentationUpdate && !docsChanged) {
         files.set("docs.md", compiled.program.documentationUpdate)
       }
+      if (compiled.program.docs?.length && !testsChanged) {
+        jsDocs = compiled.program.docs.map((d) => ({
+          name: d.name,
+          type: d.type,
+          content: d.content,
+        }))
+      }
+      files.set("contract.d.ts", programToContractDts(compiled.program))
+      files.set("openapi.json", programToOpenApiJson(compiled.program))
     }
   }
 
@@ -485,14 +514,14 @@ export function parseVibeWorkspaceFiles(files: VibeWorkspaceFiles, seed: Record<
     }
   }
 
-  const pipelineChanged = pipelineJsonChanged || pipelineJsChanged
+  const pipelineChanged = pipelineJsonChanged || pipelineJsChanged || pipelineTsChanged
 
   return {
     message: (files.get("message.md") ?? "").trim() || jsMessage || "",
     modules: pipelineChanged ? modulesOut : null,
     models: structuresChanged ? models : jsModels,
     typeAliases: aliasesChanged ? (aliases.ok && Array.isArray(aliases.value) ? aliases.value : []) : null,
-    docs: testsChanged ? docs : null,
+    docs: testsChanged ? docs : jsDocs,
     documentationUpdate: docsChanged ? (files.get("docs.md") ?? "") : null,
     projectNameUpdate: nameChanged ? projectNameUpdate : null,
     targetFunctionName,

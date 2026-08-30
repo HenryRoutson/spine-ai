@@ -1,7 +1,7 @@
 // AI : few-shot Example 1–5 as a catalog — seed + A/B score the same payloads the JSON prompt already teaches.
 import { buildFewShotPromptBlock } from "./assistant-prompt"
 import { vibeJsAuthoringEnabled } from "./vibe-coding-mode"
-import { payloadToSpineJs } from "@/lib/spine-js/payload-to-js"
+import { payloadToWorkflow } from "@/lib/spine-js/payload-to-workflow"
 
 export type VibeExampleTopology = "batch-map" | "explode" | "split-join" | "combine" | "assemble" | "fork"
 
@@ -141,6 +141,38 @@ export function matchVibeExample(text: string): VibeExampleTask | null {
   return null
 }
 
+const TOPOLOGY_HINTS: Record<VibeExampleTopology, string[]> = {
+  "batch-map": ["receipt", "excel", "spreadsheet", "hundreds", "vendor", "files"],
+  explode: ["action", "several", "per file", "items", "flatten", "meeting"],
+  "split-join": ["checklist", "each line", "bullet", "report", "summarize"],
+  combine: ["policy", "expense", "against", "audit"],
+  assemble: ["resume", "job", "skill", "match"],
+  fork: ["independently", "risks", "parties", "memo", "contract"],
+}
+
+function tokenize(text: string): string[] {
+  return text
+    .toLowerCase()
+    .split(/[^a-z0-9]+/)
+    .filter((t) => t.length > 2)
+}
+
+// AI : 1–3 nearest past-good examples per request — not an exact-task answer-key lookup.
+export function retrieveVibeExamples(task: string, k = 3): VibeExampleTask[] {
+  const tokens = new Set(tokenize(task))
+  const scored = vibeExampleTasks().map((ex) => {
+    const hay = tokenize(`${ex.prompt} ${ex.title} ${ex.topology} ${(TOPOLOGY_HINTS[ex.topology] ?? []).join(" ")}`)
+    let score = hay.filter((t) => tokens.has(t)).length
+    for (const hint of TOPOLOGY_HINTS[ex.topology] ?? []) {
+      if (task.toLowerCase().includes(hint)) score += 3
+    }
+    return { ex, score }
+  })
+  scored.sort((a, b) => b.score - a.score)
+  const positive = scored.filter((s) => s.score > 0)
+  return (positive.length ? positive : scored).slice(0, k).map((s) => s.ex)
+}
+
 export function exampleTopologyHit(task: VibeExampleTask, kinds: string[], _inputCount: number): boolean {
   switch (task.topology) {
     case "batch-map":
@@ -174,7 +206,7 @@ export function seedHarnessWriteTools(payload: VibeExamplePayload): Array<{
 }> {
   const tools: Array<{ tool: "write_file"; path: string; content: string }> = []
   if (vibeJsAuthoringEnabled()) {
-    tools.push({ tool: "write_file", path: "pipeline.js", content: payloadToSpineJs(payload) })
+    tools.push({ tool: "write_file", path: "pipeline.ts", content: payloadToWorkflow(payload) })
   } else {
     for (const model of payload.models) {
       const name =

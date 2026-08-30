@@ -21,6 +21,7 @@ import {
 } from "./vibe-coding-workspace"
 import { buildVibeTopologyPromptBlock } from "./vibe-coding-topology"
 import { vibeJsAuthoringEnabled } from "./vibe-coding-mode"
+import { buildSpineJsFewShotBlock } from "@/lib/spine-js/prompt"
 
 // AI : write_file first — generic schema fill uses enum[0]; list_dir-first is why seed scored 0.
 const HARNESS_TOOLS = ["write_file", "read_file", "run_tests", "list_dir", "delete_file", "done"] as const
@@ -93,7 +94,7 @@ export function executeVibeHarnessTool(
     if (!isWritableVibePath(path)) {
       return isReadonlyVibePath(path)
         ? `error: ${path} is read-only`
-        : `error: cannot write ${path} — allowed: pipeline.json, pipeline.js, structures/*.json, tests/*, docs.md, message.md, project.json, aliases.json, proposed_actions.json`
+        : `error: cannot write ${path} — allowed: pipeline.json, pipeline.js, pipeline.ts, structures/*.json, tests/*, docs.md, message.md, project.json, aliases.json, proposed_actions.json`
     }
     const content = call.content ?? ""
     if (content.length > VIBE_HARNESS_MAX_FILE_CHARS) {
@@ -179,7 +180,7 @@ export function applyHarnessTurn(
 function buildHarnessSystemPrompt(): string {
   const js = vibeJsAuthoringEnabled()
   const pipelineHint = js
-    ? `- Write pipeline.js (export default pipeline(...)). Each step function takes one object with a Zod schema. Cache / DAG / traces are library exports.`
+    ? `- Write pipeline.ts (export const main = workflow(async (files) => { ... })). generateObject + task + step. Compile errors from run_tests are the loop — fix the TypeScript. Do not write a JSON modules array.`
     : `- Write structures/*.json, pipeline.json, tests/*, docs.md, message.md. Up to 12 tools per turn; more files → next turn.`
   return `You are a coding agent editing a Spine project in an in-memory file workspace (OpenCode / Pi loop: write files, run_tests, repeat).
 
@@ -189,7 +190,7 @@ Tools: write_file, read_file, run_tests, list_dir, delete_file, done.
 - No shell, no network, no package installs. run_tests = parse → materialize → I/O validate → custom-code syntax → graph lint.
 - Workspace is RAM on this server. Never ask for API keys or write secrets.
 - AGENTS.md and examples/few-shot.md are read-only.
-- The first user message ALREADY includes AGENTS.md, project.json, and ${js ? "pipeline.js" : "pipeline.json"}. Do not spend a turn only on list_dir or read_file.
+- The first user message ALREADY includes AGENTS.md, project.json, and ${js ? "pipeline.ts" : "pipeline.json"}. Do not spend a turn only on list_dir or read_file.
 - Blank projects start with Input + Output — REPLACE the pipeline this turn. Do not leave only those two steps.
 - Many same-kind files (receipts, notes, invoices) → one input list[Document] + llm-batch (NOT a single llm).
 - Two different doc kinds (policy + company pack) → two inputs, parse each, then assemble or combine (side file immediately before combine).
@@ -204,7 +205,7 @@ ${pipelineHint}
 Example (copy the shape, change names for the task):
 ${
   js
-    ? `{"tools":[{"tool":"write_file","path":"pipeline.js","content":"const Row = model(\\"Row\\", { text: z.string() })\\nexport default pipeline(\\n  input({ schema: z.array(Document), type: \\"text\\", note: \\"Upload files.\\" }),\\n  llmBatch({ schema: Row, note: \\"One row per file.\\", prompt: \\"Extract the fields.\\" }),\\n  output({ schema: Row })\\n)\\n"},{"tool":"write_file","path":"tests/sample.txt","content":"Acme 12.00\\n"},{"tool":"write_file","path":"message.md","content":"I'll add a pipeline that extracts one row per file.\\n"}]}`
+    ? `{"tools":[{"tool":"write_file","path":"pipeline.ts","content":"import { z, model, workflow, task, generateObject } from \\"spine\\"\\n\\nconst Row = model(\\"Row\\", { text: z.string().describe(\\"Value\\") })\\n\\nasync function extractRow(doc: { filename: string; content?: string }) {\\n  return generateObject({ schema: Row, prompt: \\"Extract the fields.\\", note: \\"One row per file.\\" })\\n}\\n\\nexport const main = workflow(async (files: Array<{ filename: string; content?: string }>) => {\\n  const rows = []\\n  for (const file of files) rows.push(await task(extractRow)(file))\\n  return rows\\n})\\n"},{"tool":"write_file","path":"tests/sample.txt","content":"Acme 12.00\\n"},{"tool":"write_file","path":"tests/sample_2.txt","content":"Beta 9.00\\n"},{"tool":"write_file","path":"message.md","content":"I'll add a pipeline that extracts one row per file.\\n"}]}`
     : `{"tools":[{"tool":"write_file","path":"structures/Row.json","content":"{\\n  \\"name\\": \\"Row\\",\\n  \\"description\\": \\"One extracted row.\\",\\n  \\"fields\\": [{\\"name\\": \\"text\\", \\"type\\": \\"text\\", \\"optional\\": false, \\"description\\": \\"Value\\"}]\\n}\\n"},{"tool":"write_file","path":"pipeline.json","content":"[\\n  {\\"kind\\": \\"input\\", \\"label\\": \\"Files\\", \\"note\\": \\"Upload files.\\", \\"structureOut\\": \\"list[Document]\\", \\"inputType\\": \\"text\\", \\"inputDescription\\": \\"files\\"},\\n  {\\"kind\\": \\"llm-batch\\", \\"label\\": \\"Extract\\", \\"note\\": \\"One row per file.\\", \\"structureIn\\": \\"Document\\", \\"structureOut\\": \\"Row\\", \\"prompt\\": \\"Extract the fields.\\", \\"inputDescription\\": \\"files\\"},\\n  {\\"kind\\": \\"output\\", \\"label\\": \\"Rows\\", \\"structureIn\\": \\"Row\\", \\"structureOut\\": \\"Row\\", \\"inputDescription\\": \\"rows\\"}\\n]\\n"},{"tool":"write_file","path":"tests/sample.txt","content":"Acme 12.00\\n"},{"tool":"write_file","path":"message.md","content":"I'll add a pipeline that extracts one row per file.\\n"}]}`
 }
 `
@@ -221,9 +222,10 @@ function buildHarnessUserPrompt(args: {
     ? `\nPrior reasoning (do not repeat in message.md):\n${args.thinking.trim().slice(0, 6_000)}\n`
     : ""
   const first = args.turn === 0
+  const examples = first && vibeJsAuthoringEnabled() ? `\n${buildSpineJsFewShotBlock(args.task)}\n` : ""
   return `Turn ${args.turn + 1}/${VIBE_HARNESS_MAX_TURNS}
 Task: ${args.task}
-${first ? `${buildVibeTopologyPromptBlock()}\n` : ""}${thinking}${args.extra}
+${first ? `${buildVibeTopologyPromptBlock()}\n` : ""}${thinking}${args.extra}${examples}
 ${first ? "Write files this turn (do not only list_dir / read_file). Replace the stub Input + Output. Pick TOPOLOGY first." : "Continue from the tool results. If VALIDATION.md is FAIL, fix files. If PASS, done. Empty tools is not done."}
 
 ${first ? "Workspace (already loaded):" : "Last tool results:"}
@@ -261,6 +263,7 @@ export async function runVibeCodingHarness(args: {
     `AGENTS.md\n${workspace.files.get("AGENTS.md") ?? ""}`,
     `project.json\n${workspace.files.get("project.json") ?? ""}`,
     `pipeline.json\n${workspace.files.get("pipeline.json") ?? ""}`,
+    `pipeline.ts\n${workspace.files.get("pipeline.ts") ?? "(none)"}`,
     `pipeline.js\n${workspace.files.get("pipeline.js") ?? "(none)"}`,
   ].join("\n\n")
   const toolLog: string[] = []
@@ -323,6 +326,7 @@ export async function runVibeCodingHarness(args: {
     lastResults = [
       `Files: ${listVibePaths(workspace.files).join(", ")}`,
       `pipeline.json\n${workspace.files.get("pipeline.json") ?? "[]"}`,
+      `pipeline.ts\n${workspace.files.get("pipeline.ts") ?? "(none)"}`,
       `pipeline.js\n${workspace.files.get("pipeline.js") ?? "(none)"}`,
       `VALIDATION.md\n${workspace.files.get("VALIDATION.md") ?? "(not run)"}`,
       toolLog.slice(-12).join("\n\n"),

@@ -75,6 +75,20 @@ describe("hosted site UI vibe agent prompts", () => {
     expect(user).not.toContain("return steal()")
   })
 
+  it("react runtime gets a typed run() contract and still never sees prompts or code", () => {
+    const user = buildHostedSiteAssistantUserPrompt({
+      project: PROJECT,
+      siteOptions: { ...OPTIONS, runtime: "react" },
+      message: "Make a purple hero",
+      history: [],
+    })
+    expect(user).toContain("export declare function run")
+    expect(user).toContain("RunInput")
+    expect(user).not.toContain("SYSTEM PROMPT SECRET")
+    expect(user).not.toContain("return steal()")
+    expect(user).not.toContain("INTERNAL")
+  })
+
   it("keeps {{run}} if the model forgets it", () => {
     const next = applyHostedSiteAssistantPatch(OPTIONS, {
       message: "ok",

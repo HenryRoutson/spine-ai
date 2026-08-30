@@ -2,7 +2,7 @@
 // AI : Schema-aware fill from prompt context so UI (schema-first) and exports (schema-last) match.
 import { seedHarnessWriteTools } from "../vibe-coding-examples";
 import { isSpineJsAuthoringPrompt } from "@/lib/spine-js/compile";
-import { payloadToSpineJs } from "@/lib/spine-js/payload-to-js";
+import { payloadToWorkflow } from "@/lib/spine-js/payload-to-workflow";
 
 export type JsonSchemaNode = {
   type?: string | string[];
@@ -281,7 +281,10 @@ function seedNotesProposalPayload(title: string, named: string | null, unnamed: 
     modulePatch: null,
     models: [seedNotesModel()],
     typeAliases: null,
-    docs: [{ name: "sample_note.txt", type: "text", content: "Buy milk. Call Alex about Friday." }],
+    docs: [
+      { name: "sample_note.txt", type: "text", content: "Buy milk. Call Alex about Friday." },
+      { name: "sample_note_2.txt", type: "text", content: "Ship the deck. Review the hiring plan." },
+    ],
     documentationUpdate: `# ${title}\n\nSummarizes pasted notes.`,
     projectNameUpdate: !named && unnamed ? "Notes" : null,
     targetFunctionName: named,
@@ -325,7 +328,8 @@ function seedVibeHarnessReply(prompt: string): string | null {
   const named = seedNamedFunctionFromPrompt(userRequest);
   // AI : always the notes stub — never the matching few-shot payload (reward hacking).
   const payload = seedNotesProposalPayload(named || "Notes", named, /\bUntitled Pipeline\b/.test(prompt));
-  const wrotePipeline = /wrote pipeline\.json/i.test(prompt) || /wrote pipeline\.js/i.test(prompt);
+  const wrotePipeline =
+    /wrote pipeline\.json/i.test(prompt) || /wrote pipeline\.js/i.test(prompt) || /wrote pipeline\.ts/i.test(prompt);
   const ranTests = /\$ run_tests\b/i.test(prompt);
   const passed = /^PASS\b/m.test(prompt);
   if (wrotePipeline && (passed || ranTests)) {
@@ -346,19 +350,20 @@ function seedSpineJsReply(prompt: string): string | null {
   const named = seedNamedFunctionFromPrompt(userRequest);
   // AI : same notes stub as JSON/harness — do not compile the few-shot answer key.
   const payload = seedNotesProposalPayload(named || "Notes", named, /\bUntitled Pipeline\b/.test(prompt));
-  return payloadToSpineJs(payload);
+  return payloadToWorkflow(payload);
 }
 
 /** Deterministic chat completion body for a single prompt. */
 export function seedLlmReply(prompt: string, jsonMode = true): string {
-  const assistant = seedProjectAssistantReply(prompt);
-  if (assistant) return assistant;
+  // AI : harness / workflow prompts include project-context field names; do not fill the JSON assistant schema instead.
   const observe = seedObservePlanReply(prompt);
   if (observe) return observe;
   const harness = seedVibeHarnessReply(prompt);
   if (harness) return harness;
   const js = seedSpineJsReply(prompt);
   if (js) return js;
+  const assistant = seedProjectAssistantReply(prompt);
+  if (assistant) return assistant;
   const schema = extractJsonSchemaFromPrompt(prompt);
   const context = extractContextFromPrompt(prompt);
   if (schema && !schemaIsEmpty(schema)) {

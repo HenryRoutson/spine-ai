@@ -81,6 +81,8 @@ function scoreTask(ex: VibeExampleTask, mode: Mode, result: Awaited<ReturnType<t
 }
 
 async function runMode(mode: Mode, ex: VibeExampleTask): Promise<VibeAbScore> {
+  // AI : this file compares JSON-direct vs JSON-harness; JS is the product default — pin json here.
+  process.env.SPINE_VIBE_AUTHORING = "json"
   process.env.SPINE_VIBE_HARNESS = mode === "harness" ? "1" : "0"
   const session = createSpineSession()
   session.addProject({ open: true })
@@ -174,10 +176,12 @@ function writeAbArtifacts(name: string, title: string, note: string, rows: VibeA
 describe("vibe json vs file-harness A/B (seed LLM)", () => {
   const prevProvider = process.env.LLM_PROVIDER
   const prevHarness = process.env.SPINE_VIBE_HARNESS
+  const prevAuth = process.env.SPINE_VIBE_AUTHORING
   const rows: VibeAbScore[] = []
 
   beforeAll(() => {
     process.env.LLM_PROVIDER = "seed"
+    process.env.SPINE_VIBE_AUTHORING = "json"
     clearLlmProviderCache()
   })
 
@@ -186,6 +190,8 @@ describe("vibe json vs file-harness A/B (seed LLM)", () => {
     else process.env.LLM_PROVIDER = prevProvider
     if (prevHarness === undefined) delete process.env.SPINE_VIBE_HARNESS
     else process.env.SPINE_VIBE_HARNESS = prevHarness
+    if (prevAuth === undefined) delete process.env.SPINE_VIBE_AUTHORING
+    else process.env.SPINE_VIBE_AUTHORING = prevAuth
     clearLlmProviderCache()
     writeAbArtifacts(
       "vibe-ab-seed-no-lookup",
@@ -221,10 +227,12 @@ describe("vibe json vs file-harness A/B (seed LLM)", () => {
 describe.skipIf(!hasLiveOpenRouterKey())("vibe json vs file-harness A/B (OpenRouter, all examples)", () => {
   const prevProvider = process.env.LLM_PROVIDER
   const prevHarness = process.env.SPINE_VIBE_HARNESS
+  const prevAuth = process.env.SPINE_VIBE_AUTHORING
   const rows: VibeAbScore[] = []
 
   beforeAll(() => {
     delete process.env.LLM_PROVIDER
+    process.env.SPINE_VIBE_AUTHORING = "json"
     clearLlmProviderCache()
   })
 
@@ -233,6 +241,8 @@ describe.skipIf(!hasLiveOpenRouterKey())("vibe json vs file-harness A/B (OpenRou
     else process.env.LLM_PROVIDER = prevProvider
     if (prevHarness === undefined) delete process.env.SPINE_VIBE_HARNESS
     else process.env.SPINE_VIBE_HARNESS = prevHarness
+    if (prevAuth === undefined) delete process.env.SPINE_VIBE_AUTHORING
+    else process.env.SPINE_VIBE_AUTHORING = prevAuth
     clearLlmProviderCache()
     writeAbArtifacts(
       "vibe-ab-openrouter",

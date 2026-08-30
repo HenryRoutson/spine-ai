@@ -1,4 +1,5 @@
 // AI : compile LLM JavaScript into the JSON authoring IR. Library bindings only — no fs/process.
+import ts from "typescript"
 import {
   assistantResponseSchema,
   type AssistantResponseRaw,
@@ -32,6 +33,18 @@ import {
 } from "./api"
 import { model } from "./zod-models"
 import { z } from "zod"
+import {
+  beginWorkflowProgram,
+  Document,
+  generateObject,
+  isWorkflowAuthoringSource,
+  step,
+  stripAsyncAwait,
+  takeLastWorkflowProgram,
+  task,
+  tracingPromiseAll,
+  workflow,
+} from "./workflow"
 
 export type SpineJsCompileOk = {
   ok: true
@@ -71,10 +84,12 @@ const BINDINGS = {
   sql,
   chatbot,
   webhook,
-  Document: model("Document", {
-    content: z.string().optional(),
-    filename: z.string(),
-  }),
+  workflow,
+  task,
+  step,
+  generateObject,
+  Document,
+  __promiseAll: tracingPromiseAll,
 }
 
 function rewriteSpineJsSource(source: string): string {
@@ -87,12 +102,34 @@ function rewriteSpineJsSource(source: string): string {
   return s
 }
 
+function transpileAuthoring(source: string): { ok: true; js: string } | { ok: false; errors: string[] } {
+  const result = ts.transpileModule(source, {
+    compilerOptions: {
+      module: ts.ModuleKind.ESNext,
+      target: ts.ScriptTarget.ES2019,
+      isolatedModules: true,
+      skipLibCheck: true,
+      strict: false,
+    },
+    fileName: "pipeline.ts",
+    reportDiagnostics: true,
+  })
+  const errors = (result.diagnostics ?? []).filter((d) => d.category === ts.DiagnosticCategory.Error)
+  if (errors.length) {
+    return {
+      ok: false,
+      errors: errors.slice(0, 12).map((d) => ts.flattenDiagnosticMessageText(d.messageText, "\n")),
+    }
+  }
+  return { ok: true, js: result.outputText }
+}
+
 export function extractSpineJsSource(raw: string): string {
   const fenced = raw.match(/```(?:javascript|js|typescript|ts)?\s*([\s\S]*?)```/i)
   if (fenced?.[1]) return fenced[1].trim()
   const trimmed = raw.trim()
-  if (/\b(pipeline|input|llmBatch|llm)\s*\(/.test(trimmed)) return trimmed
-  throw new Error("no JavaScript pipeline found — expected export default pipeline(...) or a ```js fence")
+  if (/\b(pipeline|input|llmBatch|llm|workflow|generateObject|task)\s*\(/.test(trimmed)) return trimmed
+  throw new Error("no JavaScript pipeline found — expected export const main = workflow(...) or a ```ts fence")
 }
 
 function asDocs(value: unknown): SpineProgram["docs"] {
@@ -101,35 +138,39 @@ function asDocs(value: unknown): SpineProgram["docs"] {
 }
 
 function programFromExports(exports: Record<string, unknown>, captured: SpineProgram | undefined): SpineProgram | undefined {
-  const def = exports.default
-  if (def && typeof def === "object" && Array.isArray((def as SpineProgram).modules)) {
-    return def as SpineProgram
+  const def = exports.default ?? exports.main
+  const base =
+    def && typeof def === "object" && Array.isArray((def as SpineProgram).modules)
+      ? (def as SpineProgram)
+      : captured
+  if (!base) return undefined
+  return {
+    ...base,
+    message: typeof exports.message === "string" ? exports.message : base.message,
+    docs: asDocs(exports.docs) ?? base.docs,
+    documentationUpdate:
+      typeof exports.documentation === "string" ? exports.documentation : base.documentationUpdate,
+    projectNameUpdate:
+      typeof exports.projectName === "string" ? exports.projectName : base.projectNameUpdate,
+    targetFunctionName:
+      typeof exports.targetFunctionName === "string" ? exports.targetFunctionName : base.targetFunctionName,
   }
-  if (captured) {
-    return {
-      ...captured,
-      message: typeof exports.message === "string" ? exports.message : captured.message,
-      docs: asDocs(exports.docs) ?? captured.docs,
-      documentationUpdate:
-        typeof exports.documentation === "string" ? exports.documentation : captured.documentationUpdate,
-      projectNameUpdate:
-        typeof exports.projectName === "string" ? exports.projectName : captured.projectNameUpdate,
-      targetFunctionName:
-        typeof exports.targetFunctionName === "string" ? exports.targetFunctionName : captured.targetFunctionName,
-    }
-  }
-  return undefined
 }
 
 export function compileSpineJs(source: string): SpineJsCompileResult {
   beginSpineJsProgram()
-  const rewritten = rewriteSpineJsSource(source)
+  beginWorkflowProgram()
+  const transpiled = transpileAuthoring(source)
+  if (!transpiled.ok) return transpiled
+  const workflowSrc = isWorkflowAuthoringSource(source)
+  const prepared = workflowSrc ? stripAsyncAwait(transpiled.js) : transpiled.js
+  const rewritten = rewriteSpineJsSource(prepared)
   const names = Object.keys(BINDINGS)
-  const values = Object.values(BINDINGS)
   const body = `"use strict";
 const process = undefined;
 const require = undefined;
-const { ${names.join(", ")} } = spine;
+const Promise = { all: spine.__promiseAll, resolve: globalThis.Promise.resolve.bind(globalThis.Promise), reject: globalThis.Promise.reject.bind(globalThis.Promise) };
+const { ${names.filter((n) => n !== "__promiseAll").join(", ")} } = spine;
 ${rewritten}
 return __spine;`
   let exportsObj: Record<string, unknown>
@@ -146,9 +187,16 @@ return __spine;`
     }
     return { ok: false, errors: [`compile: ${(err as Error).message}`] }
   }
-  const program = programFromExports(exportsObj, takeLastSpineProgram())
+  const program = programFromExports(exportsObj, takeLastWorkflowProgram() ?? takeLastSpineProgram())
   if (!program?.modules?.length) {
-    return { ok: false, errors: ["compile: pipeline() was not called"] }
+    return {
+      ok: false,
+      errors: [
+        workflowSrc
+          ? "compile: workflow() was not called — export const main = workflow(async (files) => { ... })"
+          : "compile: pipeline() was not called",
+      ],
+    }
   }
   const rawParsed = assistantResponseSchema.safeParse({
     message: program.message || "I'll add this pipeline.",
@@ -173,9 +221,12 @@ return __spine;`
 
 export function isSpineJsAuthoringPrompt(prompt: string): boolean {
   return (
+    prompt.includes("export const main = workflow") ||
     prompt.includes("export default pipeline") ||
+    prompt.includes("generateObject") ||
     prompt.includes("spine-js") ||
     prompt.includes("pipeline.js") ||
-    (prompt.includes("from \"spine\"") && prompt.includes("pipeline("))
+    prompt.includes("pipeline.ts") ||
+    (prompt.includes("from \"spine\"") && (prompt.includes("pipeline(") || prompt.includes("workflow(")))
   )
 }

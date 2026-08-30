@@ -1,52 +1,46 @@
-// AI : JS authoring prompts — LLM writes normal JS; compileSpineJs converts to JSON IR.
+// AI : JS authoring prompts — LLM writes ordinary async TypeScript; compileSpineJs traces workflow/task into JSON IR.
 import { buildVibeTopologyPromptBlock } from "@/lib/server/vibe-coding-topology"
-import { payloadToSpineJs } from "./payload-to-js"
-import { vibeExampleTasks } from "@/lib/server/vibe-coding-examples"
+import { payloadToWorkflow } from "./payload-to-workflow"
+import { retrieveVibeExamples, vibeExampleTasks } from "@/lib/server/vibe-coding-examples"
 
-export function buildSpineJsFewShotBlock(): string {
-  const tasks = vibeExampleTasks()
-  const first = tasks.find((t) => t.id === "ex1") ?? tasks[0]
-  if (!first) return ""
-  return `Example (copy the shape, change names for the task):
-Task: "${first.prompt}"
-\`\`\`js
-${payloadToSpineJs(first.payload)}
-\`\`\`
-`
+export function buildSpineJsFewShotBlock(task?: string): string {
+  const examples = task?.trim() ? retrieveVibeExamples(task, 3) : [vibeExampleTasks().find((t) => t.id === "ex1") ?? vibeExampleTasks()[0]].filter(Boolean)
+  if (!examples.length) return ""
+  const blocks = examples.map(
+    (ex) => `Task: "${ex.prompt}"
+\`\`\`ts
+${payloadToWorkflow(ex.payload)}
+\`\`\``,
+  )
+  return `Nearest working examples (copy the TypeScript shape, change names for the task):\n${blocks.join("\n\n")}\n`
 }
 
-export function buildSpineJsSystemPrompt(): string {
-  return `You are authoring a Spine pipeline in ordinary JavaScript using the spine-js library (not custom JSON).
+export function buildSpineJsSystemPrompt(task?: string): string {
+  return `You are authoring a Spine pipeline in ordinary TypeScript (Windmill-style workflows as code). Do not emit a JSON modules array or OpenFlow graph.
 
-Write a JS module. Do not return a modules JSON array.
+API:
+import { z, model, workflow, task, step, generateObject, Document } from "spine"
 
-API — every step function takes ONE object (parsed by Zod). Put the I/O Zod schema in \`schema\`:
-- model("Name", { field: z.string().describe("...") })
-- input({ schema, note, type, label? })  // non-JSON types must use Document or z.array(Document)
-- llm({ schema, note, prompt, in? })
-- llmBatch({ schema, note, prompt, in? })  // schema is the ITEM type; kind already emits a list
-- customCode({ schema, code, note?, in? })  // code is a TypeScript arrow (rows) => ...
-- combine({ in, note, label? })  // in is the state structure, not list[...]
-- assemble({ bindings, note })
-- fork({ note, join, branches: [{ label, steps: [...] }] })  // at least 2 lanes
-- output({ schema })
-- pipeline(...steps) as export default
+- model("Name", { field: z.string().describe("...") }) — Zod schema with a name
+- generateObject({ schema, prompt, note? }) — structured LLM call (Vercel AI SDK shape)
+- task(fn) — checkpointed job; types come from fn's signature
+- step("name", () => ...) — inline custom-code (split, flatten, join)
+- workflow(async (input) => { ... }) as export const main
+- for (const item of files) { rows.push(await task(fn)(item)) } — many files → batch
+- Promise.all([task(a)(doc), task(b)(doc)]) — independent extracts (fork)
+- two workflow args — two uploads; process the first, keep the second raw until you need it
+- try/catch is ordinary TypeScript
 
 Rules:
-- Many same-kind files → input({ schema: z.array(Document) }) + llmBatch, never a single llm.
-- Non-JSON input schema is Document or z.array(Document). Typed rows belong on a later llm/llm-batch.
-- llm-batch \`in\` is the item (Document), never z.array(Document).
-- notes are required on input / llm / llm-batch / combine / assemble / fork.
-- Caching, DAG mermaid, and per-step traces are library exports — do not encode them as JSON fields.
+- Many same-kind files → for-loop + task(generateObject), never one generateObject over the whole list.
+- Non-JSON uploads are Document (filename + content). Parsed rows belong in generateObject schemas.
+- Export const message = "I'll add…" (present/future tense).
+- Export const docs = [{ name, type: "text"|"json"|"markdown", content }] — at least TWO files with different contents.
+- Caching / DAG / traces are library exports — do not encode them as fields.
+
 ${buildVibeTopologyPromptBlock()}
 
-Also export:
-export const message = "I'll add…"  // present/future tense
-export const docs = [{ name, type: "text"|"json"|"markdown"|"latex", content }]
-export const documentation = "# ..."
-export const projectName = "..."  // only when untitled
-
-${buildSpineJsFewShotBlock()}
+${buildSpineJsFewShotBlock(task)}
 `
 }
 
@@ -60,12 +54,12 @@ export function buildSpineJsUserPrompt(args: {
     ? `\nPrior reasoning:\n${args.thinking.trim().slice(0, 6_000)}\n`
     : ""
   const fix = args.fixErrors?.trim()
-    ? `\nYour previous JavaScript failed. Fix ALL errors and return a full corrected module:\n${args.fixErrors.trim()}\n`
+    ? `\nYour previous TypeScript failed to compile. Fix ALL errors and return a full corrected module:\n${args.fixErrors.trim()}\n`
     : ""
   return `Task: ${args.task}
 ${buildVibeTopologyPromptBlock()}
 ${thinking}${args.extra}${fix}
 
-Return a JavaScript module with export default pipeline(...). You may wrap it in a \`\`\`js fence. Do not return a JSON modules array.
+Return a TypeScript module with export const main = workflow(...). You may wrap it in a \`\`\`ts fence. Do not return a JSON modules array.
 `
 }

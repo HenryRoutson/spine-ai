@@ -5,6 +5,7 @@ import { llmStructured } from "./llm"
 import { UsageLedger } from "./usage"
 import type { ChatTurn } from "./assistant-shared"
 import { hostedSiteAppSummaryText } from "@/lib/hosted-site-app-summary"
+import { buildRunContractPromptBlock } from "@/lib/server/type_codegen"
 import {
   DEFAULT_HOSTED_SITE_AUTH_HTML,
   DEFAULT_HOSTED_SITE_HTML,
@@ -125,6 +126,7 @@ export function buildHostedSiteAssistantUserPrompt(opts: {
   return `App summary (uploads + step names only — not the pipeline internals):
 ${hostedSiteAppSummaryText(opts.project)}
 
+${opts.siteOptions.runtime === "react" ? `${buildRunContractPromptBlock(opts.project)}\n` : ""}
 Current brand:
 ${JSON.stringify(current.brand, null, 2)}
 hideSpineFooter: ${current.hideSpineFooter}

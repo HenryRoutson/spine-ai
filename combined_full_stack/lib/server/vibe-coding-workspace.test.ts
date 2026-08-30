@@ -73,6 +73,9 @@ describe("vibe coding workspace", () => {
     expect(isWritableVibePath("AGENTS.md")).toBe(false)
     expect(isWritableVibePath("pipeline.json")).toBe(true)
     expect(isWritableVibePath("pipeline.js")).toBe(true)
+    expect(isWritableVibePath("pipeline.ts")).toBe(true)
+    expect(isReadonlyVibePath("contract.d.ts")).toBe(true)
+    expect(isWritableVibePath("contract.d.ts")).toBe(false)
     expect(isWritableVibePath("structures/ReceiptRow.json")).toBe(true)
     expect(isWritableVibePath("tests/receipt.txt")).toBe(true)
   })
@@ -82,7 +85,10 @@ describe("vibe coding workspace", () => {
     const ws = seedVibeWorkspace({ project: ctx.project, globalModel: DEFAULT_MODEL })
     expect(ws.files.get("AGENTS.md")).toMatch(/run_tests/)
     expect(ws.files.get("AGENTS.md")).toMatch(/RAM only/)
+    expect(ws.files.get("AGENTS.md")).toMatch(/workflow/)
     expect(ws.files.has("pipeline.json")).toBe(true)
+    expect(ws.files.has("pipeline.ts")).toBe(true)
+    expect(ws.files.has("examples/workflow.md")).toBe(true)
     expect(listVibePaths(ws.files, "structures").length).toBeGreaterThan(0)
     const draft = parseVibeWorkspaceFiles(ws.files, ws.seed)
     expect(draft.errors).toEqual([])
@@ -332,5 +338,34 @@ describe("vibe coding harness tools", () => {
     expect(coerced[0]?.structureOut).toBe("Document")
     expect(coerced.map((s) => s.kind)).toEqual(["input", "llm", "output"])
     expect(coerced[1]?.structureOut).toBe("KycRule")
+  })
+
+  it("compiles pipeline.ts workflow authoring into modules and a run() contract", () => {
+    const session = createSpineSession()
+    session.addProject({ open: true })
+    const ws = seedVibeWorkspace({ project: session.project!, globalModel: DEFAULT_MODEL })
+    const src = `import { z, model, workflow, task, generateObject } from "spine"
+const Row = model("Row", { text: z.string().describe("Value") })
+async function extractRow(doc: { filename: string; content?: string }) {
+  return generateObject({ schema: Row, prompt: "Extract the fields.", note: "One row per file." })
+}
+export const docs = [
+  { name: "a.txt", type: "text", content: "alpha" },
+  { name: "b.txt", type: "text", content: "beta" },
+]
+export const main = workflow(async (files) => {
+  const rows = []
+  for (const file of files) rows.push(await task(extractRow)(file))
+  return rows
+})
+`
+    executeVibeHarnessTool({ tool: "write_file", path: "pipeline.ts", content: src }, ws, () => "unused")
+    const draft = parseVibeWorkspaceFiles(ws.files, ws.seed)
+    expect(draft.errors).toEqual([])
+    expect((draft.modules ?? []).map((m) => (m as { kind: string }).kind)).toEqual(["input", "llm-batch", "output"])
+    expect(ws.files.get("contract.d.ts")).toMatch(/export declare function run/)
+    expect(ws.files.get("openapi.json")).toMatch(/"operationId": "run"/)
+    const report = runVibeWorkspaceChecks(draft, session.project!, DEFAULT_MODEL, [])
+    expect(report).toMatch(/^PASS/m)
   })
 })
