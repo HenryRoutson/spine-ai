@@ -226,8 +226,8 @@ export function ShareSiteForm({
         value={siteOptions}
         onChange={commitSiteOptions}
         viewerMarkdown={viewerMarkdown}
-        forcedTab={hideDeveloperTools ? "vibe" : undefined}
-        hideSurfaceTabs={hideDeveloperTools}
+        forcedTab={editingWebsite ? undefined : hideDeveloperTools ? "vibe" : undefined}
+        hideSurfaceTabs={editingWebsite ? false : hideDeveloperTools}
         fillHeight={!!editingWebsite}
       />
 

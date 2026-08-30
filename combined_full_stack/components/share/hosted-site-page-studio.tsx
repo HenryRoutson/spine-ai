@@ -370,14 +370,15 @@ export function HostedSitePageStudio({
 
   return (
     <div className={cn(fillHeight ? "flex min-h-0 flex-1 flex-col gap-3 p-4" : "space-y-3")}>
-      {hideSurfaceTabs ? null : (
       <div className="flex items-center gap-2">
+      {hideSurfaceTabs ? null : (
       <SimpleViewToggle
         checked={tab === "vibe"}
         onCheckedChange={(on) => setLocalTab(on ? "vibe" : "code")}
         spineId="share.site-vibe"
         className="max-w-xs flex-1"
       />
+      )}
       <div className="flex gap-1 rounded-md border border-border bg-muted/30 p-1" data-spine-id="website.runtime">
         {(["html", "react"] as const).map((id) => {
           const active = value.runtime === id
@@ -399,6 +400,7 @@ export function HostedSitePageStudio({
           )
         })}
       </div>
+      {hideSurfaceTabs ? null : (
       <PipelineExportDialog
         project={project}
         modules={project.modules}
@@ -406,8 +408,8 @@ export function HostedSitePageStudio({
         typeAliases={project.typeAliases ?? []}
         siteOptions={value}
       />
-      </div>
       )}
+      </div>
 
       <form
         className="flex flex-wrap items-center gap-1.5"
