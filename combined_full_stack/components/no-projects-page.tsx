@@ -44,7 +44,7 @@ export function NoProjectsPage({
           <FolderKanban className="mb-3 h-8 w-8 text-muted-foreground" />
           <h1 className="text-lg font-semibold">No projects</h1>
           <p className="mt-1 max-w-sm text-xs text-muted-foreground">
-            You deleted your last project. Start from a blank pipeline, or clone an example
+            You have no projects yet. Start from a blank pipeline, or clone an example
             template.
           </p>
           <BlankProjectButton

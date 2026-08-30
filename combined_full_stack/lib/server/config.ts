@@ -39,6 +39,7 @@ export function getConfig(): Config {
 
 // AI : the data dir is needed even when no API key is set (offline store/tests).
 // AI : Vercel fs is read-only outside /tmp (todo §8) — artifacts become ephemeral there.
+// AI : landing Generate persists builds to Supabase (landing_page_builds / landing_page_calls), not only /tmp.
 export function dataDir(): string {
   return process.env.VERCEL ? "/tmp/forge_data" : resolve(here, "data");
 }

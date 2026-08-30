@@ -20,7 +20,8 @@ import { proposePipelineChange, type ProjectAssistantDocSpec } from "@/lib/serve
 import { blankProject } from "@/lib/server/seed";
 import { logger } from "@/lib/server/server_logger";
 import { migrateProjectModules } from "@/lib/server/validity";
-import { putLandingBuild } from "@/lib/server/demo_store";
+import { persistLandingBuild } from "@/lib/server/demo_store";
+import { landingBuildDiagnosticJson } from "@/lib/server/landing_build_persist";
 import { mintLandingBuildAccessToken } from "@/lib/server/landing_build_access";
 import {
   materializeLandingExampleDocs,
@@ -111,13 +112,14 @@ export async function buildLandingPipelineFromTask(
       ...project,
       seedDocNames: exampleDocs.map((d) => d.ref.name),
     };
-    putLandingBuild(project, exampleDocs);
+    await persistLandingBuild(project, exampleDocs);
 
     const latencyMs = Date.now() - started;
 
     await recordLandingUsage({
       prompt: trimmed,
       outputPreview: result.message.slice(0, LANDING_DEMO_MAX_PROMPT_CHARS),
+      diagnosticJson: landingBuildDiagnosticJson({ project, docs: exampleDocs }),
       tag: LANDING_DEMO_TAG_BUILD_PIPELINE,
       buildId,
       projectName: project.name,

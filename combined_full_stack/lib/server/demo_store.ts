@@ -6,6 +6,15 @@ import { getModelOptions, toPublicModelOptions } from "./openrouter_models";
 import { hashContent } from "./store";
 import { allProjectSeeds, readSeedDocContent } from "./seed";
 import { migrateProjectModules } from "./validity";
+import {
+  fetchLandingBuildDocRemote,
+  fetchLandingBuildRemote,
+  isValidLandingBuildId,
+  parseLandingBuildPayload,
+  upsertLandingBuildRemote,
+  type LandingBuildBundle,
+  type LandingBuildDoc,
+} from "./landing_build_persist";
 import type { DocId, DocLabel, DocRef, InputType, PipelineRun, Project, ProjectId } from "./types";
 
 export { DEMO_DEFAULT_PROJECT_ID };
@@ -17,8 +26,6 @@ type DemoSnapshot = {
   runs: PipelineRun[];
 };
 
-type LandingBuildDoc = { ref: DocRef; content: string };
-type LandingBuildBundle = { project: Project; docs: LandingBuildDoc[] };
 type LandingBuildCache = Map<ProjectId, LandingBuildBundle>;
 
 let cached: DemoSnapshot | null = null;
@@ -33,14 +40,6 @@ function landingBuildCache(): LandingBuildCache {
 
 function landingBuildsDir(): string {
   return join(dataDir(), "landing_builds");
-}
-
-// AI : SECURITY — buildIds are `uid("p_land_")` (prefix + alphanumerics). Reject anything else so a
-// AI : query param like `../../secret` can never traverse out of landing_builds/ on disk read.
-const LANDING_BUILD_ID_RE = /^p_land_[a-z0-9]+$/i;
-
-function isValidLandingBuildId(id: string): boolean {
-  return LANDING_BUILD_ID_RE.test(id);
 }
 
 function landingBuildFile(id: ProjectId): string {
@@ -63,11 +62,6 @@ function trimLandingBuildFiles(): void {
   }
 }
 
-type LandingBuildDiskPayload = {
-  project: Project;
-  docs?: { ref: DocRef; content: string }[];
-};
-
 export function putLandingBuild(project: Project, docs: LandingBuildDoc[] = []): void {
   const migrated = migrateProjectModules(structuredClone(project));
   const bundle: LandingBuildBundle = { project: migrated, docs: structuredClone(docs) };
@@ -75,7 +69,7 @@ export function putLandingBuild(project: Project, docs: LandingBuildDoc[] = []):
 
   const dir = landingBuildsDir();
   if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
-  const payload: LandingBuildDiskPayload = { project: migrated, docs: bundle.docs };
+  const payload = { project: migrated, docs: bundle.docs };
   writeFileSync(landingBuildFile(project.id), JSON.stringify(payload));
 
   const cache = landingBuildCache();
@@ -90,18 +84,21 @@ export function putLandingBuild(project: Project, docs: LandingBuildDoc[] = []):
   trimLandingBuildFiles();
 }
 
-function parseLandingBuildDisk(raw: unknown): LandingBuildBundle | null {
-  if (!raw || typeof raw !== "object") return null;
-  const obj = raw as LandingBuildDiskPayload & Project;
-  // AI : legacy disk files were bare Project JSON — still load those.
-  if ("id" in obj && "modules" in obj && !("project" in obj)) {
-    return { project: migrateProjectModules(obj as Project), docs: [] };
-  }
-  if (!obj.project) return null;
-  return {
-    project: migrateProjectModules(obj.project),
-    docs: (obj.docs ?? []).map((d) => ({ ref: d.ref, content: d.content })),
-  };
+// AI : Vercel /tmp is per-instance — await Supabase so /api/demo/state on another lambda can load the build.
+export async function persistLandingBuild(project: Project, docs: LandingBuildDoc[] = []): Promise<void> {
+  putLandingBuild(project, docs);
+  const bundle = landingBuildCache().get(project.id);
+  if (bundle) await upsertLandingBuildRemote(project.id, bundle);
+}
+
+async function resolveLandingBuildAnywhere(buildId: string | null | undefined): Promise<LandingBuildBundle | null> {
+  const local = resolveLandingBuildBundle(buildId);
+  if (local) return local;
+  if (!buildId || !isValidLandingBuildId(buildId)) return null;
+  const remote = await fetchLandingBuildRemote(buildId);
+  if (!remote) return null;
+  landingBuildCache().set(remote.project.id, remote);
+  return remote;
 }
 
 function resolveLandingBuildBundle(buildId: string | null | undefined): LandingBuildBundle | null {
@@ -113,7 +110,7 @@ function resolveLandingBuildBundle(buildId: string | null | undefined): LandingB
   const file = landingBuildFile(id);
   if (!existsSync(file)) return null;
   try {
-    const bundle = parseLandingBuildDisk(JSON.parse(readFileSync(file, "utf8")));
+    const bundle = parseLandingBuildPayload(JSON.parse(readFileSync(file, "utf8")));
     if (!bundle) return null;
     landingBuildCache().set(id, bundle);
     return bundle;
@@ -197,7 +194,7 @@ export async function getDemoState(projectId: ProjectId | null, buildId?: string
   const snap = await snapshot();
   let projects = snap.projects.map(migrateProjectModules);
   let docs = snap.docs;
-  const bundle = resolveLandingBuildBundle(buildId);
+  const bundle = await resolveLandingBuildAnywhere(buildId);
   if (bundle) {
     projects = [bundle.project, ...projects.filter((p) => p.id !== bundle.project.id)];
     projectId = bundle.project.id;
@@ -229,18 +226,19 @@ export async function getDemoDocText(docId: DocId): Promise<string | undefined> 
     const hit = bundle.docs.find((d) => d.ref.id === docId);
     if (hit) return hit.content;
   }
-  // AI : cold cache — scan recent landing build files for this doc id.
+  // AI : cold cache — scan recent landing build files, then Supabase (Vercel /tmp is per-instance).
   const dir = landingBuildsDir();
-  if (!existsSync(dir)) return undefined;
-  for (const name of readdirSync(dir)) {
-    if (!name.endsWith(".json")) continue;
-    try {
-      const bundle = parseLandingBuildDisk(JSON.parse(readFileSync(join(dir, name), "utf8")));
-      const hit = bundle?.docs.find((d) => d.ref.id === docId);
-      if (hit) return hit.content;
-    } catch {
-      continue;
+  if (existsSync(dir)) {
+    for (const name of readdirSync(dir)) {
+      if (!name.endsWith(".json")) continue;
+      try {
+        const bundle = parseLandingBuildPayload(JSON.parse(readFileSync(join(dir, name), "utf8")));
+        const hit = bundle?.docs.find((d) => d.ref.id === docId);
+        if (hit) return hit.content;
+      } catch {
+        continue;
+      }
     }
   }
-  return undefined;
+  return fetchLandingBuildDocRemote(docId);
 }
