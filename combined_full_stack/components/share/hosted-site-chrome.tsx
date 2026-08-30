@@ -19,6 +19,7 @@ import {
   HS_PREVIEW_MESSAGE_SOURCE,
   cssPathFromElement,
   isHsPreviewIgnoredTarget,
+  pickHostedSiteEditableTarget,
   postHsPreviewMessage,
   previewHtmlRoot,
   snippetFromElement,
@@ -108,7 +109,7 @@ export function HostedSiteChrome({
     const target = e.target
     if (!(target instanceof Element)) return
     if (isHsPreviewIgnoredTarget(target)) return
-    const tagged = target.closest("[data-hs-id]")
+    const tagged = pickHostedSiteEditableTarget(target, e.currentTarget)
     if (!tagged || !e.currentTarget.contains(tagged)) return
     e.preventDefault()
     const hsId = tagged.getAttribute("data-hs-id")

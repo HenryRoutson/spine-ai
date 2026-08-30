@@ -13,6 +13,7 @@ import {
   HS_PREVIEW_MESSAGE_SOURCE,
   cssPathFromElement,
   isHsPreviewIgnoredTarget,
+  pickHostedSiteEditableTarget,
   postHsPreviewMessage,
   previewHtmlRoot,
   snippetFromElement,
@@ -180,22 +181,23 @@ export function HostedSiteReactPreview({
     if (!(target instanceof Element)) return
     if (target.closest("[contenteditable=true]")) return
     if (isHsPreviewIgnoredTarget(target)) return
+    const tagged = pickHostedSiteEditableTarget(target, e.currentTarget) ?? target
     e.preventDefault()
-    const htmlRoot = previewHtmlRoot(target)
-    const cssPath = (htmlRoot ? cssPathFromElement(target, htmlRoot) : target.tagName.toLowerCase()) as hs_preview_css_path
-    const text = target.textContent?.trim() ?? ""
+    const htmlRoot = previewHtmlRoot(tagged)
+    const cssPath = (htmlRoot ? cssPathFromElement(tagged, htmlRoot) : tagged.tagName.toLowerCase()) as hs_preview_css_path
+    const text = tagged.textContent?.trim() ?? ""
     const filePath = findReactFileForText(files, text) ?? undefined
     e.currentTarget.querySelectorAll("[data-hs-selected]").forEach((n) => n.removeAttribute("data-hs-selected"))
-    target.setAttribute("data-hs-selected", "")
-    target.setAttribute("data-hs-original-text", text)
-    target.setAttribute("contenteditable", "true")
-    if (target instanceof HTMLElement) target.focus()
+    tagged.setAttribute("data-hs-selected", "")
+    tagged.setAttribute("data-hs-original-text", text)
+    tagged.setAttribute("contenteditable", "true")
+    if (tagged instanceof HTMLElement) tagged.focus()
     postHsPreviewMessage({
       source: HS_PREVIEW_MESSAGE_SOURCE,
       kind: "select",
       cssPath,
       hsId: "react" as hs_preview_hs_id,
-      snippet: snippetFromElement(target),
+      snippet: snippetFromElement(tagged),
       text,
       filePath,
     })

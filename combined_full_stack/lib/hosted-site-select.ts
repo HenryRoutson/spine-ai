@@ -55,6 +55,18 @@ export function stripHostedSiteHsIds(html: string): string {
   return html.replace(/\sdata-hs-id="[^"]*"/g, "")
 }
 
+export function pickHostedSiteEditableTarget(clickTarget: Element, stampedRoot: Element): Element | null {
+  const leaf = clickTarget.closest("h1, h2, h3, h4, p, span, a, label, button, li")
+  if (leaf && stampedRoot.contains(leaf)) return leaf
+  const tagged = clickTarget.closest("[data-hs-id]")
+  if (tagged && stampedRoot.contains(tagged)) return tagged
+  return clickTarget
+}
+
+export function hostedSiteHtmlInnerIsTextOnly(inner: string): boolean {
+  return !/<[a-zA-Z]/.test(inner)
+}
+
 export function patchHostedSiteHtmlText(sourceHtml: string, hsId: string, newText: string): string {
   const stamped = stampHostedSiteHsIds(sourceHtml)
   const openRe = new RegExp(`<([a-zA-Z][a-zA-Z0-9]*)([^>]*\\sdata-hs-id="${hsId}"[^>]*)>`)
@@ -66,6 +78,9 @@ export function patchHostedSiteHtmlText(sourceHtml: string, hsId: string, newTex
   const close = `</${tag}>`
   const innerEnd = stamped.indexOf(close, innerStart)
   if (innerEnd < 0) return sourceHtml
+  const inner = stamped.slice(innerStart, innerEnd)
+  // AI : replacing a wrapper (nav/header) would wipe nested markup — unique-text / brand patch instead.
+  if (!hostedSiteHtmlInnerIsTextOnly(inner)) return sourceHtml
   const patched = `${stamped.slice(0, innerStart)}${escapeHtml(newText)}${stamped.slice(innerEnd)}`
   return stripHostedSiteHsIds(patched)
 }

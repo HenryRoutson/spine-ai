@@ -27,6 +27,16 @@ describe("hosted site click-to-edit", () => {
     expect(next).not.toContain("data-hs-id")
   })
 
+  it("does not replace a wrapper that still has nested tags", () => {
+    const html = `<header class="hs-hero"><h1>Example Domain</h1><p>Lede</p></header>`
+    const stamped = stampHostedSiteHsIds(html)
+    const headerId = /data-hs-id="(\d+)"/.exec(stamped)?.[1]
+    expect(headerId).toBe("1")
+    expect(patchHostedSiteHtmlText(html, headerId!, "wiped")).toBe(html)
+    const h1Id = /<h1[^>]*data-hs-id="(\d+)"/.exec(stamped)?.[1]
+    expect(patchHostedSiteHtmlText(html, h1Id!, "Cloned")).toContain("Cloned")
+  })
+
   it("patches a unique text occurrence when hs-id is not on the source", () => {
     const html = `<h1>Example Domain</h1><p>Docs</p>`
     expect(patchHostedSiteHtmlUniqueText(html, "Example Domain", "Cloned")).toBe(
