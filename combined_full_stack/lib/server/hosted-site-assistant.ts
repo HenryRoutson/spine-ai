@@ -24,6 +24,7 @@ import { listedWebsitePipelineBindings } from "@/lib/website-pipelines"
 import type { HostedSiteAuthProvider, HostedSiteOptions, HostedSiteReactFile, website_runtime_kind } from "@/lib/shared-link-types"
 import type { ModelId, Project } from "./types"
 import { isProtectedHostedSiteReactPath, normalizeHostedSiteReactFiles } from "@/lib/hosted-site-react"
+import { pipelineClientContractText } from "@/lib/pipeline-client-contract"
 
 const hostedSiteAssistantResponseSchema = z.object({
   message: z.string(),
@@ -74,9 +75,11 @@ export function buildHostedSiteAssistantSystemPrompt(runtime: website_runtime_ki
 
 The default page is a signed-in workspace. Do not add a sign-in screen unless the publisher explicitly asks.
 
-You edit the Vite + React project: src/App.tsx, src/index.css, and files under src/. Keep <RunPipeline alias="…" /> for each bound pipeline (default alias "run") when those widgets are already on the page. Do not add a run widget unless they asked for a workspace. Keep <HostedSlot slot="…" /> for pay / table / output widgets. You may also use data-spine-sql and data-spine-action placeholders from {{sql:table}} / {{action}}.
+You edit the Vite + React project: src/App.tsx, src/index.css, src/spine-api.d.ts, and files under src/. Keep <RunPipeline alias="…" /> for each bound pipeline (default alias "run") when those widgets are already on the page. Do not add a run widget unless they asked for a workspace. Keep <HostedSlot slot="…" /> for pay / table / output widgets. You may also use data-spine-sql and data-spine-action placeholders from {{sql:table}} / {{action}}.
+src/spine-api.d.ts is the typed backend contract (OpenAPI types). Import those types. Call RunPipeline / runPipeline — do not invent backend routes or npm packages.
 You MUST NOT change the pipeline, structures, prompts, project Docs, test files, or funding.
 You MUST NOT invent a custom Supabase URL or anon key.
+You MUST NOT rewrite src/spine-api.d.ts except to keep it if you already see it.
 
 Return a short message for the publisher, then fields:
 - reactFilePatches: [{path, contents}] for every file you change or add, or null to leave the tree unchanged
@@ -86,7 +89,7 @@ Return a short message for the publisher, then fields:
 - customHtml / customCss / authHtml: always null in React mode (the HTML snapshot stays as-is)
 - authProvider: null unless they asked to change it
 
-Write real JSX components (not a dumped HTML string). Do not invent backend routes or npm packages.`
+Write real JSX components (not a dumped HTML string). Do not remove src/components/RunPipeline.tsx, src/components/HostedSlot.tsx, or src/spine-api.d.ts. Do not invent backend routes or npm packages.`
   }
   return `You are a product-page designer for a hosted Spine app (Lovable-style HTML around a run form).
 
@@ -146,7 +149,7 @@ Current actions:
 ${current.actions.length ? JSON.stringify(current.actions, null, 2) : "(none)"}
 ${
   current.runtime === "react"
-    ? `\nReact project files:\n${current.reactFiles.map((f) => `--- ${f.path} ---\n${f.contents}`).join("\n")}\n`
+    ? `\nReact project files:\n${current.reactFiles.map((f) => `--- ${f.path} ---\n${f.contents}`).join("\n")}\n\n${pipelineClientContractText(opts.project, current)}\n`
     : ""
 }
 ${historyBlock}

@@ -179,7 +179,7 @@ export function applyHarnessTurn(
 function buildHarnessSystemPrompt(): string {
   const js = vibeJsAuthoringEnabled()
   const pipelineHint = js
-    ? `- Write pipeline.js (export default pipeline(...)). Each step function takes one object with a Zod schema. Cache / DAG / traces are library exports.`
+    ? `- Write pipeline.js (\`export const main = workflow(async () => { ... })\`). Ordinary async TypeScript. Cache / DAG / traces are library exports.`
     : `- Write structures/*.json, pipeline.json, tests/*, docs.md, message.md. Up to 12 tools per turn; more files → next turn.`
   return `You are a coding agent editing a Spine project in an in-memory file workspace (OpenCode / Pi loop: write files, run_tests, repeat).
 
@@ -191,8 +191,8 @@ Tools: write_file, read_file, run_tests, list_dir, delete_file, done.
 - AGENTS.md and examples/few-shot.md are read-only.
 - The first user message ALREADY includes AGENTS.md, project.json, and ${js ? "pipeline.js" : "pipeline.json"}. Do not spend a turn only on list_dir or read_file.
 - Blank projects start with Input + Output — REPLACE the pipeline this turn. Do not leave only those two steps.
-- Many same-kind files (receipts, notes, invoices) → one input list[Document] + llm-batch (NOT a single llm).
-- Two different doc kinds (policy + company pack) → two inputs, parse each, then assemble or combine (side file immediately before combine).
+- Many same-kind files → one input list[Document] + llm-batch (NOT a single llm).
+- Two different doc kinds → two inputs, parse each, then assemble or combine (side file immediately before combine).
 - Non-JSON inputs (text/pdf/word/image/web): structureOut is Document or list[Document]. Typed rows belong on a later llm/llm-batch.
 ${buildVibeTopologyPromptBlock()}
 - run_tests FAILs when I/O, custom-code, or lint is invalid — fix files; do not call done.
@@ -204,7 +204,7 @@ ${pipelineHint}
 Example (copy the shape, change names for the task):
 ${
   js
-    ? `{"tools":[{"tool":"write_file","path":"pipeline.js","content":"const Row = model(\\"Row\\", { text: z.string() })\\nexport default pipeline(\\n  input({ schema: z.array(Document), type: \\"text\\", note: \\"Upload files.\\" }),\\n  llmBatch({ schema: Row, note: \\"One row per file.\\", prompt: \\"Extract the fields.\\" }),\\n  output({ schema: Row })\\n)\\n"},{"tool":"write_file","path":"tests/sample.txt","content":"Acme 12.00\\n"},{"tool":"write_file","path":"message.md","content":"I'll add a pipeline that extracts one row per file.\\n"}]}`
+    ? `{"tools":[{"tool":"write_file","path":"pipeline.js","content":"const Row = model(\\"Row\\", { text: z.string() })\\nexport const main = workflow(async () => {\\n  await input({ schema: z.array(Document), type: \\"text\\", note: \\"Upload files.\\" })\\n  await llmBatch({ schema: Row, note: \\"One row per file.\\", prompt: \\"Extract the fields.\\" })\\n  await output({ schema: Row })\\n})\\n"},{"tool":"write_file","path":"tests/sample.txt","content":"Acme 12.00\\n"},{"tool":"write_file","path":"message.md","content":"I'll add a pipeline that extracts one row per file.\\n"}]}`
     : `{"tools":[{"tool":"write_file","path":"structures/Row.json","content":"{\\n  \\"name\\": \\"Row\\",\\n  \\"description\\": \\"One extracted row.\\",\\n  \\"fields\\": [{\\"name\\": \\"text\\", \\"type\\": \\"text\\", \\"optional\\": false, \\"description\\": \\"Value\\"}]\\n}\\n"},{"tool":"write_file","path":"pipeline.json","content":"[\\n  {\\"kind\\": \\"input\\", \\"label\\": \\"Files\\", \\"note\\": \\"Upload files.\\", \\"structureOut\\": \\"list[Document]\\", \\"inputType\\": \\"text\\", \\"inputDescription\\": \\"files\\"},\\n  {\\"kind\\": \\"llm-batch\\", \\"label\\": \\"Extract\\", \\"note\\": \\"One row per file.\\", \\"structureIn\\": \\"Document\\", \\"structureOut\\": \\"Row\\", \\"prompt\\": \\"Extract the fields.\\", \\"inputDescription\\": \\"files\\"},\\n  {\\"kind\\": \\"output\\", \\"label\\": \\"Rows\\", \\"structureIn\\": \\"Row\\", \\"structureOut\\": \\"Row\\", \\"inputDescription\\": \\"rows\\"}\\n]\\n"},{"tool":"write_file","path":"tests/sample.txt","content":"Acme 12.00\\n"},{"tool":"write_file","path":"message.md","content":"I'll add a pipeline that extracts one row per file.\\n"}]}`
 }
 `

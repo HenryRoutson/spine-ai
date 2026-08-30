@@ -160,7 +160,6 @@ export function payloadToSpineJs(payload: SpineJsPayload): string {
     return `const ${name} = model(${jsString(name)}, {\n${shape}\n})`
   })
   const modules = Array.isArray(payload.modules) ? (payload.modules as Record<string, unknown>[]) : []
-  const steps = modules.map((m) => stepToCall(m, 1)).join(",\n")
   const extras: string[] = []
   if (payload.message) extras.push(`export const message = ${jsString(payload.message)}`)
   if (payload.docs) extras.push(`export const docs = ${JSON.stringify(payload.docs, null, 2)}`)
@@ -168,15 +167,15 @@ export function payloadToSpineJs(payload: SpineJsPayload): string {
   if (payload.projectNameUpdate) extras.push(`export const projectName = ${jsString(payload.projectNameUpdate)}`)
   if (payload.targetFunctionName) extras.push(`export const targetFunctionName = ${jsString(payload.targetFunctionName)}`)
   return [
-    'import { z, model, pipeline, input, llm, llmBatch, customCode, combine, assemble, fork, output, Document } from "spine"',
+    'import { z, model, workflow, input, llm, llmBatch, customCode, combine, assemble, fork, output, Document } from "spine"',
     "",
     ...modelLines,
     "",
     ...extras,
     extras.length ? "" : "",
-    "export default pipeline(",
-    steps,
-    ")",
+    "export const main = workflow(async () => {",
+    ...modules.map((m) => `  await ${stepToCall(m, 1)}`),
+    "})",
     "",
   ]
     .filter((line, i, arr) => !(line === "" && arr[i - 1] === ""))

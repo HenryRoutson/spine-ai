@@ -51,6 +51,32 @@ function nangoCspOrigins() {
 }
 const nangoCsp = nangoCspOrigins()
 
+function supabaseCspOrigins() {
+  const extra = new Set()
+  const addHttpAndWs = (url) => {
+    if (!url) return
+    try {
+      const parsed = new URL(url)
+      extra.add(parsed.origin)
+      if (parsed.protocol === "http:") extra.add(`ws://${parsed.host}`)
+      if (parsed.protocol === "https:") extra.add(`wss://${parsed.host}`)
+    } catch {
+      // AI : ignore malformed env — hosted *.supabase.co wildcard still covers cloud.
+    }
+  }
+  addHttpAndWs(supabaseUrl)
+  // AI : supabase start serves Kong on :54321. Auth refresh (fetch) and Realtime (ws)
+  // AI : fail with TypeError: Failed to fetch when connect-src only allows https://*.supabase.co.
+  if (supabaseUrl && /localhost|127\.0\.0\.1/.test(supabaseUrl)) {
+    extra.add("http://127.0.0.1:54321")
+    extra.add("ws://127.0.0.1:54321")
+    extra.add("http://localhost:54321")
+    extra.add("ws://localhost:54321")
+  }
+  return [...extra].join(" ")
+}
+const supabaseCsp = supabaseCspOrigins()
+
 // AI : app root only — repo-wide root made Turbopack watch old/, landing_page/, etc.
 
 /** @type {import('next').NextConfig} */
@@ -91,7 +117,7 @@ const nextConfig = {
       "style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net",
       "img-src 'self' data: blob: https:",
       "font-src 'self' data: https://cdn.jsdelivr.net",
-      `connect-src 'self' https://*.supabase.co wss://*.supabase.co https://openrouter.ai https://api.stripe.com https://cdn.jsdelivr.net ${nangoCsp.connect}`.trim(),
+      `connect-src 'self' https://*.supabase.co wss://*.supabase.co ${supabaseCsp} https://openrouter.ai https://api.stripe.com https://cdn.jsdelivr.net ${nangoCsp.connect}`.trim(),
       `frame-src 'self' https://js.stripe.com ${nangoCsp.frame}`.trim(),
       "object-src 'none'",
       "base-uri 'self'",

@@ -274,6 +274,27 @@ describe("hosted site UI vibe agent prompts", () => {
     expect(system).toMatch(/reactFileDeletes/)
     expect(system).toContain("RunPipeline")
     expect(system).toContain("HostedSlot")
+    expect(system).toContain("spine-api.d.ts")
     expect(system).not.toContain(HOSTED_SITE_RUN_SLOT)
+  })
+
+  it("react user prompt includes the typed run contract, not pipeline internals", () => {
+    const user = buildHostedSiteAssistantUserPrompt({
+      project: PROJECT,
+      siteOptions: {
+        ...OPTIONS,
+        runtime: "react",
+        pipelineBindings: [{ alias: "run", projectId: PROJECT.id }],
+        reactFiles: [{ path: "src/App.tsx", contents: "export default function App(){return null}" }],
+      },
+      message: "Make a purple hero",
+      history: [],
+    })
+    expect(user).toContain("runPipeline")
+    expect(user).toContain("spine-api.d.ts")
+    expect(user).toContain("Make a purple hero")
+    expect(user).not.toContain("INTERNAL")
+    expect(user).not.toContain("SYSTEM PROMPT SECRET")
+    expect(user).not.toContain("return steal()")
   })
 })

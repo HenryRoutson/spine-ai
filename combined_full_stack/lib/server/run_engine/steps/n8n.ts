@@ -1,5 +1,6 @@
 import { DEFAULT_N8N_TIMEOUT_MS, getN8nNode, missingN8nParams } from "@/lib/n8n-catalog"
 import { runN8nPiece } from "@/lib/n8n-run"
+import { runN8nPieceOnWindmill, shouldRunOnWindmill } from "@/lib/windmill/execute"
 import type { PipelineModule } from "../../types"
 import { materializeHints, modelById, prevModuleFor, materializeStepOutput } from "../helpers"
 import { requireLinearInput } from "../context"
@@ -21,15 +22,23 @@ export async function execN8nStep(m: PipelineModule, ctx: RunCtx, log: RunLogger
   if (missing.length) throw new Error(`n8n piece ${entry.displayName} needs: ${missing.join(", ")}`)
   const input = requireLinearInput(m, ctx)
   const timeoutMs = m.n8nTimeoutMs ?? DEFAULT_N8N_TIMEOUT_MS
-  log.info(`n8n piece`, { moduleId: m.id, nodeType, timeoutMs })
-  // AI : local only today — sidecar live path must not call evalN8nCode / runN8nPiece.
-  const raw = await runN8nPiece({
-    n8nNodeType: nodeType,
-    n8nCode: m.n8nCode,
-    n8nParameters: m.n8nParameters,
-    input,
-    timeoutMs,
-  })
+  log.info(`n8n piece`, { moduleId: m.id, nodeType, timeoutMs, windmill: shouldRunOnWindmill(project) })
+  // AI : Windmill bun workers when project.windmillExecute + WINDMILL_* — else local Code-node JS.
+  const raw = shouldRunOnWindmill(project)
+    ? await runN8nPieceOnWindmill({
+        n8nNodeType: nodeType,
+        n8nCode: m.n8nCode,
+        n8nParameters: m.n8nParameters,
+        n8nTimeoutMs: timeoutMs,
+        input,
+      })
+    : await runN8nPiece({
+        n8nNodeType: nodeType,
+        n8nCode: m.n8nCode,
+        n8nParameters: m.n8nParameters,
+        input,
+        timeoutMs,
+      })
   const prev = prevModuleFor(project.modules, ctx.prevModuleId)
   const value = materializeStepOutput(m, project, raw, materializeHints(m, ctx), prev)
   return {

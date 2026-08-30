@@ -111,6 +111,14 @@ createRoot(document.getElementById("root")!).render(
       contents: ensureHostedSiteReactCss(css),
     },
     {
+      path: "src/spine-api.d.ts",
+      contents: `export type SpineRunAlias = string
+export type SpineRunRequest = { files?: File[]; json?: unknown }
+export type SpineRunResponse = unknown
+export declare function runPipeline(alias: SpineRunAlias, input?: SpineRunRequest): Promise<SpineRunResponse>
+`,
+    },
+    {
       path: "src/components/RunPipeline.tsx",
       contents: `export function RunPipeline({ alias }: { alias: string }) {
   return (

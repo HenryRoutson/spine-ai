@@ -1298,7 +1298,7 @@ export const PARITY_ROWS: ParityRow[] = [
   row(
     "pipeline.function-add",
     "pipeline",
-    { label: "Function", file: "components/pipeline-function-select.tsx" },
+    { label: "Add function", file: "components/pipeline-function-select.tsx" },
     n("TUI has no add-function command yet"),
     y("PUT /api/projects/:id functions + modules", "/api/projects"),
     p("session_action + patch_project", "session_action"),

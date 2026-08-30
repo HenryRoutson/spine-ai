@@ -22,7 +22,7 @@ A **project** is a development group: one set of **structures** (types = Zod/Pyd
 
 There is **no vector RAG**. Traceability is **quotes** (source-linked spans) and **example select** (cheap per-item LLM relevance). Retrieval-by-embedding is out of scope on purpose.
 
-The **JSON IR** (`pipeline.json` / the `modules` array) is the portable graph. The UI, CLI, MCP, seeds, and language exports all consume that IR. A TypeScript authoring library (`spine-js`) can compile ordinary JS into the same IR. Caching, mermaid, and per-step traces are **derived**, not extra JSON fields.
+The **JSON IR** (`pipeline.json` / the `modules` array) is the portable graph. The UI, CLI, MCP, seeds, and language exports all consume that IR. Vibe authors ordinary TypeScript (`workflow()` / `task()` via `spine-js`); `compileSpineJs` lowers it to that IR. Caching, mermaid, and per-step traces are **derived**, not extra JSON fields. Hosted React sees the generated OpenAPI types, not the graph.
 
 ---
 
@@ -34,7 +34,7 @@ The **JSON IR** (`pipeline.json` / the `modules` array) is the portable graph. T
 
 **The pipeline tab is the backend.** Functions live there. Websites are a different object that bind functions. Do not nest a page studio as the only home of a pipeline.
 
-**JSON is the IR; libraries are authoring.** Cross-language export prints from JSON. Intensive steps may be Rust or Python inside a JS-authored graph. Default vibe authoring stays JSON until the library path beats it on hard spines without reward hacking.
+**JSON is the IR; libraries are authoring.** Cross-language export prints from JSON. Intensive steps may be Rust or Python inside a JS-authored graph. Default vibe authoring is Windmill-shaped `workflow()` / `task()` TypeScript (`compileSpineJs`). `SPINE_VIBE_AUTHORING=json` is the old graph-JSON LLM path.
 
 **Quotes over RAG.** If an LLM extracts text, the user clicks it and jumps to the source span. Example select filters a candidate list with `is_relevant` + reasoning, not embeddings.
 
@@ -380,14 +380,15 @@ OpenRouter (or the active provider) is exported as the default client, with synt
 
 ### 8.8 Authoring: JSON IR vs JavaScript library
 
-Vibe today emits a **custom JSON dialect**. That dialect is new to models; ordinary JavaScript is not. Two supported responses:
+Vibe authors **ordinary TypeScript** (`export const main = workflow(async () => { ... })`), not a custom JSON dialect and not a `pipeline(input(), llm())` graph constructor. `compileSpineJs` traces `workflow()` / `task()` into the JSON IR. Compile errors retry (Windmill create/update style) before any JSON fallback. Storage, UI, and exports still consume JSON. OpenFlow is an export of a compiled project (`lib/windmill/compile.ts`), never what the model emits.
 
-1. **JS → JSON.** The model writes JS; `compileSpineJs` emits the IR. Storage, UI, and exports still consume JSON.
-2. **Library.** `pipeline(input({ schema }), llmBatch({ schema, prompt }), output({ schema }))`. Each function takes **one Zod-parsed object**. The library enforces the same restrictions as `moduleSpecSchema` (notes, Document-only non-JSON inputs, llm-batch item `in`, combine state `in`, fork ≥ 2 lanes, …). Conveniences that do not weaken the IR: infer `in` from the previous step; unwrap `z.array(Document)` on llm-batch.
+`pipeline(input({ schema }), llmBatch({ schema, prompt }), output({ schema }))` remains the IR constructor. Each helper takes **one Zod-parsed object**. The same `moduleSpecSchema` restrictions apply. Conveniences: infer `in` from the previous step; unwrap `z.array(Document)` on llm-batch.
 
-Flags: `SPINE_VIBE_AUTHORING=js`, `SPINE_VIBE_HARNESS=1` (write/`run_tests` loop). Default remains JSON + up to two validation retries.
+Flags: default is JS workflow authoring. `SPINE_VIBE_AUTHORING=json` restores graph-JSON LLM output. `SPINE_VIBE_HARNESS=1` is the write/`run_tests` loop. Schema-valid is not done — `run_tests` fails input→output stubs and identical fixtures.
 
-**Reward hacking is forbidden.** Matching the user task string to few-shot Example 1–5 and pasting that payload is not a test. Live OpenRouter is the coding-performance comparison. On DeepSeek V4 (2026-08-29) JSON-direct stayed 7/7; JS-direct fell back to JSON on harder spines. Keep JSON as default. Details: `docs/json_vs_library_product_spec.md`.
+The Lovable-style React step receives `src/spine-api.d.ts` + OpenAPI from `pipeline-client-contract` (call `RunPipeline` / `runPipeline`). It never sees the flow graph.
+
+**Reward hacking is forbidden.** Matching the user task string to few-shot Example 1–5 and pasting that payload is not a test. Live OpenRouter is the coding-performance comparison. Details: `docs/json_vs_library_product_spec.md`.
 
 ---
 

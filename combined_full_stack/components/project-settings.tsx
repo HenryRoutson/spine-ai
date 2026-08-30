@@ -21,6 +21,7 @@ export function ProjectSettings() {
   const [deleting, setDeleting] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [langfuseConfigured, setLangfuseConfigured] = useState<boolean | null>(null)
+  const [windmillConfigured, setWindmillConfigured] = useState<boolean | null>(null)
   const [websiteAction, setWebsiteAction] = useState<pipeline_website_delete_action>("unbind")
   const [dependentSites, setDependentSites] = useState<ReturnType<typeof websitesUsingProject>>([])
 
@@ -32,6 +33,10 @@ export function ProjectSettings() {
       .then((r) => r.json())
       .then((data: { configured?: boolean }) => setLangfuseConfigured(!!data.configured))
       .catch(() => setLangfuseConfigured(false))
+    void fetch("/api/windmill/status")
+      .then((r) => r.json())
+      .then((data: { configured?: boolean }) => setWindmillConfigured(!!data.configured))
+      .catch(() => setWindmillConfigured(false))
   }, [])
 
   useEffect(() => {
@@ -126,6 +131,33 @@ export function ProjectSettings() {
                   : langfuseConfigured
                     ? "Requires LANGFUSE_PUBLIC_KEY and LANGFUSE_SECRET_KEY on the server (optional LANGFUSE_BASE_URL for self-host)."
                     : "Server is not configured — set Langfuse API keys in the deployment environment first."}
+              </span>
+            </span>
+          </label>
+        </section>
+
+        <section className="mb-6 rounded-lg border border-border bg-card">
+          <div className="border-b border-border px-4 py-3">
+            <h3 className="text-sm font-semibold">Windmill workers</h3>
+            <p className="mt-0.5 text-xs text-muted-foreground">
+              Run n8n pieces and custom-code on Windmill EE (nsjail). Quotes, vibe, SQL/Zod types, and LLM tests stay in Spine.
+            </p>
+          </div>
+          <label className="flex cursor-pointer items-start gap-3 px-4 py-3">
+            <Switch
+              checked={!!project.windmillExecute}
+              disabled={project.teamReadOnly || windmillConfigured === false}
+              onCheckedChange={(checked) => patchProject({ windmillExecute: !!checked })}
+              className="mt-0.5"
+            />
+            <span className="min-w-0 flex-1">
+              <span className="block text-sm font-medium">Execute scripts on Windmill</span>
+              <span className="mt-0.5 block text-xs text-muted-foreground">
+                {windmillConfigured === null
+                  ? "Checking server configuration…"
+                  : windmillConfigured
+                    ? "Requires WINDMILL_URL and WINDMILL_TOKEN (optional WINDMILL_WORKSPACE, default admins)."
+                    : "Server is not configured — set WINDMILL_URL and WINDMILL_TOKEN in the deployment environment first."}
               </span>
             </span>
           </label>
