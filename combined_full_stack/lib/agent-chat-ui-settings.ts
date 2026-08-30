@@ -25,7 +25,7 @@ export const AGENT_CHAT_UI_KIT_META: Record<
   "ai-sdk": {
     label: "Vercel AI SDK",
     shortLabel: "SDK",
-    description: "useChat + Conversation / PromptInput on the same UIMessage stream.",
+    description: "useChat bubbles on the same UIMessage stream; composer keeps paste chips and @ mentions.",
   },
 }
 

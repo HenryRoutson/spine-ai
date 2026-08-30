@@ -84,6 +84,14 @@ describe("agent-chat-ui-messages", () => {
     expect(req.pendingProposal).toEqual(p)
   })
 
+  it("uses last user text when extras.message is empty (assistant-ui Composer)", () => {
+    const req = agentRequestFromUiMessages(
+      [{ id: "u1", role: "user", parts: [{ type: "text", text: "add a webhook step" }] }],
+      { message: "" },
+    )
+    expect(req.message).toBe("add a webhook step")
+  })
+
   it("treats the context-only placeholder as an empty wire message", () => {
     expect(wireMessageFromUiText(AGENT_CONTEXT_ONLY_PLACEHOLDER)).toBe("")
     expect(wireMessageFromUiText("  ")).toBe("")

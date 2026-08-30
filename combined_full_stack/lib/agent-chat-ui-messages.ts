@@ -174,8 +174,9 @@ export function agentRequestFromUiMessages(
   const userIdx = lastUserIndex(messages)
   const lastUser = userIdx >= 0 ? messages[userIdx] : undefined
   const lastUserText = textFromUiParts(lastUser?.parts)
-  const message =
-    typeof extras.message === "string" ? extras.message : wireMessageFromUiText(lastUserText)
+  // AI : empty extras.message is the assistant-ui Composer path — use the last user part.
+  const extraWire = extras.message?.trim()
+  const message = extraWire ? extras.message! : wireMessageFromUiText(lastUserText)
   const prior = userIdx >= 0 ? messages.slice(0, userIdx) : messages
   const history = buildAssistantHistory(fromAgentUiMessages(prior), ASSISTANT_HISTORY_LIMIT)
   const uiContext = extras.uiContext?.length

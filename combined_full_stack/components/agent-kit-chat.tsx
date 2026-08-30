@@ -87,6 +87,7 @@ export function AgentKitChat(props: AgentKitChatProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [props.chatId],
   )
+  const hydratedChatIdRef = useRef<string | null>(null)
 
   extrasRef.current = {
     message: extrasRef.current.message,
@@ -110,7 +111,7 @@ export function AgentKitChat(props: AgentKitChatProps) {
             projectId: props.projectId,
             model: props.model,
             humanSurface: props.humanSurface,
-            message: extras.message,
+            ...(extras.message ? { message: extras.message } : {}),
             ...(extras.uiContext?.length ? { uiContext: extras.uiContext } : {}),
             ...(extras.pendingProposal ? { pendingProposal: extras.pendingProposal } : {}),
             ...body,
@@ -130,6 +131,18 @@ export function AgentKitChat(props: AgentKitChatProps) {
   const [phase, setPhase] = useState<AssistantLoadingPhase>("thinking")
   const [input, setInput] = useState("")
   const [pastes, setPastes] = useState<PastedAttachment[]>([])
+
+  // AI : Persist hydrate can land after first paint; seed the kit once per chat.
+  useEffect(() => {
+    if (hydratedChatIdRef.current === props.chatId) return
+    if (props.messages.length === 0) return
+    if (chat.messages.length > 0) {
+      hydratedChatIdRef.current = props.chatId
+      return
+    }
+    chat.setMessages(toAgentUiMessages(props.messages))
+    hydratedChatIdRef.current = props.chatId
+  }, [chat, props.chatId, props.messages])
 
   const busy = chat.status === "submitted" || chat.status === "streaming"
 
