@@ -173,7 +173,8 @@ export function SharePage({ simple }: { simple?: boolean } = {}) {
         </div>
       )}
 
-      <div className={cn("min-h-0 flex-1", editingWebsite ? "overflow-hidden" : "overflow-y-auto p-5")}>
+      {/* AI : cloned website editor must scroll — fillHeight flex-shrink stacked Public link / SQL / Who pays. */}
+      <div className={cn("min-h-0 flex-1 overflow-y-auto", editingWebsite ? "" : "p-5")}>
         {visibleSection === ShareSection.Activity ? (
           <DeploymentActivityPage projectId={builder.project.id} initialFilter={activityFilter} />
         ) : editingWebsite ? (

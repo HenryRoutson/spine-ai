@@ -313,9 +313,9 @@ export function HostedSitePageStudio({
   )
 
   return (
-    <div className={cn(fillHeight ? "flex min-h-0 flex-1 flex-col gap-3 p-4" : "space-y-3")}>
+    <div className={cn(fillHeight ? "flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto p-4" : "space-y-3")}>
       {hideSurfaceTabs ? null : (
-      <div className="flex items-center gap-2">
+      <div className="flex shrink-0 items-center gap-2">
       <SimpleViewToggle
         checked={tab === "vibe"}
         onCheckedChange={(on) => setLocalTab(on ? "vibe" : "code")}
@@ -354,12 +354,14 @@ export function HostedSitePageStudio({
       )}
 
       <WebsitePipelineBindings
+        className="shrink-0"
         primaryProjectId={project.id}
         projects={projects}
         options={value}
         onChange={onChange}
       />
       <WebsiteActionBindings
+        className="shrink-0"
         options={value}
         models={project.models}
         functions={functionsOnProject(project).map((fn) => ({ id: fn.id, name: fn.name }))}

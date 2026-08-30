@@ -211,7 +211,8 @@ export function ShareSiteForm({
   }
 
   return (
-    <div className={cn(editingWebsite ? "flex h-full min-h-0 flex-col" : "space-y-4")}>
+    // AI : document flow + parent scroll — flex fillHeight collapsed these headings on top of each other.
+    <div className={cn("space-y-4", editingWebsite && "p-4")}>
       {editingWebsite ? null : (
       <div>
         <h3 className="text-sm font-semibold">Website</h3>
@@ -228,13 +229,12 @@ export function ShareSiteForm({
         viewerMarkdown={viewerMarkdown}
         forcedTab={hideDeveloperTools ? "vibe" : undefined}
         hideSurfaceTabs={hideDeveloperTools}
-        fillHeight={!!editingWebsite}
       />
 
       {editingWebsite || hideDeveloperTools ? null : <ShareViewerDocsFields {...fieldsProps} />}
 
       {editingWebsite && created ? (
-        <div className="shrink-0 border-t border-border p-3">
+        <div className="border-t border-border p-3">
           <ShareSheet
             target={{ kind: "website", site: created.link, project }}
             docs={docs}
