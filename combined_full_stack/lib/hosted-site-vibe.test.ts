@@ -2,7 +2,6 @@ import { createElement } from "react"
 import { renderToStaticMarkup } from "react-dom/server"
 import { describe, expect, it } from "vitest"
 import { HostedSiteChrome } from "@/components/share/hosted-site-chrome"
-import { HostedSiteSlotWidgets } from "@/components/share/hosted-site-slot-widgets"
 import { HostedSiteSqlPreview } from "@/components/share/hosted-site-sql-widget"
 import {
   compileHostedSiteHtml,
@@ -222,12 +221,6 @@ describe("lovable-style vibe HTML compile", () => {
       createElement(HostedSiteChrome, {
         options: vibeOptions({ customHtml: "{{sql:todo}}" }),
         sqlByTable: { todo: createElement(HostedSiteSqlPreview, { table: "todo" }) },
-        slots: HostedSiteSlotWidgets({
-          projectName: "Northwind",
-          viewerMarkdown: "",
-          modules: [],
-          hideDocsInRun: false,
-        }),
       }),
     )
     expect(html).toContain("No rows in todo")
@@ -236,17 +229,9 @@ describe("lovable-style vibe HTML compile", () => {
   })
 
   it("unnamed sql slot does not fall back to shared_number", () => {
-    const slots = HostedSiteSlotWidgets({
-      projectName: "Northwind",
-      viewerMarkdown: "",
-      modules: [],
-      hideDocsInRun: false,
-    })
-    expect(slots.sql).toBeUndefined()
     const html = renderToStaticMarkup(
       createElement(HostedSiteChrome, {
         options: vibeOptions({ customHtml: "{{sql:todo}}" }),
-        slots,
       }),
     )
     expect(html).toContain("SQL · todo")
