@@ -1,6 +1,6 @@
 "use client"
 
-import { Component, useEffect, useMemo, useRef, useState, type ComponentType, type CSSProperties, type ReactNode } from "react"
+import { Component, useEffect, useMemo, useRef, useState, type ComponentType, type CSSProperties, type FocusEvent, type MouseEvent, type ReactNode } from "react"
 import { hostedSiteBrandVars } from "@/lib/hosted-site"
 import { ensureHostedSiteReactCss, htmlSiteToReactFiles, type hosted_site_react_bundle } from "@/lib/hosted-site-react"
 import { instantiateHostedSiteReactApp } from "@/lib/hosted-site-react-runtime"
@@ -9,6 +9,17 @@ import { JSON_HEADERS } from "@/lib/api-client"
 import type { HostedSiteOptions } from "@/lib/shared-link-types"
 import { DEFAULT_WEBSITE_PIPELINE_ALIAS } from "@/lib/website-pipelines"
 import type { hosted_site_widget_slot } from "@/lib/hosted-site-slots"
+import {
+  HS_PREVIEW_MESSAGE_SOURCE,
+  cssPathFromElement,
+  isHsPreviewIgnoredTarget,
+  postHsPreviewMessage,
+  previewHtmlRoot,
+  snippetFromElement,
+  type hs_preview_css_path,
+  type hs_preview_hs_id,
+} from "@/lib/hosted-site-select"
+import { findReactFileForText } from "@/lib/hosted-site-react-select"
 
 function HostRunPipeline({
   alias,
@@ -88,6 +99,7 @@ export function HostedSiteReactPreview({
   slots,
   bundle: bundleProp,
   compileError: compileErrorProp,
+  editable = false,
 }: {
   options: HostedSiteOptions
   runByAlias?: Record<string, ReactNode>
@@ -95,6 +107,7 @@ export function HostedSiteReactPreview({
   slots?: Partial<Record<hosted_site_widget_slot, ReactNode>>
   bundle?: hosted_site_react_bundle | null
   compileError?: string | null
+  editable?: boolean
 }) {
   const files = options.reactFiles.length > 0 ? options.reactFiles : htmlSiteToReactFiles(options)
   const filesKey = useMemo(() => files.map((f) => `${f.path}:${f.contents}`).join("\0"), [files])
@@ -160,9 +173,67 @@ export function HostedSiteReactPreview({
   }, [bundle, runByAlias, tableByAlias, slots])
 
   const PreviewApp = mounted.App
+
+  function onPreviewClick(e: MouseEvent<HTMLDivElement>) {
+    if (!editable) return
+    const target = e.target
+    if (!(target instanceof Element)) return
+    if (target.closest("[contenteditable=true]")) return
+    if (isHsPreviewIgnoredTarget(target)) return
+    e.preventDefault()
+    const htmlRoot = previewHtmlRoot(target)
+    const cssPath = (htmlRoot ? cssPathFromElement(target, htmlRoot) : target.tagName.toLowerCase()) as hs_preview_css_path
+    const text = target.textContent?.trim() ?? ""
+    const filePath = findReactFileForText(files, text) ?? undefined
+    e.currentTarget.querySelectorAll("[data-hs-selected]").forEach((n) => n.removeAttribute("data-hs-selected"))
+    target.setAttribute("data-hs-selected", "")
+    target.setAttribute("data-hs-original-text", text)
+    target.setAttribute("contenteditable", "true")
+    if (target instanceof HTMLElement) target.focus()
+    postHsPreviewMessage({
+      source: HS_PREVIEW_MESSAGE_SOURCE,
+      kind: "select",
+      cssPath,
+      hsId: "react" as hs_preview_hs_id,
+      snippet: snippetFromElement(target),
+      text,
+      filePath,
+    })
+  }
+
+  function onPreviewBlur(e: FocusEvent<HTMLDivElement>) {
+    if (!editable) return
+    const tagged = e.target
+    if (!(tagged instanceof HTMLElement) || tagged.getAttribute("contenteditable") !== "true") return
+    tagged.removeAttribute("contenteditable")
+    const htmlRoot = previewHtmlRoot(tagged)
+    const cssPath = (htmlRoot ? cssPathFromElement(tagged, htmlRoot) : tagged.tagName.toLowerCase()) as hs_preview_css_path
+    const previousText = tagged.getAttribute("data-hs-original-text") ?? ""
+    const text = tagged.textContent?.trim() ?? ""
+    postHsPreviewMessage({
+      source: HS_PREVIEW_MESSAGE_SOURCE,
+      kind: "inline",
+      cssPath,
+      hsId: "react" as hs_preview_hs_id,
+      text,
+      previousText,
+      filePath: findReactFileForText(files, previousText || text) ?? undefined,
+    })
+  }
+
   return (
-    <div className="hs-root hs-react-preview min-h-40" style={hostedSiteBrandVars(options.brand) as CSSProperties}>
-      {css ? <style>{css}</style> : null}
+    <div
+      className="hs-root hs-react-preview min-h-40"
+      style={hostedSiteBrandVars(options.brand) as CSSProperties}
+      onClick={editable ? onPreviewClick : undefined}
+      onBlur={editable ? onPreviewBlur : undefined}
+    >
+      {editable ? (
+        <style>{`${css}
+[data-hs-selected] { outline: 2px solid var(--hs-accent); outline-offset: 2px; cursor: text; }`}</style>
+      ) : css ? (
+        <style>{css}</style>
+      ) : null}
       {error || mounted.error ? (
         <p className="px-3 py-4 font-mono text-[11px] text-destructive">{error || mounted.error}</p>
       ) : PreviewApp ? (

@@ -2,11 +2,12 @@
 // AI : parity ids — share.site-vibe
 
 import { useCallback, useRef, useState } from "react"
-import { FileCode2, Plus, X } from "lucide-react"
+import { Globe, Loader2, Plus, X } from "lucide-react"
 import { AssistantChat } from "@/components/assistant-chat"
 import { MonacoCodeEditor } from "@/components/code-viewer"
 import { HtmlPreviewFrame } from "@/components/share/html-preview-frame"
 import { HostedSiteChrome } from "@/components/share/hosted-site-chrome"
+import { HostedSiteFileTree } from "@/components/share/hosted-site-file-tree"
 import { HostedSiteReactPreview } from "@/components/share/hosted-site-react-preview"
 import { HostedSiteSignInCard } from "@/components/share/hosted-site-sign-in"
 import { HostedSiteActionPreview } from "@/components/share/hosted-site-action-button"
@@ -40,6 +41,8 @@ import { htmlSiteToReactFiles } from "@/lib/hosted-site-react"
 import { functionsOnProject } from "@/lib/pipeline-functions"
 import { listedWebsitePipelineBindings } from "@/lib/website-pipelines"
 import { patchHostedSiteHtmlText, type HsPreviewInlinePayload, type HsPreviewSelectPayload } from "@/lib/hosted-site-select"
+import { patchReactFilesText } from "@/lib/hosted-site-react-select"
+import { canDeleteHostedSiteReactPath } from "@/lib/hosted-site-react"
 import type { HostedSiteAuth, HostedSiteBrand, HostedSiteOptions } from "@/lib/shared-link-types"
 import { DEFAULT_HOSTED_SITE_OPTIONS } from "@/lib/shared-link-types"
 import { useStore } from "@/lib/store"
@@ -83,6 +86,10 @@ export function HostedSitePageStudio({
   const [selection, setSelection] = useState<{ cssPath: string; snippet: string } | null>(null)
   const [runtimeConfirm, setRuntimeConfirm] = useState<"html" | "react" | null>(null)
   const [reactPath, setReactPath] = useState("src/App.tsx")
+  const [cloneUrl, setCloneUrl] = useState("")
+  const [cloneBusy, setCloneBusy] = useState(false)
+  const [cloneError, setCloneError] = useState<string | null>(null)
+  const [treeWidth, setTreeWidth] = useState(200)
   const valueRef = useRef(value)
   valueRef.current = value
   const resolvedTarget: studio_preview_target =
@@ -174,6 +181,7 @@ export function HostedSitePageStudio({
         runByAlias={runByAlias}
         tableByAlias={tableByAlias}
         slots={slotWidgets}
+        editable
       />
     ) : (
     <HostedSiteChrome
@@ -213,11 +221,17 @@ export function HostedSitePageStudio({
 
   const onPreviewSelect = useCallback((payload: HsPreviewSelectPayload) => {
     setSelection({ cssPath: payload.cssPath, snippet: payload.snippet })
+    if (payload.filePath) setReactPath(payload.filePath)
   }, [])
 
   const onPreviewInline = useCallback(
     (payload: HsPreviewInlinePayload) => {
       const latest = valueRef.current
+      if (latest.runtime === "react" && payload.previousText) {
+        const nextFiles = patchReactFilesText(latest.reactFiles, payload.previousText, payload.text)
+        if (nextFiles) onChange({ ...latest, reactFiles: nextFiles })
+        return
+      }
       const raw =
         resolvedTarget.kind === "signin"
           ? latest.authHtml.trim() || DEFAULT_HOSTED_SITE_AUTH_HTML
@@ -238,6 +252,46 @@ export function HostedSitePageStudio({
     },
     [onChange, resolvedTarget],
   )
+
+  async function cloneFromUrl() {
+    const url = cloneUrl.trim()
+    if (!url || cloneBusy) return
+    setCloneBusy(true)
+    setCloneError(null)
+    try {
+      const sent = valueRef.current
+      const res = await fetch(API_ROUTES.hostedSiteCloneUrl, {
+        method: "POST",
+        headers: JSON_HEADERS,
+        credentials: "same-origin",
+        body: JSON.stringify({ url, siteOptions: sent }),
+      })
+      const body = (await res.json().catch(() => null)) as
+        | { siteOptions?: HostedSiteOptions; error?: string }
+        | null
+      if (!res.ok || !body?.siteOptions) throw new Error(body?.error ?? "Could not clone that page")
+      onChange(body.siteOptions)
+    } catch (err) {
+      setCloneError((err as Error).message)
+    } finally {
+      setCloneBusy(false)
+    }
+  }
+
+  function addReactFile() {
+    const used = new Set(value.reactFiles.map((f) => f.path))
+    let n = 1
+    let path = "src/Component.tsx"
+    while (used.has(path)) {
+      n += 1
+      path = `src/Component${n}.tsx`
+    }
+    onChange({
+      ...value,
+      reactFiles: [...value.reactFiles, { path, contents: `export function Component() {\n  return <div />\n}\n` }],
+    })
+    setReactPath(path)
+  }
 
   const previewToolbar = (
     <div className="flex max-w-[18rem] flex-wrap items-center gap-0.5">
@@ -352,6 +406,33 @@ export function HostedSitePageStudio({
       />
       </div>
       )}
+
+      <form
+        className="flex flex-wrap items-center gap-1.5"
+        onSubmit={(e) => {
+          e.preventDefault()
+          void cloneFromUrl()
+        }}
+      >
+        <Globe className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+        <Input
+          value={cloneUrl}
+          onChange={(e) => setCloneUrl(e.target.value)}
+          placeholder="Clone a live site — https://…"
+          className="h-7 max-w-sm text-[11px]"
+        />
+        <Button
+          type="submit"
+          size="sm"
+          variant="outline"
+          className="h-7"
+          disabled={cloneBusy || !cloneUrl.trim()}
+          {...spineActionProps("share.site-clone-url")}
+        >
+          {cloneBusy ? <Loader2 className="h-3 w-3 animate-spin" /> : "Clone page"}
+        </Button>
+        {cloneError ? <span className="text-[10px] text-destructive">{cloneError}</span> : null}
+      </form>
 
       <WebsitePipelineBindings
         primaryProjectId={project.id}
@@ -635,60 +716,44 @@ export function HostedSitePageStudio({
       ) : value.runtime === "react" ? (
         <div className="space-y-3">
           <p className="text-[10px] text-muted-foreground">
-            Vite + React project. Preview compiles App.tsx and mounts live RunPipeline widgets.
+            Vite + React project. Click the preview to edit copy. Preview compiles App.tsx and mounts live RunPipeline widgets.
           </p>
-          <div className="flex flex-wrap gap-1">
-            {value.reactFiles.map((file) => (
-              <button
-                key={file.path}
-                type="button"
-                className={cn(
-                  "inline-flex items-center gap-1 rounded-md border px-2 py-1 font-mono text-[10px]",
-                  reactPath === file.path
-                    ? "border-border bg-background text-foreground"
-                    : "border-transparent text-muted-foreground hover:text-foreground",
-                )}
-                onClick={() => setReactPath(file.path)}
-              >
-                <FileCode2 className="h-3 w-3" />
-                {file.path}
-              </button>
-            ))}
-            <button
-              type="button"
-              className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-[10px] text-muted-foreground hover:text-foreground"
-              onClick={() => {
-                const used = new Set(value.reactFiles.map((f) => f.path))
-                let n = 1
-                let path = "src/Component.tsx"
-                while (used.has(path)) {
-                  n += 1
-                  path = `src/Component${n}.tsx`
-                }
-                onChange({
-                  ...value,
-                  reactFiles: [...value.reactFiles, { path, contents: `export function Component() {\n  return <div />\n}\n` }],
-                })
-                setReactPath(path)
-              }}
-            >
-              <Plus className="h-3 w-3" />
-              File
-            </button>
-          </div>
           <div className="overflow-hidden rounded-md border border-border">
-            <MonacoCodeEditor
-              value={value.reactFiles.find((f) => f.path === reactPath)?.contents ?? ""}
-              onChange={(next) =>
-                onChange({
-                  ...value,
-                  reactFiles: value.reactFiles.map((f) => (f.path === reactPath ? { ...f, contents: next } : f)),
-                })
+            <ResizableSplit
+              className="h-[280px]"
+              leadingWidth={treeWidth}
+              onLeadingWidthChange={setTreeWidth}
+              minLeading={140}
+              maxLeading={320}
+              leading={
+                <HostedSiteFileTree
+                  files={value.reactFiles}
+                  selectedPath={reactPath}
+                  onSelect={setReactPath}
+                  onAdd={addReactFile}
+                  onDelete={(path) => {
+                    if (!canDeleteHostedSiteReactPath(path)) return
+                    const next = value.reactFiles.filter((f) => f.path !== path)
+                    onChange({ ...value, reactFiles: next })
+                    if (reactPath === path) setReactPath(next.find((f) => f.path === "src/App.tsx")?.path ?? next[0]?.path ?? "src/App.tsx")
+                  }}
+                />
               }
-              language={reactPath.endsWith(".css") ? "css" : "typescript"}
-              compact
-              height="280px"
-              wordWrap="on"
+              trailing={
+                <MonacoCodeEditor
+                  value={value.reactFiles.find((f) => f.path === reactPath)?.contents ?? ""}
+                  onChange={(next) =>
+                    onChange({
+                      ...value,
+                      reactFiles: value.reactFiles.map((f) => (f.path === reactPath ? { ...f, contents: next } : f)),
+                    })
+                  }
+                  language={reactPath.endsWith(".css") ? "css" : "typescript"}
+                  compact
+                  height="280px"
+                  wordWrap="on"
+                />
+              }
             />
           </div>
           <HtmlPreviewFrame

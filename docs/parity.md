@@ -650,6 +650,10 @@ Grep an id (example): `rg 'project.add' combined_full_stack docs mcp_tool`.
 | `share.site-preview-inline` | Inline edit page text | no TUI [N] | preview only [N] | preview only [N] | preview only [N] |
 | `share.site-page-switch` | Hosted extra page | no TUI [N] | preview only [N] | preview only [N] | HostedSiteOptions.pages |
 | `share.site-add-page` | Add hosted page | no TUI [N] | preview only [N] | preview only [N] | nextHostedSitePagePath |
+| `share.site-file-tree` | React file tree | no TUI [N] | preview only [N] | preview only [N] | buildHostedSiteFileTree |
+| `share.site-file-add` | Add React file | no TUI [N] | preview only [N] | preview only [N] | htmlSiteToReactFiles |
+| `share.site-file-delete` | Delete React file | no TUI [N] | preview only [N] | preview only [N] | canDeleteHostedSiteReactPath |
+| `share.site-clone-url` | Clone a live site | no TUI [N] | POST /api/hosted-site/clone-url | isolated UI clone — not ask_agent [N] | cloneHostedSiteFromUrl |
 | `share.create-link` | Create link | session share lists; mint HTTP/GUI [P] | POST /api/shared-links | session_action id=share.create-link | session.createShareLink |
 | `share.deploy-api` | Deploy API | session share lists hosted APIs [P] | POST /api/hosted-apis | session_action id=share.deploy-api | session.createHostedApi |
 | `share.create-embed` | Create website embed | no TUI [N] | POST /api/shared-links (emb_ rows) | session_action id=share.create-embed | session.createShareLink({ kind: 'embed' }) |

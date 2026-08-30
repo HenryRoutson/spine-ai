@@ -811,6 +811,13 @@ export const hostedSiteOptionsSchema = z
   })
   .strict();
 
+export const hostedSiteCloneUrlBodySchema = z
+  .object({
+    url: z.string().trim().min(1).max(2000),
+    siteOptions: hostedSiteOptionsSchema,
+  })
+  .strict();
+
 export const hostedSiteCompileBodySchema = z
   .object({
     files: z

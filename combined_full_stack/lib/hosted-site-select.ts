@@ -3,6 +3,13 @@ import { HOSTED_SITE_IGNORED_SLOT_SELECTOR } from "@/lib/hosted-site-slots"
 
 export const HS_PREVIEW_MESSAGE_SOURCE = "spine-hosted-site"
 
+// AI : HTML slots plus React host widgets (bolt inspector ignores the preview iframe chrome).
+export const HS_PREVIEW_IGNORED_SELECTOR = `${HOSTED_SITE_IGNORED_SLOT_SELECTOR}, [data-spine-run], [data-spine-slot], [data-spine-sql], [data-spine-action]`
+
+export function isHsPreviewIgnoredTarget(el: Element): boolean {
+  return Boolean(el.closest(HS_PREVIEW_IGNORED_SELECTOR))
+}
+
 export type hs_preview_css_path = string & { __brand: "hs_preview_css_path" }
 export type hs_preview_hs_id = string & { __brand: "hs_preview_hs_id" }
 
@@ -13,6 +20,7 @@ export type HsPreviewSelectPayload = {
   hsId: hs_preview_hs_id
   snippet: string
   text: string
+  filePath?: string
 }
 
 export type HsPreviewInlinePayload = {
@@ -21,6 +29,8 @@ export type HsPreviewInlinePayload = {
   cssPath: hs_preview_css_path
   hsId: hs_preview_hs_id
   text: string
+  previousText?: string
+  filePath?: string
 }
 
 export type HsPreviewMessage = HsPreviewSelectPayload | HsPreviewInlinePayload

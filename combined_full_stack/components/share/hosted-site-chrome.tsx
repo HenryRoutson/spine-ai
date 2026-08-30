@@ -9,7 +9,6 @@ import {
   type hosted_site_surface,
 } from "@/lib/hosted-site"
 import {
-  HOSTED_SITE_IGNORED_SLOT_SELECTOR,
   HOSTED_SITE_SLOT_CLASS,
   groupHostedActionSlots,
   hostedSiteHasPrimarySlot,
@@ -19,6 +18,7 @@ import {
 import {
   HS_PREVIEW_MESSAGE_SOURCE,
   cssPathFromElement,
+  isHsPreviewIgnoredTarget,
   postHsPreviewMessage,
   previewHtmlRoot,
   snippetFromElement,
@@ -107,7 +107,7 @@ export function HostedSiteChrome({
     if (!editable) return
     const target = e.target
     if (!(target instanceof Element)) return
-    if (target.closest(HOSTED_SITE_IGNORED_SLOT_SELECTOR)) return
+    if (isHsPreviewIgnoredTarget(target)) return
     const tagged = target.closest("[data-hs-id]")
     if (!tagged || !e.currentTarget.contains(tagged)) return
     e.preventDefault()

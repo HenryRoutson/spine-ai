@@ -23,7 +23,7 @@ import {
 import { listedWebsitePipelineBindings } from "@/lib/website-pipelines"
 import type { HostedSiteAuthProvider, HostedSiteOptions, HostedSiteReactFile, website_runtime_kind } from "@/lib/shared-link-types"
 import type { ModelId, Project } from "./types"
-import { normalizeHostedSiteReactFiles } from "@/lib/hosted-site-react"
+import { isProtectedHostedSiteReactPath, normalizeHostedSiteReactFiles } from "@/lib/hosted-site-react"
 
 const hostedSiteAssistantResponseSchema = z.object({
   message: z.string(),
@@ -43,6 +43,7 @@ const hostedSiteAssistantResponseSchema = z.object({
     .array(z.object({ path: z.string(), contents: z.string() }).strict())
     .max(32)
     .nullable(),
+  reactFileDeletes: z.array(z.string().max(200)).max(32).nullable().optional(),
   actions: z
     .array(
       z
@@ -79,12 +80,13 @@ You MUST NOT invent a custom Supabase URL or anon key.
 
 Return a short message for the publisher, then fields:
 - reactFilePatches: [{path, contents}] for every file you change or add, or null to leave the tree unchanged
+- reactFileDeletes: ["src/Foo.tsx"] to remove unused files, or null. Never delete src/App.tsx, src/main.tsx, src/components/RunPipeline.tsx, or src/components/HostedSlot.tsx
 - companyName / tagline / colors: new value, or null to leave unchanged
 - hideSpineFooter / authEnabled: true/false, or null to leave unchanged
 - customHtml / customCss / authHtml: always null in React mode (the HTML snapshot stays as-is)
 - authProvider: null unless they asked to change it
 
-Do not remove src/components/RunPipeline.tsx or src/components/HostedSlot.tsx. Do not invent backend routes or npm packages.`
+Write real JSX components (not a dumped HTML string). Do not invent backend routes or npm packages.`
   }
   return `You are a product-page designer for a hosted Spine app (Lovable-style HTML around a run form).
 
@@ -105,6 +107,7 @@ Return a short message for the publisher, then fields:
 - hideSpineFooter / authEnabled: true/false, or null to leave unchanged
 - authProvider: "spine" (default, handled) or "custom_supabase" (placeholder), or null to leave unchanged
 - reactFilePatches: always null in HTML mode
+- reactFileDeletes: always null in HTML mode
 - actions: [{ alias, label, title, table, pipelineAlias, functionId, payload }] to configure {{action:alias}} buttons, or null to leave unchanged. functionId is the project function to run (AddTodo, not a mega-DAG). payload is the JSON the button uploads. Example: { "alias": "add", "label": "Add todo", "title": "Add", "table": "todo", "pipelineAlias": null, "functionId": "fn_add", "payload": { "action": "add" } }
 
 Write complete HTML fragments (nav/hero/features; include ${HOSTED_SITE_RUN_SLOT} only when a workspace belongs on the page; sign-in chrome around ${HOSTED_SITE_AUTH_SLOT} only if they asked). A full <!DOCTYPE html> document is ok — the host unwraps body + <style>.
@@ -173,13 +176,23 @@ function mergeAuthProvider(next: HostedSiteAuthProvider | null, current: HostedS
 function mergeReactFilePatches(
   current: HostedSiteReactFile[],
   patches: { path: string; contents: string }[] | null,
+  deletes: string[] | null | undefined,
 ): HostedSiteReactFile[] {
-  if (!patches || patches.length === 0) return current
+  if ((!patches || patches.length === 0) && (!deletes || deletes.length === 0)) return current
   const map = new Map(current.map((file) => [file.path, file.contents]))
-  for (const patch of patches) {
-    const path = patch.path.trim().replace(/^\/+/, "")
-    if (!path || path.includes("..")) continue
-    map.set(path, patch.contents)
+  if (deletes) {
+    for (const raw of deletes) {
+      const path = raw.trim().replace(/^\/+/, "")
+      if (!path || path.includes("..") || isProtectedHostedSiteReactPath(path)) continue
+      map.delete(path)
+    }
+  }
+  if (patches) {
+    for (const patch of patches) {
+      const path = patch.path.trim().replace(/^\/+/, "")
+      if (!path || path.includes("..")) continue
+      map.set(path, patch.contents)
+    }
   }
   return normalizeHostedSiteReactFiles([...map.entries()].map(([path, contents]) => ({ path, contents })))
 }
@@ -236,7 +249,9 @@ export function applyHostedSiteAssistantPatch(
           }))
         : base.actions,
     runtime: base.runtime,
-    reactFiles: reactMode ? mergeReactFilePatches(base.reactFiles, patch.reactFilePatches) : base.reactFiles,
+    reactFiles: reactMode
+      ? mergeReactFilePatches(base.reactFiles, patch.reactFilePatches, patch.reactFileDeletes)
+      : base.reactFiles,
   })
 }
 

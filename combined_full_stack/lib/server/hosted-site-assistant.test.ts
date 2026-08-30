@@ -235,7 +235,11 @@ describe("hosted site UI vibe agent prompts", () => {
       ...OPTIONS,
       runtime: "react" as const,
       pipelineBindings: [{ alias: "run" as const, projectId: PROJECT.id }],
-      reactFiles: [{ path: "src/App.tsx", contents: "export default function App(){return null}" }],
+      reactFiles: [
+        { path: "src/App.tsx", contents: "export default function App(){return null}" },
+        { path: "src/Hero.tsx", contents: "export function Hero(){return null}" },
+        { path: "src/components/RunPipeline.tsx", contents: "export function RunPipeline(){return null}" },
+      ],
     }
     const next = applyHostedSiteAssistantPatch(current, {
       message: "ok",
@@ -252,6 +256,7 @@ describe("hosted site UI vibe agent prompts", () => {
       authProvider: null,
       authHtml: null,
       reactFilePatches: [{ path: "src/App.tsx", contents: "export default function App(){return <h1>Hi</h1>}" }],
+      reactFileDeletes: ["src/Hero.tsx", "src/components/RunPipeline.tsx"],
     })
     expect(next.runtime).toBe("react")
     expect(next.pipelineBindings.map((b) => ({ alias: b.alias, projectId: b.projectId }))).toEqual(
@@ -259,11 +264,14 @@ describe("hosted site UI vibe agent prompts", () => {
     )
     expect(next.customHtml).toBe(OPTIONS.customHtml)
     expect(next.reactFiles.find((f) => f.path === "src/App.tsx")?.contents).toContain("Hi")
+    expect(next.reactFiles.find((f) => f.path === "src/Hero.tsx")).toBeUndefined()
+    expect(next.reactFiles.find((f) => f.path === "src/components/RunPipeline.tsx")?.contents).toContain("RunPipeline")
   })
 
   it("react system prompt asks for file patches, not HTML slots", () => {
     const system = buildHostedSiteAssistantSystemPrompt("react")
     expect(system).toMatch(/reactFilePatches/)
+    expect(system).toMatch(/reactFileDeletes/)
     expect(system).toContain("RunPipeline")
     expect(system).toContain("HostedSlot")
     expect(system).not.toContain(HOSTED_SITE_RUN_SLOT)

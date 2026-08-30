@@ -6,6 +6,24 @@ import { DEFAULT_WEBSITE_PIPELINE_ALIAS } from "@/lib/website-pipelines"
 const MAX_REACT_FILES = 32
 const MAX_REACT_FILE_BYTES = 50_000
 
+// AI : bolt.diy-style protected workbench files — vibe can patch App, not the host widgets.
+export const HOSTED_SITE_REACT_PROTECTED_PATHS = [
+  "src/App.tsx",
+  "src/main.tsx",
+  "src/components/RunPipeline.tsx",
+  "src/components/HostedSlot.tsx",
+] as const
+
+export type hosted_site_react_protected_path = (typeof HOSTED_SITE_REACT_PROTECTED_PATHS)[number]
+
+export function isProtectedHostedSiteReactPath(path: string): boolean {
+  return (HOSTED_SITE_REACT_PROTECTED_PATHS as readonly string[]).includes(path)
+}
+
+export function canDeleteHostedSiteReactPath(path: string): boolean {
+  return !isProtectedHostedSiteReactPath(path)
+}
+
 export function normalizeHostedSiteReactFiles(raw: unknown): HostedSiteReactFile[] {
   if (!Array.isArray(raw)) return []
   const used = new Set<string>()
