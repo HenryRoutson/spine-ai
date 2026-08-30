@@ -12,7 +12,11 @@ export async function createAdminClient(): Promise<SupabaseClient | null> {
   const env = getSupabasePublicEnv();
   const serviceKey = getServiceRoleKey();
   if (!env || !serviceKey) return null;
-  return createClient(env.url, serviceKey, {
+  return createRemoteAdminClient(env.url, serviceKey);
+}
+
+export function createRemoteAdminClient(url: string, serviceKey: string): SupabaseClient {
+  return createClient(url, serviceKey, {
     auth: { persistSession: false },
     // AI : Node 20 has no native WebSocket — ws transport required for @supabase/supabase-js init.
     realtime: { transport: ws as unknown as WebSocketLikeConstructor },

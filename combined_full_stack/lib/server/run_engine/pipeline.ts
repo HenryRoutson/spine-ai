@@ -68,6 +68,8 @@ import { execForkJoin } from "./steps/fork";
 import { execIfElseJoin } from "./steps/if_else";
 import { buildAssertResult, buildClientResult, buildHumanReviewResult, buildChatbotResult, buildLlmClientResult, failedStepResult } from "./results";
 import type { ClientStepResume, RunCtx, RunOptions } from "./engine_types";
+import { getSharedLink } from "../shared_links";
+import { siteAdminClientForLink } from "../site_supabase";
 
 export async function runPipeline(
   store: Store,
@@ -157,6 +159,10 @@ export async function runPipeline(
       ? `site:${opts.runMeta.sharedLinkId}`
       : `project:${projectId}`,
   };
+  if (opts.runMeta?.sharedLinkId) {
+    const link = await getSharedLink(opts.runMeta.sharedLinkId)
+    ctx.appSqlDb = link ? siteAdminClientForLink(link) ?? undefined : undefined
+  }
 
   const steps: RunStep[] = [];
   const artifacts: { moduleId: ModuleId; structure?: StructureModel; value: unknown }[] = [];
@@ -294,6 +300,10 @@ export async function resumeRunPipeline(
     opts.runMeta?.sharedLinkId
       ? `site:${opts.runMeta.sharedLinkId}`
       : ctx.appSqlScope ?? `project:${checkpoint.projectId}`;
+  if (opts.runMeta?.sharedLinkId) {
+    const link = await getSharedLink(opts.runMeta.sharedLinkId)
+    ctx.appSqlDb = link ? siteAdminClientForLink(link) ?? undefined : undefined
+  }
   const steps: RunStep[] = [...checkpoint.steps];
   const artifacts: { moduleId: ModuleId; structure?: StructureModel; value: unknown }[] = steps
     .filter((s) => s.status !== "error")

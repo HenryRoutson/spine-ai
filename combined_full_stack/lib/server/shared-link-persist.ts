@@ -8,8 +8,16 @@ import { logger } from "./server_logger"
 const persistLog = logger("shared-link-persist")
 
 export const SNAPSHOT_HOSTED_SITE_KEY = "hostedSite" as const
+export const SNAPSHOT_HOSTED_SITE_SECRETS_KEY = "hostedSiteSecrets" as const
 
-export type SharedLinkSnapshot = Project & { hostedSite?: HostedSiteOptions }
+export type HostedSiteSecrets = {
+  serviceRoleKey: string
+}
+
+export type SharedLinkSnapshot = Project & {
+  hostedSite?: HostedSiteOptions
+  hostedSiteSecrets?: HostedSiteSecrets
+}
 
 export type SchemaWriteError = { message?: string; code?: string }
 export type SchemaWriteResult = { error: SchemaWriteError | null }
@@ -32,13 +40,25 @@ function isEmptyJsonObject(value: unknown): boolean {
 export function withHostedSiteOnSnapshot(
   snapshot: Project,
   siteOptions: HostedSiteOptions,
+  secrets?: HostedSiteSecrets | null,
 ): SharedLinkSnapshot {
-  return { ...snapshot, [SNAPSHOT_HOSTED_SITE_KEY]: siteOptions }
+  const prev = snapshot as SharedLinkSnapshot
+  const next: SharedLinkSnapshot = { ...snapshot, [SNAPSHOT_HOSTED_SITE_KEY]: siteOptions }
+  if (secrets === null) delete next[SNAPSHOT_HOSTED_SITE_SECRETS_KEY]
+  else if (secrets?.serviceRoleKey) next[SNAPSHOT_HOSTED_SITE_SECRETS_KEY] = secrets
+  else if (prev.hostedSiteSecrets?.serviceRoleKey) next[SNAPSHOT_HOSTED_SITE_SECRETS_KEY] = prev.hostedSiteSecrets
+  return next
+}
+
+export function hostedSiteSecretsFromSnapshot(snapshot: unknown): HostedSiteSecrets | undefined {
+  const raw = snapshot && typeof snapshot === "object" ? (snapshot as SharedLinkSnapshot).hostedSiteSecrets : undefined
+  const key = typeof raw?.serviceRoleKey === "string" ? raw.serviceRoleKey.trim() : ""
+  return key ? { serviceRoleKey: key } : undefined
 }
 
 export function stripHostedSiteFromSnapshot(snapshot: unknown): Project {
   const raw = (snapshot && typeof snapshot === "object" ? snapshot : {}) as SharedLinkSnapshot
-  const { hostedSite: _hosted, ...project } = raw
+  const { hostedSite: _hosted, hostedSiteSecrets: _secrets, ...project } = raw
   return project as Project
 }
 

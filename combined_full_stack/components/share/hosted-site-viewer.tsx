@@ -21,6 +21,7 @@ import type { HostedSiteOptions } from "@/lib/shared-link-types"
 import type { hosted_site_react_bundle } from "@/lib/hosted-site-react"
 import { clearWorkspaceClientSession } from "@/lib/clear-workspace-client-session"
 import { useSupabaseSession } from "@/lib/use-supabase-session"
+import { isolatedSiteAuthReady } from "@/lib/website-supabase-need"
 import { hostedActionButtonLabel } from "@/lib/hosted-site-actions"
 import { resolveWebsitePipelineBindings } from "@/lib/website-pipelines"
 import { hostedTableSlotsForProject } from "@/components/platform/hosted-table-slot"
@@ -47,7 +48,10 @@ export function HostedSiteViewer({
   structureRows?: Project["structureRows"]
 }) {
   const options = normalizeHostedSiteOptions(siteOptions ?? DEFAULT_HOSTED_SITE_OPTIONS)
-  const { email, isAuthenticated, signOut } = useSupabaseSession()
+  const isolated = isolatedSiteAuthReady(options.auth)
+    ? { url: options.auth.customSupabaseUrl, anonKey: options.auth.customSupabaseAnonKey }
+    : null
+  const { email, isAuthenticated, signOut } = useSupabaseSession(isolated)
   const nextPath = `/site/${linkId}`
   const showSignIn = options.auth.enabled && !isAuthenticated
   const hasDocsSlot = useMemo(
@@ -132,7 +136,7 @@ export function HostedSiteViewer({
             <HostedSiteSignInCard
               companyName={options.brand.companyName}
               nextPath={nextPath}
-              provider={options.auth.provider}
+              auth={options.auth}
             />
           ),
         }}

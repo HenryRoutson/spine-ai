@@ -6,6 +6,7 @@ import { HTTP, unknownProject } from "@/lib/server/api-errors";
 import { allProjectSeeds, blankProject, cloneProject, type ProjectSeed } from "@/lib/server/seed";
 import { ensureBundledSeedDocsForProject, ensureSeedDocs, type Store } from "@/lib/server/store";
 import { publishSharedLink } from "@/lib/server/shared_links";
+import { afterAllocateSiteSupabase } from "@/lib/server/site_supabase_after";
 import { migrateProjectModules } from "@/lib/server/validity";
 import { logger } from "@/lib/server/server_logger";
 import { remapWebsiteProjectId } from "@/lib/website-pipelines";
@@ -54,6 +55,8 @@ async function maybePublishHostedSites(opts: {
           siteOptions: remapWebsiteProjectId(site, seed.project.id, opts.project.id),
         }),
       );
+      const published = sites[sites.length - 1];
+      if (published) afterAllocateSiteSupabase(published.id, published.siteOptions.auth);
     } catch (err) {
       errors.push((err as Error).message);
     }

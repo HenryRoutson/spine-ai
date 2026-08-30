@@ -33,6 +33,9 @@ export function LandingNav({ links, loginUrl }: LandingNavProps) {
               {link.label}
             </a>
           ))}
+          <a href={loginUrl} className="text-sm text-foreground transition-colors hover:text-muted">
+            Sign in
+          </a>
         </div>
 
         <button
@@ -60,6 +63,9 @@ export function LandingNav({ links, loginUrl }: LandingNavProps) {
                 {link.label}
               </a>
             ))}
+            <a href={loginUrl} className="text-sm text-foreground" onClick={() => setOpen(false)}>
+              Sign in
+            </a>
           </div>
         </div>
       ) : null}

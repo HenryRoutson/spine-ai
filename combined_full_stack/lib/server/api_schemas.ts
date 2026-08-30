@@ -754,6 +754,9 @@ export const hostedSiteOptionsSchema = z
         provider: z.enum(["spine", "custom_supabase"]).optional(),
         customSupabaseUrl: z.string().max(2048).optional(),
         customSupabaseAnonKey: z.string().max(2048).optional(),
+        projectRef: z.string().max(64).optional(),
+        allocStatus: z.enum(["idle", "pending", "ready", "error", "skipped"]).optional(),
+        allocError: z.string().max(2000).optional(),
       })
       .strict()
       .optional(),

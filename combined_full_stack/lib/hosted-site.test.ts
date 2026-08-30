@@ -172,4 +172,20 @@ describe("hosted site wrapper", () => {
     })
     expect(next.pages).toEqual([{ path: "app", html: "<p>{{run}}</p>" }])
   })
+
+  it("keeps isolated-alloc fields on auth", () => {
+    const next = normalizeHostedSiteOptions({
+      auth: {
+        enabled: true,
+        allocStatus: "ready",
+        projectRef: "abcdref",
+        customSupabaseUrl: "https://abcdref.supabase.co",
+        customSupabaseAnonKey: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.aaaaaaaaaaaaaaaaaaaa.bbbbbbbbbbbbbbbbbbbb",
+        allocError: "",
+      },
+    })
+    expect(next.auth.allocStatus).toBe("ready")
+    expect(next.auth.projectRef).toBe("abcdref")
+    expect(next.auth.customSupabaseUrl).toBe("https://abcdref.supabase.co")
+  })
 })

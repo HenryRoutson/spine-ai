@@ -9,6 +9,7 @@ import { ShareDefaultFiles } from "@/components/share/share-default-files"
 import { ShareFundingPicker } from "@/components/share/share-funding-flow"
 import { parseSharePricing, parseSpendLimitUsd, SharePricingFields } from "@/components/share/share-pricing-fields"
 import { HostedSitePageStudio } from "@/components/share/hosted-site-page-studio"
+import { SiteSupabaseStatus } from "@/components/share/site-supabase-status"
 import { ShareSheet } from "@/components/share/share-sheet"
 import { ShareViewerDocsFields, useShareViewerMarkdown } from "@/components/share/share-viewer-docs-fields"
 import { API_ROUTES } from "@/lib/api-routes"
@@ -220,6 +221,21 @@ export function ShareSiteForm({
         </p>
       </div>
       )}
+
+      {created ? (
+        <SiteSupabaseStatus
+          linkId={created.link.id}
+          auth={siteOptions.auth}
+          onAuth={(nextAuth) => {
+            setSiteOptions((prev) => ({ ...prev, auth: nextAuth }))
+            setCreated((c) =>
+              c
+                ? { ...c, link: { ...c.link, siteOptions: { ...c.link.siteOptions, auth: nextAuth } } }
+                : c,
+            )
+          }}
+        />
+      ) : null}
 
       <HostedSitePageStudio
         project={project}

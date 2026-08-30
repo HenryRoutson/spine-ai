@@ -194,7 +194,7 @@ export function HostedSitePageStudio({
           <HostedSiteSignInCard
             companyName={value.brand.companyName}
             nextPath="#"
-            provider={value.auth.provider}
+            auth={value.auth}
             preview
           />
         ),
@@ -505,7 +505,7 @@ export function HostedSitePageStudio({
                   checked={value.auth.provider === "spine"}
                   onChange={() => patchAuth({ provider: "spine" })}
                 />
-                Spine (handled)
+                Spine allocates a new project
               </label>
               <label className="flex items-center gap-1.5">
                 <input
@@ -514,13 +514,13 @@ export function HostedSitePageStudio({
                   checked={value.auth.provider === "custom_supabase"}
                   onChange={() => patchAuth({ provider: "custom_supabase" })}
                 />
-                Custom Supabase
+                Bring your own
               </label>
             </div>
             {value.auth.provider === "custom_supabase" ? (
               <div className="grid gap-2 sm:grid-cols-2">
                 <div className="space-y-1">
-                  <Label className="text-[10px] text-muted-foreground">Project URL (placeholder)</Label>
+                  <Label className="text-[10px] text-muted-foreground">Project URL</Label>
                   <Input
                     value={value.auth.customSupabaseUrl}
                     onChange={(e) => patchAuth({ customSupabaseUrl: e.target.value })}
@@ -529,17 +529,17 @@ export function HostedSitePageStudio({
                   />
                 </div>
                 <div className="space-y-1">
-                  <Label className="text-[10px] text-muted-foreground">Anon key (placeholder)</Label>
+                  <Label className="text-[10px] text-muted-foreground">Anon key</Label>
                   <Input
                     value={value.auth.customSupabaseAnonKey}
                     onChange={(e) => patchAuth({ customSupabaseAnonKey: e.target.value })}
                     className="h-8 font-mono text-xs"
-                    placeholder="stored, not allocated yet"
+                    placeholder="eyJ..."
                   />
                 </div>
                 <p className="text-[10px] text-muted-foreground sm:col-span-2">
-                  Custom sign-in and data on a separate Supabase instance are not allocated yet. Keys are stored only.
-                  Live auth still uses Spine until a project instance is provisioned.
+                  BYO skips Spine allocation. SQL still needs a service role — prefer letting Spine
+                  create a project per website so hosted rows never touch the platform database.
                 </p>
               </div>
             ) : null}
