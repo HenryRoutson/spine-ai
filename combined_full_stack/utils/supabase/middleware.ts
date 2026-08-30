@@ -5,6 +5,7 @@ import { isPublicApiPath } from "@/lib/api-routes";
 import { checkRateLimit, clientIpFromHeaders } from "@/lib/rate_limit";
 import { type RateLimitKey, publicApiTier } from "@/lib/rate_limit_config";
 import { HTTP } from "@/lib/server/api-errors";
+import { middlewareBlocksCookielessApi } from "@/lib/server/api_session_gate";
 import { frameAncestorsCsp, isEmbedLinkId, normalizeEmbedOrigins } from "@/lib/server/embed_origins";
 import { getSupabasePublicEnv } from "@/utils/supabase/env";
 import { sanitizeRedirectPath } from "@/utils/sanitize_redirect";
@@ -196,7 +197,8 @@ export async function updateSession(request: NextRequest) {
     }
   }
 
-  if (!user && isApiRoute && !isPublicApiPathLocal(pathname, request.method)) {
+  // AI : Bearer (MCP/CLI SPINE_API_TOKEN) is validated in requireAuth — do not 401 here.
+  if (!user && middlewareBlocksCookielessApi(pathname, request.method, request.headers)) {
     if (authProbeFailed) {
       return NextResponse.json(
         { error: "Auth temporarily unavailable — retry shortly." },

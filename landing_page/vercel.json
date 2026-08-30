@@ -1,13 +1,5 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "framework": "nextjs",
-  "outputDirectory": null,
-  "redirects": [
-    {
-      "source": "/",
-      "has": [{ "type": "host", "value": "auto-pipeline.dev" }],
-      "destination": "https://auto-pipeline-app.dev/login?next=%2F",
-      "permanent": false
-    }
-  ]
+  "outputDirectory": null
 }

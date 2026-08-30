@@ -27,24 +27,31 @@ export function LandingNav({ links, loginUrl }: LandingNavProps) {
           <span className="spine-wordmark hidden sm:inline" style={{ fontSize: "14px" }}>Spine</span>
         </a>
 
-        <div className="hidden items-center gap-8 md:flex">
-          {links.map((link: NavLink) => (
-            <a key={link.href} href={link.href} className="text-sm text-muted transition-colors hover:text-foreground">
-              {link.label}
-            </a>
-          ))}
+        <div className="flex items-center gap-4">
+          <div className="hidden items-center gap-8 md:flex">
+            {links.map((link: NavLink) => (
+              <a key={link.href} href={link.href} className="text-sm text-muted transition-colors hover:text-foreground">
+                {link.label}
+              </a>
+            ))}
+          </div>
+          <a
+            href={loginUrl}
+            className="text-sm text-muted transition-colors hover:text-foreground"
+          >
+            Sign in
+          </a>
+          <button
+            type="button"
+            aria-label="Menu"
+            className="flex flex-col gap-1.5 md:hidden"
+            onClick={() => setOpen((v: boolean) => !v)}
+          >
+            <span className="h-px w-5 bg-foreground" />
+            <span className="h-px w-5 bg-foreground" />
+            <span className="h-px w-5 bg-foreground" />
+          </button>
         </div>
-
-        <button
-          type="button"
-          aria-label="Menu"
-          className="flex flex-col gap-1.5 md:hidden"
-          onClick={() => setOpen((v: boolean) => !v)}
-        >
-          <span className="h-px w-5 bg-foreground" />
-          <span className="h-px w-5 bg-foreground" />
-          <span className="h-px w-5 bg-foreground" />
-        </button>
       </nav>
 
       {open ? (
@@ -60,6 +67,9 @@ export function LandingNav({ links, loginUrl }: LandingNavProps) {
                 {link.label}
               </a>
             ))}
+            <a href={loginUrl} className="text-sm text-muted" onClick={() => setOpen(false)}>
+              Sign in
+            </a>
           </div>
         </div>
       ) : null}
