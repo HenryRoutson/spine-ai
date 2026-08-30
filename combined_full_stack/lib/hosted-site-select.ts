@@ -114,6 +114,23 @@ export function snippetFromElement(el: Element): string {
   return html.length > 800 ? `${html.slice(0, 799)}…` : html
 }
 
+export function patchHostedSiteHtmlUniqueText(sourceHtml: string, oldText: string, newText: string): string | null {
+  const needle = oldText.trim()
+  const next = newText.trim()
+  if (!needle || needle === next) return null
+  let count = 0
+  let from = 0
+  while (from <= sourceHtml.length) {
+    const at = sourceHtml.indexOf(needle, from)
+    if (at < 0) break
+    count += 1
+    from = at + needle.length
+    if (count > 1) return null
+  }
+  if (count !== 1) return null
+  return sourceHtml.replace(needle, next)
+}
+
 export function postHsPreviewMessage(payload: HsPreviewMessage): void {
   window.postMessage(payload, window.location.origin)
 }

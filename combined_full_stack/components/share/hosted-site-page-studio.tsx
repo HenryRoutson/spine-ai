@@ -33,6 +33,7 @@ import {
   htmlColorInputValue,
   keepConcurrentHostedSiteEdits,
   nextHostedSitePagePath,
+  patchHostedSiteBrandCopy,
   sanitizeHostedSiteHtml,
   unwrapVibeCodedHtml,
 } from "@/lib/hosted-site"
@@ -40,7 +41,7 @@ import { HOSTED_SITE_DOCS_SLOT } from "@/lib/hosted-site-slots"
 import { htmlSiteToReactFiles } from "@/lib/hosted-site-react"
 import { functionsOnProject } from "@/lib/pipeline-functions"
 import { listedWebsitePipelineBindings } from "@/lib/website-pipelines"
-import { patchHostedSiteHtmlText, type HsPreviewInlinePayload, type HsPreviewSelectPayload } from "@/lib/hosted-site-select"
+import { patchHostedSiteHtmlText, patchHostedSiteHtmlUniqueText, type HsPreviewInlinePayload, type HsPreviewSelectPayload } from "@/lib/hosted-site-select"
 import { patchReactFilesText } from "@/lib/hosted-site-react-select"
 import { canDeleteHostedSiteReactPath } from "@/lib/hosted-site-react"
 import type { HostedSiteAuth, HostedSiteBrand, HostedSiteOptions } from "@/lib/shared-link-types"
@@ -229,8 +230,16 @@ export function HostedSitePageStudio({
   const onPreviewInline = useCallback(
     (payload: HsPreviewInlinePayload) => {
       const latest = valueRef.current
-      if (latest.runtime === "react" && payload.previousText) {
-        const nextFiles = patchReactFilesText(latest.reactFiles, payload.previousText, payload.text)
+      const previous = payload.previousText?.trim() || ""
+      if (previous && previous !== payload.text.trim()) {
+        const branded = patchHostedSiteBrandCopy(latest, previous, payload.text)
+        if (branded) {
+          onChange(branded)
+          return
+        }
+      }
+      if (latest.runtime === "react" && previous) {
+        const nextFiles = patchReactFilesText(latest.reactFiles, previous, payload.text)
         if (nextFiles) onChange({ ...latest, reactFiles: nextFiles })
         return
       }
@@ -242,7 +251,10 @@ export function HostedSitePageStudio({
             : latest.customHtml.trim() || DEFAULT_HOSTED_SITE_HTML
       const inner = unwrapVibeCodedHtml(raw).html
       const sanitized = sanitizeHostedSiteHtml(inner)
-      const next = patchHostedSiteHtmlText(sanitized, payload.hsId, payload.text)
+      let next = patchHostedSiteHtmlText(sanitized, payload.hsId, payload.text)
+      if (next === sanitized && previous) {
+        next = patchHostedSiteHtmlUniqueText(sanitized, previous, payload.text) ?? sanitized
+      }
       if (next === sanitized) return
       if (resolvedTarget.kind === "signin") onChange({ ...latest, authHtml: next })
       else if (resolvedTarget.kind === "page") {

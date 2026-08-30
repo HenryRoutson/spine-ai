@@ -14,6 +14,7 @@ import {
   keepConcurrentHostedSiteEdits,
   normalizeHostedSiteOptions,
   parseHexColor,
+  patchHostedSiteBrandCopy,
   sanitizeHostedSiteCss,
   sanitizeHostedSiteHtml,
   sharedLinkPublicPath,
@@ -74,6 +75,16 @@ describe("hosted site wrapper", () => {
     expect(parts.before).toContain("Acme")
     expect(parts.before).not.toContain(HOSTED_SITE_RUN_SLOT)
     expect(parts.after).toContain("</section>")
+  })
+
+  it("patches company/tagline from click-to-edit on a cloned page", () => {
+    const options = normalizeHostedSiteOptions({
+      brand: { companyName: "Example Domain", tagline: "This domain is for use in documentation examples." },
+    })
+    const next = patchHostedSiteBrandCopy(options, "Example Domain", "Example Domain — cloned")
+    expect(next?.brand.companyName).toBe("Example Domain — cloned")
+    expect(next?.brand.tagline).toBe(options.brand.tagline)
+    expect(patchHostedSiteBrandCopy(options, "missing", "x")).toBeNull()
   })
 
   it("rejects unsafe logo urls", () => {

@@ -1,6 +1,6 @@
 "use client"
 
-import { Component, useEffect, useMemo, useRef, useState, type ComponentType, type CSSProperties, type FocusEvent, type MouseEvent, type ReactNode } from "react"
+import { Component, useEffect, useMemo, useRef, useState, type ComponentType, type CSSProperties, type FocusEvent, type KeyboardEvent, type MouseEvent, type ReactNode } from "react"
 import { hostedSiteBrandVars } from "@/lib/hosted-site"
 import { ensureHostedSiteReactCss, htmlSiteToReactFiles, type hosted_site_react_bundle } from "@/lib/hosted-site-react"
 import { instantiateHostedSiteReactApp } from "@/lib/hosted-site-react-runtime"
@@ -221,12 +221,22 @@ export function HostedSiteReactPreview({
     })
   }
 
+  function onPreviewKeyDown(e: KeyboardEvent<HTMLDivElement>) {
+    if (!editable) return
+    if (e.key !== "Enter" || e.shiftKey) return
+    const tagged = e.target
+    if (!(tagged instanceof HTMLElement) || tagged.getAttribute("contenteditable") !== "true") return
+    e.preventDefault()
+    tagged.blur()
+  }
+
   return (
     <div
       className="hs-root hs-react-preview min-h-40"
       style={hostedSiteBrandVars(options.brand) as CSSProperties}
       onClick={editable ? onPreviewClick : undefined}
       onBlur={editable ? onPreviewBlur : undefined}
+      onKeyDown={editable ? onPreviewKeyDown : undefined}
     >
       {editable ? (
         <style>{`${css}

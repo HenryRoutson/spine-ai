@@ -1,6 +1,6 @@
 "use client"
 
-import { useMemo, type CSSProperties, type FocusEvent, type MouseEvent, type ReactNode } from "react"
+import { useMemo, type CSSProperties, type FocusEvent, type KeyboardEvent, type MouseEvent, type ReactNode } from "react"
 import {
   compileHostedSiteAuthHtml,
   compileHostedSiteHtml,
@@ -117,6 +117,7 @@ export function HostedSiteChrome({
     const cssPath = (htmlRoot ? cssPathFromElement(tagged, htmlRoot) : tagged.tagName.toLowerCase()) as hs_preview_css_path
     e.currentTarget.querySelectorAll("[data-hs-selected]").forEach((n) => n.removeAttribute("data-hs-selected"))
     tagged.setAttribute("data-hs-selected", "")
+    tagged.setAttribute("data-hs-original-text", tagged.textContent?.trim() ?? "")
     tagged.setAttribute("contenteditable", "true")
     if (tagged instanceof HTMLElement) tagged.focus()
     postHsPreviewMessage({
@@ -145,7 +146,17 @@ export function HostedSiteChrome({
       cssPath,
       hsId: hsId as hs_preview_hs_id,
       text: tagged.textContent?.trim() ?? "",
+      previousText: tagged.getAttribute("data-hs-original-text") ?? "",
     })
+  }
+
+  function onPreviewKeyDown(e: KeyboardEvent<HTMLDivElement>) {
+    if (!editable) return
+    if (e.key !== "Enter" || e.shiftKey) return
+    const tagged = e.target
+    if (!(tagged instanceof HTMLElement) || tagged.getAttribute("contenteditable") !== "true") return
+    e.preventDefault()
+    tagged.blur()
   }
 
   return (
@@ -154,6 +165,7 @@ export function HostedSiteChrome({
       style={hostedSiteBrandVars(options.brand) as CSSProperties}
       onClick={editable ? onPreviewClick : undefined}
       onBlur={editable ? onPreviewBlur : undefined}
+      onKeyDown={editable ? onPreviewKeyDown : undefined}
     >
       {editable ? (
         <style>{`${compiled.css}

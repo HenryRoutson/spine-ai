@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest"
 import {
   patchHostedSiteHtmlText,
+  patchHostedSiteHtmlUniqueText,
   stampHostedSiteHsIds,
   stripHostedSiteHsIds,
 } from "@/lib/hosted-site-select"
@@ -24,6 +25,14 @@ describe("hosted site click-to-edit", () => {
     expect(next).toContain("Invoice ops")
     expect(next).not.toContain("{{tagline}}")
     expect(next).not.toContain("data-hs-id")
+  })
+
+  it("patches a unique text occurrence when hs-id is not on the source", () => {
+    const html = `<h1>Example Domain</h1><p>Docs</p>`
+    expect(patchHostedSiteHtmlUniqueText(html, "Example Domain", "Cloned")).toBe(
+      `<h1>Cloned</h1><p>Docs</p>`,
+    )
+    expect(patchHostedSiteHtmlUniqueText(`<h1>Docs</h1><p>Docs</p>`, "Docs", "X")).toBeNull()
   })
 })
 

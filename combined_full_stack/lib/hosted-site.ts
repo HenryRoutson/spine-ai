@@ -167,6 +167,24 @@ export function applyHostedSiteTokens(html: string, brand: HostedSiteBrand): str
     .replaceAll("{{email}}", email)
 }
 
+// AI : cloned pages put the title in {{company}} / {{tagline}} — click-to-edit must patch brand, not inner HTML.
+export function patchHostedSiteBrandCopy(
+  options: HostedSiteOptions,
+  previousText: string,
+  nextText: string,
+): HostedSiteOptions | null {
+  const prev = previousText.trim()
+  const next = nextText.trim()
+  if (!prev || prev === next) return null
+  if (options.brand.companyName.trim() === prev) {
+    return { ...options, brand: { ...options.brand, companyName: next } }
+  }
+  if (options.brand.tagline.trim() === prev) {
+    return { ...options, brand: { ...options.brand, tagline: next } }
+  }
+  return null
+}
+
 export type HostedSiteHtmlParts = {
   before: string
   after: string
