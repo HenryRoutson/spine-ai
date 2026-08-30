@@ -133,16 +133,20 @@ export function PipelineFunctionSelect({
                 <DropdownMenuItem
                   key={fn.id}
                   onClick={() => setActiveFunction(fn.id)}
-                  className="group flex items-center justify-between gap-2 text-xs"
+                  className="flex items-center justify-between gap-2 text-xs"
                   {...spineActionProps("pipeline.function-select")}
                 >
                   <span className="min-w-0 truncate font-medium">{fn.name}</span>
                   <div className="flex shrink-0 items-center gap-1">
                     <Button
                       type="button"
-                      size="icon"
+                      size="icon-xs"
                       variant="ghost"
-                      className="h-6 w-6 opacity-0 group-hover:opacity-100"
+                      className="h-6 w-6"
+                      onPointerDown={(e) => {
+                        e.preventDefault()
+                        e.stopPropagation()
+                      }}
                       onClick={(e) => {
                         e.stopPropagation()
                         e.preventDefault()
@@ -157,12 +161,16 @@ export function PipelineFunctionSelect({
                     {canDelete ? (
                       <DeleteButton
                         type="button"
-                        size="icon"
+                        size="icon-xs"
                         variant="ghost"
-                        className="h-6 w-6 opacity-0 group-hover:opacity-100"
+                        className="h-6 w-6"
                         label={`Delete ${fn.name}`}
                         title={`Delete ${fn.name}`}
                         spineId="pipeline.function-delete"
+                        onPointerDown={(e: MouseEvent) => {
+                          e.preventDefault()
+                          e.stopPropagation()
+                        }}
                         onClick={(e: MouseEvent) => {
                           e.stopPropagation()
                           e.preventDefault()
