@@ -179,7 +179,7 @@ export function applyHarnessTurn(
 function buildHarnessSystemPrompt(): string {
   const js = vibeJsAuthoringEnabled()
   const pipelineHint = js
-    ? `- Write pipeline.js (export default pipeline(...)). Each step function takes one object with a Zod schema. Cache / DAG / traces are library exports.`
+    ? `- Write pipeline.js (\`export const main = workflow(async () => { ... })\`). Ordinary async TypeScript. Cache / DAG / traces are library exports.`
     : `- Write structures/*.json, pipeline.json, tests/*, docs.md, message.md. Up to 12 tools per turn; more files → next turn.`
   return `You are a coding agent editing a Spine project in an in-memory file workspace (OpenCode / Pi loop: write files, run_tests, repeat).
 
@@ -204,7 +204,7 @@ ${pipelineHint}
 Example (copy the shape, change names for the task):
 ${
   js
-    ? `{"tools":[{"tool":"write_file","path":"pipeline.js","content":"const Row = model(\\"Row\\", { text: z.string() })\\nexport default pipeline(\\n  input({ schema: z.array(Document), type: \\"text\\", note: \\"Upload files.\\" }),\\n  llmBatch({ schema: Row, note: \\"One row per file.\\", prompt: \\"Extract the fields.\\" }),\\n  output({ schema: Row })\\n)\\n"},{"tool":"write_file","path":"tests/sample.txt","content":"Acme 12.00\\n"},{"tool":"write_file","path":"message.md","content":"I'll add a pipeline that extracts one row per file.\\n"}]}`
+    ? `{"tools":[{"tool":"write_file","path":"pipeline.js","content":"const Row = model(\\"Row\\", { text: z.string() })\\nexport const main = workflow(async () => {\\n  await input({ schema: z.array(Document), type: \\"text\\", note: \\"Upload files.\\" })\\n  await llmBatch({ schema: Row, note: \\"One row per file.\\", prompt: \\"Extract the fields.\\" })\\n  await output({ schema: Row })\\n})\\n"},{"tool":"write_file","path":"tests/sample.txt","content":"Acme 12.00\\n"},{"tool":"write_file","path":"message.md","content":"I'll add a pipeline that extracts one row per file.\\n"}]}`
     : `{"tools":[{"tool":"write_file","path":"structures/Row.json","content":"{\\n  \\"name\\": \\"Row\\",\\n  \\"description\\": \\"One extracted row.\\",\\n  \\"fields\\": [{\\"name\\": \\"text\\", \\"type\\": \\"text\\", \\"optional\\": false, \\"description\\": \\"Value\\"}]\\n}\\n"},{"tool":"write_file","path":"pipeline.json","content":"[\\n  {\\"kind\\": \\"input\\", \\"label\\": \\"Files\\", \\"note\\": \\"Upload files.\\", \\"structureOut\\": \\"list[Document]\\", \\"inputType\\": \\"text\\", \\"inputDescription\\": \\"files\\"},\\n  {\\"kind\\": \\"llm-batch\\", \\"label\\": \\"Extract\\", \\"note\\": \\"One row per file.\\", \\"structureIn\\": \\"Document\\", \\"structureOut\\": \\"Row\\", \\"prompt\\": \\"Extract the fields.\\", \\"inputDescription\\": \\"files\\"},\\n  {\\"kind\\": \\"output\\", \\"label\\": \\"Rows\\", \\"structureIn\\": \\"Row\\", \\"structureOut\\": \\"Row\\", \\"inputDescription\\": \\"rows\\"}\\n]\\n"},{"tool":"write_file","path":"tests/sample.txt","content":"Acme 12.00\\n"},{"tool":"write_file","path":"message.md","content":"I'll add a pipeline that extracts one row per file.\\n"}]}`
 }
 `

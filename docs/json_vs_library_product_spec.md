@@ -8,16 +8,16 @@ Spine is a series-parallel document pipeline builder. A **project** is a group o
 
 A pipeline is a left-to-right spine of steps: input → convert/parse → llm / llm-batch / fork / combine / assemble / custom-code → output. Adjacent steps must agree on **which structure** and **single vs list**. Validation is implicit on every hop. Caching, last-run traces, and a DAG view are how you debug and avoid re-billing.
 
-The LLM that *builds* the pipeline today is asked to emit a **custom JSON dialect** (`pipeline.json` / the assistant `modules` array). That dialect is new to the model. Ordinary JavaScript is not.
+The LLM that *builds* the pipeline writes **ordinary TypeScript** (`workflow()` / `task()`, Windmill workflows-as-code). That compiles to the JSON IR. Asking the model to emit the OpenFlow-shaped / `modules` JSON dialect is the failure mode this spec exists to stop.
 
 ## The problem this spec answers
 
-Custom JSON is a small, recent language. Models that are strong at TypeScript still mis-write `structureIn: list[Document]` on `llm-batch`, skip required `note`s, emit a parsed model from a text input, or fork with one lane. Retries and a file harness reduce the miss rate; they do not make the dialect familiar.
+Custom JSON is a small, recent language. Models that are strong at TypeScript still mis-write `structureIn: list[Document]` on `llm-batch`, skip required `note`s, emit a parsed model from a text input, or fork with one lane. A `pipeline(input(), llmBatch(), output())` graph constructor is still a new dialect. `workflow(async () => { await input(...); await llmBatch(...); })` is the shape models already know (Windmill, Temporal, Inngest).
 
 Two responses, both wanted:
 
-1. **JS → JSON.** Let the model write normal JavaScript, then compile it into the existing JSON schema (the IR). The rest of the product — storage, UI, Python/Rust/Go export, SQL types — still consumes JSON.
-2. **Library.** Caching, step-by-step output, and DAG visualisation should be **functions you import**, not extra JSON fields. A pipeline file should say `pipeline(input({ schema }), llmBatch({ schema, prompt }), output({ schema }))`. The library enforces the same restrictions the JSON schema already has.
+1. **TS → JSON.** The model writes Windmill-shaped TypeScript; `compileSpineJs` emits the IR. Storage, UI, Python/Rust/Go export, SQL types still consume JSON. OpenFlow is an *export* of that IR, never the LLM's job.
+2. **Library.** Caching, step-by-step output, and DAG visualisation are **functions you import**, not extra JSON fields. The frontend (Lovable-style React) sees only the generated OpenAPI / `src/spine-api.d.ts` contract — never the graph IR.
 
 The tension: a library is language-specific. JSON is the only cheap cross-language IR. Intensive steps can still be Rust (or Python) behind a JS orchestrator. The IR stays JSON so we do not reimplement Spine once per language.
 
@@ -26,11 +26,12 @@ The tension: a library is language-specific. JSON is the only cheap cross-langua
 | Layer | Role |
 | --- | --- |
 | **JSON IR** | Portable pipeline. Same `moduleSpecSchema` for vibe, CLI, MCP, seeds, exports. |
-| **spine-js** | Authoring library. Each step function takes **one Zod-parsed object**. The I/O type is a Zod schema in `schema`. Compile to JSON IR. |
+| **spine-js** | Authoring library. `workflow()` / `task()` (Windmill-shaped). Each step helper takes **one Zod-parsed object**. Compile to JSON IR. `pipeline(...)` is the IR constructor. |
 | **Runtime exports** | `mermaidFromProgram`, `cachePlan`, `stepOutputs`, `withCache` live on the library. They are derived, not stored as JSON keys. |
-| **Cross-language** | Keep emitting TS/Py/Go/Rust *from* the JSON IR (`lib/export_runtime/*`). Do not require those languages to author pipelines. A heavy step can be a Rust custom-code body inside a JS-authored graph. |
-| **Default path** | Unchanged: JSON + direct structured output + up to two validation retries. |
-| **Flags** | `SPINE_VIBE_AUTHORING=js` turns on JS authoring. `SPINE_VIBE_HARNESS=1` is the file loop (writes `pipeline.js` when authoring is js). |
+| **Frontend contract** | After a valid compile, React vibe sees OpenAPI + `src/spine-api.d.ts` (`pipeline-client-contract`). Never the node graph. |
+| **Cross-language** | Keep emitting TS/Py/Go/Rust *from* the JSON IR (`lib/export_runtime/*`). OpenFlow (`lib/windmill/compile.ts`) is export/execution, not authoring. |
+| **Default path** | JS workflow authoring + compile-error retries, then JSON fallback. Up to two I/O validation retries. Schema-valid is not done (contract checks). |
+| **Flags** | `SPINE_VIBE_AUTHORING=json` restores graph-JSON LLM output. Unset/anything else = `js`. `SPINE_VIBE_HARNESS=1` is the file loop. |
 
 ## Library contract
 
@@ -43,11 +44,12 @@ const ReceiptRow = model("ReceiptRow", {
   amount: z.number().describe("Total amount"),
 })
 
-export default pipeline(
-  input({ schema: z.array(Document), type: "text", note: "Many receipt files." }),
-  llmBatch({ schema: ReceiptRow, note: "One row per file.", prompt: "Extract date, vendor, amount." }),
-  output({ schema: ReceiptRow }),
-)
+export const main = workflow(async () => {
+  await input({ schema: z.array(Document), type: "text", note: "Many receipt files." })
+  await llmBatch({ schema: ReceiptRow, note: "One row per file.", prompt: "Extract date, vendor, amount." })
+  await output({ schema: ReceiptRow })
+})
+```
 ```
 
 Compile (`compileSpineJs`) must:
@@ -98,16 +100,16 @@ Seed may emit a generic notes stub so offline tests still return a proposal. Cat
 
 js-direct used `generator=js` on ex1, ex1b, and ex5 only. ex1c, ex2, ex3, ex4 **fell back to JSON**. js-harness missed validity on ex3 (combine) after falling back to JSON. JSON-direct stayed on JSON for every task.
 
-On this model, the library path is cheaper when it sticks (ex1/ex1b/ex5). It does not yet beat JSON on harder spines; JSON fallback is carrying the 7/7. Keep JSON as default.
+On this model, the library path is cheaper when it sticks (ex1/ex1b/ex5). It does not yet beat JSON on harder spines; JSON fallback is carrying the 7/7. That A/B used `pipeline(...)` graph constructors — still a new dialect. **2026-08-30:** authoring is `workflow()` / `task()` (Windmill-shaped); default is JS; JSON is IR + fallback. Schema-valid is not done.
 
 The older json vs harness A/B (no library) was 7/7 vs 7/7, harness slower.
 
 ## What this does not change
 
 - The UI still edits the JSON/project graph.
-- Python / Rust / Go export still print from the IR.
+- Python / Rust / Go export still print from the IR. OpenFlow is an export of a compiled project.
 - Users can keep a mixed graph: JS-authored spine, one custom-code step in Rust/TS.
-- JSON remains the default so a regression in JS compile cannot empty Vibe.
+- JSON fallback still runs if workflow compile misses, so a JS regression cannot empty Vibe.
 
 ## Success
 

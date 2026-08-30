@@ -27,6 +27,7 @@ export {
   type StepHandle,
   type SpineProgram,
 } from "./api"
+export { workflow, task, step, type WorkflowFn } from "./workflow"
 export { compileSpineJs, extractSpineJsSource, isSpineJsAuthoringPrompt, type SpineJsCompileResult } from "./compile"
 export { payloadToSpineJs } from "./payload-to-js"
 export { mermaidFromProgram, cachePlan, stepOutputs, withCache } from "./runtime"

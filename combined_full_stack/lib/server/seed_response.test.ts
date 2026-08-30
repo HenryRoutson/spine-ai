@@ -107,8 +107,8 @@ User request: Keep Main. Also add a second function named Hello Notes that greet
     const first = JSON.parse(
       seedLlmReply(`${schema}\n\nTurn 1/8\nTask: Convert hundreds of unstructured receipts into a single Excel file\nWorkspace (already loaded):\npipeline.json\n[]\n`, true),
     ) as { tools: { tool: string; path?: string; content?: string }[]; note?: string };
-    expect(first.tools.some((t) => t.tool === "write_file" && t.path === "pipeline.json")).toBe(true);
-    expect(first.tools.some((t) => t.path?.includes("NoteSummary"))).toBe(true);
+    expect(first.tools.some((t) => t.tool === "write_file" && (t.path === "pipeline.js" || t.path === "pipeline.json"))).toBe(true);
+    expect(JSON.stringify(first)).toMatch(/NoteSummary/);
     expect(JSON.stringify(first)).not.toMatch(/ReceiptRow/);
     expect(first.note).toBe("seed writes the notes pipeline");
 

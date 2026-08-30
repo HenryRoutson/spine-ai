@@ -179,7 +179,7 @@ function testTypeFromName(name: string): "text" | "json" | "markdown" | "latex" 
 export function buildVibeAgentsMarkdown(): string {
   const js = vibeJsAuthoringEnabled()
   const pipelineFile = js
-    ? `- \`pipeline.js\` — ordinary JavaScript using the spine-js library (\`export default pipeline(...)\`). Each step function takes one object with a Zod \`schema\`. Caching / DAG / traces come from the library, not JSON fields. \`pipeline.json\` is ignored when pipeline.js is present.`
+    ? `- \`pipeline.js\` — ordinary TypeScript using \`workflow()\` / \`task()\` (Windmill workflows-as-code). Each step helper takes one object with a Zod \`schema\`. Caching / DAG / traces come from the library, not JSON fields. \`pipeline.json\` is ignored when pipeline.js is present.`
     : `- \`pipeline.json\` — FULL modules array for the **target function** (authoring format: names, not ids). Omit auto steps (Convert to text, Parse to structure, Link Quotes).`
   const examples = js
     ? `- \`examples/spine-js.md\` — valid JS shapes. Read when unsure.`

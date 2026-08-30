@@ -20,6 +20,7 @@ import {
   collectedModels,
   zodTypeSchema,
 } from "./zod-models"
+import { isWorkflowTracing, recordWorkflowStep } from "./trace"
 
 export type StepHandle = {
   kind: string
@@ -209,11 +210,13 @@ function makeStep(
     ...(args.model ? { model: args.model } : {}),
     ...(args.extra ?? {}),
   }
-  return {
+  const handle: StepHandle = {
     kind,
     spec: specRaw as PipelineAssistantModuleSpec,
     models: collectedModels(),
   }
+  if (isWorkflowTracing()) recordWorkflowStep(handle)
+  return handle
 }
 
 export function input(args: unknown): StepHandle {
@@ -310,7 +313,9 @@ export function fork(args: unknown): StepHandle {
       modules: b.steps.map((s) => s.spec),
     })),
   }
-  return { kind: "fork", spec: spec as PipelineAssistantModuleSpec, models: branchModels }
+  const handle: StepHandle = { kind: "fork", spec: spec as PipelineAssistantModuleSpec, models: branchModels }
+  if (isWorkflowTracing()) recordWorkflowStep(handle)
+  return handle
 }
 
 export function ifElse(args: unknown): StepHandle {
@@ -326,7 +331,13 @@ export function ifElse(args: unknown): StepHandle {
       { label: "Else", modules: (a.else ?? []).map((s) => s.spec) },
     ],
   }
-  return { kind: "if-else", spec: spec as PipelineAssistantModuleSpec, models: collectFromSteps(nested) }
+  const handle: StepHandle = {
+    kind: "if-else",
+    spec: spec as PipelineAssistantModuleSpec,
+    models: collectFromSteps(nested),
+  }
+  if (isWorkflowTracing()) recordWorkflowStep(handle)
+  return handle
 }
 
 export function parallel(args: unknown): StepHandle {

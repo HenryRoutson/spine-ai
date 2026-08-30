@@ -12,6 +12,7 @@
 // AI : DONE (windmill-A-schema) — StructureModel → JSON Schema via Zod; x-spine-deterministic / quote / sql-table
 // AI : DONE (windmill-B-openflow) — compileProjectToOpenFlow (llm → aiagent output_schema, batch → forloopflow)
 // AI : DONE (windmill-C-sandbox) — n8n + custom-code/transform preview on Windmill when windmillExecute + WINDMILL_* set
-// AI : DONE (windmill-D-export) — {slug}_flow.json + schema.json in the pipeline zip; Structures JSON Schema tab
+// AI : DONE (windmill-E-wac) — vibe authors workflow()/task() TypeScript; compileSpineJs → JSON IR.
+// AI :   OpenFlow stays export/execution. React sees OpenAPI types (pipeline-client-contract), not the IR.
 //
 export {}
