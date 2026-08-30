@@ -12,7 +12,7 @@ import {
 } from "lucide-react"
 import { useStorePicker } from "@/lib/store"
 import { AppChromeHeader } from "@/components/app-chrome-header"
-import { AppMode, navigateToBuildMode, navigateToRunMode } from "@/lib/app-mode-nav"
+import { AppMode, navigateToBuildMode, navigateToRunMode, navigateToWebsiteWorkspace } from "@/lib/app-mode-nav"
 import { AppPrimarySection } from "@/lib/app-primary-section-labels"
 import { handlePrimarySectionChange } from "@/lib/app-primary-section"
 import { useAppShell, AppWindowId } from "@/lib/app-shell"
@@ -53,6 +53,7 @@ import {
   overlayOptimisticSites,
   websiteDisplayName,
   websiteNameForCreate,
+  websiteStudioHostProjectId,
   websitesUsingProject,
   type pipeline_website_delete_action,
   type website_dependent,
@@ -168,12 +169,13 @@ export function ProjectPickerPage() {
   const handleOpenWebsite = useCallback(
     (link: SharedLinkRecord) => {
       openWebsiteEditor(link)
-      if (link.projectId) {
-        setOpeningId(link.projectId)
-        openProject(link.projectId)
+      const hostId = websiteStudioHostProjectId(link)
+      if (hostId) {
+        setOpeningId(hostId)
+        openProject(hostId)
         return
       }
-      navigateToBuildMode()
+      navigateToWebsiteWorkspace()
     },
     [openProject, openWebsiteEditor],
   )
@@ -521,7 +523,7 @@ export function ProjectPickerPage() {
                           disabled={openingId !== null || busy !== null}
                           spineId="website.open"
                         >
-                          {openingId === site.projectId ? (
+                          {openingId !== null && openingId === site.projectId ? (
                             <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
                           ) : null}
                           Open

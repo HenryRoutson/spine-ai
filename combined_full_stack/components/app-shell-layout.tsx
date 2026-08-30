@@ -35,6 +35,7 @@ import { AppMode, navigateToBuildMode, navigateToRunMode } from "@/lib/app-mode-
 import { CONSUMER_NAV_ITEMS } from "@/lib/app-nav-config"
 import { AppShellKind, useAppShellKind } from "@/lib/app-shell-kind"
 import { readActiveProjectSession } from "@/lib/active-project-session"
+import { readEditingWebsiteSession } from "@/lib/editing-website-session"
 import { peekPendingPickerList } from "@/lib/picker-list"
 import { ProjectPickerContext, useConsumerStore, useOptionalConsumerStore, useOptionalStore, useStore } from "@/lib/store"
 import { computeWorkspaceValidity } from "@/lib/workspace-validity-ui"
@@ -331,6 +332,8 @@ function AppShellLayoutInner({ variant = "default" }: { variant?: "default" | "e
     if (builder) return
     // AI : create/open writes session before the store context exists — wait, don't bounce to picker.
     if (readActiveProjectSession()) return
+    // AI : page-only website studio has no host pipeline session.
+    if (readEditingWebsiteSession()) return
     if (!consumer && !picker) return
     // AI : All websites… writes a pending tab then clears the session — don't stomp it back to pipelines.
     if (peekPendingPickerList()) return

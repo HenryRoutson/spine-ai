@@ -46,6 +46,7 @@ import { canDeleteHostedSiteReactPath } from "@/lib/hosted-site-react"
 import type { HostedSiteAuth, HostedSiteBrand, HostedSiteOptions } from "@/lib/shared-link-types"
 import { DEFAULT_HOSTED_SITE_OPTIONS } from "@/lib/shared-link-types"
 import { useStore } from "@/lib/store"
+import { useAppShell } from "@/lib/app-shell"
 import type { Project } from "@/lib/types"
 import { cn } from "@/lib/utils"
 
@@ -77,6 +78,7 @@ export function HostedSitePageStudio({
   fillHeight?: boolean
 }) {
   const { model, projects } = useStore()
+  const { editingWebsite } = useAppShell()
   const [localTab, setLocalTab] = useState<PageStudioTab>("vibe")
   const tab = forcedTab ?? localTab
   const [chatWidth, setChatWidth] = useState(320)
@@ -666,7 +668,7 @@ export function HostedSitePageStudio({
                 simple
                 showAvatars={false}
                 showHeaderMeta={false}
-                chatId={`site-vibe:${project.id}`}
+                chatId={`site-vibe:${editingWebsite?.id ?? (project.id || "page")}`}
                 renderProposal={() => null}
                 onApprove={() => undefined}
                 onReject={() => undefined}
@@ -680,7 +682,7 @@ export function HostedSitePageStudio({
                     headers: JSON_HEADERS,
                     credentials: "same-origin",
                     body: JSON.stringify({
-                      projectId: project.id,
+                      ...(project.id ? { projectId: project.id } : {}),
                       message,
                       history,
                       model,

@@ -14,6 +14,27 @@ export function nullableProjectId(raw: unknown): ProjectId | null {
   return typeof raw === "string" && raw.trim() ? (raw as ProjectId) : null
 }
 
+// AI : page-only sites have no host pipeline — still need a Project for ShareSiteForm / vibe chat.
+export function studioProjectForWebsite(opts: {
+  activeProject: Project | undefined
+  pageOnlyStudio: boolean
+  siteName?: string
+}): Project | undefined {
+  if (opts.activeProject) return opts.activeProject
+  if (opts.pageOnlyStudio) return pageOnlyProjectStub(opts.siteName)
+  return undefined
+}
+
+export function websiteStudioHostProjectId(
+  link: Pick<SharedLinkRecord, "projectId" | "siteOptions">,
+): ProjectId | null {
+  return (
+    nullableProjectId(link.projectId) ??
+    listedWebsitePipelineBindings(link.siteOptions.pipelineBindings)[0]?.projectId ??
+    null
+  )
+}
+
 // AI : page-only sites persist a stub snapshot so snapshot jsonb stays required.
 export function pageOnlyProjectStub(name: string = UNNAMED_WEBSITE_NAME): Project {
   return {

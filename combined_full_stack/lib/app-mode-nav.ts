@@ -8,6 +8,7 @@ type AppModeNavApi = {
   navigateToBuildMode: () => void
   navigateToProjectPicker: (tab?: picker_list_tab) => void
   openBuildWorkspace: (projectId: ProjectId) => void
+  navigateToWebsiteWorkspace: () => void
 }
 
 let api: AppModeNavApi | null = null
@@ -50,6 +51,15 @@ export function navigateToProjectPicker(tab?: picker_list_tab): void {
 export function navigateToBuildWorkspace(projectId: ProjectId): void {
   if (api) {
     api.openBuildWorkspace(projectId)
+    return
+  }
+  if (isDemoRoute()) return
+  window.location.assign("/")
+}
+
+export function navigateToWebsiteWorkspace(): void {
+  if (api) {
+    api.navigateToWebsiteWorkspace()
     return
   }
   if (isDemoRoute()) return
