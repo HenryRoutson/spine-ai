@@ -155,19 +155,21 @@ export function AgentKitChat(props: AgentKitChatProps) {
     onLoadingChangeRef.current?.(busy)
   }, [busy])
 
+  const onStreamingDraftChangeRef = useRef(props.onStreamingDraftChange)
+  onStreamingDraftChangeRef.current = props.onStreamingDraftChange
   useEffect(() => {
     if (!busy) {
-      props.onStreamingDraftChange?.(null)
+      onStreamingDraftChangeRef.current?.(null)
       return
     }
     const last = chat.messages.at(-1)
     if (last?.role !== "assistant") return
-    props.onStreamingDraftChange?.({
+    onStreamingDraftChangeRef.current?.({
       content: textFromUiParts(last.parts),
       liveThinking: reasoningFromUiParts(last.parts),
       debugTrace: [],
     })
-  }, [busy, chat.messages, props.onStreamingDraftChange])
+  }, [busy, chat.messages])
 
   useEffect(() => {
     const last = chat.messages.at(-1)

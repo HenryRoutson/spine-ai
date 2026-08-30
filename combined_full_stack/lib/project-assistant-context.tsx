@@ -15,7 +15,10 @@ import { UiContextSelectOverlay } from "@/components/ui-context-select-overlay"
 import { API_ROUTES } from "@/lib/api-routes"
 import { JSON_HEADERS, apiJson } from "@/lib/api-client"
 import { isDemoMode } from "@/lib/demo-mode"
-import type { AssistantStreamingDraft } from "@/lib/assistant-chat-types"
+import {
+  sameStreamingDraft,
+  type AssistantStreamingDraft,
+} from "@/lib/assistant-chat-types"
 import type { ProjectProposal } from "@/lib/project-assistant-types"
 import {
   dedupeUiContextRefs,
@@ -648,7 +651,7 @@ export function ProjectAssistantProvider({ children }: { children: ReactNode }) 
           setStreamingDraftByChat((prev) => {
             const current = prev[targetId] ?? null
             const next = typeof updater === "function" ? updater(current) : updater
-            if (next === current) return prev
+            if (sameStreamingDraft(next, current)) return prev
             return { ...prev, [targetId]: next }
           })
         }

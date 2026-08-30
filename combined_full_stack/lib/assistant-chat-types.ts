@@ -16,6 +16,15 @@ export type AssistantStreamingDraft = {
   debugTrace: AssistantDebugEntry[]
 }
 
+export function sameStreamingDraft(
+  a: AssistantStreamingDraft | null,
+  b: AssistantStreamingDraft | null,
+): boolean {
+  if (a === b) return true
+  if (!a || !b) return false
+  return a.content === b.content && a.liveThinking === b.liveThinking
+}
+
 export const ASSISTANT_HISTORY_LIMIT = 8
 export const ASSISTANT_REQUEST_FAILED = "Assistant request failed" as const
 
