@@ -1,9 +1,18 @@
 "use client"
 
-import { useRef, useState } from "react"
-import { Pencil, Plus } from "lucide-react"
+import { useRef, useState, type MouseEvent } from "react"
+import { Check, ChevronDown, Pencil, Plus } from "lucide-react"
 import { DeleteButton } from "@/components/delete-button"
 import { Button } from "@/components/ui/button"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuGroup,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
 import { Input } from "@/components/ui/input"
 import { spineActionProps } from "@/lib/core/parity"
 import { useStore } from "@/lib/store"
@@ -28,37 +37,46 @@ function FunctionRenameInput({
   const skipBlurCommit = useRef(false)
 
   return (
-    <Input
-      defaultValue={initialName}
-      onChange={(e) => {
-        valueRef.current = e.target.value
-      }}
-      onKeyDown={(e) => {
-        if (e.key === "Enter") {
-          e.preventDefault()
-          skipBlurCommit.current = true
+    <div
+      className="px-1.5 py-1"
+      // AI : menu items steal focus / typeahead on pointer + keyboard — block both.
+      onPointerDown={(e) => e.preventDefault()}
+      onKeyDownCapture={(e) => e.stopPropagation()}
+      onKeyUpCapture={(e) => e.stopPropagation()}
+    >
+      <Input
+        defaultValue={initialName}
+        onChange={(e) => {
+          valueRef.current = e.target.value
+        }}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") {
+            e.preventDefault()
+            skipBlurCommit.current = true
+            onCommit(valueRef.current)
+          }
+          if (e.key === "Escape") {
+            skipBlurCommit.current = true
+            onCancel()
+          }
+        }}
+        onBlur={() => {
+          if (skipBlurCommit.current) {
+            skipBlurCommit.current = false
+            return
+          }
           onCommit(valueRef.current)
-        }
-        if (e.key === "Escape") {
-          skipBlurCommit.current = true
-          onCancel()
-        }
-      }}
-      onBlur={() => {
-        if (skipBlurCommit.current) {
-          skipBlurCommit.current = false
-          return
-        }
-        onCommit(valueRef.current)
-      }}
-      autoFocus
-      aria-label="Function name"
-      className="h-7 max-w-[12rem] font-mono text-[11px]"
-    />
+        }}
+        onClick={(e) => e.stopPropagation()}
+        autoFocus
+        aria-label="Function name"
+        className="h-7 text-xs"
+      />
+    </div>
   )
 }
 
-// AI : project-level pipeline switch — structures stay shared; Hide developer tools hides Add.
+// AI : same chrome as ProjectSelector — native <select> options ignore the dark theme.
 export function PipelineFunctionSelect({
   className,
   allowAdd = true,
@@ -76,77 +94,115 @@ export function PipelineFunctionSelect({
   const fns = functionsOnProject(project)
   const active = activeFunctionId(project)
   const activeName = fns.find((fn) => fn.id === active)?.name ?? UNNAMED_FUNCTION_NAME
-  const [editing, setEditing] = useState(false)
+  const [editingId, setEditingId] = useState<pipeline_function_id | null>(null)
   const canDelete = fns.length > 1
-
-  function commitRename(name: string) {
-    renamePipelineFunction(active, name)
-    setEditing(false)
-  }
 
   return (
     <div className={cn("flex items-center gap-1.5", className)}>
-      <span className="hidden shrink-0 text-[10px] font-medium uppercase tracking-wide text-muted-foreground sm:inline">
-        Function
-      </span>
-      {editing ? (
-        <FunctionRenameInput
-          initialName={activeName}
-          onCommit={commitRename}
-          onCancel={() => setEditing(false)}
-        />
-      ) : (
-        <select
-          className="h-7 max-w-[12rem] rounded-md border border-border bg-background px-1.5 font-mono text-[11px]"
-          value={active}
-          onChange={(e) => setActiveFunction(e.target.value as pipeline_function_id)}
+      <DropdownMenu onOpenChange={(open) => { if (!open) setEditingId(null) }}>
+        <DropdownMenuTrigger
+          className="flex items-center gap-2 rounded-md border border-border bg-secondary px-2.5 py-1.5 text-xs transition-colors hover:bg-accent"
           aria-label="Function in this project"
           title={`Function in this project: ${activeName}`}
           {...spineActionProps("pipeline.function-select")}
         >
-          {fns.map((fn) => (
-            <option key={fn.id} value={fn.id}>
-              {fn.name}
-            </option>
-          ))}
-        </select>
-      )}
-      {!editing ? (
-        <Button
-          type="button"
-          size="icon-sm"
-          variant="ghost"
-          onClick={() => setEditing(true)}
-          title={`Rename ${activeName}`}
-          aria-label={`Rename ${activeName}`}
-          {...spineActionProps("pipeline.function-rename")}
-        >
-          <Pencil className="h-3 w-3" />
-        </Button>
-      ) : null}
-      {canDelete && !editing ? (
-        <DeleteButton
-          type="button"
-          size="icon-sm"
-          variant="ghost"
-          label={`Delete ${activeName}`}
-          title={`Delete ${activeName}`}
-          {...spineActionProps("pipeline.function-delete")}
-          onClick={() => deletePipelineFunction(active)}
-        />
-      ) : null}
+          <span className="font-mono text-[10px] text-muted-foreground">Function</span>
+          <span className="max-w-[180px] truncate font-medium">{activeName}</span>
+          <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="start" className="w-64">
+          <DropdownMenuGroup>
+            <DropdownMenuLabel className="font-mono text-[10px] text-muted-foreground">
+              functions
+            </DropdownMenuLabel>
+          </DropdownMenuGroup>
+          <DropdownMenuSeparator />
+          <DropdownMenuGroup>
+            {fns.map((fn) =>
+              editingId === fn.id ? (
+                <FunctionRenameInput
+                  key={fn.id}
+                  initialName={fn.name}
+                  onCommit={(name) => {
+                    renamePipelineFunction(fn.id, name)
+                    setEditingId(null)
+                  }}
+                  onCancel={() => setEditingId(null)}
+                />
+              ) : (
+                <DropdownMenuItem
+                  key={fn.id}
+                  onClick={() => setActiveFunction(fn.id)}
+                  className="group flex items-center justify-between gap-2 text-xs"
+                  {...spineActionProps("pipeline.function-select")}
+                >
+                  <span className="min-w-0 truncate font-medium">{fn.name}</span>
+                  <div className="flex shrink-0 items-center gap-1">
+                    <Button
+                      type="button"
+                      size="icon"
+                      variant="ghost"
+                      className="h-6 w-6 opacity-0 group-hover:opacity-100"
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        e.preventDefault()
+                        setEditingId(fn.id)
+                      }}
+                      aria-label={`Rename ${fn.name}`}
+                      title={`Rename ${fn.name}`}
+                      spineId="pipeline.function-rename"
+                    >
+                      <Pencil className="h-3 w-3" />
+                    </Button>
+                    {canDelete ? (
+                      <DeleteButton
+                        type="button"
+                        size="icon"
+                        variant="ghost"
+                        className="h-6 w-6 opacity-0 group-hover:opacity-100"
+                        label={`Delete ${fn.name}`}
+                        title={`Delete ${fn.name}`}
+                        spineId="pipeline.function-delete"
+                        onClick={(e: MouseEvent) => {
+                          e.stopPropagation()
+                          e.preventDefault()
+                          deletePipelineFunction(fn.id)
+                        }}
+                      />
+                    ) : null}
+                    {fn.id === active ? <Check className="h-3.5 w-3.5 text-primary" /> : null}
+                  </div>
+                </DropdownMenuItem>
+              ),
+            )}
+          </DropdownMenuGroup>
+          {allowAdd ? (
+            <>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem
+                onClick={() => addPipelineFunction()}
+                className="gap-1.5 text-xs text-primary"
+                {...spineActionProps("pipeline.function-add")}
+              >
+                <Plus className="h-3.5 w-3.5" />
+                Add function
+              </DropdownMenuItem>
+            </>
+          ) : null}
+        </DropdownMenuContent>
+      </DropdownMenu>
       {allowAdd ? (
         <Button
           type="button"
-          size="sm"
-          variant="outline"
-          className="h-7 px-2 text-[10px]"
+          variant="secondary"
+          size="xs"
+          className="h-[30px] gap-1.5 px-2.5 text-xs text-primary"
           onClick={() => addPipelineFunction()}
           title="Add a function that shares these structures"
-          {...spineActionProps("pipeline.function-add")}
+          spineId="pipeline.function-add"
         >
-          <Plus className="mr-0.5 h-3 w-3" />
-          Function
+          <Plus className="h-3.5 w-3.5" />
+          <span className="hidden sm:inline">Add function</span>
         </Button>
       ) : null}
     </div>
