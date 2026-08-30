@@ -23,7 +23,7 @@
 // AI :   Steps: lib/server/spine-in-spine-bootstrap-roadmap.ts (grep TODO (spine-in-spine-bootstrap).
 // AI :   Simple vs full vs OSS LoC: lib/server/spine-in-spine-dogfood-roadmap.ts
 // AI : DONE (allow-pipeline-non-linear-fork) — series-parallel Fork step (nested linear lanes + join).
-// AI :   Not React Flow. See lib/server/fork-roadmap.ts. Linear spine + Parallel/Combine/Assemble stay.
+// AI :   Authoring is insert-slot Lanes; DAG view is React Flow. Linear spine + Parallel/Combine/Assemble stay. See lib/server/fork-roadmap.ts.
 // AI : DONE (arch-module-union) — PipelineModule is a per-kind union (pipeline-module-union.ts).
 // AI :   normalizePipelineModule strips other-kind keys on ingest. Dual FieldType + TypeExpr stays.
 // AI : TODO (arch-store-async) — Store is sync + write-behind RAM; make methods async (JsonStore vs
