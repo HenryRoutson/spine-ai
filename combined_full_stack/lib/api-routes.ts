@@ -72,6 +72,7 @@ export const API_ROUTES = {
   sharedLinkDownload: (id: string) => `/api/shared-links/${id}/download`,
   sharedLinkClientStep: (id: string) => `/api/shared-links/${id}/client-step`,
   sharedLinkSql: (id: string) => `/api/shared-links/${id}/sql`,
+  sharedLinkSupabase: (id: string) => `/api/shared-links/${id}/supabase`,
   marketplace: "/api/marketplace",
   marketplaceListing: (id: string) => `/api/marketplace/${id}`,
   marketplaceClone: (id: string) => `/api/marketplace/${id}/clone`,

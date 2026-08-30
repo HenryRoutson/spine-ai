@@ -12,6 +12,7 @@ import {
   updateSharedLinkSpendLimit,
   updateSharedLinkViewerMarkdown,
 } from "@/lib/server/shared_links";
+import { afterAllocateSiteSupabase } from "@/lib/server/site_supabase_after";
 import type { SharedLinkRecord } from "@/lib/shared-link-types";
 
 export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
@@ -81,6 +82,7 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: strin
     try {
       result = await updateSharedLinkSiteSettings(authCtx.auth.userId, linkId, parsed.siteOptions);
       if (!result) return apiError("link not found", 404);
+      afterAllocateSiteSupabase(result.id, result.siteOptions.auth);
     } catch (err) {
       return apiError((err as Error).message, 400);
     }

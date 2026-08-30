@@ -6,6 +6,7 @@ import {
   cloneMarketplaceListing,
   MarketplaceCloneError,
 } from "@/lib/server/marketplace";
+import { afterAllocateSiteSupabase } from "@/lib/server/site_supabase_after";
 import { logger } from "@/lib/server/server_logger";
 
 const apiLog = logger("api:marketplace:clone");
@@ -23,6 +24,7 @@ export async function POST(_req: Request, ctx: { params: Promise<{ id: string }>
       buyerId: auth.auth.userId,
       store: auth.store,
     });
+    if (result.site?.id) afterAllocateSiteSupabase(result.site.id, result.site.siteOptions.auth);
     apiLog.info(`cloned marketplace listing`, {
       listingId,
       projectId: result.project?.id ?? null,

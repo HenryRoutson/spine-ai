@@ -101,9 +101,9 @@ export function BackendWorkspace({
               <SupabaseConnectFields auth={siteAuth} onChange={onSiteAuthChange} />
             ) : (
               <p className="text-[10px] text-muted-foreground">
-                Bind your own Supabase from a hosted website&apos;s sign-in settings. Hosted SQL
-                rows are scoped per website (`site:…`); builder runs use `project:…`. BYO keys are
-                stored, not used for auth or rows yet.
+                Bind your own Supabase from a hosted website&apos;s sign-in settings, or let Spine
+                allocate a new Cloud project per website. Hosted SQL rows use that project
+                (`site:…`); builder runs still use `project:…` locally.
               </p>
             )}
           </div>

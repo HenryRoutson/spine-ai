@@ -4,6 +4,7 @@ import { HTTP } from "@/lib/server/api-errors";
 import { createSharedLinkBodySchema, parseRequestJson } from "@/lib/server/api_schemas";
 import { UnknownModelError, parseOptionalRequestModel } from "@/lib/server/model_catalog";
 import { listSharedLinksForOwner, publishSharedLink } from "@/lib/server/shared_links";
+import { afterAllocateSiteSupabase } from "@/lib/server/site_supabase_after";
 import { migrateProjectModules } from "@/lib/server/validity";
 import { logger } from "@/lib/server/server_logger";
 import type { DocId, ModelId, ModuleId, ProjectId, SharedLinkFundingMode } from "@/lib/server/types";
@@ -53,6 +54,7 @@ export async function POST(req: NextRequest) {
       viewerMarkdown: body.viewerMarkdown,
     });
     apiLog.info(`published shared link`, { linkId: link.id, projectId: body.projectId, kind: body.kind ?? "link" });
+    afterAllocateSiteSupabase(link.id, link.siteOptions.auth);
     const url =
       body.kind === "site" || link.id.startsWith("site_")
         ? `/site/${link.id}`

@@ -418,6 +418,12 @@ export function normalizeHostedSiteBrand(raw: unknown): HostedSiteBrand {
   }
 }
 
+function normalizeAllocStatus(raw: unknown): HostedSiteAuth["allocStatus"] {
+  return raw === "pending" || raw === "ready" || raw === "error" || raw === "skipped" || raw === "idle"
+    ? raw
+    : "idle"
+}
+
 function normalizeHostedSiteAuth(raw: unknown): HostedSiteAuth {
   const o = (raw && typeof raw === "object" ? raw : {}) as Partial<HostedSiteAuth>
   const provider: HostedSiteAuthProvider = o.provider === "custom_supabase" ? "custom_supabase" : "spine"
@@ -426,6 +432,9 @@ function normalizeHostedSiteAuth(raw: unknown): HostedSiteAuth {
     provider,
     customSupabaseUrl: typeof o.customSupabaseUrl === "string" ? o.customSupabaseUrl.trim().slice(0, 2048) : "",
     customSupabaseAnonKey: typeof o.customSupabaseAnonKey === "string" ? o.customSupabaseAnonKey.trim().slice(0, 2048) : "",
+    projectRef: typeof o.projectRef === "string" ? o.projectRef.trim().slice(0, 64) : "",
+    allocStatus: normalizeAllocStatus(o.allocStatus),
+    allocError: typeof o.allocError === "string" ? o.allocError.trim().slice(0, 2000) : "",
   }
 }
 

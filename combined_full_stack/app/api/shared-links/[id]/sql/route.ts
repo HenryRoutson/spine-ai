@@ -7,6 +7,8 @@ import { parseSharedLinkId } from "@/lib/server/api_schemas"
 import { getSharedLink } from "@/lib/server/shared_links"
 import { appSqlScopeForSite, sqlSeedRowsOf, tableNameForModel } from "@/lib/app-sql"
 import { AppSqlUnavailableError, ensureAppSqlSeed, listAppSqlRows } from "@/lib/server/app_sql"
+import { siteAdminClientForLink } from "@/lib/server/site_supabase"
+import { isSiteLinkId } from "@/lib/hosted-site"
 import { flattenPipelineModules } from "@/lib/fork-pipeline"
 import { storedFunctionsOnProject } from "@/lib/pipeline-functions"
 import { pkFieldOf } from "@/lib/sql-id-types"
@@ -30,6 +32,21 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string 
   if (!/^[a-z][a-z0-9_]*$/i.test(table)) return apiError("table required", 400)
 
   const scope = appSqlScopeForSite(link.id)
+  const db = siteAdminClientForLink(link)
+  if (isSiteLinkId(link.id) && !db && link.siteOptions.auth.allocStatus === "pending") {
+    return apiError(
+      "This website's isolated Supabase is still provisioning. Retry in a minute.",
+      HTTP.UNAVAILABLE,
+      "app_sql_unavailable",
+    )
+  }
+  if (isSiteLinkId(link.id) && !db && link.siteOptions.auth.allocStatus === "error") {
+    return apiError(
+      link.siteOptions.auth.allocError || "Isolated Supabase allocation failed.",
+      HTTP.UNAVAILABLE,
+      "app_sql_unavailable",
+    )
+  }
   const sqlMods = storedFunctionsOnProject(link.snapshot).flatMap((fn) => flattenPipelineModules(fn.modules))
   const sqlMod = sqlMods.find((m) => {
     if (m.kind !== ModuleKind.Sql) return false
@@ -42,8 +59,8 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string 
   const pkField = model ? pkFieldOf(model)?.name ?? "id" : "id"
   const seedRows = sqlMod ? sqlSeedRowsOf(sqlMod) : []
   try {
-    const rows = await ensureAppSqlSeed(scope, table, seedRows, pkField)
-    const listed = rows.length ? rows : await listAppSqlRows(scope, table)
+    const rows = await ensureAppSqlSeed(scope, table, seedRows, pkField, db)
+    const listed = rows.length ? rows : await listAppSqlRows(scope, table, db)
     return NextResponse.json({ table, rows: listed })
   } catch (err) {
     if (err instanceof AppSqlUnavailableError) {

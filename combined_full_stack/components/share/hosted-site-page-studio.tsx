@@ -186,7 +186,7 @@ export function HostedSitePageStudio({
           <HostedSiteSignInCard
             companyName={value.brand.companyName}
             nextPath="#"
-            provider={value.auth.provider}
+            auth={value.auth}
             preview
           />
         ),
@@ -496,7 +496,7 @@ export function HostedSitePageStudio({
                   checked={value.auth.provider === "spine"}
                   onChange={() => patchAuth({ provider: "spine" })}
                 />
-                Spine (handled)
+                Spine allocates a new project
               </label>
               <label className="flex items-center gap-1.5">
                 <input
@@ -505,13 +505,13 @@ export function HostedSitePageStudio({
                   checked={value.auth.provider === "custom_supabase"}
                   onChange={() => patchAuth({ provider: "custom_supabase" })}
                 />
-                Custom Supabase
+                Bring your own
               </label>
             </div>
             {value.auth.provider === "custom_supabase" ? (
               <div className="grid gap-2 sm:grid-cols-2">
                 <div className="space-y-1">
-                  <Label className="text-[10px] text-muted-foreground">Project URL (stored, not allocated)</Label>
+                  <Label className="text-[10px] text-muted-foreground">Project URL</Label>
                   <Input
                     value={value.auth.customSupabaseUrl}
                     onChange={(e) => patchAuth({ customSupabaseUrl: e.target.value })}
@@ -520,7 +520,7 @@ export function HostedSitePageStudio({
                   />
                 </div>
                 <div className="space-y-1">
-                  <Label className="text-[10px] text-muted-foreground">Anon key (stored, not used)</Label>
+                  <Label className="text-[10px] text-muted-foreground">Anon key</Label>
                   <Input
                     value={value.auth.customSupabaseAnonKey}
                     onChange={(e) => patchAuth({ customSupabaseAnonKey: e.target.value })}
@@ -529,9 +529,8 @@ export function HostedSitePageStudio({
                   />
                 </div>
                 <p className="text-[10px] text-muted-foreground sm:col-span-2">
-                  Custom Supabase URL and anon key are stored on the website but not used for
-                  sign-in or SQL yet. Visitors still use Spine auth; hosted rows stay in Spine
-                  `app_sql_rows` (scope `site:…`).
+                  BYO skips Spine allocation. SQL still needs a service role — prefer letting Spine
+                  create a project per website so hosted rows never touch the platform database.
                 </p>
               </div>
             ) : null}
