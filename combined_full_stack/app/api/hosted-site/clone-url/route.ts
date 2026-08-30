@@ -5,7 +5,7 @@ import { HTTP } from "@/lib/server/api-errors"
 import { cloneHostedSiteFromUrl, HostedSiteCloneError } from "@/lib/hosted-site-clone"
 import { normalizeHostedSiteOptions } from "@/lib/hosted-site"
 
-export const maxDuration = 30
+export const maxDuration = 120
 
 export async function POST(req: NextRequest) {
   const ctx = await requireAuthStore()
