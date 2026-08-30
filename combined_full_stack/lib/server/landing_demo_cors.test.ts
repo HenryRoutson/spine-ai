@@ -6,6 +6,8 @@ describe("landing demo CORS origins", () => {
     expect(isLandingDemoAllowedOrigin("https://www.spine-ai-app.dev")).toBe(true)
     expect(isLandingDemoAllowedOrigin("https://spine-ai-app.dev")).toBe(true)
     expect(isLandingDemoAllowedOrigin("https://www.spine-ai.dev")).toBe(true)
+    expect(isLandingDemoAllowedOrigin("https://auto-pipeline-app.dev")).toBe(true)
+    expect(isLandingDemoAllowedOrigin("https://www.auto-pipeline-app.dev")).toBe(true)
   })
 
   it("allows local landing ports", () => {

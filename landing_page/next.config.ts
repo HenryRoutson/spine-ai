@@ -31,6 +31,10 @@ const nextConfig: NextConfig = {
   turbopack: {
     root: path.join(__dirname, ".."),
   },
+  // AI : browsers still request /favicon.ico; metadata only emits /icon.svg (prod 404).
+  async rewrites() {
+    return [{ source: "/favicon.ico", destination: "/icon.svg" }]
+  },
   // AI : baseline security headers — marketing site has no Stripe/Supabase client bootstrap.
   async headers() {
     const csp = [
@@ -39,8 +43,8 @@ const nextConfig: NextConfig = {
       "style-src 'self' 'unsafe-inline'",
       "img-src 'self' data: blob: https:",
       "font-src 'self' data:",
-      "connect-src 'self' https://www.spine-ai-app.dev https://spine-ai-app.dev http://localhost:* https://localhost:*",
-      "frame-src 'self' https://www.spine-ai-app.dev https://spine-ai-app.dev http://localhost:* https://localhost:*",
+      "connect-src 'self' https://www.spine-ai-app.dev https://spine-ai-app.dev https://www.auto-pipeline-app.dev https://auto-pipeline-app.dev http://localhost:* https://localhost:*",
+      "frame-src 'self' https://www.spine-ai-app.dev https://spine-ai-app.dev https://www.auto-pipeline-app.dev https://auto-pipeline-app.dev http://localhost:* https://localhost:*",
       "object-src 'none'",
       "base-uri 'self'",
       "form-action 'self'",

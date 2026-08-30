@@ -107,6 +107,8 @@ const nextConfig = {
       "https://www.auto-pipeline.dev",
       "https://www.spine-ai-app.dev",
       "https://spine-ai-app.dev",
+      "https://auto-pipeline-app.dev",
+      "https://www.auto-pipeline-app.dev",
       "http://localhost:3000",
       "http://localhost:3001",
       "http://127.0.0.1:3000",

@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 
 // AI : CORS for landing page → app API calls.
 // AI : DONE (jank-cors-app-origin) — spine-ai-app.dev is the live app host (landing CSP/proxy).
-// AI : TODO (jank-site-urls) — auto-pipeline.dev is a leftover alias; keep until DNS is gone.
+// AI : TODO (jank-site-urls) — auto-pipeline.dev / auto-pipeline-app.dev are leftover aliases; keep until DNS is gone.
 
 const ALLOWED_ORIGINS = new Set([
   "https://www.spine-ai.dev",
@@ -11,6 +11,8 @@ const ALLOWED_ORIGINS = new Set([
   "https://spine-ai-app.dev",
   "https://www.auto-pipeline.dev",
   "https://auto-pipeline.dev",
+  "https://www.auto-pipeline-app.dev",
+  "https://auto-pipeline-app.dev",
   "http://localhost:3000",
   "http://localhost:3001",
   "http://127.0.0.1:3000",
