@@ -1,4 +1,4 @@
-// AI : JS authoring prompts — LLM writes normal JS; compileSpineJs converts to JSON IR.
+// AI : JS authoring prompts — LLM writes Windmill-shaped workflow(); compileSpineJs converts to JSON IR.
 import { buildVibeTopologyPromptBlock } from "@/lib/server/vibe-coding-topology"
 import { payloadToSpineJs } from "./payload-to-js"
 import { vibeExampleTasks } from "@/lib/server/vibe-coding-examples"
@@ -16,11 +16,11 @@ ${payloadToSpineJs(first.payload)}
 }
 
 export function buildSpineJsSystemPrompt(): string {
-  return `You are authoring a Spine pipeline in ordinary JavaScript using the spine-js library (not custom JSON).
+  return `You are authoring a Spine pipeline in ordinary TypeScript using workflow() / task() (Windmill workflows-as-code), not custom JSON.
 
-Write a JS module. Do not return a modules JSON array.
+Write a JS/TS module. Do not return a modules JSON array. Do not describe a node/edge graph.
 
-API — every step function takes ONE object (parsed by Zod). Put the I/O Zod schema in \`schema\`:
+API — ordinary async function. Each step helper takes ONE object (parsed by Zod). Put the I/O Zod schema in \`schema\`:
 - model("Name", { field: z.string().describe("...") })
 - input({ schema, note, type, label? })  // non-JSON types must use Document or z.array(Document)
 - llm({ schema, note, prompt, in? })
@@ -30,7 +30,8 @@ API — every step function takes ONE object (parsed by Zod). Put the I/O Zod sc
 - assemble({ bindings, note })
 - fork({ note, join, branches: [{ label, steps: [...] }] })  // at least 2 lanes
 - output({ schema })
-- pipeline(...steps) as export default
+- task(fn) marks a named function as its own step (fn must call a step helper)
+- workflow(async () => { ... }) as export const main
 
 Rules:
 - Many same-kind files → input({ schema: z.array(Document) }) + llmBatch, never a single llm.
@@ -38,6 +39,7 @@ Rules:
 - llm-batch \`in\` is the item (Document), never z.array(Document).
 - notes are required on input / llm / llm-batch / combine / assemble / fork.
 - Caching, DAG mermaid, and per-step traces are library exports — do not encode them as JSON fields.
+- Schema-valid is not done: include a real transforming step and distinct sample docs.
 ${buildVibeTopologyPromptBlock()}
 
 Also export:
@@ -66,6 +68,6 @@ export function buildSpineJsUserPrompt(args: {
 ${buildVibeTopologyPromptBlock()}
 ${thinking}${args.extra}${fix}
 
-Return a JavaScript module with export default pipeline(...). You may wrap it in a \`\`\`js fence. Do not return a JSON modules array.
+Return a JavaScript module with export const main = workflow(async () => { ... }). You may wrap it in a \`\`\`js fence. Do not return a JSON modules array.
 `
 }

@@ -4,6 +4,14 @@ A chronological record of product-direction prompts (user voice, not task-demo s
 
 ---
 
+## 2026-08-30 — Windmill workflows-as-code (this session)
+
+consider this chat and how you might simplify the codebase : how to create a high quality vibe coding experience in an APP i vibe coded? … i'm using zod to derive schemas … it creates a number of errors … it's meant to be windmill.dev + lovable … trying to use a library that the model has code for and functions for each node … typed windmill.dev with generics and then a lovable react coding experience
+
+Default vibe authoring is `workflow()` / `task()` TypeScript (not OpenFlow JSON, not `pipeline()` graph constructors). `compileSpineJs` lowers that to the JSON IR; compile errors retry before JSON fallback. Schema-valid is not done (contract checks). Hosted React gets OpenAPI / `src/spine-api.d.ts` only. OpenFlow stays export/execution (`lib/windmill/compile.ts`).
+
+---
+
 ## 2026-08-29 — Full AI product spec (this session)
 
 ok combined_full_stack_specification.md Ln 1–80 is hand coded mostly, but i want a full AI version which is in complete detail. please build this
