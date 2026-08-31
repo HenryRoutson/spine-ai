@@ -16,8 +16,8 @@ Custom JSON is a small, recent language. Models that are strong at TypeScript st
 
 Two responses, both wanted; this session picks (2) as the default authoring path:
 
-1. **JS → JSON (old library).** `pipeline(input(), llmBatch(), output())` — still available as a lower-level compile target.
-2. **Workflows as code (default).** The model writes Windmill-shaped `export const main = workflow(async (files) => { await task(fn)(file) })`. Tracing lowers `for` → llm-batch, `Promise.all` → fork, two args (parse first, keep second raw) → combine, two parsed returns → assemble, `flatMap` / `step()` → custom-code. Caching, DAG visualisation, and step traces stay **library exports**, not JSON fields.
+1. **JS → JSON (old library).** `pipeline(input(), llmBatch(), output())` and `workflow(async () => { await input(...); await llmBatch(...) })` still compile.
+2. **Workflows as code (default).** The model writes Windmill-shaped `export const main = workflow(async (files) => { await task(fn)(file) })` plus `generateObject`. Tracing lowers `for` → llm-batch, `Promise.all` → fork, two args (parse first, keep second raw) → combine, two parsed returns → assemble, `flatMap` / `step()` → custom-code. Caching, DAG visualisation, and step traces stay **library exports**, not JSON fields.
 
 JSON remains the portable IR so we do not reimplement Spine once per language. Intensive steps can still be Rust (or Python) behind a TS orchestrator.
 
@@ -29,7 +29,7 @@ JSON remains the portable IR so we do not reimplement Spine once per language. I
 | **workflow TS** | Default authoring. `workflow` / `task` / `step` / `generateObject`. Compile to JSON IR. |
 | **spine-js pipeline()** | Lower-level step DSL. Still compiles. Not what the LLM is asked to write. |
 | **Runtime exports** | `mermaidFromProgram`, `cachePlan`, `stepOutputs`, `withCache` live on the library. |
-| **Frontend contract** | After a successful compile, `contract.d.ts` + `openapi.json` (`run(input): Promise<RunOutput>`). Lovable-style React generation sees only this — never the graph. |
+| **Frontend contract** | After a successful compile, `contract.d.ts` + `openapi.json` (`run(input): Promise<RunOutput>`), plus hosted React `src/spine-api.d.ts` from `pipeline-client-contract`. Lovable-style generation sees only this — never the graph. |
 | **Cross-language** | Keep emitting TS/Py/Go/Rust *from* the JSON IR. Windmill OpenFlow is the execution IR (`compileProjectToOpenFlow`). |
 | **Default path** | TypeScript workflow authoring. Compile-error retry. No fallback to asking the model for a modules JSON array. |
 | **Flags** | `SPINE_VIBE_AUTHORING=json` is the opt-out (A/B). `SPINE_VIBE_HARNESS=1` is the file loop (writes `pipeline.ts` when JS is on). |

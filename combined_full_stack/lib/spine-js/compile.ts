@@ -96,6 +96,11 @@ function rewriteSpineJsSource(source: string): string {
   let s = source.replace(/^\uFEFF/, "")
   s = s.replace(/^import\s+[\s\S]*?from\s+['"][^'"]+['"]\s*;?\s*$/gm, "")
   s = s.replace(/^import\s+['"][^'"]+['"]\s*;?\s*$/gm, "")
+  // AI : compile is sync — strip async/await so workflow() can trace without microtasks.
+  s = s.replace(/\bPromise\.all\s*\(/g, "__spineAll(")
+  s = s.replace(/\bawait\s+/g, "")
+  s = s.replace(/\basync\s+(?=\()/g, "")
+  s = s.replace(/\basync\s+function\b/g, "function")
   s = s.replace(/^[ \t]*export\s+default\s+/gm, "__spine.default = ")
   s = s.replace(/^[ \t]*export\s+const\s+(\w+)\s*=/gm, "__spine.$1 =")
   s = s.replace(/^[ \t]*export\s+let\s+(\w+)\s*=/gm, "__spine.$1 =")
@@ -129,7 +134,7 @@ export function extractSpineJsSource(raw: string): string {
   if (fenced?.[1]) return fenced[1].trim()
   const trimmed = raw.trim()
   if (/\b(pipeline|input|llmBatch|llm|workflow|generateObject|task)\s*\(/.test(trimmed)) return trimmed
-  throw new Error("no JavaScript pipeline found — expected export const main = workflow(...) or a ```ts fence")
+  throw new Error("no JavaScript pipeline found — expected export const main = workflow(...) or a ```ts / ```js fence")
 }
 
 function asDocs(value: unknown): SpineProgram["docs"] {
@@ -169,7 +174,8 @@ export function compileSpineJs(source: string): SpineJsCompileResult {
   const body = `"use strict";
 const process = undefined;
 const require = undefined;
-const Promise = { all: spine.__promiseAll, resolve: globalThis.Promise.resolve.bind(globalThis.Promise), reject: globalThis.Promise.reject.bind(globalThis.Promise) };
+function __spineAll(items) { return spine.__promiseAll(Array.isArray(items) ? items : [items]); }
+const Promise = { all: __spineAll, resolve: globalThis.Promise.resolve.bind(globalThis.Promise), reject: globalThis.Promise.reject.bind(globalThis.Promise) };
 const { ${names.filter((n) => n !== "__promiseAll").join(", ")} } = spine;
 ${rewritten}
 return __spine;`
@@ -224,6 +230,8 @@ export function isSpineJsAuthoringPrompt(prompt: string): boolean {
     prompt.includes("export const main = workflow") ||
     prompt.includes("export default pipeline") ||
     prompt.includes("generateObject") ||
+    prompt.includes("workflow(async") ||
+    prompt.includes("Windmill workflows-as-code") ||
     prompt.includes("spine-js") ||
     prompt.includes("pipeline.js") ||
     prompt.includes("pipeline.ts") ||

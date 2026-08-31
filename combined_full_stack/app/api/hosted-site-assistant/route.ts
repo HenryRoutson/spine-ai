@@ -15,6 +15,7 @@ import {
 import { ensureModelOptionsFresh } from "@/lib/server/openrouter_models"
 import { proposeHostedSitePage } from "@/lib/server/hosted-site-assistant"
 import { normalizeHostedSiteOptions } from "@/lib/hosted-site"
+import { pageOnlyProjectStub, UNNAMED_WEBSITE_NAME } from "@/lib/website-pipelines"
 import { logger } from "@/lib/server/server_logger"
 import type { ProjectId } from "@/lib/server/types"
 
@@ -34,7 +35,10 @@ export async function POST(req: NextRequest) {
   if (modelOrErr instanceof NextResponse) return modelOrErr
   const model = modelOrErr
 
-  const projectOrErr = await requireProjectOr404(store, body.projectId as ProjectId, apiLog)
+  const siteOptions = normalizeHostedSiteOptions(body.siteOptions)
+  const projectOrErr = body.projectId
+    ? await requireProjectOr404(store, body.projectId as ProjectId, apiLog)
+    : pageOnlyProjectStub(siteOptions.brand.companyName || UNNAMED_WEBSITE_NAME)
   if (projectOrErr instanceof NextResponse) return projectOrErr
   const project = projectOrErr
 
@@ -58,7 +62,7 @@ export async function POST(req: NextRequest) {
     await ensureModelOptionsFresh()
     const result = await proposeHostedSitePage(
       project,
-      normalizeHostedSiteOptions(body.siteOptions),
+      siteOptions,
       body.message,
       trimAssistantHistory(body.history ?? []),
       model,

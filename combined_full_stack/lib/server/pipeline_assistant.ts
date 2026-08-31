@@ -98,6 +98,7 @@ import { compileSpineJs, extractSpineJsSource } from "@/lib/spine-js/compile";
 import { semanticCheckProgram } from "@/lib/spine-js/semantic-check";
 import { buildSpineJsSystemPrompt, buildSpineJsUserPrompt } from "@/lib/spine-js/prompt";
 import { buildVibeTopologyPromptBlock } from "./vibe-coding-topology";
+import { vibeContractIssues } from "./vibe-coding-contract";
 
 export type {
   AssistantProposedAction,
@@ -168,6 +169,7 @@ export type PipelineAssistantOpts = {
 };
 
 const MAX_VALIDATION_RETRIES = 2;
+const MAX_JS_COMPILE_RETRIES = 2;
 
 export type { ChatTurn };
 
@@ -863,7 +865,9 @@ export function runVibeWorkspaceChecks(
     { includeExport: false },
   );
   const lintErrors = lint.lints.filter((l) => l.severity === "error");
-  const ok = !validation && compileErrors.length === 0 && lintErrors.length === 0;
+  const kinds = flattenPipelineModules(proposal.modules).map((m) => m.kind);
+  const contract = vibeContractIssues({ kinds, docs: draft.docs });
+  const ok = !validation && compileErrors.length === 0 && lintErrors.length === 0 && contract.length === 0;
   const lines = [ok ? "PASS" : "FAIL"];
   if (validation) lines.push("I/O:", validation.trim());
   if (compileErrors.length) lines.push("custom-code:", ...compileErrors.map((e) => `- ${e}`));
@@ -872,6 +876,10 @@ export function runVibeWorkspaceChecks(
       "lint:",
       ...lintErrors.map((l) => `- ${l.stepLabel ?? l.structureName ?? l.code}: ${l.message}`),
     );
+  }
+  if (contract.length) {
+    lines.push("contract:", ...contract.map((e) => `- ${e}`));
+    lines.push("Schema-valid is not done. Use a transforming step and distinct sample inputs.");
   }
   if (ok) {
     const docs = (draft.docs ?? testDocsCatalog ?? []).map((d) => ({
@@ -899,7 +907,7 @@ export function runVibeWorkspaceChecks(
     if (semantic.length) {
       return `FAIL semantic\n${semantic.map((e) => `- ${e}`).join("\n")}`;
     }
-    lines.push("I/O valid, custom-code compiled, lint clean.");
+    lines.push("I/O valid, custom-code compiled, lint clean, contract ok.");
   }
   return lines.join("\n");
 }
@@ -962,7 +970,8 @@ async function tryJsDirectAuthoring(args: {
 } | null> {
   // AI : compile errors come back as the next prompt — same loop Windmill wires into createScript.
   let fix = args.fixErrors;
-  for (let attempt = 0; attempt < MAX_VALIDATION_RETRIES + 1; attempt++) {
+  const attempts = MAX_JS_COMPILE_RETRIES + 1;
+  for (let attempt = 1; attempt <= attempts; attempt++) {
     let text: string;
     try {
       text = await llmStreamString(
@@ -996,7 +1005,7 @@ async function tryJsDirectAuthoring(args: {
     } catch (err) {
       const error = (err as Error).message;
       args.onStructuredFailure?.({
-        attempt: attempt + 1,
+        attempt,
         failureKind: "json_parse",
         error,
       });
@@ -1007,10 +1016,11 @@ async function tryJsDirectAuthoring(args: {
     if (!compiled.ok) {
       const error = compiled.errors.join("\n");
       args.onStructuredFailure?.({
-        attempt: attempt + 1,
+        attempt,
         failureKind: "schema",
         error,
       });
+      // AI : compile error is the tool result — next attempt heals, like Windmill create/update.
       fix = error;
       continue;
     }
@@ -1021,7 +1031,7 @@ async function tryJsDirectAuthoring(args: {
     if (semantic.length) {
       const error = semantic.join("\n");
       args.onStructuredFailure?.({
-        attempt: attempt + 1,
+        attempt,
         failureKind: "schema",
         error,
       });
@@ -1030,6 +1040,11 @@ async function tryJsDirectAuthoring(args: {
     }
     const proposal = materializeProposal(compiled.raw, args.project, args.globalModel, args.testDocsCatalog);
     if (!proposal) {
+      args.onStructuredFailure?.({
+        attempt,
+        failureKind: "schema",
+        error: "compile produced no pipeline — export const main = workflow(...)",
+      });
       fix = "compile produced no pipeline — export const main = workflow(...)";
       continue;
     }

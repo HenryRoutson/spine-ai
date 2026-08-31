@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest"
 import { htmlSiteToReactFiles, parseReactPreviewTree } from "@/lib/hosted-site-react"
-import { groupHostedActionSlots, splitHostedSiteSlots } from "@/lib/hosted-site-slots"
+import { groupHostedActionSlots, hostedSqlTableNames, splitHostedSiteSlots } from "@/lib/hosted-site-slots"
 import { normalizeHostedSiteOptions } from "@/lib/hosted-site"
 import { DEFAULT_HOSTED_SITE_HTML, DEFAULT_HOSTED_SITE_LANDING_HTML } from "@/lib/hosted-site-defaults"
 import {
@@ -17,12 +17,14 @@ import {
   unbindProjectFromWebsite,
   nullableProjectId,
   pageOnlyProjectStub,
+  studioProjectForWebsite,
   websiteBoundProjectIds,
+  websiteStudioHostProjectId,
   websiteUsesProject,
   websitesUsingProject,
 } from "@/lib/website-pipelines"
 import type { SharedLinkRecord } from "@/lib/shared-link-types"
-import type { ProjectId } from "@/lib/types"
+import { ModuleKind, type PipelineModule, type ProjectId } from "@/lib/types"
 
 const P1 = "p1" as ProjectId
 const P2 = "p2" as ProjectId
@@ -35,6 +37,45 @@ describe("website pipeline bindings", () => {
     expect(nullableProjectId(P1)).toBe(P1)
     expect(pageOnlyProjectStub("Acme").modules).toEqual([])
     expect(pageOnlyProjectStub("Acme").kind).toBe("page")
+  })
+
+  it("opens a page-only site without a host pipeline", () => {
+    const none = hostedSiteOptionsForCreate({ name: "Acme", pipelineIds: [], projects: [] })
+    expect(
+      websiteStudioHostProjectId({
+        projectId: null,
+        siteOptions: normalizeHostedSiteOptions(none),
+      }),
+    ).toBeNull()
+    expect(studioProjectForWebsite({ activeProject: undefined, pageOnlyStudio: false })).toBeUndefined()
+    const stub = studioProjectForWebsite({
+      activeProject: undefined,
+      pageOnlyStudio: true,
+      siteName: "Acme",
+    })
+    expect(stub?.kind).toBe("page")
+    expect(stub?.name).toBe("Acme")
+    expect(stub?.id).toBe("")
+  })
+
+  it("uses the bound pipeline as the studio host when present", () => {
+    const withRun = hostedSiteOptionsForCreate({
+      name: "Desk",
+      pipelineIds: [P1],
+      projects: [{ id: P1, name: "Ops" }],
+    })
+    expect(
+      websiteStudioHostProjectId({
+        projectId: null,
+        siteOptions: normalizeHostedSiteOptions(withRun),
+      }),
+    ).toBe(P1)
+    expect(
+      websiteStudioHostProjectId({
+        projectId: P2,
+        siteOptions: normalizeHostedSiteOptions(withRun),
+      }),
+    ).toBe(P2)
   })
 
   it("remaps bound project ids onto a cloned pipeline", () => {
@@ -160,6 +201,18 @@ describe("named run slots", () => {
       { kind: "slot", slot: "sql", alias: "shared_number" },
       { kind: "slot", slot: "action" },
     ])
+  })
+
+  it("collects SQL tables from slots and steps, not a hardcoded demo table", () => {
+    expect(hostedSqlTableNames(["{{sql:todo}}{{action}}"])).toEqual(["todo"])
+    expect(
+      hostedSqlTableNames(["{{run}}"], [{ alias: "add", label: "Add", table: "items" }]),
+    ).toEqual(["items"])
+    const modules = [
+      { id: "m1", kind: ModuleKind.Sql, label: "Add", sql: "SELECT * FROM notes" },
+    ] as PipelineModule[]
+    expect(hostedSqlTableNames(["{{run}}"], [], modules)).toEqual(["notes"])
+    expect(hostedSqlTableNames(["{{sql:todo}}"])).not.toContain("shared_number")
   })
 
   it("parses {{action:collatz}} as a named action slot", () => {

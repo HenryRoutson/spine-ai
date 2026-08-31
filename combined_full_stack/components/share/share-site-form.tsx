@@ -9,6 +9,7 @@ import { ShareDefaultFiles } from "@/components/share/share-default-files"
 import { ShareFundingPicker } from "@/components/share/share-funding-flow"
 import { parseSharePricing, parseSpendLimitUsd, SharePricingFields } from "@/components/share/share-pricing-fields"
 import { HostedSitePageStudio } from "@/components/share/hosted-site-page-studio"
+import { SiteSupabaseStatus } from "@/components/share/site-supabase-status"
 import { ShareSheet } from "@/components/share/share-sheet"
 import { ShareViewerDocsFields, useShareViewerMarkdown } from "@/components/share/share-viewer-docs-fields"
 import { API_ROUTES } from "@/lib/api-routes"
@@ -68,6 +69,7 @@ export function ShareSiteForm({
   const [error, setError] = useState<string | null>(null)
   const [created, setCreated] = useState<{ url: string; link: SharedLinkRecord } | null>(null)
   const [copied, setCopied] = useState(false)
+  const [shareOpen, setShareOpen] = useState(false)
   const [fundingMode, setFundingMode] = useState<SharedLinkFundingMode>(SharedLinkFundingMode.SharerPays)
   const [viewerNameRequired, setViewerNameRequired] = useState(false)
   const [spendLimitEnabled, setSpendLimitEnabled] = useState(true)
@@ -221,26 +223,74 @@ export function ShareSiteForm({
       </div>
       )}
 
+      {created ? (
+        <SiteSupabaseStatus
+          linkId={created.link.id}
+          auth={siteOptions.auth}
+          onAuth={(nextAuth) => {
+            setSiteOptions((prev) => ({ ...prev, auth: nextAuth }))
+            setCreated((c) =>
+              c
+                ? { ...c, link: { ...c.link, siteOptions: { ...c.link.siteOptions, auth: nextAuth } } }
+                : c,
+            )
+          }}
+        />
+      ) : null}
+
       <HostedSitePageStudio
         project={project}
         value={siteOptions}
         onChange={commitSiteOptions}
         viewerMarkdown={viewerMarkdown}
-        forcedTab={hideDeveloperTools ? "vibe" : undefined}
-        hideSurfaceTabs={hideDeveloperTools}
+        forcedTab={editingWebsite ? undefined : hideDeveloperTools ? "vibe" : undefined}
+        hideSurfaceTabs={editingWebsite ? false : hideDeveloperTools}
         fillHeight={!!editingWebsite}
       />
 
       {editingWebsite || hideDeveloperTools ? null : <ShareViewerDocsFields {...fieldsProps} />}
 
       {editingWebsite && created ? (
-        <div className="shrink-0 border-t border-border p-3">
-          <ShareSheet
-            target={{ kind: "website", site: created.link, project }}
-            docs={docs}
-            inferenceInputDocIds={inferenceInputDocIds}
-            onCreated={onCreated}
-          />
+        <div className="shrink-0 border-t border-border">
+          <div className="flex flex-wrap items-center gap-2 px-3 py-2">
+            <button
+              type="button"
+              className="text-[11px] font-medium text-muted-foreground hover:text-foreground"
+              onClick={() => setShareOpen((v) => !v)}
+            >
+              {shareOpen ? "Hide share" : "Share"}
+            </button>
+            <a
+              href={created.url}
+              target="_blank"
+              rel="noreferrer"
+              className="min-w-0 flex-1 truncate font-mono text-[10px] text-muted-foreground hover:text-foreground"
+            >
+              {created.url}
+            </a>
+            <Button type="button" size="sm" variant="outline" className="h-7" onClick={() => void copyUrl()}>
+              {copied ? "Copied" : "Copy"}
+            </Button>
+            <a
+              href={created.url}
+              target="_blank"
+              rel="noreferrer"
+              className="inline-flex h-7 items-center rounded-lg px-2 text-muted-foreground hover:text-foreground"
+              aria-label="Open public site"
+            >
+              <ExternalLink className="h-3.5 w-3.5" />
+            </a>
+          </div>
+          {shareOpen ? (
+            <div className="max-h-56 overflow-y-auto border-t border-border p-3">
+              <ShareSheet
+                target={{ kind: "website", site: created.link, project }}
+                docs={docs}
+                inferenceInputDocIds={inferenceInputDocIds}
+                onCreated={onCreated}
+              />
+            </div>
+          ) : null}
         </div>
       ) : null}
 

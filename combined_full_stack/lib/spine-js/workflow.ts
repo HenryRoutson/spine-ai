@@ -10,6 +10,7 @@ import {
   llmBatch,
   output,
   pipeline,
+  takeLastSpineProgram,
   type SpineProgram,
   type StepHandle,
 } from "./api"
@@ -661,6 +662,8 @@ function currentSpineBefore(handle: TraceHandle): TraceHandle | undefined {
   return params[0]
 }
 
+export type WorkflowFn = (...args: never[]) => unknown
+
 export function workflow<I extends unknown[], O>(fn: (...args: I) => O): SpineProgram {
   tracing = true
   params = []
@@ -688,6 +691,14 @@ export function workflow<I extends unknown[], O>(fn: (...args: I) => O): SpinePr
     result = withArrayHooks(() => fn(...(args as I)))
   } finally {
     tracing = false
+  }
+  // AI : #39 authored input()/llmBatch() inside workflow(); #41 traces generateObject.
+  // Prefer the explicit step-helper program when generateObject was not used.
+  const usedGenerateObject = ops.some((op) => op.type === "task" && Boolean(op.handle.prompt))
+  const captured = takeLastSpineProgram()
+  if (!usedGenerateObject && captured?.modules.length) {
+    lastWorkflowProgram = captured
+    return captured
   }
   lastWorkflowProgram = lowerToProgram(result)
   return lastWorkflowProgram

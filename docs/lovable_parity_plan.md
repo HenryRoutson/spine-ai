@@ -6,7 +6,7 @@ Do not rebuild Vibe, Share, or export. Add page-building to the surfaces that ex
 
 Code markers: grep `TODO (lovable` — source of truth is [`combined_full_stack/lib/server/lovable-parity-roadmap.ts`](../combined_full_stack/lib/server/lovable-parity-roadmap.ts). Mark `DONE` when a stage ships.
 
-Related: [`media_and_custom_views_plan.md`](media_and_custom_views_plan.md) (output viewers), [`parity.md`](parity.md), `lib/server/connect-roadmap.ts`.
+Related: [`media_and_custom_views_plan.md`](media_and_custom_views_plan.md) (output viewers), [`parity.md`](parity.md), [`lovable_replit_alts.md`](lovable_replit_alts.md), `lib/server/connect-roadmap.ts`.
 
 ---
 
@@ -136,6 +136,24 @@ Skip `{{pay}}` and `{{table:Model}}` here (those need product billing / a row st
 
 ---
 
+## F3 — bolt.diy / Open Lovable (MIT) onto the existing studio
+
+Do not vendor those repos (dogfood D3). Port the missing gestures:
+
+1. **File tree** (bolt.diy workbench) on the React Code tab — folders before files, add/delete. Host widgets (`RunPipeline`, `HostedSlot`, `App.tsx`, `main.tsx`) cannot be deleted.
+2. **React click-to-edit** (bolt inspector) — F1 already did this for HTML. The React preview now selects an element, patches unique source text without an LLM, and pins the matching file for the assistant.
+3. **Clone URL** (Open Lovable, without Firecrawl) — fetch a public page, extract title/copy/colors, rebuild `customHtml` (and `reactFiles` when runtime is React). SSRF: no localhost / RFC1918 / credentials.
+
+`reactFileDeletes` is the bolt file-delete action on the existing structured assistant (no XML artifact parser).
+
+**Done when:** switch to React → tree + Monaco + live preview; click a headline to edit; paste `https://…` and get a rebuilt hosted page.
+
+Files: `lib/hosted-site-file-tree.ts`, `lib/hosted-site-react-select.ts`, `lib/hosted-site-clone.ts`, `components/share/hosted-site-file-tree.tsx`, `app/api/hosted-site/clone-url/route.ts`.
+
+Out of scope: WebContainer/npm, GitHub two-way, wrapping Claude Code inside the studio (use MCP).
+
+---
+
 ## Out of scope (already built, or a different plan)
 
 | Tempting rebuild | Reality |
@@ -154,6 +172,7 @@ Skip `{{pay}}` and `{{table:Model}}` here (those need product billing / a row st
 F0 surface studio on Vibe Share
   └─ F1 click-to-edit on HtmlPreviewFrame
        └─ F2 extra pages + {{output}}/{{chatbot}}/{{docs}} → same export zip
+            └─ F3 bolt.diy file tree + React click-to-edit + Open Lovable clone URL
 ```
 
 First PR is F0 only: Vibe Share renders `ShareSiteForm`. No new slots, no visual edit, no export format change.

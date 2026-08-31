@@ -279,6 +279,46 @@ describe("vibe coding harness tools", () => {
     expect(report).toMatch(/structureOut Document/)
   })
 
+  it("run_tests fails contract on input→output stubs even when I/O is valid", () => {
+    const session = createSpineSession()
+    session.addProject({ open: true })
+    const ws = seedVibeWorkspace({ project: session.project!, globalModel: DEFAULT_MODEL })
+    executeVibeHarnessTool(
+      {
+        tool: "write_file",
+        path: "pipeline.json",
+        content: JSON.stringify(
+          [
+            {
+              kind: "input",
+              label: "Notes",
+              note: "Paste notes.",
+              inputType: "text",
+              structureOut: "list[Document]",
+              inputDescription: "notes",
+            },
+            {
+              kind: "output",
+              label: "Out",
+              structureIn: "Document",
+              structureOut: "Document",
+              inputDescription: "notes",
+            },
+          ],
+          null,
+          2,
+        ),
+      },
+      ws,
+      () => "unused",
+    )
+    const draft = parseVibeWorkspaceFiles(ws.files, ws.seed)
+    const report = runVibeWorkspaceChecks(draft, session.project!, DEFAULT_MODEL, [])
+    expect(report).toMatch(/^FAIL/m)
+    expect(report).toMatch(/contract/i)
+    expect(report).toMatch(/transforming step/i)
+  })
+
   it("does not treat Input+Output as a finished pipeline", () => {
     expect(
       harnessDraftHasPipelineWork({

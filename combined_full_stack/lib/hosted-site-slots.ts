@@ -1,3 +1,6 @@
+import { inferSqlTableFromModules, type HostedSiteActionBinding } from "@/lib/hosted-site-actions"
+import type { PipelineModule } from "@/lib/types"
+
 export const HOSTED_SITE_RUN_SLOT = "{{run}}"
 export const HOSTED_SITE_AUTH_SLOT = "{{auth}}"
 export const HOSTED_SITE_OUTPUT_SLOT = "{{output}}"
@@ -189,4 +192,26 @@ export function hostedSiteHasPrimarySlot(
     if (s.slot === "action" && (!s.alias || s.alias === "run")) return true
     return s.slot === primary && (primary !== "run" || !s.alias || s.alias === "run")
   })
+}
+
+// AI : studio/live SQL widgets key off {{sql:table}}, action.table, or the pipeline SQL step — never a demo table.
+export function hostedSqlTableNames(
+  htmlFragments: string[],
+  actions: HostedSiteActionBinding[] = [],
+  modules: PipelineModule[] = [],
+): string[] {
+  const tables = new Set<string>()
+  for (const html of htmlFragments) {
+    if (!html?.trim()) continue
+    for (const seg of splitHostedSiteSlots(html)) {
+      if (seg.kind === "slot" && seg.slot === "sql" && seg.alias) tables.add(seg.alias)
+    }
+  }
+  for (const a of actions) {
+    const t = a.table?.trim()
+    if (t) tables.add(t)
+  }
+  const inferred = inferSqlTableFromModules(modules)
+  if (inferred) tables.add(inferred)
+  return [...tables]
 }

@@ -46,12 +46,17 @@ export type HostedSiteBrand = {
 
 export type HostedSiteAuthProvider = "spine" | "custom_supabase";
 
+// AI : public alloc state — never put service_role or db password here.
+export type supabase_alloc_status = "idle" | "pending" | "ready" | "error" | "skipped";
+
 export type HostedSiteAuth = {
   enabled: boolean;
   provider: HostedSiteAuthProvider;
-  // AI : placeholder — custom project instance is not allocated yet.
   customSupabaseUrl: string;
   customSupabaseAnonKey: string;
+  projectRef: string;
+  allocStatus: supabase_alloc_status;
+  allocError: string;
 };
 
 export const DEFAULT_HOSTED_SITE_AUTH: HostedSiteAuth = {
@@ -59,6 +64,9 @@ export const DEFAULT_HOSTED_SITE_AUTH: HostedSiteAuth = {
   provider: "spine",
   customSupabaseUrl: "",
   customSupabaseAnonKey: "",
+  projectRef: "",
+  allocStatus: "idle",
+  allocError: "",
 };
 
 export type hosted_site_page_path = string & { __brand: "hosted_site_page_path" };

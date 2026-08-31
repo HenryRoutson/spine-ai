@@ -5,6 +5,7 @@ import {
   layoutPipelineDag,
   roundedOrthogonalPath,
 } from "@/lib/pipeline-dag-layout"
+import { pipelineModulesToReactFlow } from "@/lib/pipeline-dag-reactflow"
 import { derivePipelineMermaid } from "@/lib/pipeline-mermaid"
 import { IfConditionKind, ModuleKind, type ModuleId, type PipelineModule } from "@/lib/types"
 
@@ -268,5 +269,50 @@ describe("pipeline DAG layout core", () => {
         expect(overlap).toBe(false)
       }
     }
+  })
+})
+
+describe("pipeline DAG React Flow adapter", () => {
+  it("maps a linear pipeline onto selectable step nodes and chrome endpoints", () => {
+    const modules = [
+      step({ id: "in", kind: ModuleKind.Input, label: "In" }),
+      step({ id: "llm", kind: ModuleKind.Llm, label: "Ask" }),
+      step({ id: "out", kind: ModuleKind.Output, label: "Out" }),
+    ]
+    const { nodes, edges } = pipelineModulesToReactFlow(modules, { selectedId: "llm" as ModuleId })
+    expect(nodes.map((n) => n.type)).toEqual(expect.arrayContaining(["chrome", "step"]))
+    const byId = new Map(nodes.map((n) => [n.id, n]))
+    expect(byId.get(DAG_START_ID)?.type).toBe("chrome")
+    expect(byId.get(DAG_START_ID)?.selectable).toBe(false)
+    expect(byId.get("llm")?.type).toBe("step")
+    expect(byId.get("llm")?.selected).toBe(true)
+    expect(byId.get("llm")?.selectable).toBe(true)
+    expect(byId.get("llm")?.draggable).toBe(false)
+    expect(byId.get("in")?.selected).toBe(false)
+    expect(byId.get("out")?.data.isOutput).toBe(true)
+    expect(edges.length).toBeGreaterThan(0)
+    expect(edges.every((e) => e.type === "laid" && e.data.path.length > 0)).toBe(true)
+    expect(edges.some((e) => e.data.kind === "trigger" && e.data.dashed)).toBe(true)
+  })
+
+  it("keeps Then/Else labels on laid edges for if-else", () => {
+    const modules = [
+      step({ id: "in", kind: ModuleKind.Input, label: "In" }),
+      step({
+        id: "ife",
+        kind: ModuleKind.IfElse,
+        label: "Route",
+        ifCondition: { kind: IfConditionKind.Path, path: "is_legal" },
+        forkBranches: [
+          { id: "t", label: "Then", modules: [step({ id: "t1", kind: ModuleKind.N8n, label: "Legal" })] },
+          { id: "e", label: "Else", modules: [step({ id: "e1", kind: ModuleKind.N8n, label: "Billing" })] },
+        ],
+      }),
+    ]
+    const { nodes, edges } = pipelineModulesToReactFlow(modules)
+    expect(nodes.find((n) => n.id === "ife")?.data.forkish).toBe(true)
+    expect(edges.some((e) => e.label === "Then" && e.data.kind === "then")).toBe(true)
+    expect(edges.some((e) => e.label === "Else" && e.data.kind === "else")).toBe(true)
+    expect(edges.filter((e) => e.label === "Then" || e.label === "Else").every((e) => e.data.labelAt)).toBe(true)
   })
 })

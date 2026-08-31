@@ -22,7 +22,7 @@ A **project** is a development group: one set of **structures** (types = Zod/Pyd
 
 There is **no vector RAG**. Traceability is **quotes** (source-linked spans) and **example select** (cheap per-item LLM relevance). Retrieval-by-embedding is out of scope on purpose.
 
-The **JSON IR** (`pipeline.json` / the `modules` array) is the portable graph. The UI, CLI, MCP, seeds, language exports, and Windmill OpenFlow all consume that IR. Vibe authors ordinary TypeScript (`workflow` / `task` / `generateObject`); `compileSpineJs` traces it into the same IR. Caching, mermaid, and per-step traces are **derived**, not extra JSON fields.
+The **JSON IR** (`pipeline.json` / the `modules` array) is the portable graph. The UI, CLI, MCP, seeds, language exports, and Windmill OpenFlow all consume that IR. Vibe authors ordinary TypeScript (`workflow` / `task` / `generateObject`); `compileSpineJs` traces it into the same IR. Caching, mermaid, and per-step traces are **derived**, not extra JSON fields. Hosted React sees the generated OpenAPI types (`contract.d.ts` / `pipeline-client-contract`), not the graph.
 
 ---
 
@@ -34,7 +34,7 @@ The **JSON IR** (`pipeline.json` / the `modules` array) is the portable graph. T
 
 **The pipeline tab is the backend.** Functions live there. Websites are a different object that bind functions. Do not nest a page studio as the only home of a pipeline.
 
-**JSON is the IR; TypeScript is authoring.** Cross-language export prints from JSON. Intensive steps may be Rust or Python inside a TS-authored graph. Default vibe authoring is `workflow()` / `task()` TypeScript; `SPINE_VIBE_AUTHORING=json` is the opt-out.
+**JSON is the IR; TypeScript is authoring.** Cross-language export prints from JSON. Intensive steps may be Rust or Python inside a TS-authored graph. Default vibe authoring is `workflow()` / `task()` / `generateObject` TypeScript; `SPINE_VIBE_AUTHORING=json` is the opt-out (old graph-JSON LLM path).
 
 **Quotes over RAG.** If an LLM extracts text, the user clicks it and jumps to the source span. Example select filters a candidate list with `is_relevant` + reasoning, not embeddings.
 
@@ -382,11 +382,11 @@ OpenRouter (or the active provider) is exported as the default client, with synt
 
 The OpenFlow-shaped node/edge dialect has no pretraining prior; typed TypeScript does. Structured decoding does not fix semantic mistakes. Vibe therefore asks the model for ordinary async TypeScript, not a modules JSON array:
 
-1. **Workflows as code (default).** `export const main = workflow(async (files) => { await task(fn)(file) })` plus `generateObject({ schema, prompt })`. Tracing lowers `for` → llm-batch, `Promise.all` → fork, two args → combine/assemble, `step()`/`flatMap` → custom-code.
+1. **Workflows as code (default).** `export const main = workflow(async (files) => { await task(fn)(file) })` plus `generateObject({ schema, prompt })`. Tracing lowers `for` → llm-batch, `Promise.all` → fork, two args → combine/assemble, `step()`/`flatMap` → custom-code. `input()` / `llmBatch()` inside `workflow()` still compile (IR constructor).
 2. **JSON IR.** Portable compile target. UI, exports, OpenFlow. `SPINE_VIBE_AUTHORING=json` still lets the model emit the modules array (A/B opt-out). There is no JSON fallback when TS authoring is on.
 3. **Lower-level `pipeline()` DSL.** Still compiles. Not what the LLM is asked to write.
 
-Pass is compile + I/O + semantic checks (two distinct test docs; no empty/passthrough pipeline). The React/Lovable step sees `run()` types from `contract.d.ts` / OpenAPI, never the graph.
+Pass is compile + I/O + semantic checks (two distinct test docs; no empty/passthrough pipeline). Schema-valid is not done. The React/Lovable step sees `run()` types from `contract.d.ts` / OpenAPI (`pipeline-client-contract`), never the graph.
 
 Flags: default TS; `SPINE_VIBE_AUTHORING=json`; `SPINE_VIBE_HARNESS=1` (write/`run_tests` loop on `pipeline.ts`).
 

@@ -1,4 +1,4 @@
-// AI : BYO Supabase for a hosted site — validate keys and pack schema.sql. No isolated alloc yet.
+// AI : BYO Supabase for a hosted site — validate keys and pack schema.sql. Isolated alloc is lib/server/site_supabase.ts.
 import { allModelsToSql } from "@/lib/sql-schema"
 import { sqlTableName } from "@/lib/sql-id-types"
 import { stripSharedModels } from "@/lib/server/builtin_models"

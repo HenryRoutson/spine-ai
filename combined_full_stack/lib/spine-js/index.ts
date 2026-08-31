@@ -36,6 +36,7 @@ export {
   beginWorkflowProgram,
   takeLastWorkflowProgram,
   isWorkflowAuthoringSource,
+  type WorkflowFn,
 } from "./workflow"
 export { compileSpineJs, extractSpineJsSource, isSpineJsAuthoringPrompt, type SpineJsCompileResult } from "./compile"
 export { payloadToSpineJs } from "./payload-to-js"

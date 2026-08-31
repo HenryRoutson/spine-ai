@@ -25,8 +25,8 @@ export {}
 // AI : TODO (jank-legal-identity) — shared/legal/site.ts controllerName is still
 // AI :   "Spine (Antler hackathon project)". Product rename is a legal copy change.
 // AI : TODO (jank-site-urls) — production hosts are split: spine-ai.dev (marketing),
-// AI :   spine-ai-app.dev (app), app.usespine.com (login), auto-pipeline.dev (legacy CORS).
-// AI :   One constant module + env overrides; do not hardcode a fourth name.
+// AI :   spine-ai-app.dev (app + login). app.usespine.com does not resolve — landing Sign in
+// AI :   uses spine-ai-app.dev/login. One constant module; do not hardcode a fourth name.
 // AI : DONE (jank-mcp-paths) — .cursor/mcp.json uses ${workspaceFolder}/mcp_tool/spine-mcp.mjs (no machine PATH).
 // AI : TODO (jank-oauth-login) — login page GitHub/Google OAuth is commented out
 // AI :   (callback route exists at /auth/callback).
