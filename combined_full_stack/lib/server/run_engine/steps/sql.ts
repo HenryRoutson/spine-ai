@@ -24,7 +24,7 @@ export async function execSqlStep(m: PipelineModule, ctx: RunCtx, log: RunLogger
   const pkField = out ? pkFieldOf(out)?.name ?? "id" : "id"
   const table = out ? tableNameForModel(out) : undefined
   log.info(`sql step`, { moduleId: m.id, scope, table, sql })
-  const rows = await execAppSql(scope, sql, { seedRows: sqlSeedRowsOf(m), pkField })
+  const rows = await execAppSql(scope, sql, { seedRows: sqlSeedRowsOf(m), pkField, db: ctx.appSqlDb })
   const raw = stepEmitsList(m) ? rows : (rows[0] ?? {})
   const prev = prevModuleFor(ctx.project.modules, ctx.prevModuleId)
   const value = out

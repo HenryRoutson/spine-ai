@@ -40,7 +40,7 @@ export function HostedSiteSqlWidget({
       ) : showBig ? (
         <>
           <div className="hs-sql-value">{String(value)}</div>
-          <p className="hs-sql-caption">Shared SQL row · {table}</p>
+          <p className="hs-sql-caption">SQL · {table}</p>
         </>
       ) : rows.length === 0 ? (
         <p className="text-sm text-muted-foreground">No rows in {table}</p>
@@ -56,8 +56,7 @@ export function HostedSiteSqlWidget({
 export function HostedSiteSqlPreview({ table }: { table: string }) {
   return (
     <div className="hs-sql-widget" data-spine-id="site.sql-table">
-      <div className="hs-sql-value">1</div>
-      <p className="hs-sql-caption">Shared SQL row · {table} (preview)</p>
+      <p className="text-sm text-muted-foreground">No rows in {table}</p>
     </div>
   )
 }

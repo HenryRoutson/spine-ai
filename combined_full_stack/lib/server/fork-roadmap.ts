@@ -1,7 +1,7 @@
 // AI : Pipeline forks — grep "TODO (allow-pipeline-non-linear-fork)" / "DONE (allow-pipeline-non-linear-fork)".
 //
 // Decision: in-pipeline forks (series-parallel), not saved-component sub-pipelines
-//   and not an open node canvas (TODO.txt React Flow / XYFlow stays deferred).
+//   and not an open node canvas (TODO.txt free-form React Flow authoring stays deferred).
 //
 // Why not "save as separate linear pipelines":
 //   One task is one project. Testing, cache, export, marketplace, and the assistant
@@ -54,8 +54,8 @@
 //   Drop "strictly linear". Prefer a single spine when one chain suffices; Fork when
 //   independent sub-pipelines share an input and must run before a join.
 //
-// Out of v1: multi-sink (no join / multiple Output), PipelineRef components, React Flow.
-//   nested fork UI, PipelineRef components, React Flow.
+// Out of v1: multi-sink (no join / multiple Output), PipelineRef components, free-form RF authoring.
+//   nested fork UI, PipelineRef components, drag-wire canvas.
 export {}
 
 // AI : DONE (allow-pipeline-non-linear-fork) — stage A model: ModuleKind.Fork + forkBranches + forkJoin;
@@ -72,9 +72,10 @@ export {}
 // AI :   Ink list with indent.
 // AI : DONE (allow-pipeline-non-linear-fork) — stage F seeds: contract_diligence_fork, invoice_triage_fork,
 // AI :   lead_notify_fork (+ docs).
-// AI : TODO (allow-pipeline-non-linear-fork) — later: sinks join, PipelineRef, React Flow.
+// AI : TODO (allow-pipeline-non-linear-fork) — later: sinks join, PipelineRef, free-form RF authoring.
 // AI : DONE (allow-pipeline-if-else) — ModuleKind.IfElse exclusive Then/Else on a bool spine path. Comparisons stay in custom-code.
-// AI : DONE (pipeline-dag-d3) — pipelineToDag IR + d3-dag sugiyama layout (Lanes | DAG canvas). Loops stay in custom-code / llm-batch.
+// AI : DONE (pipeline-dag-d3) — pipelineToDag IR + d3-dag sugiyama layout. Loops stay in custom-code / llm-batch.
+// AI : DONE (pipeline-dag-reactflow) — React Flow is the DAG visualization layer (default). Lanes stay as insert-slot authoring.
 // AI : DONE (pipeline-dag-triggers) — Start accepts typed trigger sources (manual/schedule/share/hosted/inbound-webhook). Not graph steps.
 // AI : DONE (allow-pipeline-non-linear-fork) — nested fork UI: canvas recurses fork boxes; max 12 lanes.
 

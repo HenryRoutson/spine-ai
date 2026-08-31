@@ -114,6 +114,56 @@ describe("spine-js library", () => {
     expect(traces.map((s) => s.kind)).toEqual(["input", "llm-batch", "output"])
   })
 
+  it("compiles Windmill-shaped workflow() / task() into the same JSON IR", () => {
+    const compiled = compileSpineJs(`
+const ReceiptRow = model("ReceiptRow", {
+  date: z.string().describe("Receipt date"),
+  vendor: z.string().describe("Vendor name"),
+  amount: z.number().describe("Total amount"),
+})
+
+async function extractEach() {
+  return llmBatch({
+    label: "Extract Each Receipt",
+    note: "One structured ReceiptRow per uploaded Document.",
+    schema: ReceiptRow,
+    prompt: "Extract date, vendor, and total amount from this receipt text.",
+  })
+}
+
+export const message = "I'll add a receipt extractor."
+export const main = workflow(async () => {
+  await input({
+    label: "Receipt Uploads",
+    note: "Many receipt files uploaded into one slot.",
+    schema: z.array(Document),
+    type: "text",
+    inputMinCount: 2,
+  })
+  await task(extractEach)()
+  await output({ schema: ReceiptRow })
+})
+`)
+    expect(compiled.ok, compiled.ok ? "" : compiled.errors.join("; ")).toBe(true)
+    if (!compiled.ok) return
+    expect(compiled.program.modules.map((m) => m.kind)).toEqual(["input", "llm-batch", "output"])
+    expect(compiled.program.modules[1]?.structureIn).toBe("Document")
+  })
+
+  it("preserves export const targetFunctionName on workflow()", () => {
+    const compiled = compileSpineJs(`
+export const targetFunctionName = "Hello Notes"
+export const main = workflow(async () => {
+  await input({ schema: z.array(Document), type: "text", note: "Paste notes." })
+  await llmBatch({ schema: model("NoteSummary", { summary: z.string() }), note: "One summary per note.", prompt: "Summarize." })
+  await output({ schema: model("NoteSummary", { summary: z.string() }) })
+})
+`)
+    expect(compiled.ok, compiled.ok ? "" : compiled.errors.join("; ")).toBe(true)
+    if (!compiled.ok) return
+    expect(compiled.program.targetFunctionName).toBe("Hello Notes")
+  })
+
   it("round-trips few-shot JSON payloads through JS and back to the same kinds", () => {
     for (const ex of vibeExampleTasks()) {
       const src = payloadToSpineJs(ex.payload)

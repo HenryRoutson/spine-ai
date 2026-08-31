@@ -1,7 +1,7 @@
 import { describe, expect, it, beforeEach } from "vitest"
 import { resolve } from "node:path"
 import { evalSqlExpr, parseAppSql, sqlWhereMatches, tableNameForModel } from "@/lib/app-sql"
-import { execAppSql, resetAppSqlForTests } from "@/lib/server/app_sql"
+import { execAppSql, resetAppSqlForTests, AppSqlUnavailableError, appSqlAllowsEphemeralFallback } from "@/lib/server/app_sql"
 import { loadProjectSeed, SEEDS_DIR } from "@/lib/server/seed"
 import { shouldCheckInputDescription } from "@/lib/server/input_description_check"
 import { computeInvalid, migrateProjectModules } from "@/lib/server/validity"
@@ -141,6 +141,30 @@ describe("execAppSql", () => {
     const removed = await execAppSql(scope, "DELETE FROM todos WHERE id = 't1'")
     expect(removed).toEqual([{ id: "t1", title: "Buy milk" }])
     expect(await execAppSql(scope, "SELECT * FROM todos")).toEqual([])
+  })
+})
+
+describe("app sql vercel fallback", () => {
+  it("disallows ephemeral /tmp fallback on Vercel", () => {
+    const prev = process.env.VERCEL
+    process.env.VERCEL = "1"
+    expect(appSqlAllowsEphemeralFallback()).toBe(false)
+    if (prev === undefined) delete process.env.VERCEL
+    else process.env.VERCEL = prev
+  })
+
+  it("allows file fallback off Vercel", () => {
+    const prev = process.env.VERCEL
+    delete process.env.VERCEL
+    expect(appSqlAllowsEphemeralFallback()).toBe(true)
+    if (prev !== undefined) process.env.VERCEL = prev
+  })
+
+  it("names the missing app_sql_rows table in the error", () => {
+    const err = new AppSqlUnavailableError("Could not find the table 'public.app_sql_rows' in the schema cache")
+    expect(err.code).toBe("app_sql_unavailable")
+    expect(err.message).toMatch(/app_sql_rows/)
+    expect(err.message).toMatch(/db:push|migrations/i)
   })
 })
 

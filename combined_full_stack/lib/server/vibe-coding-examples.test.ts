@@ -38,7 +38,7 @@ describe("vibe few-shot example catalog", () => {
       if (ex.topology === "fork") {
         expect(kinds.includes("fork"), `${ex.id} kinds=${kinds.join(",")}`).toBe(true)
       }
-      expect(seedHarnessWriteTools(ex.payload).some((t) => t.path === "pipeline.json")).toBe(true)
+      expect(seedHarnessWriteTools(ex.payload).some((t) => t.path === "pipeline.js" || t.path === "pipeline.json")).toBe(true)
     })
   }
 })

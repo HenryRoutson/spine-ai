@@ -37,3 +37,13 @@ export {}
 // AI : DONE (lovable-F2-pay-table) — {{pay}} / {{table:Model}} live on hosted pages via platform widgets
 // AI : DONE (lovable-F2-export) — generateHostedSiteExportFiles emits one HTML per page; dialog tabs stay hosted/*
 // AI : optional later: drop inference_ui.html into .hs-run-slot in the zip (SETUP already says to do it by hand)
+
+// ---------------------------------------------------------------------------
+// F3 — bolt.diy / open-lovable MIT ports (do not vendor their trees)
+// ---------------------------------------------------------------------------
+// AI : DONE (lovable-F3-file-tree) — bolt.diy workbench tree on React Code tab (lib/hosted-site-file-tree.ts)
+// AI : DONE (lovable-F3-file-delete) — reactFileDeletes + GUI delete; never drop RunPipeline / HostedSlot / App / main
+// AI : DONE (lovable-F3-react-select) — React preview click-to-edit patches unique source text (bolt inspector)
+// AI : DONE (lovable-F3-clone-url) — POST /api/hosted-site/clone-url rebuilds hosted HTML/React from a public page
+// AI : Catalog: lib/server/lovable-replit-alts.ts — clone checkouts via scripts/clone_lovable_replit_alts.py
+// AI : Out of scope (still): WebContainer/npm, GitHub two-way, CLI-agent wrap (MCP already), OpenHands loop

@@ -1,5 +1,5 @@
 // AI : canonical DAG IR for the series-parallel pipeline (forks, if/else, combine side-feeds).
-// AI : authoring stays insert-slot lanes; this graph is layout, mermaid, validation, and export topology.
+// AI : authoring stays insert-slot lanes; React Flow visualises this graph; mermaid/validation/export share it.
 // AI : triggers attach to Start (Run / Schedule / Share / hosted API). They are not graph steps or loops.
 import { combineGroupAt } from "@/lib/pipeline-layout"
 import {

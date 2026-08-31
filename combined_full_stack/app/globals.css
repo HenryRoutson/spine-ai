@@ -5,6 +5,11 @@
 @source '../node_modules/@assistant-ui/react/dist/**/*.js';
 @source '../node_modules/@assistant-ui/core/dist/**/*.js';
 
+/* AI : Tailwind 4 — React Flow stylesheet must load in global CSS after tailwind, not from a component. */
+@layer base {
+  @import '@xyflow/react/dist/style.css';
+}
+
 @custom-variant dark (&:is(.dark *));
 
 @theme inline {
@@ -238,5 +243,57 @@
   display: none !important;
   width: 0 !important;
   height: 0 !important;
+  background: transparent !important;
+}
+
+/* AI : React Flow DAG canvas — map xyflow tokens onto Spine dark-first colors; hide default node chrome. */
+.pipeline-rf .react-flow {
+  --xy-background-color: transparent;
+  --xy-background-pattern-dots-color: color-mix(in oklab, var(--muted-foreground) 35%, transparent);
+  --xy-controls-button-background-color: var(--card);
+  --xy-controls-button-background-color-hover: var(--accent);
+  --xy-controls-button-color: var(--foreground);
+  --xy-controls-button-color-hover: var(--foreground);
+  --xy-controls-button-border-color: var(--border);
+  --xy-controls-box-shadow: none;
+  --xy-attribution-background-color: transparent;
+  --xy-node-background-color: transparent;
+  --xy-node-border: none;
+  --xy-node-boxshadow-hover: none;
+  --xy-node-boxshadow-selected: none;
+  --xy-edge-stroke: var(--border);
+  --xy-edge-label-background-color: var(--card);
+  --xy-edge-label-color: var(--muted-foreground);
+  background-color: var(--background);
+}
+
+.pipeline-rf .react-flow__node {
+  margin: 0;
+  padding: 0;
+  border: none;
+  background: transparent;
+  box-shadow: none;
+  cursor: pointer;
+}
+
+.pipeline-rf .react-flow__node.selected,
+.pipeline-rf .react-flow__node:focus,
+.pipeline-rf .react-flow__node:focus-visible {
+  box-shadow: none;
+  outline: none;
+}
+
+.pipeline-rf .react-flow__node-chrome {
+  cursor: default;
+  pointer-events: none;
+}
+
+.pipeline-rf .react-flow__handle {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.pipeline-rf .react-flow__attribution {
+  font-size: 9px;
   background: transparent !important;
 }

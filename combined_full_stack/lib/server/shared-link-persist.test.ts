@@ -67,6 +67,14 @@ describe("stripHostedSiteFromSnapshot", () => {
     expect(stripHostedSiteFromSnapshot(snap)).not.toHaveProperty("hostedSite")
     expect(stripHostedSiteFromSnapshot(snap).name).toBe("Acme")
   })
+
+  it("strips hostedSiteSecrets so public project views never see the service role", () => {
+    const snap = withHostedSiteOnSnapshot(stub, siteOptions, { serviceRoleKey: "secret-role-key" })
+    expect(snap.hostedSiteSecrets?.serviceRoleKey).toBe("secret-role-key")
+    const stripped = stripHostedSiteFromSnapshot(snap)
+    expect(stripped).not.toHaveProperty("hostedSiteSecrets")
+    expect(JSON.stringify(stripped)).not.toContain("secret-role-key")
+  })
 })
 
 describe("persistOmittingUnknownColumns", () => {

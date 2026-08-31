@@ -82,6 +82,8 @@ export interface RunCtx {
   webhookEnv?: Record<string, string>;
   // AI : hosted-app SQL — site:{linkId} on public pages, project:{id} in the builder.
   appSqlScope?: string;
+  // AI : isolated website DB — never serialize (service_role). Re-resolved on resume.
+  appSqlDb?: import("@supabase/supabase-js").SupabaseClient;
   // AI : testing skips live Nango; live runs need connectConnectionId.
   source?: import("../types").RunSource;
 }

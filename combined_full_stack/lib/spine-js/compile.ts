@@ -31,6 +31,7 @@ import {
   type SpineProgram,
 } from "./api"
 import { model } from "./zod-models"
+import { step, task, workflow } from "./workflow"
 import { z } from "zod"
 
 export type SpineJsCompileOk = {
@@ -71,6 +72,9 @@ const BINDINGS = {
   sql,
   chatbot,
   webhook,
+  workflow,
+  task,
+  step,
   Document: model("Document", {
     content: z.string().optional(),
     filename: z.string(),
@@ -81,6 +85,11 @@ function rewriteSpineJsSource(source: string): string {
   let s = source.replace(/^\uFEFF/, "")
   s = s.replace(/^import\s+[\s\S]*?from\s+['"][^'"]+['"]\s*;?\s*$/gm, "")
   s = s.replace(/^import\s+['"][^'"]+['"]\s*;?\s*$/gm, "")
+  // AI : compile is sync — strip async/await so workflow() can trace without microtasks.
+  s = s.replace(/\bPromise\.all\s*\(/g, "__spineAll(")
+  s = s.replace(/\bawait\s+/g, "")
+  s = s.replace(/\basync\s+(?=\()/g, "")
+  s = s.replace(/\basync\s+function\b/g, "function")
   s = s.replace(/^[ \t]*export\s+default\s+/gm, "__spine.default = ")
   s = s.replace(/^[ \t]*export\s+const\s+(\w+)\s*=/gm, "__spine.$1 =")
   s = s.replace(/^[ \t]*export\s+let\s+(\w+)\s*=/gm, "__spine.$1 =")
@@ -91,8 +100,8 @@ export function extractSpineJsSource(raw: string): string {
   const fenced = raw.match(/```(?:javascript|js|typescript|ts)?\s*([\s\S]*?)```/i)
   if (fenced?.[1]) return fenced[1].trim()
   const trimmed = raw.trim()
-  if (/\b(pipeline|input|llmBatch|llm)\s*\(/.test(trimmed)) return trimmed
-  throw new Error("no JavaScript pipeline found — expected export default pipeline(...) or a ```js fence")
+  if (/\b(pipeline|workflow|input|llmBatch|llm)\s*\(/.test(trimmed)) return trimmed
+  throw new Error("no JavaScript pipeline found — expected workflow(...) / export default pipeline(...) or a ```js fence")
 }
 
 function asDocs(value: unknown): SpineProgram["docs"] {
@@ -101,24 +110,23 @@ function asDocs(value: unknown): SpineProgram["docs"] {
 }
 
 function programFromExports(exports: Record<string, unknown>, captured: SpineProgram | undefined): SpineProgram | undefined {
-  const def = exports.default
-  if (def && typeof def === "object" && Array.isArray((def as SpineProgram).modules)) {
-    return def as SpineProgram
+  const def = exports.default ?? exports.main
+  const base =
+    def && typeof def === "object" && Array.isArray((def as SpineProgram).modules)
+      ? (def as SpineProgram)
+      : captured
+  if (!base) return undefined
+  return {
+    ...base,
+    message: typeof exports.message === "string" ? exports.message : base.message,
+    docs: asDocs(exports.docs) ?? base.docs,
+    documentationUpdate:
+      typeof exports.documentation === "string" ? exports.documentation : base.documentationUpdate,
+    projectNameUpdate:
+      typeof exports.projectName === "string" ? exports.projectName : base.projectNameUpdate,
+    targetFunctionName:
+      typeof exports.targetFunctionName === "string" ? exports.targetFunctionName : base.targetFunctionName,
   }
-  if (captured) {
-    return {
-      ...captured,
-      message: typeof exports.message === "string" ? exports.message : captured.message,
-      docs: asDocs(exports.docs) ?? captured.docs,
-      documentationUpdate:
-        typeof exports.documentation === "string" ? exports.documentation : captured.documentationUpdate,
-      projectNameUpdate:
-        typeof exports.projectName === "string" ? exports.projectName : captured.projectNameUpdate,
-      targetFunctionName:
-        typeof exports.targetFunctionName === "string" ? exports.targetFunctionName : captured.targetFunctionName,
-    }
-  }
-  return undefined
 }
 
 export function compileSpineJs(source: string): SpineJsCompileResult {
@@ -129,6 +137,7 @@ export function compileSpineJs(source: string): SpineJsCompileResult {
   const body = `"use strict";
 const process = undefined;
 const require = undefined;
+function __spineAll(items) { return Array.isArray(items) ? items : [items]; }
 const { ${names.join(", ")} } = spine;
 ${rewritten}
 return __spine;`
@@ -148,7 +157,7 @@ return __spine;`
   }
   const program = programFromExports(exportsObj, takeLastSpineProgram())
   if (!program?.modules?.length) {
-    return { ok: false, errors: ["compile: pipeline() was not called"] }
+    return { ok: false, errors: ["compile: workflow() / pipeline() was not called"] }
   }
   const rawParsed = assistantResponseSchema.safeParse({
     message: program.message || "I'll add this pipeline.",
@@ -174,8 +183,11 @@ return __spine;`
 export function isSpineJsAuthoringPrompt(prompt: string): boolean {
   return (
     prompt.includes("export default pipeline") ||
+    prompt.includes("export const main = workflow") ||
+    prompt.includes("workflow(async") ||
+    prompt.includes("Windmill workflows-as-code") ||
     prompt.includes("spine-js") ||
     prompt.includes("pipeline.js") ||
-    (prompt.includes("from \"spine\"") && prompt.includes("pipeline("))
+    (prompt.includes("from \"spine\"") && (prompt.includes("pipeline(") || prompt.includes("workflow(")))
   )
 }

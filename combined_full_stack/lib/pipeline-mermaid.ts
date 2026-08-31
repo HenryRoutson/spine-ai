@@ -100,7 +100,7 @@ function themeClassDefs(theme: PipelineMermaidTheme): string[] {
   ]
 }
 
-// AI : flowchart LR is the pipeline DAG (d3-dag / mermaid share pipelineToDag).
+// AI : flowchart LR is the pipeline DAG (React Flow / mermaid share pipelineToDag; layout is d3-dag).
 export function derivePipelineMermaid(
   modules: PipelineModule[],
   models: StructureModel[],

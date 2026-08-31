@@ -48,8 +48,8 @@ export function SupabaseBackendPanel({
           Supabase schema
         </h4>
         <p className="mt-0.5 text-xs text-muted-foreground">
-          SQL generated from Structures. Every website on this project shares these tables — the pipeline is what
-          processes the rows.
+          SQL generated from Structures. Websites with SQL, auth, or table slots get their own
+          Supabase Cloud project — Spine production schema is never altered.
         </p>
       </div>
 
@@ -114,8 +114,10 @@ export function SupabaseBackendPanel({
 
       <div className="rounded-lg border border-dashed border-border bg-muted/20 p-3">
         <p className="text-[10px] text-muted-foreground">
-          <strong className="text-foreground">Coming soon:</strong> provision an isolated Supabase project for this
-          website. Until then, schema is annotation-only — runtime values stay as JSON maps in pipeline runs.
+          Isolated Supabase is created when you publish a website that has backend logic (SQL, sign-in,
+          actions, or tables). Set <span className="font-mono">SUPABASE_ACCESS_TOKEN</span> and{" "}
+          <span className="font-mono">SUPABASE_ORG_SLUG</span>. Hosted rows live on that project, not on
+          Spine <span className="font-mono">app_sql_rows</span>.
         </p>
       </div>
     </div>

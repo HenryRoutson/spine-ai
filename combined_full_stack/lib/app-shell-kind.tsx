@@ -30,6 +30,7 @@ type AppShellKindContextValue = {
   navigateToBuildMode: () => void
   navigateToProjectPicker: (tab?: picker_list_tab) => void
   openBuildWorkspace: (projectId: ProjectId) => void
+  navigateToWebsiteWorkspace: () => void
 }
 
 const AppShellKindContext = createContext<AppShellKindContextValue | null>(null)
@@ -116,21 +117,32 @@ export function AppShellKindProvider({
     router.replace(href, { scroll: false })
   }, [router])
 
+  const stripPickerSearch = useCallback(() => {
+    if (isDemoRoute()) return
+    // AI : dropping ?list= via router.replace remounts AppShell and wipes the website studio.
+    if (typeof window !== "undefined" && window.location.pathname === "/") {
+      if (window.location.search) window.history.replaceState(null, "", "/")
+      return
+    }
+    router.replace("/", { scroll: false })
+  }, [router])
+
   const openBuildWorkspace = useCallback(
     (projectId: ProjectId) => {
       const nav = getStoreNavigationBridge()
       nav?.enterBuilder(projectId)
       setShellKind(AppShellKind.Builder)
-      if (isDemoRoute()) return
-      // AI : dropping ?list= via router.replace remounts AppShell and wipes the website studio.
-      if (typeof window !== "undefined" && window.location.pathname === "/") {
-        if (window.location.search) window.history.replaceState(null, "", "/")
-        return
-      }
-      router.replace("/", { scroll: false })
+      stripPickerSearch()
     },
-    [router],
+    [stripPickerSearch],
   )
+
+  const navigateToWebsiteWorkspace = useCallback(() => {
+    const nav = getStoreNavigationBridge()
+    nav?.enterWebsiteStudio()
+    setShellKind(AppShellKind.Builder)
+    stripPickerSearch()
+  }, [stripPickerSearch])
 
   const value = useMemo(
     () => ({
@@ -140,8 +152,9 @@ export function AppShellKindProvider({
       navigateToBuildMode,
       navigateToProjectPicker,
       openBuildWorkspace,
+      navigateToWebsiteWorkspace,
     }),
-    [hydrated, initialKind, shellKind, navigateToRunMode, navigateToBuildMode, navigateToProjectPicker, openBuildWorkspace],
+    [hydrated, initialKind, shellKind, navigateToRunMode, navigateToBuildMode, navigateToProjectPicker, openBuildWorkspace, navigateToWebsiteWorkspace],
   )
 
   useLayoutEffect(() => {
@@ -150,9 +163,10 @@ export function AppShellKindProvider({
       navigateToBuildMode,
       navigateToProjectPicker,
       openBuildWorkspace,
+      navigateToWebsiteWorkspace,
     })
     return () => registerAppModeNavApi(null)
-  }, [navigateToRunMode, navigateToBuildMode, navigateToProjectPicker, openBuildWorkspace])
+  }, [navigateToRunMode, navigateToBuildMode, navigateToProjectPicker, openBuildWorkspace, navigateToWebsiteWorkspace])
 
   return <AppShellKindContext.Provider value={value}>{children}</AppShellKindContext.Provider>
 }

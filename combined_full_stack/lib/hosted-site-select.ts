@@ -3,6 +3,13 @@ import { HOSTED_SITE_IGNORED_SLOT_SELECTOR } from "@/lib/hosted-site-slots"
 
 export const HS_PREVIEW_MESSAGE_SOURCE = "spine-hosted-site"
 
+// AI : HTML slots plus React host widgets (bolt inspector ignores the preview iframe chrome).
+export const HS_PREVIEW_IGNORED_SELECTOR = `${HOSTED_SITE_IGNORED_SLOT_SELECTOR}, [data-spine-run], [data-spine-slot], [data-spine-sql], [data-spine-action]`
+
+export function isHsPreviewIgnoredTarget(el: Element): boolean {
+  return Boolean(el.closest(HS_PREVIEW_IGNORED_SELECTOR))
+}
+
 export type hs_preview_css_path = string & { __brand: "hs_preview_css_path" }
 export type hs_preview_hs_id = string & { __brand: "hs_preview_hs_id" }
 
@@ -13,6 +20,7 @@ export type HsPreviewSelectPayload = {
   hsId: hs_preview_hs_id
   snippet: string
   text: string
+  filePath?: string
 }
 
 export type HsPreviewInlinePayload = {
@@ -21,6 +29,8 @@ export type HsPreviewInlinePayload = {
   cssPath: hs_preview_css_path
   hsId: hs_preview_hs_id
   text: string
+  previousText?: string
+  filePath?: string
 }
 
 export type HsPreviewMessage = HsPreviewSelectPayload | HsPreviewInlinePayload
@@ -45,6 +55,18 @@ export function stripHostedSiteHsIds(html: string): string {
   return html.replace(/\sdata-hs-id="[^"]*"/g, "")
 }
 
+export function pickHostedSiteEditableTarget(clickTarget: Element, stampedRoot: Element): Element | null {
+  const leaf = clickTarget.closest("h1, h2, h3, h4, p, span, a, label, button, li")
+  if (leaf && stampedRoot.contains(leaf)) return leaf
+  const tagged = clickTarget.closest("[data-hs-id]")
+  if (tagged && stampedRoot.contains(tagged)) return tagged
+  return clickTarget
+}
+
+export function hostedSiteHtmlInnerIsTextOnly(inner: string): boolean {
+  return !/<[a-zA-Z]/.test(inner)
+}
+
 export function patchHostedSiteHtmlText(sourceHtml: string, hsId: string, newText: string): string {
   const stamped = stampHostedSiteHsIds(sourceHtml)
   const openRe = new RegExp(`<([a-zA-Z][a-zA-Z0-9]*)([^>]*\\sdata-hs-id="${hsId}"[^>]*)>`)
@@ -56,6 +78,9 @@ export function patchHostedSiteHtmlText(sourceHtml: string, hsId: string, newTex
   const close = `</${tag}>`
   const innerEnd = stamped.indexOf(close, innerStart)
   if (innerEnd < 0) return sourceHtml
+  const inner = stamped.slice(innerStart, innerEnd)
+  // AI : replacing a wrapper (nav/header) would wipe nested markup — unique-text / brand patch instead.
+  if (!hostedSiteHtmlInnerIsTextOnly(inner)) return sourceHtml
   const patched = `${stamped.slice(0, innerStart)}${escapeHtml(newText)}${stamped.slice(innerEnd)}`
   return stripHostedSiteHsIds(patched)
 }
@@ -102,6 +127,23 @@ function cssEscapeIdent(raw: string): string {
 export function snippetFromElement(el: Element): string {
   const html = el.outerHTML.replace(/\sdata-hs-id="[^"]*"/g, "").replace(/\sdata-hs-selected="[^"]*"/g, "")
   return html.length > 800 ? `${html.slice(0, 799)}…` : html
+}
+
+export function patchHostedSiteHtmlUniqueText(sourceHtml: string, oldText: string, newText: string): string | null {
+  const needle = oldText.trim()
+  const next = newText.trim()
+  if (!needle || needle === next) return null
+  let count = 0
+  let from = 0
+  while (from <= sourceHtml.length) {
+    const at = sourceHtml.indexOf(needle, from)
+    if (at < 0) break
+    count += 1
+    from = at + needle.length
+    if (count > 1) return null
+  }
+  if (count !== 1) return null
+  return sourceHtml.replace(needle, next)
 }
 
 export function postHsPreviewMessage(payload: HsPreviewMessage): void {
