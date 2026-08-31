@@ -15,6 +15,11 @@ import {
   type StepHandle,
 } from "./api"
 import { isZodType, model, structureRefFromZod, type StructureRef, zodTypeSchema } from "./zod-models"
+import {
+  beginWorkflowTrace,
+  endWorkflowTrace,
+  peekWorkflowTrace,
+} from "./trace"
 
 const TRACE = Symbol("spine-trace")
 
@@ -664,8 +669,22 @@ function currentSpineBefore(handle: TraceHandle): TraceHandle | undefined {
 
 export type WorkflowFn = (...args: never[]) => unknown
 
+function rootTracedSteps(steps: StepHandle[]): StepHandle[] {
+  // AI : fork/ifElse eval nested llm() before the parent call — drop those from the linear spine.
+  const nested = new Set<unknown>()
+  for (const s of steps) {
+    const branches = (s.spec as { forkBranches?: { modules?: unknown[] }[] }).forkBranches
+    if (!Array.isArray(branches)) continue
+    for (const b of branches) {
+      for (const m of b.modules ?? []) nested.add(m)
+    }
+  }
+  return nested.size ? steps.filter((s) => !nested.has(s.spec)) : steps
+}
+
 export function workflow<I extends unknown[], O>(fn: (...args: I) => O): SpineProgram {
   tracing = true
+  beginWorkflowTrace()
   params = []
   ops = []
   currentGenerate = undefined
@@ -692,15 +711,22 @@ export function workflow<I extends unknown[], O>(fn: (...args: I) => O): SpinePr
   } finally {
     tracing = false
   }
-  // AI : #39 authored input()/llmBatch() inside workflow(); #41 traces generateObject.
-  // Prefer the explicit step-helper program when generateObject was not used.
-  const usedGenerateObject = ops.some((op) => op.type === "task" && Boolean(op.handle.prompt))
-  const captured = takeLastSpineProgram()
-  if (!usedGenerateObject && captured?.modules.length) {
-    lastWorkflowProgram = captured
-    return captured
+  let program: SpineProgram | undefined
+  try {
+    // AI : #39 authored input()/llmBatch() inside workflow(); #41 traces generateObject.
+    const usedGenerateObject = ops.some((op) => op.type === "task" && Boolean(op.handle.prompt))
+    if (!usedGenerateObject) {
+      const captured = takeLastSpineProgram()
+      if (captured?.modules.length) program = captured
+      else {
+        const steps = rootTracedSteps(peekWorkflowTrace<StepHandle>())
+        if (steps.length) program = pipeline(...steps)
+      }
+    }
+  } finally {
+    endWorkflowTrace()
   }
-  lastWorkflowProgram = lowerToProgram(result)
+  lastWorkflowProgram = program ?? lowerToProgram(result)
   return lastWorkflowProgram
 }
 
