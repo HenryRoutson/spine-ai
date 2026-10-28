@@ -1,0 +1,372 @@
+import { NextResponse, type NextRequest, after } from "next/server";
+import { cookies } from "next/headers";
+import { apiError } from "@/lib/server/api_context";
+import { HTTP } from "@/lib/server/api-errors";
+import { checkRateLimit, clientIpFromHeaders } from "@/lib/rate_limit";
+import type { RateLimitKey } from "@/lib/rate_limit_config";
+import { secureSessionCookieOptions } from "@/lib/server/cookie_options";
+import { parseRequestJson, parseSharedLinkId, sharedLinkRunBodySchema } from "@/lib/server/api_schemas";
+import { assertCanStartRun } from "@/lib/server/billing_account";
+import {
+  billSharedLinkRun,
+  sharedLinkBillingKey,
+  viewerFundsSharedRun,
+} from "@/lib/server/shared_link_billing";
+import { sharedLinkRequiresSignIn } from "@/lib/shared-link-funding";
+import { PUBLIC_RUN_SPEND_RESERVE_CENTS } from "@/lib/billing_config";
+import {
+  orderedInputModules,
+  inputDocsByModuleFromAssignment,
+  moduleInputReady,
+  inputMinCountForModule,
+  type InputDocsAssignment,
+} from "@/lib/inference-input";
+import {
+  collectInferenceInputIssues,
+  inferenceInputIssueMessage,
+} from "@/lib/inference-validity";
+import { missingRequiredSecretsError } from "@/lib/server/secret_preflight";
+import { sharedRunNotes } from "@/lib/shared-link-types";
+import { PipelinePausedError } from "@/lib/server/run_checkpoint";
+import { runPipeline } from "@/lib/server/run_engine";
+import { computeRunFingerprintForRequest } from "@/lib/server/run_fingerprint";
+import {
+  MAX_CONCURRENT_RUNS_PER_USER,
+  countActiveJobs,
+  createJob,
+  finishJob,
+  jobProgress,
+  openCrossUserJobDb,
+  pauseJob,
+  withJobLogging,
+  type RunJobId,
+} from "@/lib/server/run_jobs";
+import {
+  adjustSharedLinkSpend,
+  assertSharedLinkCanAcceptRun,
+  getSharedLink,
+  incrementSharedLinkRunCount,
+  newSessionId,
+  openStoreForUser,
+  recordSharedLinkSpend,
+  snapshotForWebsiteAlias,
+  registerSharedProgressToken,
+  reserveSharedLinkSpend,
+  revokeSharedLink,
+  SharedLinkDisabledError,
+  SharedLinkSpendLimitError,
+} from "@/lib/server/shared_links";
+import { isEmbedLinkId } from "@/lib/server/embed_origins";
+import {
+  embedSessionParentAllowed,
+  readEmbedSessionHeader,
+  verifyEmbedSessionToken,
+} from "@/lib/server/embed_session";
+import {
+  loadDefaultDocContent,
+  overlayStoreForSharedRun,
+  parseSharedSessionId,
+  sessionDocContent,
+  sessionDocsForModule,
+  defaultDocIdForLink,
+  SHARED_RUN_SESSION_COOKIE,
+} from "@/lib/server/shared-link-session";
+import { optionalAuthSession, type user_id_string } from "@/lib/server/require_auth";
+import { logger } from "@/lib/server/server_logger";
+import { DocLabel, RunSource } from "@/lib/server/types";
+import type { DocId, DocRef, ModuleId, ProjectId, SharedLinkId } from "@/lib/server/types";
+import { MAX_UPLOAD_BYTES } from "@/lib/server/upload_constants";
+
+export const maxDuration = 300;
+export const dynamic = "force-dynamic";
+
+const runLog = logger("api:shared-links:run");
+
+async function resolveAssignment(
+  linkId: SharedLinkId,
+  sessionId: string,
+  link: NonNullable<Awaited<ReturnType<typeof getSharedLink>>>,
+  byModule: Partial<Record<ModuleId, DocId[]>> | undefined,
+): Promise<{ assignment: InputDocsAssignment; contentByDocId: Record<string, string> }> {
+  const inputModules = orderedInputModules(link.snapshot.modules);
+  const assignment: InputDocsAssignment = {};
+  const contentByDocId: Record<string, string> = {};
+
+  for (const m of inputModules) {
+    const viewerIds = byModule?.[m.id] ?? [];
+    const docs: DocRef[] = [];
+
+    if (viewerIds.length) {
+      for (const docId of viewerIds) {
+        const content = await sessionDocContent(linkId, sessionId, docId);
+        if (content === undefined) continue;
+        const meta = (await sessionDocsForModule(linkId, sessionId, m.id)).find((d) => d.id === docId);
+        if (!meta) continue;
+        docs.push(meta);
+        contentByDocId[docId] = content;
+      }
+    } else {
+      const defs = link.defaultDocs.filter((d) => d.moduleId === m.id);
+      for (const def of defs) {
+        const loaded = loadDefaultDocContent(linkId, m.id, def.filename, link.defaultDocs);
+        if (!loaded) continue;
+        const id = defaultDocIdForLink(linkId, m.id, def.filename);
+        const doc: DocRef = {
+          id,
+          name: loaded.name,
+          type: loaded.type,
+          label: DocLabel.Inference,
+          sizeKb: Math.max(1, Math.round(loaded.content.length / 1024)),
+          uploadedAt: Date.now(),
+          preview: loaded.content.slice(0, 180),
+        };
+        docs.push(doc);
+        contentByDocId[id] = loaded.content;
+      }
+    }
+    if (docs.length) assignment[m.id] = docs;
+  }
+  return { assignment, contentByDocId };
+}
+
+export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
+  const { id } = await ctx.params;
+  const linkId = parseSharedLinkId(id);
+  if (!linkId) return apiError("link not found", 404);
+
+  // AI : TODO (jank-shared-run-abuse) — sharer_pays credit drain: IP-bucketed shared_run (5/10m) is rotatable;
+  // AI : embed session token blocks spoofed parentOrigin; CAPTCHA / spend caps still needed vs distributed drain.
+  const ip = clientIpFromHeaders(req.headers);
+  const runLimitKey = `shared-run:${linkId}:${ip}` as RateLimitKey;
+  const runLimited = await checkRateLimit(runLimitKey, "shared_run");
+  if (!runLimited.ok) {
+    return apiError("Too many runs on this link — try again later.", HTTP.TOO_MANY_REQUESTS, "rate_limited");
+  }
+
+  const link = await getSharedLink(linkId);
+  if (!link) return apiError("link not found", 404);
+
+  const jar = await cookies();
+  let sessionId = parseSharedSessionId(jar.get(SHARED_RUN_SESSION_COOKIE)?.value) ?? newSessionId();
+
+  const parsed = await parseRequestJson(req, sharedLinkRunBodySchema, {});
+  if ("validationError" in parsed) return apiError(parsed.validationError, HTTP.BAD_REQUEST);
+  const body = parsed;
+
+  // AI : Embed anti-theft — HMAC from /embed/[id] via header (or body fallback). Never trust parentOrigin.
+  if (isEmbedLinkId(link.id) || (link.allowedOrigins?.length ?? 0) > 0) {
+    const token = readEmbedSessionHeader(req) ?? body.embedSessionToken;
+    const claims = verifyEmbedSessionToken(link.id, token);
+    if (
+      !claims ||
+      !embedSessionParentAllowed(claims.parentOrigin, link.allowedOrigins ?? [], req.nextUrl.origin)
+    ) {
+      return apiError(
+        "This embed is not allowed on this website. Ask the publisher to add your origin.",
+        403,
+        "embed_origin_denied",
+      );
+    }
+  }
+
+  if (link.viewerNameRequired && !body.viewerName?.trim()) {
+    return apiError("name required", 400);
+  }
+
+  const sharerStore = await openStoreForUser(link.ownerId);
+  const overlay = await overlayStoreForSharedRun(
+    sharerStore,
+    link.id,
+    sessionId,
+    link.defaultDocs,
+  );
+
+  const boundSnapshot = await snapshotForWebsiteAlias(
+    link,
+    body.pipelineAlias,
+    sharerStore,
+    body.functionId,
+  );
+  const runLink = boundSnapshot === link.snapshot ? link : { ...link, snapshot: boundSnapshot, defaultDocs: [] };
+  const project = runLink.snapshot;
+  const inputModules = orderedInputModules(project.modules);
+  const { assignment, contentByDocId } = await resolveAssignment(
+    link.id,
+    sessionId,
+    runLink,
+    body.inputDocsByModule as Partial<Record<ModuleId, DocId[]>> | undefined,
+  );
+
+  for (const m of inputModules) {
+    if (!moduleInputReady(m, assignment)) {
+      return apiError(`input "${m.label}" needs at least ${inputMinCountForModule(m)} document(s)`, 400);
+    }
+  }
+  const inputIssues = collectInferenceInputIssues(inputModules, {}, contentByDocId, assignment, {
+    models: project.models,
+    typeAliases: project.typeAliases,
+  });
+  if (inputIssues.length) return apiError(inferenceInputIssueMessage(inputIssues, inputModules), 400);
+
+  const missingSecrets = await missingRequiredSecretsError(project.modules, link.ownerId, { teamId: project.teamId, projectName: project.name, projectOwnerId: project.teamProjectOwnerId });
+  if (missingSecrets) return apiError(missingSecrets, HTTP.BAD_REQUEST, "missing_secrets");
+
+  const resolvedByModule = inputDocsByModuleFromAssignment(inputModules, assignment);
+  const flatIds = inputModules.flatMap((m) => (resolvedByModule[m.id] ?? []).map((d) => d as DocId));
+  const [primary, ...rest] = flatIds;
+  if (!primary) return apiError("no input documents", 400);
+
+  const model = link.defaultModel ?? project.modules.find((m) => m.kind === "llm")?.model ?? "qwen-2.5-72b";
+  const { fingerprint, inputDocIds: fingerprintInputDocIds } = computeRunFingerprintForRequest(
+    overlay,
+    project,
+    model,
+    primary,
+    rest,
+    resolvedByModule,
+  );
+
+  let viewerUserId: user_id_string | undefined;
+  let triggerUserId: user_id_string | undefined;
+  let triggerUserEmail: string | undefined;
+  const optionalAuth = await optionalAuthSession();
+  if (optionalAuth) {
+    triggerUserId = optionalAuth.userId;
+    triggerUserEmail = optionalAuth.email;
+    if (viewerFundsSharedRun(link.fundingMode)) viewerUserId = optionalAuth.userId;
+  }
+  if (sharedLinkRequiresSignIn(link.fundingMode)) {
+    if (!triggerUserId) return apiError("sign in required", 401);
+    if (viewerFundsSharedRun(link.fundingMode)) viewerUserId = triggerUserId;
+  }
+  const billingKey = sharedLinkBillingKey(link.ownerId, link.fundingMode, viewerUserId);
+
+  try {
+    assertSharedLinkCanAcceptRun(link);
+    await assertCanStartRun(billingKey);
+  } catch (err) {
+    if (err instanceof SharedLinkDisabledError) {
+      return apiError(err.message, 403, "deployment_disabled");
+    }
+    if (err instanceof SharedLinkSpendLimitError) {
+      return apiError(err.message, 402, "spend_limit_reached");
+    }
+    const code = (err as { code?: string }).code;
+    if (code === "insufficient_funds") {
+      return apiError(
+        viewerFundsSharedRun(link.fundingMode)
+          ? "Not enough credit — subscribe or top up"
+          : "Link owner has insufficient credit",
+        402,
+        code,
+      );
+    }
+    throw err;
+  }
+
+  const reserveCents = link.spendLimitCents != null ? PUBLIC_RUN_SPEND_RESERVE_CENTS : 0;
+  if (reserveCents > 0) {
+    const reserved = await reserveSharedLinkSpend(link.id, reserveCents);
+    if (!reserved) {
+      return apiError("This link has reached its spending limit.", 402, "spend_limit_reached");
+    }
+  }
+
+  if (countActiveJobs(link.ownerId) >= MAX_CONCURRENT_RUNS_PER_USER) {
+    return apiError("Too many runs in progress — wait for one to finish.", HTTP.TOO_MANY_REQUESTS, "concurrent_runs");
+  }
+
+  const jobDb = await openCrossUserJobDb();
+  let jobId: RunJobId;
+  try {
+    jobId = await createJob(link.ownerId, jobDb);
+  } catch (err) {
+    runLog.error(`createJob failed for shared link`, {
+      linkId: link.id,
+      ownerId: link.ownerId,
+      error: (err as Error).message,
+    });
+    return apiError("Could not start run — job setup failed. Try again in a moment.", 503, "job_create_failed");
+  }
+  let progressToken: string;
+  try {
+    progressToken = await registerSharedProgressToken(link.id, link.ownerId, jobId);
+  } catch (err) {
+    runLog.error(`progress token register failed`, { linkId: link.id, error: (err as Error).message });
+    return apiError("Could not start run — progress auth unavailable.", 503, "progress_token_failed");
+  }
+
+  const res = NextResponse.json({ jobId, progressToken, sessionId });
+  res.cookies.set(SHARED_RUN_SESSION_COOKIE, sessionId, secureSessionCookieOptions(60 * 60 * 24 * 30));
+
+  after(async () => {
+    await withJobLogging(link.ownerId, jobId, jobDb, async () => {
+      try {
+        const run = await runPipeline(overlay, link.projectId ?? ("" as ProjectId), primary, {
+          model,
+          inputDocIds: rest,
+          inputDocsByModule: resolvedByModule,
+          fingerprint,
+          fingerprintInputDocIds,
+          cacheOwnerId: link.ownerId,
+          projectOverride: project,
+          runMeta: {
+            source: RunSource.SharedLink,
+            sharedLinkId: link.id,
+            viewerName: body.viewerName?.trim(),
+            viewerSessionId: sessionId,
+            triggerUserId,
+            triggerUserEmail,
+            notes: sharedRunNotes(body.viewerName),
+          },
+          onStep: (p) => {
+            void jobProgress(link.ownerId, jobId, p, jobDb).catch(() => {});
+          },
+        });
+        await sharerStore.flush();
+        const billed = run.billedCents;
+        if (billed > 0) {
+          try {
+            const bill = await billSharedLinkRun(billingKey, link.ownerId, link, billed);
+            if (reserveCents > 0) {
+              const settled = await adjustSharedLinkSpend(link.id, bill.totalCents - reserveCents);
+              if (!settled) {
+                runLog.warn(`spend limit exceeded after run — revoking link`, {
+                  linkId: link.id,
+                  billed: bill.totalCents,
+                  reserveCents,
+                });
+                await revokeSharedLink(link.ownerId, link.id);
+              }
+            } else {
+              await recordSharedLinkSpend(link.id, bill.totalCents);
+            }
+          } catch (billErr) {
+            runLog.warn(`post-run billing failed — revoking link`, {
+              linkId: link.id,
+              jobId,
+              billed,
+              error: (billErr as Error).message,
+            });
+            await revokeSharedLink(link.ownerId, link.id);
+          }
+        } else if (reserveCents > 0) {
+          await adjustSharedLinkSpend(link.id, -reserveCents).catch(() => {});
+        }
+        await incrementSharedLinkRunCount(link.id);
+        await finishJob(link.ownerId, jobId, { run }, jobDb);
+      } catch (err) {
+        if (reserveCents > 0 && !(err instanceof PipelinePausedError)) {
+          await adjustSharedLinkSpend(link.id, -reserveCents).catch(() => {});
+        }
+        if (err instanceof PipelinePausedError) {
+          await pauseJob(link.ownerId, jobId, err.checkpoint, jobDb);
+          return;
+        }
+        await finishJob(link.ownerId, jobId, { error: (err as Error).message }, jobDb);
+      }
+    });
+  });
+
+  return res;
+}

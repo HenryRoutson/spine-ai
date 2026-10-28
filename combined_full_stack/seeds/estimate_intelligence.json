@@ -1,0 +1,867 @@
+{
+  "id": "p_estimate_intelligence",
+  "name": "Estimate Intelligence",
+  "kind": "estimate-intelligence",
+  "models": [
+    {
+      "id": "m_work_item",
+      "name": "WorkItem",
+      "description": "One row from this builder's work-item / rate catalog.",
+      "fields": [
+        {
+          "id": "f_wi_id",
+          "name": "id",
+          "type": "text",
+          "optional": false,
+          "description": "Catalog id",
+          "relation": { "kind": "pk" }
+        },
+        {
+          "id": "f_wi_code",
+          "name": "code",
+          "type": "text",
+          "optional": false,
+          "description": "Trade code"
+        },
+        {
+          "id": "f_wi_trade",
+          "name": "trade",
+          "type": "text",
+          "optional": false,
+          "description": "Trade category"
+        },
+        {
+          "id": "f_wi_unit",
+          "name": "unit",
+          "type": "text",
+          "optional": false,
+          "description": "Billing unit"
+        },
+        {
+          "id": "f_wi_rate",
+          "name": "unit_rate",
+          "type": "float",
+          "optional": false,
+          "description": "This builder's unit rate"
+        },
+        {
+          "id": "f_wi_desc",
+          "name": "description",
+          "type": "text",
+          "optional": false,
+          "description": "Line item description"
+        }
+      ]
+    },
+    {
+      "id": "m_billed_line",
+      "name": "BilledLine",
+      "description": "Denormalized billed line copied onto a past job (catalog fields + quantity).",
+      "fields": [
+        {
+          "id": "f_bl_wid",
+          "name": "work_item_id",
+          "type": "text",
+          "optional": false,
+          "description": "Catalog work item id",
+          "relation": { "kind": "fk", "to": { "modelId": "m_work_item", "field": "id" } }
+        },
+        {
+          "id": "f_bl_code",
+          "name": "code",
+          "type": "text",
+          "optional": false,
+          "description": "Trade code copied from catalog"
+        },
+        {
+          "id": "f_bl_trade",
+          "name": "trade",
+          "type": "text",
+          "optional": false,
+          "description": "Trade category copied from catalog"
+        },
+        {
+          "id": "f_bl_desc",
+          "name": "description",
+          "type": "text",
+          "optional": false,
+          "description": "Line description copied from catalog"
+        },
+        {
+          "id": "f_bl_unit",
+          "name": "unit",
+          "type": "text",
+          "optional": false,
+          "description": "Billing unit"
+        },
+        {
+          "id": "f_bl_qty",
+          "name": "quantity",
+          "type": "float",
+          "optional": false,
+          "description": "Quantity billed on that job"
+        },
+        {
+          "id": "f_bl_rate",
+          "name": "unit_rate",
+          "type": "float",
+          "optional": false,
+          "description": "Unit rate billed on that job"
+        }
+      ]
+    },
+    {
+      "id": "m_past_job",
+      "name": "PastJob",
+      "description": "One past assessment from a single builder's job library.",
+      "fields": [
+        {
+          "id": "f_pj_id",
+          "name": "id",
+          "type": "text",
+          "optional": false,
+          "description": "Stable past job id",
+          "relation": { "kind": "pk" }
+        },
+        {
+          "id": "f_pj_builder",
+          "name": "builder_id",
+          "type": "text",
+          "optional": false,
+          "description": "Owning builder — retrieval is tenant-scoped"
+        },
+        {
+          "id": "f_pj_title",
+          "name": "title",
+          "type": "text",
+          "optional": false,
+          "description": "Short label"
+        },
+        {
+          "id": "f_pj_peril",
+          "name": "peril",
+          "type": "text",
+          "optional": false,
+          "description": "Cause of loss"
+        },
+        {
+          "id": "f_pj_con",
+          "name": "construction",
+          "type": "text",
+          "optional": false,
+          "description": "Dwelling construction"
+        },
+        {
+          "id": "f_pj_storeys",
+          "name": "storeys",
+          "type": "int",
+          "optional": false,
+          "description": "Storey count"
+        },
+        {
+          "id": "f_pj_rooms",
+          "name": "rooms_affected",
+          "type": "text",
+          "optional": false,
+          "description": "Rooms / areas on the assessment"
+        },
+        {
+          "id": "f_pj_nar",
+          "name": "narrative",
+          "type": "text",
+          "optional": false,
+          "description": "Past claim narrative"
+        },
+        {
+          "id": "f_pj_lines",
+          "name": "billed_lines",
+          "type": "list[model]",
+          "ref": "m_billed_line",
+          "optional": false,
+          "description": "Denormalized billed lines — kept on spine, omitted from pass-1 prompt view",
+          "minItems": 1
+        }
+      ]
+    },
+    {
+      "id": "m_selected_job",
+      "name": "SelectedPastJob",
+      "description": "Comparable past job after example-select — billed_lines still attached.",
+      "fields": [
+        {
+          "id": "f_sj_id",
+          "name": "id",
+          "type": "text",
+          "optional": false,
+          "description": "Matches library id"
+        },
+        {
+          "id": "f_sj_builder",
+          "name": "builder_id",
+          "type": "text",
+          "optional": false,
+          "description": "Owning builder"
+        },
+        {
+          "id": "f_sj_title",
+          "name": "title",
+          "type": "text",
+          "optional": false,
+          "description": "Short label"
+        },
+        {
+          "id": "f_sj_peril",
+          "name": "peril",
+          "type": "text",
+          "optional": false,
+          "description": "Cause of loss"
+        },
+        {
+          "id": "f_sj_con",
+          "name": "construction",
+          "type": "text",
+          "optional": false,
+          "description": "Dwelling construction"
+        },
+        {
+          "id": "f_sj_storeys",
+          "name": "storeys",
+          "type": "int",
+          "optional": false,
+          "description": "Storey count"
+        },
+        {
+          "id": "f_sj_rooms",
+          "name": "rooms_affected",
+          "type": "text",
+          "optional": false,
+          "description": "Rooms / areas on the assessment"
+        },
+        {
+          "id": "f_sj_nar",
+          "name": "narrative",
+          "type": "text",
+          "optional": false,
+          "description": "Past claim narrative"
+        },
+        {
+          "id": "f_sj_lines",
+          "name": "billed_lines",
+          "type": "list[model]",
+          "ref": "m_billed_line",
+          "optional": false,
+          "description": "Denormalized billed lines from the analogue",
+          "minItems": 1
+        },
+        {
+          "id": "f_sj_reason",
+          "name": "selection_reason",
+          "type": "text",
+          "optional": false,
+          "description": "Why this past job is a useful analogue",
+          "deterministic": false,
+          "minLength": 1
+        }
+      ]
+    },
+    {
+      "id": "m_candidate_line",
+      "name": "CandidateLine",
+      "description": "Unique billed line exploded from selected analogues, with source job id.",
+      "fields": [
+        {
+          "id": "f_cl_wid",
+          "name": "work_item_id",
+          "type": "text",
+          "optional": false,
+          "description": "Catalog work item id",
+          "relation": { "kind": "fk", "to": { "modelId": "m_work_item", "field": "id" } }
+        },
+        {
+          "id": "f_cl_src",
+          "name": "source_job_id",
+          "type": "text",
+          "optional": false,
+          "description": "Past job this line was copied from",
+          "relation": { "kind": "fk", "to": { "modelId": "m_past_job", "field": "id" } }
+        },
+        {
+          "id": "f_cl_code",
+          "name": "code",
+          "type": "text",
+          "optional": false,
+          "description": "Trade code"
+        },
+        {
+          "id": "f_cl_trade",
+          "name": "trade",
+          "type": "text",
+          "optional": false,
+          "description": "Trade category"
+        },
+        {
+          "id": "f_cl_desc",
+          "name": "description",
+          "type": "text",
+          "optional": false,
+          "description": "Line description"
+        },
+        {
+          "id": "f_cl_unit",
+          "name": "unit",
+          "type": "text",
+          "optional": false,
+          "description": "Billing unit"
+        },
+        {
+          "id": "f_cl_qty",
+          "name": "quantity",
+          "type": "float",
+          "optional": false,
+          "description": "Quantity from the source analogue"
+        },
+        {
+          "id": "f_cl_rate",
+          "name": "unit_rate",
+          "type": "float",
+          "optional": false,
+          "description": "Unit rate from the source analogue"
+        }
+      ]
+    },
+    {
+      "id": "m_selected_line",
+      "name": "SelectedLine",
+      "description": "Candidate line kept for the preliminary estimate.",
+      "fields": [
+        {
+          "id": "f_sl_wid",
+          "name": "work_item_id",
+          "type": "text",
+          "optional": false,
+          "description": "Catalog work item id"
+        },
+        {
+          "id": "f_sl_src",
+          "name": "source_job_id",
+          "type": "text",
+          "optional": false,
+          "description": "Past job this line was copied from"
+        },
+        {
+          "id": "f_sl_code",
+          "name": "code",
+          "type": "text",
+          "optional": false,
+          "description": "Trade code"
+        },
+        {
+          "id": "f_sl_trade",
+          "name": "trade",
+          "type": "text",
+          "optional": false,
+          "description": "Trade category"
+        },
+        {
+          "id": "f_sl_desc",
+          "name": "description",
+          "type": "text",
+          "optional": false,
+          "description": "Line description"
+        },
+        {
+          "id": "f_sl_unit",
+          "name": "unit",
+          "type": "text",
+          "optional": false,
+          "description": "Billing unit"
+        },
+        {
+          "id": "f_sl_qty",
+          "name": "quantity",
+          "type": "float",
+          "optional": false,
+          "description": "Quantity from the source analogue"
+        },
+        {
+          "id": "f_sl_rate",
+          "name": "unit_rate",
+          "type": "float",
+          "optional": false,
+          "description": "Unit rate from the source analogue"
+        },
+        {
+          "id": "f_sl_reason",
+          "name": "selection_reason",
+          "type": "text",
+          "optional": false,
+          "description": "Why this line belongs on the current estimate",
+          "deterministic": false,
+          "minLength": 1
+        }
+      ]
+    },
+    {
+      "id": "m_assessment",
+      "name": "Assessment",
+      "description": "Structured field assessment for the new claim — query for analogue retrieval.",
+      "fields": [
+        {
+          "id": "f_as_builder",
+          "name": "builder_id",
+          "type": "text",
+          "optional": false,
+          "description": "Builder whose job library and rates may be used"
+        },
+        {
+          "id": "f_as_peril",
+          "name": "peril",
+          "type": "text",
+          "optional": false,
+          "description": "Cause of loss"
+        },
+        {
+          "id": "f_as_con",
+          "name": "construction",
+          "type": "text",
+          "optional": false,
+          "description": "Dwelling construction"
+        },
+        {
+          "id": "f_as_storeys",
+          "name": "storeys",
+          "type": "int",
+          "optional": false,
+          "description": "Storey count"
+        },
+        {
+          "id": "f_as_rooms",
+          "name": "rooms_affected",
+          "type": "text",
+          "optional": false,
+          "description": "Rooms / areas assessed"
+        },
+        {
+          "id": "f_as_nar",
+          "name": "narrative",
+          "type": "text",
+          "optional": false,
+          "description": "Assessor narrative"
+        },
+        {
+          "id": "f_as_cov",
+          "name": "coverage_note",
+          "type": "text",
+          "optional": false,
+          "description": "Policy coverage constraints for this claim"
+        }
+      ]
+    },
+    {
+      "id": "m_estimate_req",
+      "name": "EstimateRequest",
+      "description": "Assessment plus retrieved analogues and applicable lines.",
+      "fields": [
+        {
+          "id": "f_er_as",
+          "name": "assessment",
+          "type": "model",
+          "ref": "m_assessment",
+          "optional": false,
+          "description": "Current structured assessment"
+        },
+        {
+          "id": "f_er_jobs",
+          "name": "selected_jobs",
+          "type": "list[model]",
+          "ref": "m_selected_job",
+          "optional": false,
+          "description": "Comparable past jobs",
+          "minItems": 1
+        },
+        {
+          "id": "f_er_lines",
+          "name": "selected_lines",
+          "type": "list[model]",
+          "ref": "m_selected_line",
+          "optional": false,
+          "description": "Applicable analogue lines",
+          "minItems": 1
+        }
+      ]
+    },
+    {
+      "id": "m_est_line",
+      "name": "EstimateLine",
+      "description": "One line on the preliminary estimate.",
+      "fields": [
+        {
+          "id": "f_el_wid",
+          "name": "work_item_id",
+          "type": "text",
+          "optional": false,
+          "description": "Catalog id from selected_lines"
+        },
+        {
+          "id": "f_el_code",
+          "name": "code",
+          "type": "text",
+          "optional": false,
+          "description": "Trade code"
+        },
+        {
+          "id": "f_el_desc",
+          "name": "description",
+          "type": "text",
+          "optional": false,
+          "description": "Line description"
+        },
+        {
+          "id": "f_el_qty",
+          "name": "quantity",
+          "type": "float",
+          "optional": false,
+          "description": "Proposed quantity",
+          "deterministic": false
+        },
+        {
+          "id": "f_el_unit",
+          "name": "unit",
+          "type": "text",
+          "optional": false,
+          "description": "Billing unit"
+        },
+        {
+          "id": "f_el_rate",
+          "name": "unit_rate",
+          "type": "float",
+          "optional": false,
+          "description": "Unit rate from this builder's analogues"
+        },
+        {
+          "id": "f_el_amt",
+          "name": "amount",
+          "type": "float",
+          "optional": false,
+          "description": "quantity × unit_rate",
+          "deterministic": false
+        },
+        {
+          "id": "f_el_src",
+          "name": "source_job_id",
+          "type": "text",
+          "optional": false,
+          "description": "Analogue job this line was taken from"
+        },
+        {
+          "id": "f_el_why",
+          "name": "rationale",
+          "type": "text",
+          "optional": false,
+          "description": "Why this line is on the preliminary estimate",
+          "deterministic": false,
+          "minLength": 1
+        }
+      ]
+    },
+    {
+      "id": "m_estimate",
+      "name": "PreliminaryEstimate",
+      "description": "Draft estimate for human review — not a final decision.",
+      "fields": [
+        {
+          "id": "f_pe_title",
+          "name": "title",
+          "type": "text",
+          "optional": false,
+          "description": "Short job title",
+          "deterministic": false
+        },
+        {
+          "id": "f_pe_jobs",
+          "name": "comparable_job_ids",
+          "type": "list[text]",
+          "optional": false,
+          "description": "Selected analogue job ids",
+          "minItems": 1
+        },
+        {
+          "id": "f_pe_lines",
+          "name": "line_items",
+          "type": "list[model]",
+          "ref": "m_est_line",
+          "optional": false,
+          "description": "Proposed billed lines",
+          "minItems": 1
+        },
+        {
+          "id": "f_pe_total",
+          "name": "total_ex_gst",
+          "type": "float",
+          "optional": false,
+          "description": "Sum of line amounts excluding GST",
+          "deterministic": false
+        },
+        {
+          "id": "f_pe_review",
+          "name": "review_notes",
+          "type": "text",
+          "optional": false,
+          "description": "Gaps, coverage flags, and what a human should check",
+          "deterministic": false
+        }
+      ]
+    }
+  ],
+  "modules": [
+    {
+      "id": "mod_assessment_in",
+      "kind": "input",
+      "label": "Current Assessment",
+      "inputType": "json",
+      "inputNameContains": "assessment",
+      "inputDescription": "Structured assessment JSON (builder_id, peril, construction, storeys, rooms_affected, narrative, coverage_note)",
+      "outStructureId": "m_assessment",
+      "cached": true,
+      "avgMs": 80,
+      "avgCostCents": 0,
+      "note": "New claim as structured field data — example-select stringifies the whole object as {description}"
+    },
+    {
+      "id": "mod_job_lib_in",
+      "kind": "input",
+      "label": "Past Job Library",
+      "inputType": "json",
+      "inputNameContains": "past_job_library",
+      "inputDescription": "JSON array of this network's past jobs with denormalized billed_lines",
+      "outStructureId": "m_past_job",
+      "cached": true,
+      "avgMs": 80,
+      "avgCostCents": 0,
+      "note": "Tenant job library — billed_lines stay on the spine; pass-1 prompt view drops them",
+      "outType": {
+        "kind": "list",
+        "item": { "kind": "ref", "modelId": "m_past_job" }
+      }
+    },
+    {
+      "id": "mod_select_jobs",
+      "kind": "example-select",
+      "label": "Select Comparable Jobs",
+      "note": "Pass 1 — cached assessment prefix; uncached {example} is the prompt view (no billed_lines). Spine passthrough keeps billed_lines.",
+      "inputDescription": "list[PastJob] from the job library JSON",
+      "inStructureId": "m_past_job",
+      "outStructureId": "m_selected_job",
+      "exampleContextLabel": "Current Assessment",
+      "exampleReasonField": "selection_reason",
+      "examplePromptView": "SELECT id, builder_id, title, peril, construction, storeys, rooms_affected, narrative FROM past_job",
+      "prompt": "Find past assessments from THIS builder that are useful analogues for scoping the current claim.\n\nMatch builder_id exactly. Prefer the same peril, construction, storeys, and affected rooms. Reject other builders and unrelated trades (decks, owner upgrades, office fitouts).\n\nCURRENT ASSESSMENT:\n\n{description}\n\nCANDIDATE PAST JOB:\n\n{example}",
+      "model": "deepseek-v4",
+      "costLimitCents": 100,
+      "cached": true,
+      "avgMs": 2200,
+      "avgCostCents": 3,
+      "outType": {
+        "kind": "list",
+        "item": { "kind": "ref", "modelId": "m_selected_job" }
+      }
+    },
+    {
+      "id": "mod_explode_lines",
+      "kind": "custom-code",
+      "label": "Explode Analogue Lines",
+      "note": "Flatten selected jobs' billed_lines; unique by work_item_id. Quantity/rate stay on the row for compose.",
+      "inputDescription": "list[SelectedPastJob] with denormalized billed_lines",
+      "inStructureId": "m_selected_job",
+      "outStructureId": "m_candidate_line",
+      "cached": true,
+      "avgMs": 8,
+      "avgCostCents": 0,
+      "fallbackList": [
+        {
+          "typescript": "(jobs) => { const seen = new Map(); for (const j of jobs) { for (const line of j.billed_lines ?? []) { if (!seen.has(line.work_item_id)) seen.set(line.work_item_id, { ...line, source_job_id: j.id }); } } return [...seen.values()]; }"
+        }
+      ],
+      "outType": {
+        "kind": "list",
+        "item": { "kind": "ref", "modelId": "m_candidate_line" }
+      }
+    },
+    {
+      "id": "mod_select_lines",
+      "kind": "example-select",
+      "label": "Select Applicable Lines",
+      "note": "Pass 2 — cached assessment prefix; prompt view drops quantity/unit_rate (uncached noise). Kept rows still have rates for compose.",
+      "inputDescription": "list[CandidateLine] exploded from selected analogues",
+      "inStructureId": "m_candidate_line",
+      "outStructureId": "m_selected_line",
+      "exampleContextLabel": "Current Assessment",
+      "exampleReasonField": "selection_reason",
+      "examplePromptView": "SELECT work_item_id, code, trade, description, unit, source_job_id FROM candidate_line",
+      "prompt": "Decide whether this billed line from a comparable past job should appear on the preliminary estimate.\n\nKeep lines the current damage would require. Drop lines specific to a different room, peril, or construction. Do not use quantity or rate to decide relevance.\n\nCURRENT ASSESSMENT:\n\n{description}\n\nCANDIDATE LINE:\n\n{example}",
+      "model": "deepseek-v4",
+      "costLimitCents": 200,
+      "cached": true,
+      "avgMs": 4000,
+      "avgCostCents": 8,
+      "outType": {
+        "kind": "list",
+        "item": { "kind": "ref", "modelId": "m_selected_line" }
+      }
+    },
+    {
+      "id": "mod_assemble",
+      "kind": "assemble",
+      "label": "Assemble Estimate Request",
+      "note": "Zip assessment + selected jobs + selected lines for the compose step.",
+      "inputDescription": "Filtered SelectedLine rows",
+      "inStructureId": "m_selected_line",
+      "outStructureId": "m_estimate_req",
+      "inType": {
+        "kind": "list",
+        "item": { "kind": "ref", "modelId": "m_selected_line" }
+      },
+      "outType": {
+        "kind": "ref",
+        "modelId": "m_estimate_req"
+      },
+      "assembleBindings": {
+        "assessment": { "kind": "state", "label": "Current Assessment" },
+        "selected_jobs": { "kind": "state", "label": "Select Comparable Jobs" },
+        "selected_lines": { "kind": "spine" }
+      },
+      "cached": true,
+      "avgMs": 5,
+      "avgCostCents": 0
+    },
+    {
+      "id": "mod_compose",
+      "kind": "llm",
+      "label": "Compose Preliminary Estimate",
+      "note": "Compose from retrieved analogue lines — do not invent SKUs or rates. Output is for human review.",
+      "inputDescription": "EstimateRequest with assessment, selected_jobs, and selected_lines",
+      "inStructureId": "m_estimate_req",
+      "outStructureId": "m_estimate",
+      "prompt": "Compose a preliminary estimate from retrieved analogue lines. Use selected_lines as the only allowed SKU pool — copy work_item_id, code, description, unit, unit_rate, and source_job_id. Pick quantity from selected_jobs billed_lines for the same work_item_id when several analogues disagree; do not invent catalog rows or rates. amount = quantity * unit_rate. Drop lines that coverage_note would exclude. comparable_job_ids must be the selected_jobs ids. review_notes must flag gaps, coverage calls, and that a human must sign off. Output title, comparable_job_ids, line_items, total_ex_gst, review_notes.",
+      "model": "deepseek-v4",
+      "cached": true,
+      "avgMs": 1800,
+      "avgCostCents": 4
+    },
+    {
+      "id": "mod_output",
+      "kind": "output",
+      "label": "Estimate Output",
+      "inputDescription": "PreliminaryEstimate for human review",
+      "inStructureId": "m_estimate",
+      "outStructureId": "m_estimate",
+      "cached": true,
+      "avgMs": 40,
+      "avgCostCents": 0,
+      "note": ""
+    }
+  ],
+  "strategies": [
+    {
+      "id": "s_single",
+      "kind": "single-llm",
+      "name": "Single LLM Call",
+      "enabled": true,
+      "model": "deepseek-v4",
+      "accuracy": 80,
+      "latencyMs": 16000,
+      "costCents": 18,
+      "passRate": 88
+    },
+    {
+      "id": "s_agent",
+      "kind": "claude-code",
+      "name": "Agent (Frontier)",
+      "enabled": true,
+      "model": "deepseek-v4",
+      "accuracy": 92,
+      "latencyMs": 48000,
+      "costCents": 160,
+      "passRate": 95
+    },
+    {
+      "id": "s_cheap",
+      "kind": "cheap-agent",
+      "name": "Agent (Cheap Model)",
+      "enabled": true,
+      "model": "deepseek-v4",
+      "accuracy": 82,
+      "latencyMs": 30000,
+      "costCents": 20,
+      "passRate": 85
+    }
+  ],
+  "docs": [
+    {
+      "name": "bathroom_leak_assessment.json",
+      "type": "json",
+      "label": "inference",
+      "file": "estimate_intelligence/bathroom_leak_assessment.json"
+    },
+    {
+      "name": "roof_storm_assessment.json",
+      "type": "json",
+      "label": "inference",
+      "file": "estimate_intelligence/roof_storm_assessment.json"
+    },
+    {
+      "name": "past_job_library.json",
+      "type": "json",
+      "label": "inference",
+      "file": "estimate_intelligence/past_job_library.json"
+    },
+    {
+      "name": "estimate_intelligence_inference.json",
+      "type": "json",
+      "label": "inference",
+      "file": "estimate_intelligence/estimate_intelligence_inference.json"
+    },
+    {
+      "name": "roof_storm_inference.json",
+      "type": "json",
+      "label": "inference",
+      "file": "estimate_intelligence/roof_storm_inference.json"
+    },
+    {
+      "name": "estimate_intelligence_testing.json",
+      "type": "json",
+      "label": "training",
+      "file": "estimate_intelligence/estimate_intelligence_testing.json"
+    },
+    {
+      "name": "roof_storm_testing.json",
+      "type": "json",
+      "label": "training",
+      "file": "estimate_intelligence/roof_storm_testing.json"
+    },
+    {
+      "name": "estimate_intelligence_README.md",
+      "type": "text",
+      "label": "training",
+      "file": "estimate_intelligence/README.md"
+    }
+  ],
+  "inferencePresets": [
+    {
+      "name": "Bathroom leak (default)",
+      "description": "Two-storey brick veneer escape-of-water — bathroom_leak_assessment.json + past_job_library.json",
+      "inputs": {
+        "Current Assessment": "bathroom_leak_assessment.json",
+        "Past Job Library": "past_job_library.json"
+      }
+    },
+    {
+      "name": "Roof storm",
+      "description": "Single-storey storm roof — roof_storm_assessment.json + past_job_library.json",
+      "inputs": {
+        "Current Assessment": "roof_storm_assessment.json",
+        "Past Job Library": "past_job_library.json"
+      }
+    }
+  ]
+}

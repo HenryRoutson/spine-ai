@@ -1,0 +1,1 @@
+{"root":["./src/app.tsx","./src/main.tsx","../shared/activity_recorder.ts","../shared/activity_replayer.ts","../shared/activity_types.ts","../shared/dom_utils.ts"],"version":"5.9.3"}

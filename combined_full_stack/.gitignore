@@ -1,0 +1,11 @@
+# AI : data/ is local JSON persistence + run artifacts — never commit (todo gotchas).
+data/
+node_modules/
+.next/
+public/monaco/
+.env.local
+*.tsbuildinfo
+next-env.d.ts
+.typecheck/
+.parity-cache/
+.next/dev/trace-turbopack

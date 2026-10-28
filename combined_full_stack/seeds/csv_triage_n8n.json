@@ -1,0 +1,125 @@
+{
+  "id": "p_csv_triage_n8n",
+  "name": "CSV Triage (n8n pieces)",
+  "kind": "ops",
+  "models": [
+    {
+      "id": "m_csv",
+      "name": "CsvBlob",
+      "description": "Raw CSV text on a typed structure.",
+      "fields": [
+        { "id": "f_csv", "name": "csv", "type": "text", "optional": false, "description": "CSV including header row" }
+      ]
+    },
+    {
+      "id": "m_parsed",
+      "name": "ParsedCsv",
+      "description": "CSV plus parsed row objects.",
+      "fields": [
+        { "id": "f_p_csv", "name": "csv", "type": "text", "optional": false, "description": "Original CSV" },
+        { "id": "f_p_rows", "name": "rows", "type": "json", "optional": false, "description": "Parsed rows" }
+      ]
+    },
+    {
+      "id": "m_row",
+      "name": "CsvRow",
+      "description": "One spreadsheet row after split-out.",
+      "fields": [
+        { "id": "f_vendor", "name": "vendor", "type": "text", "optional": true, "description": "Vendor" },
+        { "id": "f_amount", "name": "amount", "type": "text", "optional": true, "description": "Amount" },
+        { "id": "f_status", "name": "status", "type": "text", "optional": true, "description": "open or closed" }
+      ]
+    }
+  ],
+  "modules": [
+    {
+      "id": "mod_in",
+      "kind": "input",
+      "label": "CSV Upload",
+      "note": "Typed CSV payload",
+      "inputType": "json",
+      "inputNameContains": "invoices_csv",
+      "outStructureId": "m_csv",
+      "inputDescription": "JSON with a csv field"
+    },
+    {
+      "id": "mod_parse",
+      "kind": "n8n",
+      "label": "Parse CSV",
+      "note": "n8n Spreadsheet File — local parse, not Google Sheets",
+      "inStructureId": "m_csv",
+      "outStructureId": "m_parsed",
+      "n8nNodeType": "n8n-nodes-base.spreadsheetFile",
+      "n8nParameters": { "field": "csv", "outputField": "rows" },
+      "inputDescription": "CsvBlob"
+    },
+    {
+      "id": "mod_split",
+      "kind": "n8n",
+      "label": "Split Rows",
+      "note": "n8n Item Lists splitOut",
+      "inStructureId": "m_parsed",
+      "outStructureId": "m_row",
+      "inType": { "kind": "ref", "modelId": "m_parsed" },
+      "outType": { "kind": "list", "item": { "kind": "ref", "modelId": "m_row" } },
+      "n8nNodeType": "n8n-nodes-base.itemLists",
+      "n8nParameters": { "fieldToSplitOut": "rows" },
+      "inputDescription": "Parsed CSV with rows"
+    },
+    {
+      "id": "mod_filter",
+      "kind": "n8n",
+      "label": "Open Only",
+      "note": "n8n Filter",
+      "inStructureId": "m_row",
+      "outStructureId": "m_row",
+      "inType": { "kind": "list", "item": { "kind": "ref", "modelId": "m_row" } },
+      "outType": { "kind": "list", "item": { "kind": "ref", "modelId": "m_row" } },
+      "n8nNodeType": "n8n-nodes-base.filter",
+      "n8nParameters": { "field": "status", "operator": "equals", "value": "open" },
+      "inputDescription": "CSV rows"
+    },
+    {
+      "id": "mod_sort",
+      "kind": "n8n",
+      "label": "Sort Vendor",
+      "note": "n8n Sort",
+      "inStructureId": "m_row",
+      "outStructureId": "m_row",
+      "inType": { "kind": "list", "item": { "kind": "ref", "modelId": "m_row" } },
+      "outType": { "kind": "list", "item": { "kind": "ref", "modelId": "m_row" } },
+      "n8nNodeType": "n8n-nodes-base.sort",
+      "n8nParameters": { "field": "vendor", "direction": "asc" },
+      "inputDescription": "Open rows"
+    },
+    {
+      "id": "mod_limit",
+      "kind": "n8n",
+      "label": "Top 20",
+      "note": "n8n Limit",
+      "inStructureId": "m_row",
+      "outStructureId": "m_row",
+      "inType": { "kind": "list", "item": { "kind": "ref", "modelId": "m_row" } },
+      "outType": { "kind": "list", "item": { "kind": "ref", "modelId": "m_row" } },
+      "n8nNodeType": "n8n-nodes-base.limit",
+      "n8nParameters": { "maxItems": 20 },
+      "inputDescription": "Sorted rows"
+    },
+    {
+      "id": "mod_out",
+      "kind": "output",
+      "label": "Triage Rows",
+      "inStructureId": "m_row",
+      "outStructureId": "m_row",
+      "inType": { "kind": "list", "item": { "kind": "ref", "modelId": "m_row" } },
+      "outType": { "kind": "list", "item": { "kind": "ref", "modelId": "m_row" } },
+      "inputDescription": "Limited open invoices"
+    }
+  ],
+  "strategies": [
+    { "id": "s_single", "kind": "single-llm", "name": "Single LLM Call", "enabled": true, "model": "deepseek-v4", "accuracy": 78, "latencyMs": 800, "costCents": 1, "passRate": 90 }
+  ],
+  "docs": [
+    { "name": "invoices_csv.json", "type": "json", "label": "inference", "file": "csv_triage_n8n/invoices_csv.json" }
+  ]
+}

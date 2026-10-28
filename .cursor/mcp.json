@@ -1,0 +1,14 @@
+{
+  "mcpServers": {
+    "spine": {
+      "command": "node",
+      "args": [
+        "${workspaceFolder}/mcp_tool/spine-mcp.mjs"
+      ],
+      "env": {
+        "DOTENV_CONFIG_QUIET": "true",
+        "NODE_NO_WARNINGS": "1"
+      }
+    }
+  }
+}

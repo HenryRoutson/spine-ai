@@ -1,0 +1,24 @@
+{
+  "id": "n8n-nodes-base.html",
+  "n8nNodeType": "n8n-nodes-base.html",
+  "displayName": "HTML extract",
+  "description": "Strip tags from an HTML field into plain text.",
+  "category": "transform",
+  "props": [
+    {
+      "name": "field",
+      "displayName": "HTML field",
+      "type": "string",
+      "required": true,
+      "default": "html"
+    },
+    {
+      "name": "outputField",
+      "displayName": "Output field",
+      "type": "string",
+      "required": true,
+      "default": "text"
+    }
+  ],
+  "n8nCode": "const field = String($parameter.field ?? \"html\");\nconst outField = String($parameter.outputField ?? \"text\");\nreturn items.map((item) => {\n  const html = String(item.json?.[field] ?? \"\");\n  const text = html.replace(/<[^>]+>/g, \" \").replace(/\\s+/g, \" \").trim();\n  return { json: { ...item.json, [outField]: text } };\n});"
+}

@@ -1,0 +1,31 @@
+import { NextResponse, type NextRequest } from "next/server";
+import { apiError, requireAuthStore } from "@/lib/server/api_context";
+import { HTTP } from "@/lib/server/api-errors";
+import { generatePipelineExportBundle } from "@/lib/server/pipeline_export_bundle";
+import type { Project } from "@/lib/server/types";
+
+// AI : full export bundle (codegen + documents + runtime libs) — server-only; do not client-import generators.
+export async function POST(req: NextRequest) {
+  const ctx = await requireAuthStore();
+  if (ctx instanceof NextResponse) return ctx;
+
+  let project: Project;
+  let siteOptions: unknown;
+  try {
+    const body = (await req.json()) as Project & { siteOptions?: unknown };
+    siteOptions = body.siteOptions;
+    project = body;
+  } catch {
+    return apiError("Invalid JSON body", HTTP.BAD_REQUEST);
+  }
+
+  if (!project?.modules?.length || !project?.models?.length) {
+    return apiError("Project modules and models required", HTTP.BAD_REQUEST);
+  }
+
+  try {
+    return NextResponse.json(generatePipelineExportBundle(project, siteOptions));
+  } catch (err) {
+    return apiError((err as Error).message, HTTP.BAD_REQUEST);
+  }
+}

@@ -1,0 +1,40 @@
+syntax = "proto3";
+
+package forge.pipeline;
+
+// Generated from Spine — language-neutral connector for exported pipeline runners.
+// Project: Example Select Demo 2 1
+
+message Document {
+  string content = 1;
+  string filename = 2;
+}
+
+message InputSlot {
+  string label = 1;
+  Document document = 2;
+}
+
+message RunPipelineRequest {
+  Document initial_input = 1;
+  repeated InputSlot inputs = 2;
+  // input slot: Work Description (text)
+  // input slot: Job Example Library (json)
+  // input slot: Work Item Catalog (json)
+}
+
+message RunPipelineResponse {
+  string result_json = 1;
+  string error = 2;
+}
+
+message HealthRequest {}
+
+message HealthResponse {
+  string status = 1;  // "ok"
+}
+
+service PipelineConnector {
+  rpc RunPipeline(RunPipelineRequest) returns (RunPipelineResponse);
+  rpc Health(HealthRequest) returns (HealthResponse);
+}

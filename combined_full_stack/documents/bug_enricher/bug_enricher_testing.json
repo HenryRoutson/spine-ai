@@ -1,0 +1,10 @@
+{
+  "description": "Test scaffold for Bug Report Enricher — inputs are pinned; fill the null expected outputs from a verified run (only listed steps are checked).",
+  "inputs": {
+    "Bug Report": "ticket_8842_bug_report.md",
+    "App Logs": "ticket_8842_app_logs.md"
+  },
+  "expectedOutputs": {
+    "Enriched Ticket": null
+  }
+}

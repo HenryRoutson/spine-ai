@@ -1,0 +1,356 @@
+/*old? - Dead / orphaned */
+
+@import "tailwindcss";
+
+/* AI : zeeroday-style palette — pure black, white text, subtle grid lines */
+:root {
+  --background: #000000;
+  --foreground: #fafafa;
+  --panel: #0a0a0a;
+  --panel-raised: #121212;
+  --line: #1a1a1a;
+  --line-bright: #fafafa1f;
+  --accent: #4ade80;
+  --accent-dim: #4ade8040;
+  --primary: #fafafa;
+  --primary-foreground: #0a0a0a;
+  --muted: #a3a3a3;
+  --muted-dim: #737373;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-panel: var(--panel);
+  --color-panel-raised: var(--panel-raised);
+  --color-line: var(--line);
+  --color-line-bright: var(--line-bright);
+  --color-accent: var(--accent);
+  --color-accent-dim: var(--accent-dim);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-dim: var(--muted-dim);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-geist-sans), Helvetica, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* AI : subtle film grain like zeeroday */
+.grain-bg::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 50;
+  opacity: 0.035;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+
+.zeero-grid {
+  border: 1px solid var(--line);
+}
+
+.zeero-badge {
+  display: inline-flex;
+  align-items: stretch;
+  border: 1px solid var(--line-bright);
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.zeero-badge-new {
+  padding: 6px 10px;
+  background: var(--foreground);
+  color: var(--background);
+  font-weight: 600;
+}
+
+.zeero-badge-label {
+  padding: 6px 12px;
+  color: var(--foreground);
+}
+
+.zeero-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 5px;
+  background: var(--primary);
+  color: var(--primary-foreground);
+  font-size: 14px;
+  font-weight: 500;
+  padding: 10px 20px;
+  transition: opacity 0.15s;
+}
+
+.zeero-btn:hover {
+  opacity: 0.88;
+}
+
+.zeero-btn-ghost {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 5px;
+  border: 1px solid var(--line-bright);
+  color: var(--foreground);
+  font-size: 14px;
+  padding: 10px 20px;
+  transition: background 0.15s;
+}
+
+.zeero-btn-ghost:hover {
+  background: var(--panel-raised);
+}
+
+.terminal-window {
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--panel);
+  overflow: hidden;
+}
+
+.terminal-titlebar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  border-bottom: 1px solid var(--line);
+  padding: 10px 14px;
+}
+
+.terminal-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+}
+
+.log-line {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--line);
+  font-family: var(--font-geist-mono), monospace;
+  font-size: 12px;
+}
+
+.log-line:last-child {
+  border-bottom: none;
+}
+
+.log-tag {
+  flex-shrink: 0;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  padding: 2px 8px;
+  font-size: 10px;
+  color: var(--muted);
+}
+
+.live-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 0 8px var(--accent);
+}
+
+.faq-item summary {
+  cursor: pointer;
+  list-style: none;
+}
+
+.faq-item summary::-webkit-details-marker {
+  display: none;
+}
+
+.faq-item[open] summary .faq-chevron {
+  transform: rotate(180deg);
+}
+
+/* AI : spine mark — vertical spine column + vertebra node bars; always b&w regardless of accent */
+.spine-mark {
+  --mark-size: 32px;
+  --spine-w: 3px;
+  --node-w: 14px;
+  --node-h: 3px;
+  --mark-fg: var(--foreground);
+  --mark-fg-dim: #fafafa40;
+  position: relative;
+  width: var(--mark-size);
+  height: var(--mark-h, var(--mark-size));
+  flex-shrink: 0;
+}
+
+.spine-mark::before {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: -2px;
+  bottom: -2px;
+  width: var(--spine-w);
+  transform: translateX(-50%);
+  border-radius: 999px;
+  background: linear-gradient(
+    180deg,
+    var(--mark-fg-dim) 0%,
+    var(--mark-fg) 42%,
+    var(--mark-fg) 58%,
+    var(--mark-fg-dim) 100%
+  );
+  box-shadow: 0 0 18px var(--mark-fg-dim);
+}
+
+.spine-mark .node {
+  position: absolute;
+  left: 50%;
+  width: var(--node-w);
+  height: var(--node-h);
+  transform: translateX(-50%);
+  border-radius: 999px;
+  background: var(--mark-fg);
+  opacity: 0.92;
+}
+
+.spine-mark .node:nth-child(1) { top: 5px; opacity: 0.55; }
+.spine-mark .node:nth-child(2) {
+  top: 50%;
+  margin-top: -1.5px;
+  width: calc(var(--node-w) + 6px);
+  background: var(--mark-fg);
+  box-shadow: 0 0 10px var(--mark-fg-dim);
+}
+.spine-mark .node:nth-child(3) { bottom: 5px; opacity: 0.55; }
+
+.spine-logo {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  text-decoration: none;
+  color: inherit;
+}
+
+/* AI : boxed variant — mark sits in a bordered panel tile */
+.spine-logo.boxed .spine-mark-wrap {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border: 1px solid var(--line-bright);
+  background: var(--panel);
+}
+
+.spine-wordmark {
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: -0.03em;
+  line-height: 1;
+  color: var(--foreground);
+}
+
+/* AI : hero task prompt — building pulse + status text fade */
+.landing-task-panel-building {
+  border-color: var(--accent-dim);
+  animation: landing-panel-pulse 1.6s ease-in-out infinite;
+}
+
+@keyframes landing-panel-pulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 var(--accent-dim);
+  }
+  50% {
+    box-shadow: 0 0 0 3px var(--accent-dim);
+  }
+}
+
+@keyframes landing-consent-nudge {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 var(--accent);
+  }
+  50% {
+    box-shadow: 0 0 0 4px color-mix(in oklab, var(--accent) 45%, transparent);
+  }
+}
+
+.landing-demo-consent-accept-nudge {
+  animation: landing-consent-nudge 0.75s ease-in-out 4;
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.landing-build-status {
+  animation: landing-status-fade 1.8s ease-in-out;
+}
+
+@keyframes landing-status-fade {
+  from {
+    opacity: 0.35;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+/* AI : live LLM token stream under the generate prompt — grows page length, no nested scroll */
+.landing-stream-tokens {
+  border-left: 2px solid var(--accent-dim);
+  padding-left: 0.75rem;
+}
+
+.landing-stream-thinking {
+  border-left-color: color-mix(in srgb, var(--muted-dim) 70%, transparent);
+  opacity: 0.85;
+}
+
+.landing-stream-message {
+  border-left-color: var(--accent);
+}
+
+.landing-stream-caret {
+  display: inline-block;
+  width: 0.45em;
+  height: 1em;
+  margin-left: 2px;
+  vertical-align: text-bottom;
+  background: var(--accent);
+  animation: landing-caret-blink 1s steps(1) infinite;
+}
+
+@keyframes landing-caret-blink {
+  50% {
+    opacity: 0;
+  }
+}
+
+.demo-spinner {
+  width: 14px;
+  height: 14px;
+  border: 2px solid var(--primary-foreground);
+  border-top-color: transparent;
+  border-radius: 50%;
+  animation: demo-spin 0.7s linear infinite;
+}
+
+@keyframes demo-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* AI : legacy HTML fallback only — prefer structured LandingLoggingTrace (page length). */
+.landing-run-trace-frame {
+  min-height: 480px;
+  height: auto;
+}

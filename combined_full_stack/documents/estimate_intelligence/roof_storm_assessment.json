@@ -1,0 +1,9 @@
+{
+  "builder_id": "bld-prime-north",
+  "peril": "storm",
+  "construction": "brick veneer",
+  "storeys": 1,
+  "rooms_affected": "roof, bedroom",
+  "narrative": "Overnight storm lifted tiles on the north roof slope. Bedroom ceiling has water stains. No bathroom or kitchen involvement.",
+  "coverage_note": "Storm damage to the roof is covered. Cosmetic matching of undamaged elevations is excluded."
+}

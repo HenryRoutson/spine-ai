@@ -1,0 +1,176 @@
+{
+  "note": "Fixed URL list. Add/remove companies and urls freely; the scraper resolves whatever it finds into points or bands.",
+  "companies": [
+    {
+      "name": "Lovable",
+      "category": "Prompt-to-app builder",
+      "similarity": 10,
+      "own_domains": [
+        "lovable.dev"
+      ],
+      "growth": 4.0,
+      "desc": "Prompt-to-app builder producing React/TypeScript front ends with Supabase-backed auth, data and hosting. The category reference point.",
+      "urls": [
+        "https://techcrunch.com/2026/07/08/lovable-reportedly-in-talks-to-double-its-valuation-to-13-2b/",
+        "https://www.gurufocus.com/news/9027780/lovable-secures-400-million-funding-round-valuation-surges-to-133-billion",
+        "https://growthindex.startupriders.com/lovable",
+        "https://getlatka.com/companies/lovable.dev"
+      ]
+    },
+    {
+      "name": "v0 (Vercel)",
+      "category": "Prompt-to-UI generator",
+      "similarity": 10,
+      "own_domains": [
+        "vercel.com",
+        "v0.app",
+        "v0.dev"
+      ],
+      "growth": 3.0,
+      "desc": "Text-to-UI generation producing React components, wired to Vercel deploy, branches and PRs. Revenue is not broken out from its parent.",
+      "urls": [
+        "https://sacra.com/c/vercel/",
+        "https://www.selecthub.com/vibe-coding-tools/base44-vs-vercel-v0/"
+      ]
+    },
+    {
+      "name": "Vercel",
+      "category": "Front-end cloud + AI tooling",
+      "similarity": 6,
+      "own_domains": [
+        "vercel.com"
+      ],
+      "growth": 2.2,
+      "desc": "Front-end hosting and deploy platform behind Next.js; v0 sits inside it and drives downstream infrastructure consumption.",
+      "urls": [
+        "https://sacra.com/c/vercel/",
+        "https://tracxn.com/d/companies/vercel/__uPuJfXzfvAQs0wmUuqRiXFxW4uGbcaKUHjHks8VPbrI/funding-and-investors",
+        "https://www.hustlefund.vc/post/angel-squad-vercel-pre-ipo-shares-what-accredited-investors-should-know-in-2026",
+        "https://www.premieralts.com/companies/vercel/valuation"
+      ]
+    },
+    {
+      "name": "Replit",
+      "category": "Browser IDE + agent",
+      "similarity": 7,
+      "own_domains": [
+        "replit.com"
+      ],
+      "growth": 4.0,
+      "desc": "Browser-based IDE with an autonomous build agent; broader than front-end but a direct competitor for prompt-to-app work.",
+      "urls": [
+        "https://tracxn.com/d/companies/replit/__PUWtoWCDA1Qjxd1rE0XG7GgDNdav8DNlaP_1EkZUh3A/funding-and-investors",
+        "https://www.arr.club/replit/replit-rockets-to-9b-valuation-after-series-d-funding",
+        "https://fnex.com/replit-raises-400m-at-9b-valuation/",
+        "https://tech-insider.org/ie/replit-9-billion-valuation-2026/"
+      ]
+    },
+    {
+      "name": "Base44 (Wix)",
+      "category": "Prompt-to-app builder",
+      "similarity": 8,
+      "own_domains": [
+        "base44.com",
+        "wix.com"
+      ],
+      "growth": 5.0,
+      "desc": "Backend-first prompt-to-app builder bundling database, auth and hosting. Acquired by Wix mid-2025; now reported inside Wix results.",
+      "urls": [
+        "https://www.calcalistech.com/ctechnews/article/n4je37x0k",
+        "https://finance.yahoo.com/news/wix-com-q4-earnings-call-165003576.html",
+        "https://weavai.app/blog/en/2026/05/08/base44-review-2026-wix-80m-ai-app-builder-pricing/"
+      ]
+    },
+    {
+      "name": "Emergent",
+      "category": "Prompt-to-app builder",
+      "similarity": 8,
+      "own_domains": [
+        "emergent.sh"
+      ],
+      "growth": 5.0,
+      "desc": "Autonomous-agent app builder for web and mobile aimed at non-technical founders; fastest of the cohort from launch to unicorn.",
+      "urls": [
+        "https://techcrunch.com/2026/07/15/indian-ai-coding-startup-emergent-becomes-a-unicorn-just-over-a-year-after-launch/",
+        "https://emergent.sh/news/emergent-now-a-unicorn-at-1-5-billion-valuation",
+        "https://entrackr.com/news/emergent-becomes-third-ai-unicorn-of-2026-with-130-mn-series-c-led-by-creaegis-12166031",
+        "https://www.techbuzz.ai/articles/indian-ai-coding-startup-emergent-hits-unicorn-status"
+      ]
+    },
+    {
+      "name": "Bolt.new (StackBlitz)",
+      "category": "Prompt-to-app builder",
+      "similarity": 9,
+      "own_domains": [
+        "stackblitz.com",
+        "bolt.new"
+      ],
+      "growth": 3.0,
+      "desc": "Browser-native full-stack builder on WebContainers; multi-framework output and in-browser Node runtime with zero setup.",
+      "urls": [
+        "https://sacra.com/c/bolt-new/",
+        "https://getlatka.com/companies/bolt.new",
+        "https://vibeappscanner.com/bolt-statistics",
+        "https://productgrowth.in/tools/ai-automation/bolt-new/"
+      ]
+    },
+    {
+      "name": "Framer",
+      "category": "Visual site builder",
+      "similarity": 7,
+      "own_domains": [
+        "framer.com"
+      ],
+      "growth": 2.0,
+      "desc": "Figma-like canvas that publishes production sites, with AI layout generation (Wireframer) and a coding assistant (Workshop).",
+      "urls": [
+        "https://sacra.com/c/framer/",
+        "https://tracxn.com/d/companies/framer/__WwABy6r40KPszbW9ZaEHR6v4BX_MP8437KgHYLns7fo",
+        "https://technologychecker.io/technology/framer"
+      ]
+    },
+    {
+      "name": "Webflow",
+      "category": "Visual site builder",
+      "similarity": 6,
+      "own_domains": [
+        "webflow.com"
+      ],
+      "growth": 1.4,
+      "desc": "Visual development environment with deep CMS, localisation and clean code export; the incumbent the AI builders are attacking.",
+      "urls": [
+        "https://productgrowth.in/tools/no-code/webflow/",
+        "https://www.flowninja.com/blog/framer-vs-webflow"
+      ]
+    },
+    {
+      "name": "Cursor (Anysphere)",
+      "category": "AI code editor",
+      "similarity": 5,
+      "own_domains": [
+        "cursor.com",
+        "cursor.sh"
+      ],
+      "growth": 6.0,
+      "desc": "AI-first VS Code fork. Not front-end specific, included as the ceiling reference for the category's pricing.",
+      "urls": [
+        "https://www.cbsnews.com/news/spacex-cursor-60-billion-ai-acquisition/",
+        "https://www.forbes.com/sites/sandycarter/2026/06/16/spacex-buys-cursor-in-largest-startup-acquisition-ever-at-60-billion/",
+        "https://www.digitalapplied.com/blog/spacex-acquires-cursor-anysphere-60b-ai-coding-2026"
+      ]
+    },
+    {
+      "name": "Figma Make",
+      "category": "Prompt-to-UI generator",
+      "similarity": 8,
+      "own_domains": [
+        "figma.com"
+      ],
+      "growth": 2.0,
+      "desc": "Prompt-to-app inside Figma, converting design frames to working front ends. No product-level figures: Figma is public and does not break it out.",
+      "urls": [
+        "https://www.figma.com/make/"
+      ]
+    }
+  ]
+}

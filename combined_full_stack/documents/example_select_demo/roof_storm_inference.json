@@ -1,0 +1,7 @@
+{
+  "description": "Roof storm damage — same example library; example-select should favour roof tile scope rows over bathroom leak distractors.",
+  "inputs": {
+    "Damage Case": "damage_case_roof_storm.txt",
+    "Example Library": "example_library.json"
+  }
+}

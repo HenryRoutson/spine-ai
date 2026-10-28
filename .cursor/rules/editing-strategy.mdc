@@ -1,0 +1,38 @@
+---
+description: How to make code edits — targeted diffs vs full rewrites
+alwaysApply: true
+---
+
+# Editing Strategy
+
+## Default: Targeted Edits (diff-style)
+
+Always prefer surgical edits over rewriting a whole file.
+
+- Use StrReplace to change only the lines that need changing
+- Read the file first, then target the exact block to modify
+- If adding a new function or import, insert it — don't regenerate the file
+
+✅ Good — change only what needs to change:
+```
+StrReplace: old block → new block
+```
+
+❌ Bad — rewriting the entire file when only 5 lines changed:
+```
+Write: entire 300-line file
+```
+
+## When Full Rewrite Is OK
+
+Only write the full file when:
+1. **Creating a new file from scratch** — the file does not yet exist
+2. **The file is tiny** (< 30 lines) and the majority of it needs to change
+3. **The file is generated / derived** (e.g. a lock file, seed, migration) and re-generation is the correct workflow
+
+## For `combined_full_stack/`
+
+This is a large Next.js + Supabase project. Files often exceed 200 lines.  
+Always use StrReplace here. Read → locate the block → replace.
+
+If you're making structural changes that touch many parts of a file, make multiple sequential StrReplace calls rather than one full Write.

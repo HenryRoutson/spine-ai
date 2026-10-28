@@ -1,0 +1,952 @@
+import type { SupabaseClient } from "@supabase/supabase-js";
+import { AUTH_SIGN_IN_REQUIRED } from "@/lib/auth-messages";
+// AI : original PDF/image bytes persist via Supabase Storage (see persistOriginalDocBytes).
+// AI : adopted from backend_with_users/ — implements the same Store contract, so
+// AI : runPipeline & co accept this store unchanged. Session JWT + explicit user_id
+// AI : on writes keep rows scoped to the signed-in user.
+import { hashContent, parseOriginalDocExt, type OriginalDocBytes, type OriginalDocMeta, type Store } from "./store";
+import type { user_id_string } from "./require_auth";
+import { storeErrorMessage } from "./errors";
+import { listTeamsForUser } from "./teams";
+import { migrateProjectModules, projectWithAuthoredModules } from "./validity";
+import { stripSharedModels } from "./builtin_models";
+import { buildDocRef, docRefFromDbRow, type DocDbRow, userDocDbRow } from "./doc_ref";
+import {
+  downloadOriginalDocObject,
+  findOriginalDocObject,
+  removeOriginalDocObject,
+  uploadOriginalDocObject,
+} from "./doc_original_storage";
+import {
+  clearPlatformSeedDocState,
+  ingestPlatformSeedDocRows,
+  type PlatformSeedDocState,
+} from "./platform_seed_docs";
+import { allBundledSeedDocNames } from "./seed_docs_platform";
+import type {
+  FileContentHash,
+  ParserCacheKey,
+  ParserCacheRow,
+  ParserKind,
+  VisionCacheKey,
+  VisionCacheRow,
+} from "./doc_text_cache";
+import {
+  createParserVisionCacheIndex,
+  indexParserRow,
+  indexVisionRow,
+  parserCacheGetByDoc,
+  parserCacheGetByFileHash,
+  purgeParserVisionCacheForDoc,
+  visionCacheGet,
+  visionCachesForDoc,
+} from "./parser_vision_cache_index";
+import type {
+  DocId,
+  DocLabel,
+  DocRef,
+  InputType,
+  PipelineRun,
+  Project,
+  ProjectId,
+  RunFingerprint,
+  RunTestReport,
+} from "./types";
+
+interface RunRow {
+  project_id: string;
+  started_at: number;
+  data: PipelineRun;
+  fingerprint?: string | null;
+}
+
+interface VisionCacheDbRow {
+  cache_key: string;
+  doc_id: string;
+  model: string;
+  prompt: string;
+  purpose: string;
+  content: string;
+  created_at: number;
+}
+
+interface ParserCacheDbRow {
+  cache_key: string;
+  file_hash: string;
+  doc_id: string;
+  parser: string;
+  content: string;
+  created_at: number;
+}
+
+// AI : Supabase twin of JsonStore. The Store contract is synchronous, so: load everything
+// AI : for the signed-in user once in init(), serve reads from memory, and queue
+// AI : write-behind upserts that flush() awaits (routes flush before responding).
+// AI : TODO bug (prod) / TODO (arch-store-async) — load-all + write-behind is serverless-hostile; make Store async and
+// AI : read/write Postgres per call so instances do not diverge.
+// AI : docs.content = built-in parser text; doc_vision_cache = OpenRouter vision OCR (separate table).
+export class SupabaseStore implements Store {
+  private state = {
+    projects: [] as Project[],
+    docs: [] as DocRef[],
+    contents: new Map<DocId, string>(),
+    runs: [] as PipelineRun[],
+    runProjects: {} as Record<string, ProjectId>,
+  };
+  private cacheIndex = createParserVisionCacheIndex();
+  // AI : defer db calls to flush() so rebindDb always supplies a fresh JWT (same as project upserts).
+  private pendingRest: Array<() => PromiseLike<{ error: unknown }>> = [];
+  // AI : row payloads only — upserts run in flush() with this request's db (not at saveProject time).
+  private pendingProjectUpserts = new Map<ProjectId, Record<string, unknown>>();
+  private flushTail: Promise<void> = Promise.resolve();
+  private projectIdsAtInit = new Set<ProjectId>();
+  private createdProjectIds = new Set<ProjectId>();
+  private hasFingerprintColumn = false;
+  private hasProjectTeamIdColumn = false;
+  private hasVisionCacheTable = false;
+  private hasParserCacheTable = false;
+  private platformSeedDocsLoaded = false;
+  private platformSeedDocIds = new Set<DocId>();
+
+  private platformSeedDocState(): PlatformSeedDocState {
+    return {
+      docs: this.state.docs,
+      contents: this.state.contents,
+      platformSeedDocIds: this.platformSeedDocIds,
+    };
+  }
+
+  constructor(
+    private db: SupabaseClient,
+    private scopedUserId: user_id_string,
+  ) {}
+
+  // AI : cached stores keep memory warm across requests — rebind so RLS uses this request's JWT.
+  rebindDb(db: SupabaseClient): void {
+    this.db = db;
+  }
+
+  private queueRest(op: () => PromiseLike<{ error: unknown }>): void {
+    this.pendingRest.push(op);
+  }
+
+  private withUserId<T extends Record<string, unknown>>(row: T): T {
+    return { ...row, user_id: this.scopedUserId };
+  }
+
+  // AI : shared team projects persist on the owner's row — not the viewer's scoped user id.
+  private projectPersistUserId(p: Pick<Project, "teamProjectOwnerId">): user_id_string {
+    return p.teamProjectOwnerId ?? this.scopedUserId;
+  }
+
+  private projectDataForStorage(p: Project): Project {
+    const { teamReadOnly, teamProjectOwnerId, ...rest } = projectWithAuthoredModules(p);
+    return rest;
+  }
+
+  // AI : drop a never-persisted / already-gone row from memory — DELETE matching 0 is success.
+  private dropLocalProject(id: ProjectId): void {
+    this.state.projects = this.state.projects.filter((p) => p.id !== id);
+    this.pendingProjectUpserts.delete(id);
+    this.projectIdsAtInit.delete(id);
+    this.createdProjectIds.delete(id);
+  }
+
+  // AI : 0-row DELETE is ok when the row is already gone; with cookie JWT, RLS deny looks identical —
+  // AI : prefer service-role rebind (app_store) so deletes actually hit the owner's row.
+  private queueProjectDelete(id: ProjectId, ownerId: user_id_string): void {
+    this.queueRest(async () => {
+      const { data, error } = await this.db
+        .from("projects")
+        .delete()
+        .eq("user_id", ownerId)
+        .eq("id", id)
+        .select("id");
+      if (error) return { error };
+      if (!data?.length) {
+        // AI : confirm gone — if still visible under this owner, treat as auth/write failure.
+        const { data: still } = await this.db
+          .from("projects")
+          .select("id")
+          .eq("user_id", ownerId)
+          .eq("id", id)
+          .maybeSingle();
+        if (still) return { error: new Error(AUTH_SIGN_IN_REQUIRED) };
+      }
+      return { error: null };
+    });
+  }
+
+  // AI : owned + team-shared rows — same shape as init / syncProjectsFromDb.
+  private async fetchAccessibleProjects(): Promise<Project[]> {
+    const projectsWithTeam = await this.db
+      .from("projects")
+      .select("data, team_id, user_id")
+      .eq("user_id", this.scopedUserId);
+    let projects;
+    if (projectsWithTeam.error?.message?.includes("team_id")) {
+      this.hasProjectTeamIdColumn = false;
+      projects = await this.db.from("projects").select("data, user_id").eq("user_id", this.scopedUserId);
+      if (projects.error) throw projects.error;
+    } else {
+      if (projectsWithTeam.error) throw projectsWithTeam.error;
+      this.hasProjectTeamIdColumn = true;
+      projects = projectsWithTeam;
+    }
+
+    const ownedProjects = (projects.data ?? []).map((row) => {
+      const data = row.data as Project;
+      const teamId = this.hasProjectTeamIdColumn
+        ? ((row as { team_id?: string }).team_id as Project["teamId"]) ?? data.teamId
+        : data.teamId;
+      return teamId ? { ...data, teamId } : data;
+    });
+
+    let sharedTeamProjects: Project[] = [];
+    if (this.hasProjectTeamIdColumn) {
+      try {
+        const teams = await listTeamsForUser(this.scopedUserId);
+        const roleByTeamId = new Map(teams.map((t) => [t.id, t.role]));
+        const teamIds = [...roleByTeamId.keys()];
+        if (teamIds.length) {
+          const shared = await this.db
+            .from("projects")
+            .select("data, team_id, user_id")
+            .in("team_id", teamIds)
+            .neq("user_id", this.scopedUserId);
+          if (!shared.error) {
+            sharedTeamProjects = (shared.data ?? []).map((row) => {
+              const data = row.data as Project;
+              const teamId = (row.team_id as Project["teamId"]) ?? data.teamId;
+              const role = teamId ? roleByTeamId.get(teamId) : undefined;
+              const canEdit = role === "owner" || role === "admin";
+              return {
+                ...data,
+                ...(teamId ? { teamId } : {}),
+                teamProjectOwnerId: row.user_id as user_id_string,
+                teamReadOnly: !canEdit,
+              };
+            });
+          }
+        }
+      } catch {
+        // AI : teams tables may not exist yet — owned projects still load.
+      }
+    }
+
+    return [...ownedProjects, ...sharedTeamProjects].map((p) => migrateProjectModules(p));
+  }
+
+  // AI : warm lambdas miss projects created on another instance — re-read before state/runs 404.
+  async syncProjectsFromDb(): Promise<void> {
+    const fromDb = await this.fetchAccessibleProjects();
+    const dbIds = new Set(fromDb.map((p) => p.id));
+    const pendingIds = new Set(this.pendingProjectUpserts.keys());
+    const keepLocalCreates = this.state.projects.filter(
+      (p) => this.createdProjectIds.has(p.id) && !dbIds.has(p.id),
+    );
+    this.state.projects = [
+      ...fromDb.map((dbP) => {
+        if (!pendingIds.has(dbP.id)) return dbP;
+        return this.state.projects.find((p) => p.id === dbP.id) ?? dbP;
+      }),
+      ...keepLocalCreates,
+    ];
+    for (const id of [...this.projectIdsAtInit]) {
+      if (!dbIds.has(id) && !this.createdProjectIds.has(id)) this.projectIdsAtInit.delete(id);
+    }
+    for (const id of dbIds) this.projectIdsAtInit.add(id);
+  }
+
+  async ensureProject(id: ProjectId): Promise<Project | undefined> {
+    const hit = this.project(id);
+    if (hit) return hit;
+    await this.syncProjectsFromDb();
+    return this.project(id);
+  }
+
+  // AI : explicit owner + shared-project filters — safe under service-role (must not rely on RLS alone).
+  private sharedTeamProjectIds(): ProjectId[] {
+    return [
+      ...new Set(
+        this.state.projects
+          .filter((p) => !!p.teamId && !!p.teamProjectOwnerId)
+          .map((p) => p.id),
+      ),
+    ];
+  }
+
+  private async fetchAccessibleRunRows(): Promise<RunRow[]> {
+    const sharedProjectIds = this.sharedTeamProjectIds();
+    const mergeRows = (own: RunRow[], shared: RunRow[]): RunRow[] => {
+      if (!shared.length) return own;
+      const seen = new Set(own.map((r) => (r.data as PipelineRun).id));
+      const out = [...own];
+      for (const row of shared) {
+        const id = (row.data as PipelineRun).id;
+        if (seen.has(id)) continue;
+        seen.add(id);
+        out.push(row);
+      }
+      return out;
+    };
+
+    const runsWithFp = await this.db
+      .from("runs")
+      .select("project_id, started_at, data, fingerprint")
+      .eq("user_id", this.scopedUserId)
+      .order("started_at", { ascending: false });
+    if (runsWithFp.error?.message?.includes("fingerprint")) {
+      this.hasFingerprintColumn = false;
+      const ownLegacy = await this.db
+        .from("runs")
+        .select("project_id, started_at, data")
+        .eq("user_id", this.scopedUserId)
+        .order("started_at", { ascending: false });
+      if (ownLegacy.error) throw ownLegacy.error;
+      let sharedLegacy: RunRow[] = [];
+      if (sharedProjectIds.length) {
+        const sharedQ = await this.db
+          .from("runs")
+          .select("project_id, started_at, data")
+          .in("project_id", sharedProjectIds)
+          .neq("user_id", this.scopedUserId)
+          .order("started_at", { ascending: false });
+        if (!sharedQ.error) sharedLegacy = (sharedQ.data ?? []) as RunRow[];
+      }
+      return mergeRows((ownLegacy.data ?? []) as RunRow[], sharedLegacy);
+    }
+    if (runsWithFp.error) throw runsWithFp.error;
+    this.hasFingerprintColumn = true;
+    let sharedFp: RunRow[] = [];
+    if (sharedProjectIds.length) {
+      const sharedQ = await this.db
+        .from("runs")
+        .select("project_id, started_at, data, fingerprint")
+        .in("project_id", sharedProjectIds)
+        .neq("user_id", this.scopedUserId)
+        .order("started_at", { ascending: false });
+      if (!sharedQ.error) sharedFp = (sharedQ.data ?? []) as RunRow[];
+    }
+    return mergeRows((runsWithFp.data ?? []) as RunRow[], sharedFp);
+  }
+
+  private ingestRunRows(runRows: RunRow[], opts?: { mergeLocal?: boolean }): void {
+    const nextRuns: PipelineRun[] = [];
+    const nextProjects: Record<string, ProjectId> = {};
+    for (const row of runRows) {
+      const run = row.data as PipelineRun;
+      const fingerprint = (row.fingerprint ?? run.fingerprint) as RunFingerprint | undefined;
+      if (fingerprint) run.fingerprint = fingerprint;
+      nextRuns.push(run);
+      nextProjects[run.id] = row.project_id as ProjectId;
+      if (this.hasFingerprintColumn && fingerprint && !row.fingerprint) {
+        this.queueRest(() =>
+          this.db
+            .from("runs")
+            .update({ fingerprint })
+            .eq("user_id", this.scopedUserId)
+            .eq("id", run.id),
+        );
+      }
+    }
+    if (opts?.mergeLocal) {
+      const dbIds = new Set(nextRuns.map((r) => r.id));
+      for (const run of this.state.runs) {
+        if (dbIds.has(run.id)) continue;
+        nextRuns.push(run);
+        const projectId = this.state.runProjects[run.id];
+        if (projectId) nextProjects[run.id] = projectId;
+      }
+    }
+    nextRuns.sort((a, b) => (b.startedAt ?? 0) - (a.startedAt ?? 0));
+    this.state.runs = nextRuns;
+    this.state.runProjects = nextProjects;
+  }
+
+  async syncRunsFromDb(): Promise<void> {
+    const rows = await this.fetchAccessibleRunRows();
+    this.ingestRunRows(rows, { mergeLocal: true });
+  }
+
+  // AI : own docs + shared-owner docs — explicit filters (service-role safe; mirrors init()).
+  async syncDocsFromDb(): Promise<void> {
+    const docs = await this.db
+      .from("docs")
+      .select("*")
+      .eq("user_id", this.scopedUserId)
+      .order("uploaded_at", { ascending: false });
+    if (docs.error) return;
+    const docRows: DocDbRow[] = [...((docs.data ?? []) as DocDbRow[])];
+    const sharedOwnerIds = [
+      ...new Set(
+        this.state.projects
+          .map((p) => p.teamProjectOwnerId)
+          .filter((id): id is user_id_string => !!id),
+      ),
+    ];
+    if (sharedOwnerIds.length) {
+      const sharedDocs = await this.db
+        .from("docs")
+        .select("*")
+        .in("user_id", sharedOwnerIds)
+        .order("uploaded_at", { ascending: false });
+      if (!sharedDocs.error) {
+        const seenIds = new Set(docRows.map((row) => row.id));
+        for (const row of (sharedDocs.data ?? []) as DocDbRow[]) {
+          if (seenIds.has(row.id)) continue;
+          seenIds.add(row.id);
+          docRows.push(row);
+        }
+      }
+    }
+    const seen = new Set<DocId>();
+    const nextDocs: DocRef[] = [];
+    const nextContents = new Map<DocId, string>();
+    for (const row of docRows) {
+      const doc = docRefFromDbRow(row);
+      if (seen.has(doc.id)) continue;
+      seen.add(doc.id);
+      nextDocs.push(doc);
+      nextContents.set(doc.id, row.content);
+    }
+    // AI : keep platform seed_docs overlays that are not also user rows.
+    for (const doc of this.state.docs) {
+      if (!this.platformSeedDocIds.has(doc.id) || seen.has(doc.id)) continue;
+      nextDocs.push(doc);
+      const content = this.state.contents.get(doc.id);
+      if (content !== undefined) nextContents.set(doc.id, content);
+    }
+    this.state.docs = nextDocs;
+    this.state.contents = nextContents;
+    // AI : DB still has legacy per-user bundled rows — drop them again so they don't undo init purge.
+    this.purgeStaleUserBundledDocsFromMemory();
+  }
+
+  async init(): Promise<void> {
+    const docsQ = this.db.from("docs").select("*").order("uploaded_at", { ascending: false }).eq("user_id", this.scopedUserId);
+    const accessible = await this.fetchAccessibleProjects();
+    const docs = await docsQ;
+    if (docs.error) throw docs.error;
+
+    this.state.projects = accessible;
+    this.projectIdsAtInit = new Set(this.state.projects.map((p) => p.id));
+
+    const docRows: DocDbRow[] = [...((docs.data ?? []) as DocDbRow[])];
+    const sharedOwnerIds = [
+      ...new Set(
+        accessible
+          .map((p) => p.teamProjectOwnerId)
+          .filter((id): id is user_id_string => !!id),
+      ),
+    ];
+    if (sharedOwnerIds.length) {
+      const sharedDocs = await this.db
+        .from("docs")
+        .select("*")
+        .in("user_id", sharedOwnerIds)
+        .order("uploaded_at", { ascending: false });
+      if (!sharedDocs.error) {
+        const seen = new Set(docRows.map((row) => row.id));
+        for (const row of (sharedDocs.data ?? []) as DocDbRow[]) {
+          if (!seen.has(row.id)) {
+            seen.add(row.id);
+            docRows.push(row);
+          }
+        }
+      }
+    }
+
+    const runRows = await this.fetchAccessibleRunRows();
+
+    for (const row of docRows) {
+      const doc = docRefFromDbRow(row);
+      this.state.docs.push(doc);
+      this.state.contents.set(doc.id, row.content);
+    }
+
+    const seedDocs = await this.db.from("seed_docs").select("*");
+    if (!seedDocs.error) {
+      this.platformSeedDocsLoaded = true;
+      ingestPlatformSeedDocRows(this.platformSeedDocState(), (seedDocs.data ?? []) as DocDbRow[]);
+    }
+    this.purgeStaleUserBundledDocsFromMemory();
+
+    this.ingestRunRows(runRows);
+
+    const vision = await this.db.from("doc_vision_cache").select("*").eq("user_id", this.scopedUserId);
+    if (vision.error) {
+      this.hasVisionCacheTable = !isMissingSchemaError(vision.error);
+      if (!isMissingSchemaError(vision.error)) throw vision.error;
+    } else {
+      this.hasVisionCacheTable = true;
+      for (const row of (vision.data ?? []) as VisionCacheDbRow[]) {
+        indexVisionRow(this.cacheIndex, {
+          key: row.cache_key as VisionCacheKey,
+          docId: row.doc_id as DocId,
+          model: row.model as VisionCacheRow["model"],
+          prompt: row.prompt ?? "",
+          purpose: row.purpose ?? "",
+          content: row.content,
+          createdAt: row.created_at,
+        });
+      }
+    }
+
+    const parser = await this.db.from("doc_parser_cache").select("*").eq("user_id", this.scopedUserId);
+    if (parser.error) {
+      this.hasParserCacheTable = !isMissingSchemaError(parser.error);
+      if (!isMissingSchemaError(parser.error)) throw parser.error;
+    } else {
+      this.hasParserCacheTable = true;
+      for (const row of (parser.data ?? []) as ParserCacheDbRow[]) {
+        indexParserRow(this.cacheIndex, {
+          key: row.cache_key as ParserCacheKey,
+          fileHash: row.file_hash as FileContentHash,
+          docId: row.doc_id as DocId,
+          parser: row.parser as ParserKind,
+          content: row.content,
+          createdAt: row.created_at,
+        });
+      }
+    }
+  }
+
+  private runRow(projectId: ProjectId, run: PipelineRun): Record<string, unknown> {
+    const row: Record<string, unknown> = {
+      id: run.id,
+      project_id: projectId,
+      started_at: run.startedAt,
+      data: run,
+    };
+    if (this.hasFingerprintColumn) row.fingerprint = run.fingerprint ?? null;
+    return row;
+  }
+
+  projects(): Project[] {
+    return this.state.projects;
+  }
+
+  project(id: ProjectId): Project | undefined {
+    return this.state.projects.find((p) => p.id === id);
+  }
+
+  saveProject(p: Project): void {
+    const migrated = migrateProjectModules(p);
+    const existing = this.state.projects.find((x) => x.id === migrated.id);
+    const toPersist = {
+      ...migrated,
+      models: stripSharedModels(migrated.models),
+      teamProjectOwnerId: migrated.teamProjectOwnerId ?? existing?.teamProjectOwnerId,
+      teamReadOnly: migrated.teamReadOnly ?? existing?.teamReadOnly,
+    };
+    const i = this.state.projects.findIndex((x) => x.id === toPersist.id);
+    if (i === -1) {
+      this.state.projects.push(toPersist);
+      this.createdProjectIds.add(toPersist.id);
+    } else this.state.projects[i] = toPersist;
+    // AI : new creates always persist under the signed-in user — clones must not inherit teamProjectOwnerId.
+    const ownerId =
+      this.createdProjectIds.has(toPersist.id) && !this.projectIdsAtInit.has(toPersist.id)
+        ? this.scopedUserId
+        : this.projectPersistUserId(toPersist);
+    // AI : read-only team viewers may sync in memory — never upsert the owner's row under their JWT.
+    const skipPersist = ownerId !== this.scopedUserId && toPersist.teamReadOnly === true;
+    if (!skipPersist) {
+      const projectRow: Record<string, unknown> = {
+        id: toPersist.id,
+        user_id: ownerId,
+        data: this.projectDataForStorage(toPersist),
+      };
+      if (this.hasProjectTeamIdColumn) projectRow.team_id = toPersist.teamId ?? null;
+      this.pendingProjectUpserts.set(toPersist.id, projectRow);
+    }
+  }
+
+  deleteProject(id: ProjectId): boolean {
+    const i = this.state.projects.findIndex((p) => p.id === id);
+    if (i === -1) return false;
+    const ownerId = this.projectPersistUserId(this.state.projects[i]!);
+    const wasOnlyLocal = this.createdProjectIds.has(id) && !this.projectIdsAtInit.has(id);
+    this.state.projects.splice(i, 1);
+    this.pendingProjectUpserts.delete(id);
+    this.projectIdsAtInit.delete(id);
+    this.createdProjectIds.delete(id);
+    const runIds = new Set(
+      Object.entries(this.state.runProjects)
+        .filter(([, pid]) => pid === id)
+        .map(([rid]) => rid),
+    );
+    this.state.runs = this.state.runs.filter((r) => !runIds.has(r.id));
+    for (const rid of runIds) delete this.state.runProjects[rid];
+    // AI : never-persisted create (failed flush) — nothing to delete in Supabase.
+    if (!wasOnlyLocal) this.queueProjectDelete(id, ownerId);
+    if (runIds.size) {
+      this.queueRest(() =>
+        this.db.from("runs").delete().eq("user_id", this.scopedUserId).eq("project_id", id),
+      );
+    }
+    return true;
+  }
+
+  docs(): DocRef[] {
+    return this.state.docs;
+  }
+
+  usesPlatformSeedDocs(): boolean {
+    return this.platformSeedDocsLoaded;
+  }
+
+  docContent(id: DocId): string | undefined {
+    return this.state.contents.get(id);
+  }
+
+  // AI : own folder first, then team-shared project owners (bytes live under the uploader's user_id).
+  private originalBytesOwnerIds(): user_id_string[] {
+    const ids: user_id_string[] = [this.scopedUserId];
+    for (const p of this.state.projects) {
+      if (p.teamProjectOwnerId && !ids.includes(p.teamProjectOwnerId)) ids.push(p.teamProjectOwnerId);
+    }
+    return ids;
+  }
+
+  persistOriginalDocBytes(id: DocId, bytes: Uint8Array, ext: string): void {
+    const parsed = parseOriginalDocExt(ext);
+    if (!parsed) return;
+    const body = Buffer.from(bytes);
+    const ownerId = this.scopedUserId;
+    this.queueRest(() => uploadOriginalDocObject(this.db, ownerId, id, body, parsed));
+  }
+
+  async loadOriginalDocMeta(id: DocId): Promise<OriginalDocMeta | undefined> {
+    const found = await findOriginalDocObject(this.db, this.originalBytesOwnerIds(), id);
+    if (!found) return undefined;
+    return { mime: found.mime, ext: found.ext, source: "storage" };
+  }
+
+  async loadOriginalDocBytes(id: DocId): Promise<OriginalDocBytes | undefined> {
+    return downloadOriginalDocObject(this.db, this.originalBytesOwnerIds(), id);
+  }
+
+  parserCacheGetByFileHash(fileHash: FileContentHash, parser: ParserKind): ParserCacheRow | undefined {
+    return parserCacheGetByFileHash(this.cacheIndex, fileHash, parser);
+  }
+
+  parserCacheGetByDoc(docId: DocId): ParserCacheRow | undefined {
+    return parserCacheGetByDoc(this.cacheIndex, docId);
+  }
+
+  parserCacheSet(row: Omit<ParserCacheRow, "createdAt"> & { createdAt?: number }): void {
+    const payload: ParserCacheRow = { ...row, createdAt: row.createdAt ?? Date.now() };
+    indexParserRow(this.cacheIndex, payload);
+    if (!this.hasParserCacheTable) return;
+    // AI : user_id must be explicit — service-role rebind has auth.uid()=null, so the
+    // AI : column default fails NOT NULL and every POST /api/docs 500s on flush.
+    this.queueRest(() =>
+      this.db.from("doc_parser_cache").upsert(
+        this.withUserId({
+          cache_key: row.key,
+          file_hash: row.fileHash,
+          doc_id: row.docId,
+          parser: row.parser,
+          content: row.content,
+          created_at: payload.createdAt,
+        }),
+        { onConflict: "user_id,cache_key" },
+      ),
+    );
+  }
+
+  visionCacheGet(key: VisionCacheKey): VisionCacheRow | undefined {
+    return visionCacheGet(this.cacheIndex, key);
+  }
+
+  visionCacheSet(row: Omit<VisionCacheRow, "createdAt"> & { createdAt?: number }): void {
+    const payload: VisionCacheRow = { ...row, createdAt: row.createdAt ?? Date.now() };
+    indexVisionRow(this.cacheIndex, payload);
+    if (!this.hasVisionCacheTable) return;
+    // AI : same service-role trap as parserCacheSet — default auth.uid() is null.
+    this.queueRest(() =>
+      this.db.from("doc_vision_cache").upsert(
+        this.withUserId({
+          cache_key: row.key,
+          doc_id: row.docId,
+          model: row.model,
+          prompt: row.prompt,
+          purpose: row.purpose,
+          content: row.content,
+          created_at: payload.createdAt,
+        }),
+        { onConflict: "user_id,cache_key" },
+      ),
+    );
+  }
+
+  visionCachesForDoc(docId: DocId): VisionCacheRow[] {
+    return visionCachesForDoc(this.cacheIndex, docId);
+  }
+
+  repointDocName(id: DocId, name: string): boolean {
+    const i = this.state.docs.findIndex((d) => d.id === id);
+    if (i === -1 || this.state.docs[i]!.name === name) return false;
+    const prev = this.state.docs[i]!;
+    const doc = { ...prev, name };
+    this.state.docs[i] = doc;
+    const content = this.state.contents.get(id);
+    if (content !== undefined && !this.platformSeedDocIds.has(id)) {
+      this.queueRest(() =>
+        this.db.from("docs").upsert(userDocDbRow(this.scopedUserId, doc, content), {
+          onConflict: "user_id,id",
+        }),
+      );
+    }
+    return true;
+  }
+
+  addDoc(name: string, type: InputType, content: string, label: DocLabel): DocRef {
+    const id = hashContent(content);
+    const now = Date.now();
+    const i = this.state.docs.findIndex((d) => d.id === id);
+    if (i >= 0) {
+      // AI : content-addressed reuse — bump uploadedAt + filename so docsForProject picks this edit.
+      const doc = buildDocRef({ id, name, type, label, content, uploadedAt: now });
+      this.state.docs = [doc, ...this.state.docs.filter((_, j) => j !== i)];
+      this.state.contents.set(id, content);
+      this.queueRest(() =>
+        this.db.from("docs").upsert(userDocDbRow(this.scopedUserId, doc, content), {
+          onConflict: "user_id,id",
+        }),
+      );
+      return doc;
+    }
+    const doc = buildDocRef({ id, name, type, label, content, uploadedAt: now });
+    this.state.docs = [doc, ...this.state.docs];
+    this.state.contents.set(id, content);
+    this.queueRest(() =>
+      this.db.from("docs").upsert(userDocDbRow(this.scopedUserId, doc, content), {
+        onConflict: "user_id,id",
+      }),
+    );
+    return doc;
+  }
+
+  removeDoc(id: DocId): boolean {
+    const i = this.state.docs.findIndex((d) => d.id === id);
+    if (i === -1) return false;
+    const platformOnly = this.platformSeedDocIds.has(id);
+    this.state.docs.splice(i, 1);
+    this.state.contents.delete(id);
+    purgeParserVisionCacheForDoc(this.cacheIndex, id);
+    if (!platformOnly) {
+      this.queueRest(() => this.db.from("docs").delete().eq("id", id));
+      this.queueRest(() => removeOriginalDocObject(this.db, this.scopedUserId, id));
+    } else {
+      this.platformSeedDocIds.delete(id);
+    }
+    if (this.hasParserCacheTable) {
+      this.queueRest(() =>
+        this.db.from("doc_parser_cache").delete().eq("user_id", this.scopedUserId).eq("doc_id", id),
+      );
+    }
+    if (this.hasVisionCacheTable) {
+      this.queueRest(() =>
+        this.db.from("doc_vision_cache").delete().eq("user_id", this.scopedUserId).eq("doc_id", id),
+      );
+    }
+    return true;
+  }
+
+  // AI : resync-examples — reload public.seed_docs after admin upsert from git.
+  async refreshPlatformSeedDocsFromDb(): Promise<number> {
+    clearPlatformSeedDocState(this.platformSeedDocState());
+    this.platformSeedDocsLoaded = false;
+
+    const seedDocs = await this.db.from("seed_docs").select("*");
+    if (seedDocs.error) return 0;
+
+    this.platformSeedDocsLoaded = true;
+    return ingestPlatformSeedDocRows(this.platformSeedDocState(), (seedDocs.data ?? []) as DocDbRow[]);
+  }
+
+  // AI : legacy per-user bundled rows shadow seed_docs in memory until purged from public.docs.
+  purgeStaleUserBundledDocsFromMemory(): number {
+    const bundled = allBundledSeedDocNames();
+    let removed = 0;
+    for (let i = this.state.docs.length - 1; i >= 0; i--) {
+      const doc = this.state.docs[i]!;
+      if (!bundled.has(doc.name) || this.platformSeedDocIds.has(doc.id)) continue;
+      this.state.docs.splice(i, 1);
+      this.state.contents.delete(doc.id);
+      removed += 1;
+    }
+    return removed;
+  }
+
+  runs(projectId?: ProjectId): PipelineRun[] {
+    if (!projectId) return this.state.runs;
+    return this.state.runs.filter((r) => this.state.runProjects[r.id] === projectId);
+  }
+
+  findRunByFingerprint(projectId: ProjectId, fingerprint: RunFingerprint): PipelineRun | undefined {
+    return this.runs(projectId).find((r) => r.status === "ok" && r.fingerprint === fingerprint);
+  }
+
+  addRun(projectId: ProjectId, run: PipelineRun): void {
+    // AI : shared pointer — run row stays under the runner; team peers see it via project_id + RLS.
+    this.state.runProjects[run.id] = projectId;
+    this.state.runs = [run, ...this.state.runs];
+    this.queueRest(() =>
+      this.db.from("runs").upsert(this.withUserId(this.runRow(projectId, run)), { onConflict: "user_id,id" }),
+    );
+  }
+
+  updateRunNotes(runId: PipelineRun["id"], notes: string | undefined): boolean {
+    const i = this.state.runs.findIndex((r) => r.id === runId);
+    if (i < 0) return false;
+    const next = notes?.trim() ? notes.trim() : undefined;
+    const prev = this.state.runs[i].notes;
+    if (prev === next) return true;
+    return this.patchRun(i, { notes: next });
+  }
+
+  updateRunTest(runId: PipelineRun["id"], test: RunTestReport | undefined): boolean {
+    const i = this.state.runs.findIndex((r) => r.id === runId);
+    if (i < 0) return false;
+    return this.patchRun(i, { test });
+  }
+
+  // AI : shared upsert for post-run field patches (notes, test report).
+  private patchRun(i: number, patch: Partial<PipelineRun>): boolean {
+    const run = { ...this.state.runs[i], ...patch };
+    this.state.runs[i] = run;
+    const projectId = this.state.runProjects[run.id];
+    this.queueRest(() =>
+      this.db.from("runs").upsert(this.withUserId(this.runRow(projectId, run)), { onConflict: "user_id,id" }),
+    );
+    return true;
+  }
+
+  // AI : drop project upserts when another request deleted the row after this store loaded.
+  private async dropConcurrentlyDeletedProjects(): Promise<void> {
+    if (this.pendingProjectUpserts.size === 0) return;
+    for (const id of [...this.pendingProjectUpserts.keys()]) {
+      if (this.createdProjectIds.has(id)) continue;
+      if (!this.projectIdsAtInit.has(id)) continue;
+      // AI : query by id — team-shared rows live under the owner's user_id, not ours.
+      const { data, error } = await this.db.from("projects").select("id").eq("id", id).maybeSingle();
+      if (error) continue;
+      if (!data) {
+        this.pendingProjectUpserts.delete(id);
+        this.state.projects = this.state.projects.filter((p) => p.id !== id);
+        this.projectIdsAtInit.delete(id);
+      }
+    }
+  }
+
+  // AI : await all queued writes; routes call this once before (or right after) responding.
+  async flush(): Promise<void> {
+    const run = this.flushTail.then(() => this.flushNow());
+    this.flushTail = run.catch(() => undefined);
+    await run;
+  }
+
+  // AI : warm store shares one client slot — reject only on positive user mismatch after rebindDb.
+  // AI : service-role rebind has no user JWT; scopedUserId from requireAuth is the tenancy boundary.
+  // AI : never treat Auth/JWKS timeouts as signed-out when using the cookie client.
+  private async ensureFreshWriteAuth(): Promise<void> {
+    try {
+      const { data, error } = await this.db.auth.getClaims();
+      const sub = !error ? data?.claims?.sub : undefined;
+      if (sub && sub !== this.scopedUserId) throw new Error(AUTH_SIGN_IN_REQUIRED);
+      if (sub) return;
+    } catch (err) {
+      if (err instanceof Error && err.message === AUTH_SIGN_IN_REQUIRED) throw err;
+    }
+    try {
+      const { data: sessionData } = await this.db.auth.getSession();
+      const id = sessionData.session?.user?.id;
+      if (id && id !== this.scopedUserId) throw new Error(AUTH_SIGN_IN_REQUIRED);
+    } catch (err) {
+      if (err instanceof Error && err.message === AUTH_SIGN_IN_REQUIRED) throw err;
+    }
+  }
+
+  private async flushNow(): Promise<void> {
+    await this.ensureFreshWriteAuth();
+    const onlyNewProjects =
+      this.pendingProjectUpserts.size > 0 &&
+      [...this.pendingProjectUpserts.keys()].every((id) => this.createdProjectIds.has(id));
+    if (!onlyNewProjects) await this.dropConcurrentlyDeletedProjects();
+    const flushingCreatedIds = [...this.pendingProjectUpserts.keys()].filter((id) =>
+      this.createdProjectIds.has(id),
+    );
+    const pendingProjectRows = [...this.pendingProjectUpserts.values()];
+    this.pendingProjectUpserts.clear();
+    const projectUpserts = pendingProjectRows.map((row) =>
+      this.db.from("projects").upsert(row, { onConflict: "user_id,id" }),
+    );
+    const pendingRestOps = this.pendingRest;
+    this.pendingRest = [];
+    const results = await Promise.all([
+      ...projectUpserts,
+      ...pendingRestOps.map((op) => op()),
+    ]);
+    const failed = results.find((r) => r.error);
+    if (failed) {
+      // AI : drop only creates that never landed — keep ones that upserted before a later pendingRest error.
+      for (const id of flushingCreatedIds) {
+        const { data } = await this.db
+          .from("projects")
+          .select("id")
+          .eq("user_id", this.scopedUserId)
+          .eq("id", id)
+          .maybeSingle();
+        if (data) {
+          this.createdProjectIds.delete(id);
+          this.projectIdsAtInit.add(id);
+        } else {
+          this.dropLocalProject(id);
+        }
+      }
+      throw failed.error;
+    }
+    for (const id of flushingCreatedIds) {
+      this.createdProjectIds.delete(id);
+      this.projectIdsAtInit.add(id);
+    }
+  }
+}
+
+// AI : schema.sql may not be applied yet — detect missing tables and fall back to local JSON.
+export function isMissingSchemaError(error: unknown): boolean {
+  const msg = storeErrorMessage(error, String(error));
+  const code =
+    typeof error === "object" && error !== null && "code" in error
+      ? String((error as { code: unknown }).code)
+      : "";
+  return (
+    code === "PGRST205" ||
+    msg.includes("schema cache") ||
+    msg.includes("Could not find the table") ||
+    (msg.includes("relation") && msg.includes("does not exist")) ||
+    (msg.includes("column") && msg.includes("does not exist"))
+  );
+}
+
+// AI : PostgREST rejects JWTs whose iat is slightly in the future (local clock skew) — retryable.
+export function isExpectedAuthSkewError(error: unknown): boolean {
+  const msg = storeErrorMessage(error, String(error));
+  const code =
+    typeof error === "object" && error !== null && "code" in error
+      ? String((error as { code: unknown }).code)
+      : "";
+  return code === "PGRST303" || /JWT issued at future/i.test(msg);
+}
+
+// AI : a ready store for one signed-in user — zero projects is valid (client shows the
+// AI : no-projects page), so nothing is auto-created here anymore.
+export async function openUserStore(db: SupabaseClient, userId: user_id_string): Promise<SupabaseStore> {
+  const s = new SupabaseStore(db, userId);
+  await s.init();
+  return s;
+}

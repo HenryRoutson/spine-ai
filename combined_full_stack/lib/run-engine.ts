@@ -1,0 +1,669 @@
+// AI : client shim for the real server run engine — POST /api/runs starts the pipeline,
+// AI : then the Inference tab polls progress until the persisted PipelineRun arrives.
+// AI : TODO (arch-run-engine-name) — this is the browser client-step shim; server engine is lib/server/run_engine/.
+// AI :   Rename to client-run.ts (or similar) so "run engine" isn't two trees.
+// AI : user-authored transform/custom steps run here in the browser (never on the server).
+// AI : assistant / Vibe approve-to-run uses source: assistant via lib/assistant-run.ts.
+import { invariant } from "@/lib/assert"
+import {
+  CustomCodeExhaustedError,
+  formatCustomCodeFailureLog,
+  runAssertWithFallbacks,
+  runCustomCodeWithFallbacks,
+  type CustomCodeAttemptFailure,
+} from "@/lib/custom_code"
+import { CodeTracePhase, formatLineProfileLog, type CodeTraceEvent } from "@/lib/custom_code_trace"
+import type { CodeExecUiState, CodeLineProfile, StepCodeProfile } from "@/lib/code-exec-ui"
+import { CODE_ERROR_NS, recordCodeError } from "@/lib/code-error-history"
+import { getCustomLlmProvider, type CustomLlmProviderDef } from "@/lib/custom-llm-providers"
+import type { LlmClientStepSpec } from "@/lib/llm-client-step"
+import { runBrowserLlmPrompts } from "@/lib/llm-provider-runtime"
+import {
+  MAX_CLIENT_STEP_ERROR_CHARS,
+  sanitizeClientStepPayload,
+  truncateClientStepText,
+  type ClientStepSubmitPayload,
+} from "@/lib/client-step-payload"
+import { readApiErrorBody, formatApiError, logApiFailure, JSON_HEADERS, FETCH_NO_STORE } from "@/lib/api-client"
+import { API_ROUTES } from "@/lib/api-routes"
+import { isDemoMode } from "@/lib/demo-mode"
+// AI : poll tier max only — rate_limit_config has no Upstash/server deps (safe in this client shim).
+import { RATE_LIMITS } from "@/lib/rate_limit_config"
+import type {
+  DocId,
+  JobLogEntry,
+  ModelId,
+  ModuleId,
+  PipelineRun,
+  ProjectId,
+  RunJob,
+  RunJobId,
+  RunSource,
+  RunStepStatus,
+  StepDescriptionFields,
+  StepProgress,
+  StepSubProgress,
+} from "@/lib/types"
+import { JobLogLevel, type ClientStepSpec } from "@/lib/run-types"
+
+export type StepUiState = StepDescriptionFields & {
+  status: StepProgress["status"] | "idle"
+  sub?: StepSubProgress
+}
+
+type StepUiStatus = StepProgress["status"] | RunStepStatus | "idle"
+
+function mergeStepDescriptionFields(
+  cur: StepUiState | undefined,
+  next: StepProgress,
+): Pick<
+  StepUiState,
+  "outputPreview" | "inputDescriptionCheck" | "descriptionCheckLlmCalls" | "descriptionCheckCostCents"
+> {
+  const stepDone = next.status !== "running"
+  return {
+    outputPreview: next.outputPreview ?? (stepDone ? cur?.outputPreview : undefined),
+    inputDescriptionCheck: next.inputDescriptionCheck ?? cur?.inputDescriptionCheck,
+    descriptionCheckLlmCalls: next.descriptionCheckLlmCalls ?? cur?.descriptionCheckLlmCalls,
+    descriptionCheckCostCents: next.descriptionCheckCostCents ?? cur?.descriptionCheckCostCents,
+  }
+}
+
+function stepStatusRank(s: StepUiStatus): number {
+  if (s === "running") return 1
+  if (s === "ok" || s === "cached") return 2
+  if (s === "error") return 3
+  return 0
+}
+
+// AI : stale Supabase polls must not rewind a step from ok → running in the progress UI.
+export function mergeStepStates(
+  prev: Map<ModuleId, StepUiState>,
+  polled: StepProgress[],
+): Map<ModuleId, StepUiState> {
+  const next = new Map(prev)
+  for (const s of polled) {
+    invariant(s.moduleId, "step progress missing moduleId")
+    const cur = next.get(s.moduleId)
+    const curStatus = cur?.status ?? "idle"
+    let status: StepUiState["status"] = curStatus
+    if (!cur || s.status === "error" || stepStatusRank(s.status) >= stepStatusRank(curStatus)) {
+      status = s.status
+    }
+    const descFields = mergeStepDescriptionFields(cur, s)
+    next.set(s.moduleId, {
+      status,
+      sub: status === "running" ? s.sub ?? cur?.sub : undefined,
+      ...descFields,
+    })
+  }
+  return next
+}
+
+export class RunStartError extends Error {
+  constructor(
+    message: string,
+    readonly status: number,
+    readonly code?: string,
+  ) {
+    super(message)
+    this.name = "RunStartError"
+  }
+}
+
+// AI : 402 from POST /api/runs — insufficient credit or billing cap; Inference shows a Billing CTA.
+export function isRunBillingError(e: unknown): e is RunStartError {
+  return e instanceof RunStartError && e.status === 402
+}
+
+const MAX_PROGRESS_POLLS = 10
+const PROGRESS_POLL_BACKOFF_MS = 200
+const PROGRESS_429_RETRY_MAX = 60
+const DEFAULT_POLL_INTERVAL_MS = 700
+// AI : after browser submits client-step, poll quickly until server pauses on the next step.
+const CLIENT_RESUME_POLL_MS = 120
+
+// AI : parallel job polls share one user rate-limit bucket — stretch interval so N jobs stay under poll tier max.
+export function pollIntervalForParallelJobs(parallelCount: number): number {
+  const maxPerMin = RATE_LIMITS.poll.max
+  const minGapMs = Math.ceil(60_000 / maxPerMin)
+  return Math.max(DEFAULT_POLL_INTERVAL_MS, minGapMs * Math.max(1, parallelCount))
+}
+
+function retryAfterMs(res: Response): number {
+  const sec = Number.parseInt(res.headers.get("Retry-After") ?? "2", 10)
+  return Math.max(500, (Number.isFinite(sec) ? sec : 2) * 1000)
+}
+
+function throwApiError(context: string, res: Response, body: Awaited<ReturnType<typeof readApiErrorBody>>): never {
+  logApiFailure(context, res, body)
+  throw new RunStartError(formatApiError(context, res, body), res.status, body?.code)
+}
+
+export type StartRunResult = {
+  jobId: RunJobId;
+  fingerprint?: string;
+  run?: PipelineRun;
+};
+
+export async function startRun(
+  projectId: ProjectId,
+  inputDocId: DocId,
+  model: ModelId,
+  inputDocIds: DocId[] = [],
+  inputDocsByModule?: Partial<Record<ModuleId, DocId[]>>,
+  allowDuplicateRuns = false,
+  source?: RunSource.Testing | RunSource.Assistant,
+): Promise<StartRunResult> {
+  const demo = isDemoMode()
+  const url = demo ? API_ROUTES.demoRuns : API_ROUTES.runs
+  const demoQs =
+    demo && typeof window !== "undefined"
+      ? (() => {
+          const qs = new URLSearchParams(window.location.search)
+          const params = new URLSearchParams()
+          const buildId = qs.get("buildId")
+          const accessToken = qs.get("accessToken")
+          if (buildId) params.set("buildId", buildId)
+          if (accessToken) params.set("accessToken", accessToken)
+          const q = params.toString()
+          return q ? `?${q}` : ""
+        })()
+      : ""
+  const res = await fetch(`${url}${demoQs}`, {
+    method: "POST",
+    headers: JSON_HEADERS,
+    body: JSON.stringify({
+      projectId,
+      inputDocId,
+      inputDocIds,
+      inputDocsByModule,
+      model,
+      allowDuplicateRuns,
+      source,
+    }),
+  })
+  if (!res.ok) {
+    const body = await readApiErrorBody(res)
+    logApiFailure(url, res, body, "POST")
+    throw new RunStartError(
+      formatApiError(
+        `Failed to start pipeline for project ${projectId}, doc ${inputDocId}, model ${model}`,
+        res,
+        body,
+      ),
+      res.status,
+      body?.code,
+    )
+  }
+  const body = (await res.json()) as StartRunResult
+  if (demo) {
+    invariant(body.run, `POST ${url} missing run for project ${projectId}`)
+    return { jobId: (body.jobId ?? body.run.id) as RunJobId, run: body.run, fingerprint: body.fingerprint }
+  }
+  invariant(body.jobId, `POST /api/runs missing jobId for project ${projectId}`)
+  return body
+}
+
+export async function pollJobProgress(url: string, context: string): Promise<RunJob> {
+  // AI : first polls can 404 when progress GET hits a cold bundle before the job file is visible.
+  let lastDetail: string | undefined
+  let notFoundAttempts = 0
+  let rateLimitRetries = 0
+  while (notFoundAttempts < MAX_PROGRESS_POLLS) {
+    const res = await fetch(url, FETCH_NO_STORE)
+    if (res.status === 429 && rateLimitRetries < PROGRESS_429_RETRY_MAX) {
+      rateLimitRetries++
+      await readApiErrorBody(res)
+      await new Promise((r) => setTimeout(r, retryAfterMs(res)))
+      continue
+    }
+    if (res.status === 404 && notFoundAttempts < MAX_PROGRESS_POLLS - 1) {
+      const body = await readApiErrorBody(res)
+      lastDetail = [body?.error, body?.detail].filter(Boolean).join(" — ") || lastDetail
+      notFoundAttempts++
+      await new Promise((r) => setTimeout(r, PROGRESS_POLL_BACKOFF_MS * notFoundAttempts))
+      continue
+    }
+    if (!res.ok) {
+      throwApiError(`${context} failed`, res, await readApiErrorBody(res))
+    }
+    return res.json() as Promise<RunJob>
+  }
+  throw new Error(
+    `${context} failed after ${MAX_PROGRESS_POLLS} attempts (404)` +
+      (lastDetail ? `: ${lastDetail}` : ": server has no record of this run") +
+      ". The job may not have been created, or the server restarted and dropped in-progress runs. Try Run pipeline again.",
+  )
+}
+
+export async function runProgress(jobId: RunJobId): Promise<RunJob> {
+  return pollJobProgress(API_ROUTES.runProgress(jobId), `Progress poll for job ${jobId}`)
+}
+
+export interface AwaitRunCallbacks {
+  onStep?: (steps: StepProgress[]) => void
+  onLogs?: (logs: JobLogEntry[], newLines: JobLogEntry[]) => void
+  // AI : human-review steps pause until the operator approves or rejects in Inference.
+  onHumanReview?: (spec: ClientStepSpec) => Promise<"approved" | "rejected">
+  // AI : chatbot pause — Inference runs turns; resolves with ChatbotResult for client-step submit.
+  onChatbot?: (spec: ClientStepSpec) => Promise<import("@/lib/chatbot-step").ChatbotResultValue>
+  // AI : live line-by-line preview while assert/custom-code runs in the browser.
+  onCodeExec?: (state: CodeExecUiState) => void
+  // AI : custom LLM providers persisted on the project (merged with localStorage at runtime).
+  projectLlmProviders?: import("@/lib/custom-llm-providers").CustomLlmProviderDef[]
+  signal?: AbortSignal
+}
+
+export type { ClientStepSubmitPayload } from "@/lib/client-step-payload"
+
+export type AwaitRunResult = {
+  run: PipelineRun
+  deduped?: boolean
+  cachedRunId?: PipelineRun["id"]
+}
+
+// AI : assert/custom-code failures are expected project outcomes — warn in console, not Next.js console.error overlay.
+function pipelineLogToConsole(entry: JobLogEntry): void {
+  const fn = entry.level === "info" ? console.log : console.warn
+  fn(`[pipeline] ${entry.line}`)
+}
+
+function clientStepFailureLogLevel(tag: string): JobLogEntry["level"] {
+  return tag === "assert" || tag === "custom-code" ? JobLogLevel.Warn : JobLogLevel.Error
+}
+
+function recordCustomCodeFailures(failures: CustomCodeAttemptFailure[]): void {
+  for (const f of failures) {
+    recordCodeError(f.code, f.error, CODE_ERROR_NS.customCode)
+  }
+}
+
+function clientStepSubmitError(kind: string, err: unknown, stepLabel?: string): string {
+  const stepName = stepLabel ? `"${stepLabel}" ` : ""
+  const uiLocation = `Inference → Run Pipeline → ${kind} step${stepLabel ? ` (${stepLabel})` : ""}`
+  let message: string
+  if (err instanceof CustomCodeExhaustedError) {
+    const last = err.failures[err.failures.length - 1]
+    message = kind === "assert" && last?.error ? last.error : err.message
+  } else {
+    message = err instanceof Error ? err.message : String(err)
+  }
+  return truncateClientStepText(
+    [`${stepName}${kind} step failed: ${message}`, `UI location: ${uiLocation}`].join("\n"),
+    MAX_CLIENT_STEP_ERROR_CHARS,
+  )
+}
+
+// AI : shared poll loop for dev runs and shared-link runs — handles browser client steps + human review.
+async function submitBrowserLlmClientStep(
+  moduleId: ModuleId,
+  label: string,
+  llmClient: LlmClientStepSpec,
+  projectLlmProviders: CustomLlmProviderDef[] | undefined,
+  submitClientStep: (payload: ClientStepSubmitPayload) => Promise<void>,
+): Promise<void> {
+  const clientLogs: JobLogEntry[] = []
+  const tag = "llm-provider"
+  try {
+    const output = await runBrowserLlmPrompts(llmClient, projectLlmProviders)
+    clientLogs.push({
+      at: Date.now(),
+      level: JobLogLevel.Info,
+      tag,
+      line: `${tag} ${llmClient.providerId} completed (${llmClient.prompts.length} prompt(s))`,
+      moduleId,
+    })
+    await submitClientStep({ output, clientLogs })
+  } catch (err) {
+    const message = (err as Error).message
+    recordCodeError(
+      getCustomLlmProvider(llmClient.providerId)?.code ?? `provider:${llmClient.providerId}`,
+      message,
+      CODE_ERROR_NS.llmProvider,
+    )
+    clientLogs.push({
+      at: Date.now(),
+      level: JobLogLevel.Error,
+      tag,
+      line: `${tag} ${llmClient.providerId} failed: ${message}`,
+      moduleId,
+    })
+    await submitClientStep({
+      error: truncateClientStepText(
+        [`${tag} step (${label}) failed: ${message}`, `UI location: Inference → Run Pipeline → LLM (${label})`].join(
+          "\n",
+        ),
+        MAX_CLIENT_STEP_ERROR_CHARS,
+      ),
+      clientLogs,
+    })
+  }
+}
+
+export async function awaitJobCompletion(
+  poll: () => Promise<RunJob>,
+  submitClientStep: (payload: ClientStepSubmitPayload) => Promise<void>,
+  callbacks: AwaitRunCallbacks | ((steps: StepProgress[]) => void),
+  intervalMs = DEFAULT_POLL_INTERVAL_MS,
+  clientStepContext?: { stepLabel?: string },
+): Promise<AwaitRunResult> {
+  const { onStep, onLogs, onHumanReview, onChatbot, onCodeExec, projectLlmProviders, signal } =
+    typeof callbacks === "function" ? { onStep: callbacks } : callbacks
+  let seenLogs = 0
+  let clientStepBusy = false
+  let clientStepSubmittedFor: ModuleId | undefined
+  let awaitingServerResume = false
+  for (;;) {
+    if (signal?.aborted) throw new DOMException("Aborted", "AbortError")
+    const job = await poll()
+    onStep?.(job.steps)
+    const logs = job.logs ?? []
+    const newLines = logs.slice(seenLogs)
+    if (newLines.length) {
+      for (const l of newLines) pipelineLogToConsole(l)
+      onLogs?.(logs, newLines)
+      seenLogs = logs.length
+    }
+    if (!job.clientStep && !awaitingServerResume) {
+      clientStepSubmittedFor = undefined
+      if (clientStepContext) clientStepContext.stepLabel = undefined
+    }
+    if (
+      awaitingServerResume &&
+      ((job.clientStep && job.clientStep.moduleId !== clientStepSubmittedFor) || job.run || job.error)
+    ) {
+      awaitingServerResume = false
+    }
+    if (
+      job.clientStep?.kind === "human-review" &&
+      !job.run &&
+      !job.error &&
+      !clientStepBusy &&
+      clientStepSubmittedFor !== job.clientStep.moduleId
+    ) {
+      const spec = job.clientStep
+      if (clientStepContext) clientStepContext.stepLabel = spec.label
+      if (onHumanReview) {
+        clientStepBusy = true
+        try {
+          const decision = await onHumanReview(spec)
+          if (decision === "approved") {
+            await submitClientStep({ output: spec.input })
+          } else {
+            await submitClientStep({ error: "Human review rejected" })
+          }
+          clientStepSubmittedFor = spec.moduleId
+          awaitingServerResume = true
+        } finally {
+          clientStepBusy = false
+        }
+        continue
+      }
+      throw new Error("This pipeline requires human review, which is not available on this page")
+    }
+    if (
+      job.clientStep?.kind === "chatbot" &&
+      !job.run &&
+      !job.error &&
+      !clientStepBusy &&
+      clientStepSubmittedFor !== job.clientStep.moduleId
+    ) {
+      const spec = job.clientStep
+      if (clientStepContext) clientStepContext.stepLabel = spec.label
+      if (onChatbot) {
+        clientStepBusy = true
+        try {
+          const result = await onChatbot(spec)
+          await submitClientStep({ output: result })
+          clientStepSubmittedFor = spec.moduleId
+          awaitingServerResume = true
+        } finally {
+          clientStepBusy = false
+        }
+        continue
+      }
+      throw new Error("This pipeline requires a chatbot session, which is not available on this page")
+    }
+    if (
+      job.clientStep?.llmClient &&
+      !job.run &&
+      !job.error &&
+      !clientStepBusy &&
+      clientStepSubmittedFor !== job.clientStep.moduleId
+    ) {
+      const { moduleId, label, llmClient } = job.clientStep
+      if (clientStepContext) clientStepContext.stepLabel = label
+      clientStepBusy = true
+      try {
+        await submitBrowserLlmClientStep(moduleId, label, llmClient, projectLlmProviders, submitClientStep)
+        clientStepSubmittedFor = moduleId
+        awaitingServerResume = true
+      } finally {
+        clientStepBusy = false
+      }
+      continue
+    }
+    if (
+      job.clientStep &&
+      job.clientStep.kind !== "human-review" &&
+      job.clientStep.kind !== "chatbot" &&
+      !job.clientStep.llmClient &&
+      !job.run &&
+      !job.error &&
+      !clientStepBusy &&
+      clientStepSubmittedFor !== job.clientStep.moduleId
+    ) {
+      const { moduleId, label, entries, input, pipelineState, kind, expectedOutputs, maxRunMs } = job.clientStep
+      if (clientStepContext) clientStepContext.stepLabel = label
+      if (!entries?.length) {
+        await submitClientStep({ error: `${kind} step has no code configured` })
+        clientStepSubmittedFor = moduleId
+        awaitingServerResume = true
+        continue
+      }
+      clientStepBusy = true
+      const clientLogs: JobLogEntry[] = []
+      const tag = kind === "assert" ? "assert" : "custom-code"
+      const primaryEntry = entries[0]!
+      let lineMs: CodeLineProfile = {}
+      const pushCodeExec = (patch: Partial<CodeExecUiState>) => {
+        onCodeExec?.({
+          moduleId,
+          language: primaryEntry.language,
+          code: primaryEntry.code,
+          lineMs,
+          status: "running",
+          ...patch,
+        })
+      }
+      pushCodeExec({})
+      const onTrace = (event: CodeTraceEvent) => {
+        lineMs = event.lineMs
+        if (event.phase === CodeTracePhase.Enter && event.activeLine != null) {
+          pushCodeExec({
+            activeLine: event.activeLine,
+            activeSlot: event.activeSlot,
+            lineMs,
+            status: "running",
+          })
+        }
+      }
+      const codeOpts = { onTrace, maxRunMs }
+      try {
+        const { output, failures, attemptIndex, language } =
+          kind === "assert"
+            ? await runAssertWithFallbacks(entries, input, pipelineState, expectedOutputs, codeOpts)
+            : await runCustomCodeWithFallbacks(entries, input, pipelineState, codeOpts)
+        const profileCode = entries[attemptIndex]?.code ?? primaryEntry.code
+        const profileLanguage = entries[attemptIndex]?.language ?? language
+        const codeProfile: StepCodeProfile | undefined = Object.keys(lineMs).length
+          ? { code: profileCode, language: profileLanguage, lineMs }
+          : undefined
+        if (codeProfile) {
+          clientLogs.push({
+            at: Date.now(),
+            level: JobLogLevel.Info,
+            tag: "code-profile",
+            line: formatLineProfileLog(profileCode, lineMs),
+            moduleId,
+          })
+        }
+        pushCodeExec({ activeLine: undefined, lineMs, status: "done" })
+        for (const f of failures) {
+          clientLogs.push({
+            at: Date.now(),
+            level: JobLogLevel.Warn,
+            tag,
+            line: formatCustomCodeFailureLog(f, tag),
+            moduleId,
+          })
+        }
+        recordCustomCodeFailures(failures)
+        if (failures.length) {
+          clientLogs.push({
+            at: Date.now(),
+            level: JobLogLevel.Info,
+            tag,
+            line: `${tag} succeeded on attempt ${attemptIndex + 1} (${language}) after ${failures.length} fallback(s)`,
+            moduleId,
+          })
+        }
+        if (output === undefined) {
+          throw new Error(
+            kind === "assert"
+              ? "assert returned undefined — throw or return true on success"
+              : "custom code returned undefined — add a trailing (input) => output arrow or an explicit return",
+          )
+        }
+        await submitClientStep({ output, clientLogs, codeProfile })
+        clientStepSubmittedFor = moduleId
+        awaitingServerResume = true
+      } catch (err) {
+        const timeoutFailure =
+          err instanceof CustomCodeExhaustedError
+            ? err.failures.find((f) => f.lineMs && Object.keys(f.lineMs).length)
+            : undefined
+        if (timeoutFailure?.lineMs) lineMs = timeoutFailure.lineMs
+        // AI : clear activeLine so StepCodeExecPreview shows profile bars after timeout.
+        pushCodeExec({ activeLine: undefined, lineMs, status: "error" })
+        const profileCode = entries[0]?.code ?? primaryEntry.code
+        const codeProfile: StepCodeProfile | undefined = Object.keys(lineMs).length
+          ? { code: profileCode, language: entries[0]?.language ?? primaryEntry.language, lineMs }
+          : undefined
+        const failures =
+          err instanceof CustomCodeExhaustedError
+            ? err.failures
+            : [
+                {
+                  attemptIndex: 0,
+                  language: entries[0]?.language ?? "typescript",
+                  code: entries[0]?.code ?? "",
+                  error: (err as Error).message,
+                  stack: (err as Error).stack,
+                  input,
+                },
+              ]
+        const failureLevel = clientStepFailureLogLevel(tag)
+        for (const f of failures) {
+          clientLogs.push({
+            at: Date.now(),
+            level: failureLevel,
+            tag,
+            line: formatCustomCodeFailureLog(f, tag),
+            moduleId,
+          })
+        }
+        recordCustomCodeFailures(failures)
+        clientLogs.push({
+          at: Date.now(),
+          level: failureLevel,
+          tag,
+          line: `${tag} exhausted all ${entries.length} attempt(s)`,
+          moduleId,
+        })
+        await submitClientStep({
+          error: clientStepSubmitError(kind, err, label),
+          clientLogs,
+          codeProfile,
+        })
+        clientStepSubmittedFor = moduleId
+        awaitingServerResume = true
+      } finally {
+        clientStepBusy = false
+      }
+      continue
+    }
+    if (job.error) throw new Error(job.error)
+    if (job.run) {
+      invariant(job.run.id, "completed job missing run.id")
+      invariant(!job.clientStep, `completed job still has pending client step ${job.clientStep?.moduleId}`)
+      return {
+        run: job.run,
+        deduped: job.deduped,
+        cachedRunId: job.cachedRunId,
+      }
+    }
+    await new Promise((r) => setTimeout(r, awaitingServerResume ? CLIENT_RESUME_POLL_MS : intervalMs))
+  }
+}
+
+const CONCURRENT_RETRY_MS = 800
+const CONCURRENT_RETRY_MAX = 90
+
+// AI : batch test runs share the server job pool — wait for a slot instead of failing on 429.
+export async function startRunWithRetry(...args: Parameters<typeof startRun>): Promise<StartRunResult> {
+  for (let attempt = 0; attempt < CONCURRENT_RETRY_MAX; attempt++) {
+    try {
+      return await startRun(...args)
+    } catch (e) {
+      if (e instanceof RunStartError && e.code === "concurrent_runs" && attempt < CONCURRENT_RETRY_MAX - 1) {
+        await new Promise((r) => setTimeout(r, CONCURRENT_RETRY_MS))
+        continue
+      }
+      throw e
+    }
+  }
+  throw new Error("Timed out waiting for a free run slot")
+}
+
+export async function cancelRun(jobId: RunJobId): Promise<void> {
+  const res = await fetch(API_ROUTES.run(jobId), { method: "DELETE", headers: JSON_HEADERS })
+  if (res.ok) return
+  if (res.status === 404) return
+  throwApiError(`Cancel run job ${jobId} failed`, res, await readApiErrorBody(res))
+}
+
+// AI : poll until the run finishes; callbacks stream progress + server logs to the UI / console.
+async function submitClientStep(
+  jobId: RunJobId,
+  payload: ClientStepSubmitPayload,
+  opts?: { stepLabel?: string },
+): Promise<void> {
+  const res = await fetch(API_ROUTES.runClientStep(jobId), {
+    method: "POST",
+    headers: JSON_HEADERS,
+    body: JSON.stringify(sanitizeClientStepPayload(payload)),
+  })
+  if (res.ok) return
+  const body = await readApiErrorBody(res)
+  // AI : race fix — stale progress can trigger a second POST after claim; 409 is harmless, keep polling.
+  if (res.status === 409 && body?.error?.includes("not waiting for client code")) return
+  const stepHint = opts?.stepLabel ? ` "${opts.stepLabel}"` : ""
+  throwApiError(`Client code step${stepHint} for job ${jobId} failed`, res, body)
+}
+
+export async function awaitRun(
+  jobId: RunJobId,
+  callbacks: AwaitRunCallbacks | ((steps: StepProgress[]) => void),
+  intervalMs = DEFAULT_POLL_INTERVAL_MS,
+): Promise<AwaitRunResult> {
+  const clientStepContext = { stepLabel: undefined as string | undefined }
+  return awaitJobCompletion(
+    () => runProgress(jobId),
+    (payload) => submitClientStep(jobId, payload, { stepLabel: clientStepContext.stepLabel }),
+    callbacks,
+    intervalMs,
+    clientStepContext,
+  )
+}

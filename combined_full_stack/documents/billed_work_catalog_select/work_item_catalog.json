@@ -1,0 +1,702 @@
+[
+  {
+    "id": "WI-00001",
+    "code": "PLB-ISO-001",
+    "trade": "plumbing",
+    "unit": "each",
+    "description": "Isolate water supply"
+  },
+  {
+    "id": "WI-00002",
+    "code": "PLB-RPR-002",
+    "trade": "plumbing",
+    "unit": "each",
+    "description": "Repair burst flexi hose at vanity basin"
+  },
+  {
+    "id": "WI-00003",
+    "code": "PLB-SWR-003",
+    "trade": "plumbing",
+    "unit": "each",
+    "description": "Re-seal shower waste and pressure test tray"
+  },
+  {
+    "id": "WI-00004",
+    "code": "PLB-TAP-004",
+    "trade": "plumbing",
+    "unit": "each",
+    "description": "Replace leaking mixer tap"
+  },
+  {
+    "id": "WI-00005",
+    "code": "PLB-WC-005",
+    "trade": "plumbing",
+    "unit": "each",
+    "description": "Reset and reseal close-coupled WC pan"
+  },
+  {
+    "id": "WI-00006",
+    "code": "PLB-HWU-006",
+    "trade": "plumbing",
+    "unit": "each",
+    "description": "Replace failed tempering valve on hot water line"
+  },
+  {
+    "id": "WI-00007",
+    "code": "PLB-PIPE-007",
+    "trade": "plumbing",
+    "unit": "lm",
+    "description": "Reroute copper feed line in wall cavity"
+  },
+  {
+    "id": "WI-00008",
+    "code": "PLB-GAS-008",
+    "trade": "plumbing",
+    "unit": "each",
+    "description": "Pressure test gas line to cooktop (compliance)"
+  },
+  {
+    "id": "WI-00009",
+    "code": "PLB-DRN-009",
+    "trade": "plumbing",
+    "unit": "each",
+    "description": "Clear blocked floor waste"
+  },
+  {
+    "id": "WI-00010",
+    "code": "PLB-INS-010",
+    "trade": "plumbing",
+    "unit": "each",
+    "description": "Install new dishwasher water connection point"
+  },
+  {
+    "id": "WI-00011",
+    "code": "ELC-ISO-001",
+    "trade": "electrical",
+    "unit": "each",
+    "description": "Isolate and tag wet-area circuits"
+  },
+  {
+    "id": "WI-00012",
+    "code": "ELC-GPO-002",
+    "trade": "electrical",
+    "unit": "each",
+    "description": "Replace water-damaged GPO"
+  },
+  {
+    "id": "WI-00013",
+    "code": "ELC-LED-003",
+    "trade": "electrical",
+    "unit": "each",
+    "description": "Supply and install LED downlight"
+  },
+  {
+    "id": "WI-00014",
+    "code": "ELC-SW-004",
+    "trade": "electrical",
+    "unit": "each",
+    "description": "Replace light switch"
+  },
+  {
+    "id": "WI-00015",
+    "code": "ELC-FAN-005",
+    "trade": "electrical",
+    "unit": "each",
+    "description": "Install exhaust fan with timer"
+  },
+  {
+    "id": "WI-00016",
+    "code": "ELC-SMK-006",
+    "trade": "electrical",
+    "unit": "each",
+    "description": "Replace interconnected smoke alarm (hardwired)"
+  },
+  {
+    "id": "WI-00017",
+    "code": "ELC-SUB-007",
+    "trade": "electrical",
+    "unit": "each",
+    "description": "Upgrade sub-board RCD protection"
+  },
+  {
+    "id": "WI-00018",
+    "code": "ELC-OVN-008",
+    "trade": "electrical",
+    "unit": "each",
+    "description": "Connect electric oven"
+  },
+  {
+    "id": "WI-00019",
+    "code": "ELC-DATA-009",
+    "trade": "electrical",
+    "unit": "each",
+    "description": "Install data point"
+  },
+  {
+    "id": "WI-00020",
+    "code": "ELC-SOL-010",
+    "trade": "electrical",
+    "unit": "each",
+    "description": "Commission solar inverter export limit"
+  },
+  {
+    "id": "WI-00021",
+    "code": "ROF-TIL-001",
+    "trade": "roofing",
+    "unit": "each",
+    "description": "Replace broken concrete roof tile"
+  },
+  {
+    "id": "WI-00022",
+    "code": "ROF-RID-002",
+    "trade": "roofing",
+    "unit": "lm",
+    "description": "Reseal ridge capping with flexible pointing"
+  },
+  {
+    "id": "WI-00023",
+    "code": "ROF-VLY-003",
+    "trade": "roofing",
+    "unit": "lm",
+    "description": "Replace corroded valley flashing"
+  },
+  {
+    "id": "WI-00024",
+    "code": "ROF-GUT-004",
+    "trade": "roofing",
+    "unit": "lm",
+    "description": "Replace damaged gutter section"
+  },
+  {
+    "id": "WI-00025",
+    "code": "ROF-FLS-005",
+    "trade": "roofing",
+    "unit": "each",
+    "description": "Install lead flashing at chimney abutment"
+  },
+  {
+    "id": "WI-00026",
+    "code": "ROF-SHT-006",
+    "trade": "roofing",
+    "unit": "m2",
+    "description": "Install sarking under tile field"
+  },
+  {
+    "id": "WI-00027",
+    "code": "ROF-BMT-007",
+    "trade": "roofing",
+    "unit": "each",
+    "description": "Secure loose barge capping screws"
+  },
+  {
+    "id": "WI-00028",
+    "code": "ROF-SKY-008",
+    "trade": "roofing",
+    "unit": "each",
+    "description": "Reseal skylight curb and flashings"
+  },
+  {
+    "id": "WI-00029",
+    "code": "ROF-EP-009",
+    "trade": "roofing",
+    "unit": "each",
+    "description": "Erect edge protection"
+  },
+  {
+    "id": "WI-00030",
+    "code": "ROF-CLN-010",
+    "trade": "roofing",
+    "unit": "each",
+    "description": "Roof moss treatment and blow-down"
+  },
+  {
+    "id": "WI-00031",
+    "code": "FLR-MST-001",
+    "trade": "flooring",
+    "unit": "each",
+    "description": "Moisture content testing — timber subfloor"
+  },
+  {
+    "id": "WI-00032",
+    "code": "FLR-SND-002",
+    "trade": "flooring",
+    "unit": "m2",
+    "description": "Sand and recoat cupped timber floorboards"
+  },
+  {
+    "id": "WI-00033",
+    "code": "FLR-BRD-003",
+    "trade": "flooring",
+    "unit": "m2",
+    "description": "Replace crowned timber boards after drying period"
+  },
+  {
+    "id": "WI-00034",
+    "code": "FLR-VIN-004",
+    "trade": "flooring",
+    "unit": "m2",
+    "description": "Supply and lay luxury vinyl plank"
+  },
+  {
+    "id": "WI-00035",
+    "code": "FLR-TIL-005",
+    "trade": "flooring",
+    "unit": "m2",
+    "description": "Tile floor — porcelain 300x300"
+  },
+  {
+    "id": "WI-00036",
+    "code": "FLR-CPT-006",
+    "trade": "flooring",
+    "unit": "m2",
+    "description": "Replace water-stained carpet and underlay"
+  },
+  {
+    "id": "WI-00037",
+    "code": "FLR-SLV-007",
+    "trade": "flooring",
+    "unit": "m2",
+    "description": "Self-levelling compound to slab"
+  },
+  {
+    "id": "WI-00038",
+    "code": "FLR-STP-008",
+    "trade": "flooring",
+    "unit": "lm",
+    "description": "Install solid timber skirting — match existing profile"
+  },
+  {
+    "id": "WI-00039",
+    "code": "FLR-LAM-009",
+    "trade": "flooring",
+    "unit": "m2",
+    "description": "Supply and lay floating laminate"
+  },
+  {
+    "id": "WI-00040",
+    "code": "FLR-POL-010",
+    "trade": "flooring",
+    "unit": "m2",
+    "description": "Grind and polish exposed concrete"
+  },
+  {
+    "id": "WI-00041",
+    "code": "DRW-SH-001",
+    "trade": "drywall",
+    "unit": "m2",
+    "description": "Install 13mm plasterboard to ceiling"
+  },
+  {
+    "id": "WI-00042",
+    "code": "DRW-JT-002",
+    "trade": "drywall",
+    "unit": "m2",
+    "description": "Tape and joint ceiling sheets — Level 4 finish"
+  },
+  {
+    "id": "WI-00043",
+    "code": "DRW-SH-003",
+    "trade": "drywall",
+    "unit": "m2",
+    "description": "Line internal wall — standard 10mm board"
+  },
+  {
+    "id": "WI-00044",
+    "code": "DRW-COR-004",
+    "trade": "drywall",
+    "unit": "each",
+    "description": "Install plasterboard ceiling cornice — 90mm"
+  },
+  {
+    "id": "WI-00045",
+    "code": "DRW-NCH-005",
+    "trade": "drywall",
+    "unit": "each",
+    "description": "Patch nib wall after doorway relocation"
+  },
+  {
+    "id": "WI-00046",
+    "code": "DRW-ENC-006",
+    "trade": "drywall",
+    "unit": "each",
+    "description": "Build bulkhead over cupboards"
+  },
+  {
+    "id": "WI-00047",
+    "code": "DRW-FIR-007",
+    "trade": "drywall",
+    "unit": "m2",
+    "description": "Install fire-rated board to habitation wall"
+  },
+  {
+    "id": "WI-00048",
+    "code": "DRW-WET-008",
+    "trade": "drywall",
+    "unit": "m2",
+    "description": "Wet-area fibre cement sheet to shower walls"
+  },
+  {
+    "id": "WI-00049",
+    "code": "DRW-SKM-009",
+    "trade": "drywall",
+    "unit": "m2",
+    "description": "Skim coat over textured ceiling"
+  },
+  {
+    "id": "WI-00050",
+    "code": "DRW-DMP-010",
+    "trade": "drywall",
+    "unit": "m2",
+    "description": "Install moisture-resistant board"
+  },
+  {
+    "id": "WI-00051",
+    "code": "PNT-CLG-001",
+    "trade": "painting",
+    "unit": "m2",
+    "description": "Prime and paint ceiling — two coats"
+  },
+  {
+    "id": "WI-00052",
+    "code": "PNT-WAL-002",
+    "trade": "painting",
+    "unit": "m2",
+    "description": "Wash, prep and paint internal walls"
+  },
+  {
+    "id": "WI-00053",
+    "code": "PNT-EXT-003",
+    "trade": "painting",
+    "unit": "m2",
+    "description": "Repaint weatherboard exterior"
+  },
+  {
+    "id": "WI-00054",
+    "code": "PNT-TRM-004",
+    "trade": "painting",
+    "unit": "lm",
+    "description": "Prep and paint timber window trims"
+  },
+  {
+    "id": "WI-00055",
+    "code": "PNT-DR-005",
+    "trade": "painting",
+    "unit": "each",
+    "description": "Paint door — semi-gloss enamel"
+  },
+  {
+    "id": "WI-00056",
+    "code": "PNT-FEN-006",
+    "trade": "painting",
+    "unit": "lm",
+    "description": "Stain and seal timber fence"
+  },
+  {
+    "id": "WI-00057",
+    "code": "PNT-KIT-007",
+    "trade": "painting",
+    "unit": "each",
+    "description": "Cabinet spray finish — polyurethane"
+  },
+  {
+    "id": "WI-00058",
+    "code": "PNT-STN-008",
+    "trade": "painting",
+    "unit": "m2",
+    "description": "Block stain and spot prime water marks"
+  },
+  {
+    "id": "WI-00059",
+    "code": "PNT-RF-009",
+    "trade": "painting",
+    "unit": "m2",
+    "description": "Roof membrane topcoat"
+  },
+  {
+    "id": "WI-00060",
+    "code": "PNT-FLR-010",
+    "trade": "painting",
+    "unit": "m2",
+    "description": "Apply floor enamel to concrete slab"
+  },
+  {
+    "id": "WI-00061",
+    "code": "DEM-CLG-001",
+    "trade": "demolition",
+    "unit": "m2",
+    "description": "Remove collapsed plasterboard ceiling"
+  },
+  {
+    "id": "WI-00062",
+    "code": "DEM-STR-002",
+    "trade": "demolition",
+    "unit": "m2",
+    "description": "Strip water-damaged drywall to studs"
+  },
+  {
+    "id": "WI-00063",
+    "code": "DEM-TIL-003",
+    "trade": "demolition",
+    "unit": "m2",
+    "description": "Hack off failed wall tiles"
+  },
+  {
+    "id": "WI-00064",
+    "code": "DEM-CAB-004",
+    "trade": "demolition",
+    "unit": "each",
+    "description": "Remove existing cabinetry for disposal"
+  },
+  {
+    "id": "WI-00065",
+    "code": "DEM-FLR-005",
+    "trade": "demolition",
+    "unit": "m2",
+    "description": "Lift and dispose damaged vinyl flooring"
+  },
+  {
+    "id": "WI-00066",
+    "code": "DEM-FEN-006",
+    "trade": "demolition",
+    "unit": "each",
+    "description": "Demolish non-structural timber pergola"
+  },
+  {
+    "id": "WI-00067",
+    "code": "DEM-SLB-007",
+    "trade": "demolition",
+    "unit": "m3",
+    "description": "Break out concrete pathway section"
+  },
+  {
+    "id": "WI-00068",
+    "code": "DEM-INS-008",
+    "trade": "demolition",
+    "unit": "m2",
+    "description": "Remove contaminated ceiling insulation — bag and dispose"
+  },
+  {
+    "id": "WI-00069",
+    "code": "DEM-ASB-009",
+    "trade": "demolition",
+    "unit": "each",
+    "description": "Licensed asbestos sheet removal — eaves (if present)"
+  },
+  {
+    "id": "WI-00070",
+    "code": "DEM-CLR-010",
+    "trade": "demolition",
+    "unit": "each",
+    "description": "Site clearance and skip bin — 6m³"
+  },
+  {
+    "id": "WI-00071",
+    "code": "MIT-DH-001",
+    "trade": "mitigation",
+    "unit": "week",
+    "description": "Deploy commercial dehumidifiers — monitor 5–7 days"
+  },
+  {
+    "id": "WI-00072",
+    "code": "MIT-LOG-002",
+    "trade": "mitigation",
+    "unit": "each",
+    "description": "Daily moisture readings and insurer log sheet"
+  },
+  {
+    "id": "WI-00073",
+    "code": "MIT-AMT-003",
+    "trade": "mitigation",
+    "unit": "m2",
+    "description": "Antimicrobial treatment to exposed ceiling framing"
+  },
+  {
+    "id": "WI-00074",
+    "code": "MIT-AIR-004",
+    "trade": "mitigation",
+    "unit": "each",
+    "description": "Install HEPA air scrubber during drying phase"
+  },
+  {
+    "id": "WI-00075",
+    "code": "MIT-EXT-005",
+    "trade": "mitigation",
+    "unit": "each",
+    "description": "Extract standing water"
+  },
+  {
+    "id": "WI-00076",
+    "code": "MIT-DRY-006",
+    "trade": "mitigation",
+    "unit": "each",
+    "description": "Injectidry system setup — wall cavity drying"
+  },
+  {
+    "id": "WI-00077",
+    "code": "MIT-BAR-007",
+    "trade": "mitigation",
+    "unit": "each",
+    "description": "Containment barriers and negative air — mould protocol"
+  },
+  {
+    "id": "WI-00078",
+    "code": "MIT-MUD-008",
+    "trade": "mitigation",
+    "unit": "each",
+    "description": "Mould remediation assessment — third party"
+  },
+  {
+    "id": "WI-00079",
+    "code": "MIT-ODR-009",
+    "trade": "mitigation",
+    "unit": "each",
+    "description": "Thermal imaging moisture mapping — post event"
+  },
+  {
+    "id": "WI-00080",
+    "code": "MIT-SAN-010",
+    "trade": "mitigation",
+    "unit": "each",
+    "description": "Sanitise soft furnishings — smoke not water"
+  },
+  {
+    "id": "WI-00081",
+    "code": "CAB-RM-001",
+    "trade": "cabinetry",
+    "unit": "each",
+    "description": "Remove and dispose existing kitchen base units"
+  },
+  {
+    "id": "WI-00082",
+    "code": "CAB-BASE-002",
+    "trade": "cabinetry",
+    "unit": "lm",
+    "description": "Supply and install flat-pack base cabinetry"
+  },
+  {
+    "id": "WI-00083",
+    "code": "CAB-WAL-003",
+    "trade": "cabinetry",
+    "unit": "lm",
+    "description": "Supply and install wall oven housing cabinets"
+  },
+  {
+    "id": "WI-00084",
+    "code": "CAB-BT-004",
+    "trade": "cabinetry",
+    "unit": "each",
+    "description": "Template, cut and install stone benchtop"
+  },
+  {
+    "id": "WI-00085",
+    "code": "CAB-PAN-005",
+    "trade": "cabinetry",
+    "unit": "each",
+    "description": "Install pantry pull-out shelving system"
+  },
+  {
+    "id": "WI-00086",
+    "code": "CAB-VAN-006",
+    "trade": "cabinetry",
+    "unit": "each",
+    "description": "Supply and fit bathroom vanity — 900mm"
+  },
+  {
+    "id": "WI-00087",
+    "code": "CAB-LDY-007",
+    "trade": "cabinetry",
+    "unit": "each",
+    "description": "Install laundry tub and cabinet combo"
+  },
+  {
+    "id": "WI-00088",
+    "code": "CAB-HND-008",
+    "trade": "cabinetry",
+    "unit": "each",
+    "description": "Supply handles and hinges"
+  },
+  {
+    "id": "WI-00089",
+    "code": "CAB-WIR-009",
+    "trade": "cabinetry",
+    "unit": "each",
+    "description": "Built-in wardrobe internals"
+  },
+  {
+    "id": "WI-00090",
+    "code": "CAB-BAR-010",
+    "trade": "cabinetry",
+    "unit": "each",
+    "description": "Outdoor kitchen BBQ module"
+  },
+  {
+    "id": "WI-00091",
+    "code": "STR-JST-001",
+    "trade": "structural",
+    "unit": "each",
+    "description": "Prop and replace deflected ceiling joist"
+  },
+  {
+    "id": "WI-00092",
+    "code": "STR-SIS-002",
+    "trade": "structural",
+    "unit": "each",
+    "description": "Sister joist to water-softened timber member"
+  },
+  {
+    "id": "WI-00093",
+    "code": "STR-BMT-003",
+    "trade": "structural",
+    "unit": "each",
+    "description": "Install temporary propping under load-bearing wall"
+  },
+  {
+    "id": "WI-00094",
+    "code": "STR-LVL-004",
+    "trade": "structural",
+    "unit": "each",
+    "description": "Install LVL beam — removed load-bearing wall"
+  },
+  {
+    "id": "WI-00095",
+    "code": "STR-PIER-005",
+    "trade": "structural",
+    "unit": "each",
+    "description": "Replace rotted stump"
+  },
+  {
+    "id": "WI-00096",
+    "code": "STR-BRG-006",
+    "trade": "structural",
+    "unit": "each",
+    "description": "Install bearer plate and ant cap"
+  },
+  {
+    "id": "WI-00097",
+    "code": "STR-STR-007",
+    "trade": "structural",
+    "unit": "each",
+    "description": "Engineer-certified repair detail — storm bracing"
+  },
+  {
+    "id": "WI-00098",
+    "code": "STR-FND-008",
+    "trade": "structural",
+    "unit": "each",
+    "description": "Epoxy inject crack in foundation"
+  },
+  {
+    "id": "WI-00099",
+    "code": "STR-RET-009",
+    "trade": "structural",
+    "unit": "each",
+    "description": "Retaining wall tie-back"
+  },
+  {
+    "id": "WI-00100",
+    "code": "STR-STP-010",
+    "trade": "structural",
+    "unit": "each",
+    "description": "Steel portal frame"
+  }
+]

@@ -1,0 +1,143 @@
+{
+  "id": "p_lead_notify_fork",
+  "name": "Lead Notify Fork",
+  "kind": "sales-ops",
+  "models": [
+    {
+      "id": "m_lead",
+      "name": "ParsedLead",
+      "description": "Normalized inbound lead.",
+      "fields": [
+        { "id": "f_name", "name": "name", "type": "text", "optional": false, "description": "Contact name" },
+        { "id": "f_email", "name": "email", "type": "text", "optional": false, "description": "Email" },
+        { "id": "f_company", "name": "company", "type": "text", "optional": false, "description": "Company" },
+        { "id": "f_message", "name": "message", "type": "text", "optional": false, "description": "Inquiry" }
+      ]
+    },
+    {
+      "id": "m_crm",
+      "name": "CrmAck",
+      "description": "CRM webhook ack.",
+      "fields": [
+        { "id": "f_crm_id", "name": "record_id", "type": "text", "optional": false, "description": "CRM id" }
+      ]
+    },
+    {
+      "id": "m_slack",
+      "name": "SlackAck",
+      "description": "Slack webhook ack.",
+      "fields": [
+        { "id": "f_ts", "name": "ts", "type": "text", "optional": false, "description": "Message timestamp" }
+      ]
+    },
+    {
+      "id": "m_record",
+      "name": "LeadRecord",
+      "description": "Saved lead row.",
+      "fields": [
+        { "id": "f_r_name", "name": "name", "type": "text", "optional": false, "description": "Contact name" },
+        { "id": "f_r_email", "name": "email", "type": "text", "optional": false, "description": "Email" },
+        { "id": "f_r_company", "name": "company", "type": "text", "optional": false, "description": "Company" },
+        { "id": "f_r_message", "name": "message", "type": "text", "optional": false, "description": "Inquiry" },
+        { "id": "f_r_saved", "name": "saved", "type": "text", "optional": false, "description": "Saved flag" }
+      ]
+    }
+  ],
+  "modules": [
+    {
+      "id": "mod_in",
+      "kind": "input",
+      "label": "Inbound Lead",
+      "note": "JSON form payload",
+      "inputType": "text",
+      "inputNameContains": "inbound_lead",
+      "outStructureId": "m_builtin_document",
+      "inputDescription": "Website form JSON"
+    },
+    {
+      "id": "mod_parse",
+      "kind": "llm",
+      "label": "Parse Lead",
+      "note": "Normalize the form into ParsedLead",
+      "inStructureId": "m_builtin_document",
+      "outStructureId": "m_lead",
+      "inputDescription": "Lead Document.content JSON",
+      "prompt": "Parse name, email, company, message.",
+      "model": "deepseek-v4"
+    },
+    {
+      "id": "mod_fork",
+      "kind": "fork",
+      "label": "Notify",
+      "note": "CRM, Slack, and saved record — product join as v1 stand-in for multi-sink",
+      "forkJoin": "product",
+      "forkBranches": [
+        {
+          "id": "fbr_crm",
+          "label": "CRM",
+          "modules": [
+            {
+              "id": "mod_crm",
+              "kind": "webhook",
+              "label": "CRM Push",
+              "note": "Create CRM record",
+              "inStructureId": "m_lead",
+              "outStructureId": "m_crm",
+              "webhookUrl": "https://example.com/crm/leads",
+              "webhookMethod": "POST",
+              "inputDescription": "Parsed lead"
+            }
+          ]
+        },
+        {
+          "id": "fbr_slack",
+          "label": "Slack",
+          "modules": [
+            {
+              "id": "mod_slack",
+              "kind": "webhook",
+              "label": "Slack Push",
+              "note": "Notify sales channel",
+              "inStructureId": "m_lead",
+              "outStructureId": "m_slack",
+              "webhookUrl": "https://example.com/slack/notify",
+              "webhookMethod": "POST",
+              "inputDescription": "Parsed lead"
+            }
+          ]
+        },
+        {
+          "id": "fbr_save",
+          "label": "Save",
+          "modules": [
+            {
+              "id": "mod_save",
+              "kind": "transform",
+              "label": "Save Record",
+              "note": "Persist LeadRecord shape",
+              "inStructureId": "m_lead",
+              "outStructureId": "m_record"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "mod_out",
+      "kind": "output",
+      "label": "Lead Record",
+      "inStructureId": "sm_fork_mod_fork",
+      "outStructureId": "sm_fork_mod_fork",
+      "inputDescription": "Fork product of CRM, Slack, Save"
+    }
+  ],
+  "strategies": [
+    { "id": "s_single", "kind": "single-llm", "name": "Single LLM Call", "enabled": true, "model": "deepseek-v4", "accuracy": 78, "latencyMs": 3200, "costCents": 8, "passRate": 90 },
+    { "id": "s_agent", "kind": "claude-code", "name": "Agent (Frontier)", "enabled": true, "model": "deepseek-v4", "accuracy": 92, "latencyMs": 28000, "costCents": 160, "passRate": 97 },
+    { "id": "s_cheap", "kind": "cheap-agent", "name": "Agent (Cheap Model)", "enabled": true, "model": "deepseek-v4", "accuracy": 82, "latencyMs": 18000, "costCents": 12, "passRate": 89 }
+  ],
+  "docs": [
+    { "name": "inbound_lead.json", "type": "text", "label": "inference", "file": "lead_notify_fork/inbound_lead.json" },
+    { "name": "lead_notify_fork_testing.json", "type": "json", "label": "training", "file": "lead_notify_fork/lead_notify_fork_testing.json" }
+  ]
+}

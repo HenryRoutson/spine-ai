@@ -1,0 +1,12 @@
+{
+  "description": "Roof storm scenario — golden fixtures for deterministic steps; LLM steps use null placeholders.",
+  "inputs": {
+    "Damage Case": "damage_case_roof_storm.txt",
+    "Example Library": "example_library.json"
+  },
+  "expectedOutputs": {
+    "Select Relevant Examples": null,
+    "Draft Scope": null,
+    "Scope Output": null
+  }
+}

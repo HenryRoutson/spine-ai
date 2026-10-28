@@ -1,0 +1,352 @@
+import { describe, expect, it } from "vitest"
+import { htmlSiteToReactFiles, parseReactPreviewTree } from "@/lib/hosted-site-react"
+import { groupHostedActionSlots, hostedSqlTableNames, splitHostedSiteSlots } from "@/lib/hosted-site-slots"
+import { normalizeHostedSiteOptions } from "@/lib/hosted-site"
+import { DEFAULT_HOSTED_SITE_HTML, DEFAULT_HOSTED_SITE_LANDING_HTML } from "@/lib/hosted-site-defaults"
+import {
+  bindingsFromProjectIds,
+  hostedSiteOptionsForCreate,
+  insertWebsitePipelineInCode,
+  listedWebsitePipelineBindings,
+  nextPrimaryProjectIdAfterUnbind,
+  normalizeWebsitePipelineBindings,
+  overlayOptimisticSites,
+  remapWebsiteProjectId,
+  resolveWebsitePipelineBindings,
+  stripWebsitePipelineFromCode,
+  unbindProjectFromWebsite,
+  nullableProjectId,
+  pageOnlyProjectStub,
+  studioProjectForWebsite,
+  websiteBoundProjectIds,
+  websiteStudioHostProjectId,
+  websiteUsesProject,
+  websitesUsingProject,
+} from "@/lib/website-pipelines"
+import type { SharedLinkRecord } from "@/lib/shared-link-types"
+import { ModuleKind, type PipelineModule, type ProjectId } from "@/lib/types"
+
+const P1 = "p1" as ProjectId
+const P2 = "p2" as ProjectId
+
+describe("website pipeline bindings", () => {
+  it("treats empty and blank project ids as page-only", () => {
+    expect(nullableProjectId("")).toBeNull()
+    expect(nullableProjectId("   ")).toBeNull()
+    expect(nullableProjectId(null)).toBeNull()
+    expect(nullableProjectId(P1)).toBe(P1)
+    expect(pageOnlyProjectStub("Acme").modules).toEqual([])
+    expect(pageOnlyProjectStub("Acme").kind).toBe("page")
+  })
+
+  it("opens a page-only site without a host pipeline", () => {
+    const none = hostedSiteOptionsForCreate({ name: "Acme", pipelineIds: [], projects: [] })
+    expect(
+      websiteStudioHostProjectId({
+        projectId: null,
+        siteOptions: normalizeHostedSiteOptions(none),
+      }),
+    ).toBeNull()
+    expect(studioProjectForWebsite({ activeProject: undefined, pageOnlyStudio: false })).toBeUndefined()
+    const stub = studioProjectForWebsite({
+      activeProject: undefined,
+      pageOnlyStudio: true,
+      siteName: "Acme",
+    })
+    expect(stub?.kind).toBe("page")
+    expect(stub?.name).toBe("Acme")
+    expect(stub?.id).toBe("")
+  })
+
+  it("uses the bound pipeline as the studio host when present", () => {
+    const withRun = hostedSiteOptionsForCreate({
+      name: "Desk",
+      pipelineIds: [P1],
+      projects: [{ id: P1, name: "Ops" }],
+    })
+    expect(
+      websiteStudioHostProjectId({
+        projectId: null,
+        siteOptions: normalizeHostedSiteOptions(withRun),
+      }),
+    ).toBe(P1)
+    expect(
+      websiteStudioHostProjectId({
+        projectId: P2,
+        siteOptions: normalizeHostedSiteOptions(withRun),
+      }),
+    ).toBe(P2)
+  })
+
+  it("remaps bound project ids onto a cloned pipeline", () => {
+    const options = normalizeHostedSiteOptions({
+      pipelineBindings: [{ alias: "run", projectId: P1, functionId: "fn_double" }],
+    })
+    const next = remapWebsiteProjectId(options, P1, P2)
+    expect(next.pipelineBindings).toEqual([{ alias: "run", projectId: P2, functionId: "fn_double" }])
+    expect(remapWebsiteProjectId(options, null, P2).pipelineBindings[0]?.projectId).toBe(P1)
+  })
+
+  it("lists websites that bind or host a pipeline", () => {
+    const bound = {
+      id: "site_a" as SharedLinkRecord["id"],
+      name: "fallback",
+      projectId: P2,
+      siteOptions: normalizeHostedSiteOptions({
+        brand: { companyName: "CounselDesk" },
+        pipelineBindings: [{ alias: "run", projectId: P1 }],
+      }),
+    }
+    const hostedOnly = {
+      id: "site_b" as SharedLinkRecord["id"],
+      name: "Shared Number",
+      projectId: P1,
+      siteOptions: normalizeHostedSiteOptions({ brand: { companyName: "" } }),
+    }
+    expect(websiteUsesProject(bound, P1)).toBe(true)
+    expect(websiteUsesProject(hostedOnly, P1)).toBe(true)
+    expect(websiteUsesProject(bound, P2)).toBe(true)
+    expect(websitesUsingProject([bound, hostedOnly], P1).map((s) => s.name)).toEqual(["CounselDesk", "Shared Number"])
+  })
+
+  it("unbinds a pipeline from site HTML and remaining primary id", () => {
+    const options = normalizeHostedSiteOptions({
+      customHtml: "<h1>Hi</h1>{{run}}<hr>{{run:invoice}}",
+      pipelineBindings: [
+        { alias: "run", projectId: P1 },
+        { alias: "invoice", projectId: P2 },
+      ],
+    })
+    const next = unbindProjectFromWebsite(options, P1)
+    expect(next.customHtml).not.toContain("{{run}}")
+    expect(next.customHtml).toContain("{{run:invoice}}")
+    expect(next.pipelineBindings).toEqual([{ alias: "invoice", projectId: P2 }])
+    expect(nextPrimaryProjectIdAfterUnbind(P1, next, P1)).toBe(P2)
+    expect(nextPrimaryProjectIdAfterUnbind(P2, next, P1)).toBe(P2)
+    const empty = unbindProjectFromWebsite(next, P2)
+    expect(nextPrimaryProjectIdAfterUnbind(P2, empty, P2)).toBeNull()
+  })
+
+  it("treats stored empty bindings as no pipelines at runtime", () => {
+    expect(listedWebsitePipelineBindings([])).toEqual([])
+    expect(websiteBoundProjectIds(P1, [])).toEqual([])
+    expect(resolveWebsitePipelineBindings(P1, [])).toEqual([])
+  })
+
+  it("mints landing HTML when no pipelines are selected", () => {
+    const none = hostedSiteOptionsForCreate({ name: "Acme", pipelineIds: [], projects: [] })
+    expect(none.pipelineBindings).toEqual([])
+    expect(none.customHtml).toBe(DEFAULT_HOSTED_SITE_LANDING_HTML)
+    expect(none.customHtml).not.toContain("{{run}}")
+    const withRun = hostedSiteOptionsForCreate({
+      name: "Acme",
+      pipelineIds: [P1],
+      projects: [{ id: P1, name: "Extract" }],
+    })
+    expect(withRun.pipelineBindings).toEqual([{ alias: "run", projectId: P1 }])
+    expect(withRun.customHtml).toBe(DEFAULT_HOSTED_SITE_HTML)
+  })
+
+  it("does not name a new website after Untitled Pipeline", () => {
+    const fromBlank = hostedSiteOptionsForCreate({
+      name: "Untitled Pipeline",
+      pipelineIds: [P1],
+      projects: [{ id: P1, name: "Untitled Pipeline" }],
+    })
+    expect(fromBlank.brand.companyName).toBe("Untitled Website")
+    expect(hostedSiteOptionsForCreate({ name: "  ", pipelineIds: [], projects: [] }).brand.companyName).toBe(
+      "Untitled Website",
+    )
+    expect(hostedSiteOptionsForCreate({ name: "Acme Desk", pipelineIds: [], projects: [] }).brand.companyName).toBe(
+      "Acme Desk",
+    )
+  })
+
+  it("keeps extra pipelines and unique aliases", () => {
+    const bindings = normalizeWebsitePipelineBindings([
+      { alias: "run", projectId: P1 },
+      { alias: "invoice", projectId: P2 },
+      { alias: "invoice", projectId: "p3" },
+    ])
+    expect(bindings).toEqual([
+      { alias: "run", projectId: P1 },
+      { alias: "invoice", projectId: P2 },
+      { alias: "p3", projectId: "p3" },
+    ])
+  })
+
+  it("builds bindings from selected project ids", () => {
+    const next = bindingsFromProjectIds([P1, P2], [
+      { id: P1, name: "Extract" },
+      { id: P2, name: "Invoice OCR" },
+    ])
+    expect(next.map((b) => b.alias)).toEqual(["run", "invoice-ocr"])
+  })
+})
+
+describe("named run slots", () => {
+  it("parses {{run:alias}} without breaking {{run}}", () => {
+    const segs = splitHostedSiteSlots("<h1>Hi</h1>{{run}}<hr>{{run:invoice}}")
+    expect(segs).toEqual([
+      { kind: "html", html: "<h1>Hi</h1>" },
+      { kind: "slot", slot: "run" },
+      { kind: "html", html: "<hr>" },
+      { kind: "slot", slot: "run", alias: "invoice" },
+    ])
+  })
+
+  it("parses {{sql:shared_number}} and {{action}}", () => {
+    const segs = splitHostedSiteSlots("{{sql:shared_number}}{{action}}")
+    expect(segs).toEqual([
+      { kind: "slot", slot: "sql", alias: "shared_number" },
+      { kind: "slot", slot: "action" },
+    ])
+  })
+
+  it("collects SQL tables from slots and steps, not a hardcoded demo table", () => {
+    expect(hostedSqlTableNames(["{{sql:todo}}{{action}}"])).toEqual(["todo"])
+    expect(
+      hostedSqlTableNames(["{{run}}"], [{ alias: "add", label: "Add", table: "items" }]),
+    ).toEqual(["items"])
+    const modules = [
+      { id: "m1", kind: ModuleKind.Sql, label: "Add", sql: "SELECT * FROM notes" },
+    ] as PipelineModule[]
+    expect(hostedSqlTableNames(["{{run}}"], [], modules)).toEqual(["notes"])
+    expect(hostedSqlTableNames(["{{sql:todo}}"])).not.toContain("shared_number")
+  })
+
+  it("parses {{action:collatz}} as a named action slot", () => {
+    const segs = splitHostedSiteSlots("{{action}}{{action:collatz}}")
+    expect(segs).toEqual([
+      { kind: "slot", slot: "action" },
+      { kind: "slot", slot: "action", alias: "collatz" },
+    ])
+  })
+
+  it("groups adjacent action slots into a centered row", () => {
+    const segs = splitHostedSiteSlots("<div class=\"hs-action-row\">{{action}}\n    {{action:collatz}}</div>")
+    expect(groupHostedActionSlots(segs)).toEqual([
+      {
+        kind: "action-row",
+        slots: [
+          { kind: "slot", slot: "action" },
+          { kind: "slot", slot: "action", alias: "collatz" },
+        ],
+      },
+    ])
+  })
+
+  it("keeps complete chrome HTML when actions are not nested", () => {
+    const html =
+      "<nav class=\"hs-nav\"></nav>\n<header class=\"hs-hero\"></header>\n{{sql:shared_number}}\n{{action}}\n{{action:collatz}}\n"
+    const grouped = groupHostedActionSlots(splitHostedSiteSlots(html))
+    expect(grouped.filter((s) => s.kind === "html").every((s) => s.kind === "html" && !s.html.includes("<section"))).toBe(
+      true,
+    )
+    expect(grouped.some((s) => s.kind === "action-row")).toBe(true)
+  })
+})
+
+describe("html to react conversion", () => {
+  it("emits a Vite-style tree with RunPipeline", () => {
+    const files = htmlSiteToReactFiles(
+      normalizeHostedSiteOptions({
+        customHtml: "<h1>Acme</h1>{{run}}{{run:invoice}}",
+        customCss: "h1{color:red}",
+      }),
+    )
+    const app = files.find((f) => f.path === "src/App.tsx")?.contents ?? ""
+    expect(app).toContain("RunPipeline")
+    expect(app).toContain("invoice")
+    expect(files.some((f) => f.path === "src/components/RunPipeline.tsx")).toBe(true)
+    expect(files.some((f) => f.path === "src/components/HostedSlot.tsx")).toBe(true)
+    expect(files.some((f) => f.path === "package.json")).toBe(true)
+    expect(files.some((f) => f.path === "vite.config.ts")).toBe(true)
+    const tree = parseReactPreviewTree(files)
+    expect(tree.css).toContain("h1{color:red}")
+    expect(tree.nodes.some((n) => n.kind === "run" && n.alias === "run")).toBe(true)
+    expect(tree.nodes.some((n) => n.kind === "run" && n.alias === "invoice")).toBe(true)
+  })
+
+  it("emits sql and action parts from HTML slots", () => {
+    const files = htmlSiteToReactFiles(
+      normalizeHostedSiteOptions({
+        customHtml: "{{sql:shared_number}}{{action}}",
+      }),
+    )
+    const app = files.find((f) => f.path === "src/App.tsx")?.contents ?? ""
+    expect(app).toContain('kind: "sql"')
+    expect(app).toContain("shared_number")
+    expect(app).toContain('kind: "action"')
+    const tree = parseReactPreviewTree(files)
+    expect(tree.nodes.some((n) => n.kind === "sql" && n.table === "shared_number")).toBe(true)
+    expect(tree.nodes.some((n) => n.kind === "action")).toBe(true)
+  })
+})
+
+describe("hosted site options normalize", () => {
+  it("defaults runtime to html and keeps bindings", () => {
+    const next = normalizeHostedSiteOptions({
+      pipelineBindings: [{ alias: "run", projectId: P1 }],
+      runtime: "react",
+      reactFiles: [{ path: "src/App.tsx", contents: "export default function App(){return null}" }],
+    })
+    expect(next.runtime).toBe("react")
+    expect(next.pipelineBindings).toEqual([{ alias: "run", projectId: P1 }])
+    expect(next.reactFiles[0]?.path).toBe("src/App.tsx")
+  })
+})
+
+describe("pipeline widgets in page code", () => {
+  it("strips named run slots from HTML and React", () => {
+    const options = normalizeHostedSiteOptions({
+      customHtml: "<h1>Hi</h1>{{run}}<hr>{{run:invoice}}",
+      reactFiles: [
+        {
+          path: "src/App.tsx",
+          contents: `const parts = [
+  { kind: "html", html: "<h1>Hi</h1>" },
+  { kind: "run", alias: "run" },
+  { kind: "run", alias: "invoice" },
+] as const
+export default function App() { return <RunPipeline alias="invoice" /> }
+`,
+        },
+      ],
+    })
+    const next = stripWebsitePipelineFromCode(options, "invoice")
+    expect(next.customHtml).toContain("{{run}}")
+    expect(next.customHtml).not.toContain("{{run:invoice}}")
+    expect(next.reactFiles[0]?.contents).toContain('alias: "run"')
+    expect(next.reactFiles[0]?.contents).not.toContain("invoice")
+    const droppedPrimary = stripWebsitePipelineFromCode(options, "run")
+    expect(droppedPrimary.customHtml).toContain("{{run:invoice}}")
+    expect(droppedPrimary.customHtml).not.toMatch(/\{\{run\}\}/)
+  })
+
+  it("inserts a named run widget into HTML and App.tsx", () => {
+    const options = normalizeHostedSiteOptions({
+      customHtml: "<h1>Hi</h1>{{run}}",
+      reactFiles: [
+        {
+          path: "src/App.tsx",
+          contents: `const parts = [
+  { kind: "run", alias: "run" },
+] as const
+`,
+        },
+      ],
+    })
+    const next = insertWebsitePipelineInCode(options, "invoice")
+    expect(next.customHtml).toContain("{{run:invoice}}")
+    expect(next.reactFiles[0]?.contents).toContain('alias: "invoice"')
+  })
+
+  it("keeps minted sites that a stale shared-link refetch has not seen yet", () => {
+    const minted = { id: "site_new", revoked: false } as SharedLinkRecord
+    const older = { id: "site_old", revoked: false } as SharedLinkRecord
+    expect(overlayOptimisticSites([older], [minted]).map((s) => s.id)).toEqual(["site_new", "site_old"])
+    expect(overlayOptimisticSites([minted, older], [minted]).map((s) => s.id)).toEqual(["site_new", "site_old"])
+    expect(overlayOptimisticSites([older], [{ ...minted, revoked: true }])).toEqual([older])
+  })
+})

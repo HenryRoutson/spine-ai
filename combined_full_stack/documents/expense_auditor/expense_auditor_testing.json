@@ -1,0 +1,10 @@
+{
+  "description": "Test scaffold for Expense Report Auditor — inputs are pinned; fill the null expected outputs from a verified run (only listed steps are checked).",
+  "inputs": {
+    "Expense Policy": "acme_expense_policy.md",
+    "Expense Report": "jordan_lee_expense_report.md"
+  },
+  "expectedOutputs": {
+    "Compliance Flags": null
+  }
+}

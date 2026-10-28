@@ -1,0 +1,255 @@
+{
+  "id": "p_tutoring_styled_batch",
+  "name": "Tutoring Styled Batch",
+  "kind": "education",
+  "models": [
+    {
+      "id": "m_request",
+      "name": "Request",
+      "description": "Pipeline parameters \u2014 question type plus how many styled variants to write.",
+      "fields": [
+        {
+          "id": "f_qtype",
+          "name": "question_type",
+          "type": "text",
+          "optional": false,
+          "description": "Topic / year level / question style to generate"
+        },
+        {
+          "id": "f_vars_n",
+          "name": "variations",
+          "type": "int",
+          "optional": false,
+          "description": "How many differently styled questions to generate"
+        }
+      ]
+    },
+    {
+      "id": "m_style_job",
+      "name": "StyleJob",
+      "description": "One batch item \u2014 write a full question in a named presentation style.",
+      "fields": [
+        {
+          "id": "f_eid",
+          "name": "example_id",
+          "type": "text",
+          "optional": false,
+          "description": "Stable id e.g. ex-1"
+        },
+        {
+          "id": "f_qtype",
+          "name": "question_type",
+          "type": "text",
+          "optional": false,
+          "description": "Copied from Request.question_type"
+        },
+        {
+          "id": "f_style",
+          "name": "style",
+          "type": "text",
+          "optional": false,
+          "description": "Presentation style for this variant"
+        }
+      ]
+    },
+    {
+      "id": "m_variant",
+      "name": "StyledQuestion",
+      "description": "One complete LaTeX question body written for a style.",
+      "fields": [
+        {
+          "id": "f_eid",
+          "name": "example_id",
+          "type": "text",
+          "optional": false,
+          "description": "Matches StyleJob.example_id"
+        },
+        {
+          "id": "f_style",
+          "name": "style",
+          "type": "text",
+          "optional": false,
+          "description": "Style used"
+        },
+        {
+          "id": "f_latex",
+          "name": "latex_body",
+          "type": "text",
+          "optional": false,
+          "description": "LaTeX question BODY (not a full document); concrete numbers, no {placeholders}",
+          "deterministic": false
+        }
+      ]
+    },
+    {
+      "id": "m_latex_pack",
+      "name": "LatexPack",
+      "description": "Final LaTeX worksheet joining styled batch questions.",
+      "fields": [
+        {
+          "id": "f_title",
+          "name": "title",
+          "type": "text",
+          "optional": false,
+          "description": "Worksheet title"
+        },
+        {
+          "id": "f_latex",
+          "name": "latex",
+          "type": "text",
+          "optional": false,
+          "description": "Complete LaTeX document text",
+          "deterministic": false
+        }
+      ]
+    }
+  ],
+  "modules": [
+    {
+      "id": "mod_input",
+      "kind": "input",
+      "label": "Request",
+      "inputType": "json",
+      "inputDescription": "JSON with question_type (string) and variations (positive integer count)",
+      "outStructureId": "m_request",
+      "note": "Parameters: question_type + variations"
+    },
+    {
+      "id": "mod_expand",
+      "kind": "transform",
+      "label": "Expand \u2192 Style Jobs",
+      "note": "Request \u2192 list[StyleJob] \u2014 one job per variation with a rotating presentation style.",
+      "inputDescription": "Request with question_type and variations",
+      "inStructureId": "m_request",
+      "outStructureId": "m_style_job",
+      "code": "(req) => { const styles = [\"exam-style with clean stem\", \"worded real-world story problem\", \"scaffolded multi-part (a)(b)\", \"diagram-first TikZ then short ask\", \"challenge extension with a twist\"]; const n = Math.max(1, Math.min(12, Number(req?.variations) || 3)); const qtype = String(req?.question_type ?? \"\"); return Array.from({ length: n }, (_, i) => ({ example_id: `ex-${i + 1}`, question_type: qtype, style: styles[i % styles.length] })); }",
+      "outType": {
+        "kind": "list",
+        "item": {
+          "kind": "ref",
+          "modelId": "m_style_job"
+        }
+      }
+    },
+    {
+      "id": "mod_batch",
+      "kind": "llm-batch",
+      "label": "Write Styled Questions",
+      "note": "list[StyleJob] \u2192 list[StyledQuestion]. One full LaTeX body per style.",
+      "inputDescription": "List of StyleJob objects \u2014 question_type plus style hint",
+      "inStructureId": "m_style_job",
+      "outStructureId": "m_variant",
+      "prompt": "Write ONE complete tutoring question for the given question_type, in the given style.\nKeep the same example_id and style.\nReturn latex_body as a LaTeX question BODY only (not a full document): concrete numbers/labels (no {placeholders}), clear exam wording, and a TikZ diagram only when the style or topic needs one.\nMake this variant feel different from other styles \u2014 change framing, numbers, and difficulty slightly while staying on-topic.",
+      "model": "deepseek-v4",
+      "outType": {
+        "kind": "list",
+        "item": {
+          "kind": "ref",
+          "modelId": "m_variant"
+        }
+      }
+    },
+    {
+      "id": "mod_format",
+      "kind": "transform",
+      "label": "Join LaTeX Worksheet",
+      "note": "list[StyledQuestion] \u2192 LatexPack document.",
+      "inputDescription": "List of StyledQuestion objects with latex_body",
+      "inStructureId": "m_variant",
+      "outStructureId": "m_latex_pack",
+      "code": "(rows, state) => { const req = state[\"Request\"] ?? {}; const title = String(req?.question_type ?? \"Tutoring questions\").split(\"\\u2014\")[0].split(\"-\")[0].trim() || \"Tutoring questions\"; const body = (Array.isArray(rows) ? rows : []).map((r, i) => { const id = String(r?.example_id ?? i + 1); const style = String(r?.style ?? \"\"); const head = \"\\\\subsection*{Example \" + id + \"}\\n\" + (style ? \"\\\\textit{\" + style + \"}\\n\" : \"\"); return head + String(r?.latex_body ?? \"\"); }).join(\"\\n\\n\"); const latex = [\"\\\\documentclass{article}\", \"\\\\usepackage{amsmath,amssymb,tikz}\", \"\\\\begin{document}\", \"\\\\section*{\" + title + \"}\", \"\", body, \"\\\\end{document}\"].join(\"\\n\"); return { title, latex }; }"
+    },
+    {
+      "id": "mod_output",
+      "kind": "output",
+      "label": "LaTeX Worksheet",
+      "inputDescription": "Single LatexPack \u2014 title plus complete LaTeX document text",
+      "inStructureId": "m_latex_pack",
+      "outStructureId": "m_latex_pack",
+      "note": ""
+    }
+  ],
+  "strategies": [
+    {
+      "id": "s_single_styled",
+      "kind": "single-llm",
+      "name": "Single LLM Call",
+      "enabled": true,
+      "model": "deepseek-v4",
+      "accuracy": 74,
+      "latencyMs": 8000,
+      "costCents": 22,
+      "passRate": 86
+    },
+    {
+      "id": "s_agent_styled",
+      "kind": "claude-code",
+      "name": "Agent (Frontier)",
+      "enabled": true,
+      "model": "deepseek-v4",
+      "accuracy": 90,
+      "latencyMs": 28000,
+      "costCents": 160,
+      "passRate": 96
+    },
+    {
+      "id": "s_cheap_styled",
+      "kind": "cheap-agent",
+      "name": "Agent (Cheap Model)",
+      "enabled": true,
+      "model": "deepseek-v4",
+      "accuracy": 78,
+      "latencyMs": 18000,
+      "costCents": 14,
+      "passRate": 88
+    }
+  ],
+  "docs": [
+    {
+      "name": "year10_request.json",
+      "type": "json",
+      "label": "inference",
+      "file": "tutoring_styled_batch/year10_request.json"
+    },
+    {
+      "name": "year12_request.json",
+      "type": "json",
+      "label": "inference",
+      "file": "tutoring_styled_batch/year12_request.json"
+    },
+    {
+      "name": "year10_inference.json",
+      "type": "json",
+      "label": "inference",
+      "file": "tutoring_styled_batch/year10_inference.json"
+    },
+    {
+      "name": "year12_inference.json",
+      "type": "json",
+      "label": "inference",
+      "file": "tutoring_styled_batch/year12_inference.json"
+    },
+    {
+      "name": "tutoring_styled_batch_testing.json",
+      "type": "json",
+      "label": "training",
+      "file": "tutoring_styled_batch/tutoring_styled_batch_testing.json"
+    }
+  ],
+  "inferencePresets": [
+    {
+      "name": "Year 10 Pythagoras",
+      "description": "Year 10 Pythagoras \u2014 4 differently styled questions via llm-batch",
+      "inputs": {
+        "Request": "year10_request.json"
+      }
+    },
+    {
+      "name": "Year 12 Differentiation",
+      "description": "Year 12 differentiation \u2014 3 differently styled questions via llm-batch",
+      "inputs": {
+        "Request": "year12_request.json"
+      }
+    }
+  ]
+}

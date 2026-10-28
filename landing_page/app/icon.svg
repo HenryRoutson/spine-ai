@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" role="img" aria-label="Spine">
+  <rect width="32" height="32" rx="6" fill="#0a0a0a"/>
+  <defs>
+    <linearGradient id="sg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%"   stop-color="#fafafa" stop-opacity="0.2"/>
+      <stop offset="42%"  stop-color="#fafafa" stop-opacity="1"/>
+      <stop offset="58%"  stop-color="#fafafa" stop-opacity="1"/>
+      <stop offset="100%" stop-color="#fafafa" stop-opacity="0.2"/>
+    </linearGradient>
+  </defs>
+  <!-- spine column -->
+  <rect x="15" y="3" width="2" height="26" rx="1" fill="url(#sg)"/>
+  <!-- top node -->
+  <rect x="11" y="8"  width="10" height="2" rx="1" fill="#fafafa" opacity="0.5"/>
+  <!-- mid node — full brightness, slightly wider -->
+  <rect x="9"  y="15" width="14" height="2" rx="1" fill="#fafafa"/>
+  <!-- bottom node -->
+  <rect x="11" y="22" width="10" height="2" rx="1" fill="#fafafa" opacity="0.5"/>
+</svg>

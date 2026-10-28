@@ -1,0 +1,9 @@
+{
+  "description": "Test scaffold for Product Feedback Router — inputs are pinned; fill the null expected outputs from a verified run (only listed steps are checked).",
+  "inputs": {
+    "Feedback Dump": "march_product_feedback.txt"
+  },
+  "expectedOutputs": {
+    "Routed Feedback": null
+  }
+}

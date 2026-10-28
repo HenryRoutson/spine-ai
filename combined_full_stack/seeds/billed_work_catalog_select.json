@@ -1,0 +1,599 @@
+{
+  "id": "p_billed_work_catalog_select",
+  "name": "Billed Work Catalog Select",
+  "kind": "billed-work-catalog-select",
+  "models": [
+    {
+      "id": "m_billed_line",
+      "name": "BilledLineRef",
+      "description": "Reference to a catalog work item on a past job.",
+      "fields": [
+        {
+          "id": "f_wid",
+          "name": "work_item_id",
+          "type": "text",
+          "optional": false,
+          "description": "Catalog work item id",
+          "relation": { "kind": "fk", "to": { "modelId": "m_work_item", "field": "id" } }
+        },
+        {
+          "id": "f_qty",
+          "name": "quantity",
+          "type": "float",
+          "optional": false,
+          "description": "Billed quantity"
+        },
+        {
+          "id": "f_note",
+          "name": "unit_note",
+          "type": "text",
+          "optional": true,
+          "description": "Optional unit clarification"
+        }
+      ]
+    },
+    {
+      "id": "m_job_ex",
+      "name": "JobExample",
+      "description": "One past repair job from the example library.",
+      "fields": [
+        {
+          "id": "f_id",
+          "name": "id",
+          "type": "text",
+          "optional": false,
+          "description": "Stable job example id",
+          "relation": { "kind": "pk" }
+        },
+        {
+          "id": "f_title",
+          "name": "title",
+          "type": "text",
+          "optional": false,
+          "description": "Short label"
+        },
+        {
+          "id": "f_work",
+          "name": "work_description",
+          "type": "text",
+          "optional": false,
+          "description": "Past claim narrative"
+        },
+        {
+          "id": "f_items",
+          "name": "billed_items",
+          "type": "list[model]",
+          "ref": "m_billed_line",
+          "optional": false,
+          "description": "Structured billed work references",
+          "minItems": 1
+        }
+      ]
+    },
+    {
+      "id": "m_selected_job",
+      "name": "SelectedJobExample",
+      "description": "Relevant past job after example-select — includes selection_reason.",
+      "fields": [
+        {
+          "id": "f_id",
+          "name": "id",
+          "type": "text",
+          "optional": false,
+          "description": "Matches library id"
+        },
+        {
+          "id": "f_title",
+          "name": "title",
+          "type": "text",
+          "optional": false,
+          "description": "Short label"
+        },
+        {
+          "id": "f_work",
+          "name": "work_description",
+          "type": "text",
+          "optional": false,
+          "description": "Past claim narrative"
+        },
+        {
+          "id": "f_items",
+          "name": "billed_items",
+          "type": "list[model]",
+          "ref": "m_billed_line",
+          "optional": false,
+          "description": "Structured billed work references",
+          "minItems": 1
+        },
+        {
+          "id": "f_reason",
+          "name": "selection_reason",
+          "type": "text",
+          "optional": false,
+          "description": "Why this job is useful for the current claim",
+          "deterministic": false,
+          "minLength": 1
+        }
+      ]
+    },
+    {
+      "id": "m_item_filter_ctx",
+      "name": "ItemFilterContext",
+      "description": "Claim description + selected past jobs — cached context for catalog filtering.",
+      "fields": [
+        {
+          "id": "f_desc",
+          "name": "description",
+          "type": "text",
+          "optional": false,
+          "description": "Current claim work description"
+        },
+        {
+          "id": "f_examples",
+          "name": "selected_examples",
+          "type": "list[model]",
+          "ref": "m_selected_job",
+          "optional": false,
+          "description": "Filtered past jobs",
+          "minItems": 1
+        }
+      ]
+    },
+    {
+      "id": "m_work_item",
+      "name": "WorkItem",
+      "description": "One row from the master work-item catalog.",
+      "fields": [
+        {
+          "id": "f_id",
+          "name": "id",
+          "type": "text",
+          "optional": false,
+          "description": "Catalog id",
+          "relation": { "kind": "pk" }
+        },
+        {
+          "id": "f_code",
+          "name": "code",
+          "type": "text",
+          "optional": false,
+          "description": "Trade code"
+        },
+        {
+          "id": "f_trade",
+          "name": "trade",
+          "type": "text",
+          "optional": false,
+          "description": "Trade category"
+        },
+        {
+          "id": "f_unit",
+          "name": "unit",
+          "type": "text",
+          "optional": false,
+          "description": "Billing unit"
+        },
+        {
+          "id": "f_desc",
+          "name": "description",
+          "type": "text",
+          "optional": false,
+          "description": "Line item description"
+        }
+      ]
+    },
+    {
+      "id": "m_catalog_bundle",
+      "name": "CatalogSelectBundle",
+      "description": "Item filter context + catalog rows merged by combine.",
+      "fields": [
+        {
+          "id": "f_ctx",
+          "name": "draft_context",
+          "type": "model",
+          "ref": "m_item_filter_ctx",
+          "optional": false,
+          "description": "Description + selected jobs from Assemble Item Filter"
+        },
+        {
+          "id": "f_items",
+          "name": "items",
+          "type": "list[model]",
+          "ref": "m_work_item",
+          "optional": false,
+          "description": "Catalog rows from the side input",
+          "minItems": 1
+        }
+      ]
+    },
+    {
+      "id": "m_selected_item",
+      "name": "SelectedWorkItem",
+      "description": "Relevant catalog row after example-select — includes selection_reason.",
+      "fields": [
+        {
+          "id": "f_id",
+          "name": "id",
+          "type": "text",
+          "optional": false,
+          "description": "Catalog id"
+        },
+        {
+          "id": "f_code",
+          "name": "code",
+          "type": "text",
+          "optional": false,
+          "description": "Trade code"
+        },
+        {
+          "id": "f_trade",
+          "name": "trade",
+          "type": "text",
+          "optional": false,
+          "description": "Trade category"
+        },
+        {
+          "id": "f_unit",
+          "name": "unit",
+          "type": "text",
+          "optional": false,
+          "description": "Billing unit"
+        },
+        {
+          "id": "f_desc",
+          "name": "description",
+          "type": "text",
+          "optional": false,
+          "description": "Line item description"
+        },
+        {
+          "id": "f_reason",
+          "name": "selection_reason",
+          "type": "text",
+          "optional": false,
+          "description": "Why this catalog item applies to the claim",
+          "deterministic": false,
+          "minLength": 1
+        }
+      ]
+    },
+    {
+      "id": "m_draft_req",
+      "name": "BilledWorkDraftRequest",
+      "description": "Merged description, jobs, and filtered catalog items for final LLM.",
+      "fields": [
+        {
+          "id": "f_desc",
+          "name": "description",
+          "type": "text",
+          "optional": false,
+          "description": "Current claim"
+        },
+        {
+          "id": "f_examples",
+          "name": "selected_examples",
+          "type": "list[model]",
+          "ref": "m_selected_job",
+          "optional": false,
+          "description": "Filtered past jobs",
+          "minItems": 1
+        },
+        {
+          "id": "f_items",
+          "name": "selected_work_items",
+          "type": "list[model]",
+          "ref": "m_selected_item",
+          "optional": false,
+          "description": "Filtered catalog rows",
+          "minItems": 1
+        }
+      ]
+    },
+    {
+      "id": "m_draft_line",
+      "name": "DraftLineItem",
+      "description": "One billed line on the draft scope.",
+      "fields": [
+        {
+          "id": "f_wid",
+          "name": "work_item_id",
+          "type": "text",
+          "optional": false,
+          "description": "Catalog id"
+        },
+        {
+          "id": "f_qty",
+          "name": "quantity",
+          "type": "float",
+          "optional": false,
+          "description": "Proposed quantity"
+        },
+        {
+          "id": "f_rat",
+          "name": "rationale",
+          "type": "text",
+          "optional": false,
+          "description": "Why this line is on the scope",
+          "deterministic": false
+        }
+      ]
+    },
+    {
+      "id": "m_billed_draft",
+      "name": "BilledWorkDraft",
+      "description": "Draft structured billed work for the new claim.",
+      "fields": [
+        {
+          "id": "f_title",
+          "name": "title",
+          "type": "text",
+          "optional": false,
+          "description": "Short job title",
+          "deterministic": false
+        },
+        {
+          "id": "f_lines",
+          "name": "line_items",
+          "type": "list[model]",
+          "ref": "m_draft_line",
+          "optional": false,
+          "description": "Proposed billed lines",
+          "minItems": 1
+        }
+      ]
+    }
+  ],
+  "modules": [
+    {
+      "id": "mod_work_in",
+      "kind": "input",
+      "label": "Work Description",
+      "inputType": "text",
+      "inputNameContains": "work_description",
+      "inputDescription": "Plain-text description of the new repair claim",
+      "outStructureId": "m_builtin_document",
+      "cached": true,
+      "avgMs": 80,
+      "avgCostCents": 0,
+      "note": "New claim narrative — example-select reads Document.content as {description}"
+    },
+    {
+      "id": "mod_job_lib_in",
+      "kind": "input",
+      "label": "Job Example Library",
+      "inputType": "json",
+      "inputNameContains": "job_example_library",
+      "inputDescription": "JSON array of structured past jobs (id, title, work_description, billed_items)",
+      "outStructureId": "m_job_ex",
+      "cached": true,
+      "avgMs": 80,
+      "avgCostCents": 0,
+      "note": "Past jobs with billed_items references — JSON array on the spine for pass 1",
+      "outType": {
+        "kind": "list",
+        "item": { "kind": "ref", "modelId": "m_job_ex" }
+      }
+    },
+    {
+      "id": "mod_select_jobs",
+      "kind": "example-select",
+      "label": "Select Relevant Jobs",
+      "note": "Pass 1 — filter past jobs by similarity to the claim description. {example} is title+work_description (examplePromptView); billed_items stay on spine passthrough.",
+      "inputDescription": "list[JobExample] from the job library JSON",
+      "inStructureId": "m_job_ex",
+      "outStructureId": "m_selected_job",
+      "exampleContextLabel": "Work Description",
+      "exampleContextField": "content",
+      "exampleReasonField": "selection_reason",
+      "examplePromptView": "SELECT id, title, work_description FROM job_example",
+      "prompt": "Find past repair jobs that are useful references for scoping this new insurance claim.\n\nWORK DESCRIPTION:\n\n{description}\n\nCANDIDATE PAST JOB:\n\n{example}",
+      "model": "deepseek-v4",
+      "costLimitCents": 100,
+      "cached": true,
+      "avgMs": 2200,
+      "avgCostCents": 3,
+      "outType": {
+        "kind": "list",
+        "item": { "kind": "ref", "modelId": "m_selected_job" }
+      }
+    },
+    {
+      "id": "mod_assemble_item_ctx",
+      "kind": "assemble",
+      "label": "Assemble Item Filter",
+      "note": "Zip Work Description.content with selected_examples → ItemFilterContext (cached prefix for pass 2).",
+      "inputDescription": "Filtered SelectedJobExample rows",
+      "inStructureId": "m_selected_job",
+      "outStructureId": "m_item_filter_ctx",
+      "inType": {
+        "kind": "list",
+        "item": { "kind": "ref", "modelId": "m_selected_job" }
+      },
+      "outType": {
+        "kind": "ref",
+        "modelId": "m_item_filter_ctx"
+      },
+      "assembleBindings": {
+        "description": { "kind": "path", "from": { "label": "Work Description" }, "path": "content" },
+        "selected_examples": { "kind": "spine" }
+      },
+      "cached": true,
+      "avgMs": 5,
+      "avgCostCents": 0
+    },
+    {
+      "id": "mod_catalog_in",
+      "kind": "input",
+      "label": "Work Item Catalog",
+      "inputType": "json",
+      "inputNameContains": "work_item_catalog",
+      "inputDescription": "JSON array of billable work items — master catalog",
+      "outStructureId": "m_work_item",
+      "cached": true,
+      "avgMs": 120,
+      "avgCostCents": 0,
+      "note": "100-item catalog for pass 2 — too large for one prompt; filtered per row with cached prefix",
+      "outType": {
+        "kind": "list",
+        "item": { "kind": "ref", "modelId": "m_work_item" }
+      }
+    },
+    {
+      "id": "mod_combine_catalog",
+      "kind": "combine",
+      "label": "Combine Catalog",
+      "note": "Merges ItemFilterContext with Work Item Catalog side input — required after pass-1 processing.",
+      "inputDescription": "Catalog JSON array plus ItemFilterContext from Assemble Item Filter on pipeline state",
+      "inStructureId": "m_item_filter_ctx",
+      "outStructureId": "m_catalog_bundle",
+      "cached": true,
+      "avgMs": 40,
+      "avgCostCents": 0
+    },
+    {
+      "id": "mod_select_items",
+      "kind": "example-select",
+      "label": "Select Relevant Work Items",
+      "note": "Pass 2 — filter catalog rows; context is ItemFilterContext with billed_items lookup-embedded (code/trade/unit/description) on the cached prefix only. {example} and kept rows stay normalized WorkItem catalog rows.",
+      "inputDescription": "list[WorkItem] from Combine Catalog.items",
+      "inStructureId": "m_work_item",
+      "outStructureId": "m_selected_item",
+      "exampleContextLabel": "Assemble Item Filter",
+      "exampleReasonField": "selection_reason",
+      "prompt": "You are filtering a master construction work-item catalog for an insurance repair claim.\n\nThe CASE and RELEVANT PAST JOBS are below. billed_items on those jobs include catalog code, trade, unit, and description looked up from work_item_id — use those when deciding. Kept output is still catalog rows (id/code/trade/unit/description), not billed lines.\n\nCASE AND PAST JOBS:\n\n{description}\n\nCANDIDATE WORK ITEM:\n\n{example}",
+      "model": "deepseek-v4",
+      "costLimitCents": 500,
+      "cached": true,
+      "avgMs": 12000,
+      "avgCostCents": 25,
+      "outType": {
+        "kind": "list",
+        "item": { "kind": "ref", "modelId": "m_selected_item" }
+      }
+    },
+    {
+      "id": "mod_merge_draft",
+      "kind": "merge",
+      "label": "Merge for Draft",
+      "note": "Deep-merge Assemble Item Filter with selected_work_items → BilledWorkDraftRequest.",
+      "inputDescription": "Filtered SelectedWorkItem rows",
+      "inStructureId": "m_selected_item",
+      "outStructureId": "m_draft_req",
+      "mergeStateLabel": "Assemble Item Filter",
+      "mergeWrapListField": "selected_work_items",
+      "cached": true,
+      "avgMs": 5,
+      "avgCostCents": 0
+    },
+    {
+      "id": "mod_draft",
+      "kind": "llm",
+      "label": "Draft Billed Work",
+      "note": "Final structured scope using selected jobs, catalog items, and selection_reason fields.",
+      "inputDescription": "BilledWorkDraftRequest with description, selected_examples, and selected_work_items",
+      "inStructureId": "m_draft_req",
+      "outStructureId": "m_billed_draft",
+      "prompt": "Draft structured billed work for the claim. Use selected_examples for coverage patterns and selected_work_items as the allowed catalog pool — each row includes selection_reason. Pick quantities from past jobs where sensible. Output title and line_items with work_item_id, quantity, and rationale.",
+      "model": "deepseek-v4",
+      "cached": true,
+      "avgMs": 1800,
+      "avgCostCents": 4
+    },
+    {
+      "id": "mod_output",
+      "kind": "output",
+      "label": "Billed Work Output",
+      "inputDescription": "BilledWorkDraft with title and line_items",
+      "inStructureId": "m_billed_draft",
+      "outStructureId": "m_billed_draft",
+      "cached": true,
+      "avgMs": 40,
+      "avgCostCents": 0,
+      "note": ""
+    }
+  ],
+  "strategies": [
+    {
+      "id": "s_single",
+      "kind": "single-llm",
+      "name": "Single LLM Call",
+      "enabled": true,
+      "model": "deepseek-v4",
+      "accuracy": 80,
+      "latencyMs": 16000,
+      "costCents": 32,
+      "passRate": 88
+    },
+    {
+      "id": "s_agent",
+      "kind": "claude-code",
+      "name": "Agent (Frontier)",
+      "enabled": true,
+      "model": "deepseek-v4",
+      "accuracy": 92,
+      "latencyMs": 48000,
+      "costCents": 180,
+      "passRate": 95
+    },
+    {
+      "id": "s_cheap",
+      "kind": "cheap-agent",
+      "name": "Agent (Cheap Model)",
+      "enabled": true,
+      "model": "deepseek-v4",
+      "accuracy": 82,
+      "latencyMs": 30000,
+      "costCents": 20,
+      "passRate": 85
+    }
+  ],
+  "docs": [
+    {
+      "name": "billed_work_description.txt",
+      "type": "text",
+      "label": "inference",
+      "file": "billed_work_catalog_select/billed_work_description.txt"
+    },
+    {
+      "name": "job_example_library.json",
+      "type": "json",
+      "label": "inference",
+      "file": "billed_work_catalog_select/job_example_library.json"
+    },
+    {
+      "name": "work_item_catalog.json",
+      "type": "json",
+      "label": "inference",
+      "file": "billed_work_catalog_select/work_item_catalog.json"
+    },
+    {
+      "name": "billed_work_catalog_select_inference.json",
+      "type": "json",
+      "label": "inference",
+      "file": "billed_work_catalog_select/billed_work_catalog_select_inference.json"
+    },
+    {
+      "name": "billed_work_catalog_select_testing.json",
+      "type": "json",
+      "label": "training",
+      "file": "billed_work_catalog_select/billed_work_catalog_select_testing.json"
+    },
+    {
+      "name": "billed_work_catalog_select_README.md",
+      "type": "text",
+      "label": "training",
+      "file": "billed_work_catalog_select/README.md"
+    }
+  ],
+  "inferencePresets": [
+    {
+      "name": "Bathroom leak (default)",
+      "description": "Default inference preset — billed_work_description.txt + job_example_library.json + work_item_catalog.json",
+      "inputs": {
+        "Work Description": "billed_work_description.txt",
+        "Job Example Library": "job_example_library.json",
+        "Work Item Catalog": "work_item_catalog.json"
+      }
+    }
+  ]
+}

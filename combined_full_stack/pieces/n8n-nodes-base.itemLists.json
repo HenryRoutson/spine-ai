@@ -1,0 +1,17 @@
+{
+  "id": "n8n-nodes-base.itemLists",
+  "n8nNodeType": "n8n-nodes-base.itemLists",
+  "displayName": "Split out field",
+  "description": "Turn a list field on one object into one item per element (n8n Item Lists).",
+  "category": "core",
+  "props": [
+    {
+      "name": "fieldToSplitOut",
+      "displayName": "Field to split out",
+      "type": "string",
+      "required": true,
+      "default": "items"
+    }
+  ],
+  "n8nCode": "const field = String($parameter.fieldToSplitOut ?? \"items\");\nconst out = [];\nfor (const item of items) {\n  const list = item.json?.[field];\n  if (!Array.isArray(list) || !list.length) {\n    out.push(item);\n    continue;\n  }\n  for (const row of list) {\n    const json = row && typeof row === \"object\" && !Array.isArray(row) ? { ...item.json, ...row } : { ...item.json, [field]: row };\n    delete json[field];\n    out.push({ json });\n  }\n}\nreturn out;"
+}

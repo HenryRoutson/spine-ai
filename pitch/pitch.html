@@ -1,0 +1,1729 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Spine — Lovable for backend</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@300..700&family=Geist+Mono:wght@400;500&display=swap" rel="stylesheet" />
+<style>
+  /* AI : palette lifted from landing_page/app/globals.css so the deck reads as the same product */
+  :root{
+    color-scheme: dark;
+    --background:#000000;
+    --foreground:#fafafa;
+    --panel:#0a0a0a;
+    --panel-raised:#121212;
+    --line:#1a1a1a;
+    --line-bright:#fafafa1f;
+    --accent:#4ade80;
+    --accent-dim:#4ade8040;
+    --warn:#f59e0b;
+    --danger:#ef4444;
+    --muted:#a3a3a3;
+    --muted-dim:#737373;
+    --max:1200px;
+  }
+
+  *{ box-sizing:border-box; }
+  html{ scroll-behavior:smooth; }
+  body{
+    margin:0;
+    background:var(--background);
+    color:var(--foreground);
+    font-family:"Geist", system-ui, -apple-system, "Segoe UI", Helvetica, sans-serif;
+    -webkit-font-smoothing:antialiased;
+    font-size:16px;
+    line-height:1.6;
+  }
+  ::selection{ background:var(--accent-dim); }
+
+  /* AI : film grain overlay — same trick as the live landing page */
+  body::before{
+    content:"";
+    position:fixed; inset:0; pointer-events:none; z-index:60; opacity:.035;
+    background-image:url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  }
+
+  a{ color:inherit; }
+  .mono{ font-family:"Geist Mono", ui-monospace, SFMono-Regular, monospace; }
+
+  /* ---------- scroll progress ---------- */
+  #progress{
+    position:fixed; top:0; left:0; height:2px; width:0%;
+    background:var(--foreground); z-index:70; transition:width .08s linear;
+  }
+
+  /* ---------- nav ---------- */
+  header.nav{
+    position:sticky; top:0; z-index:50;
+    border-bottom:1px solid var(--line);
+    background:rgba(0,0,0,.9);
+    backdrop-filter:blur(8px);
+  }
+  header.nav .inner{
+    max-width:var(--max); margin:0 auto;
+    display:flex; align-items:center; justify-content:space-between;
+    padding:12px 20px;
+  }
+  .spine-logo{ display:inline-flex; align-items:center; gap:10px; text-decoration:none; }
+  .spine-mark-wrap{
+    display:flex; align-items:center; justify-content:center;
+    width:32px; height:32px; border:1px solid var(--line-bright); background:var(--panel);
+  }
+  .spine-mark{
+    --mark-size:20px; --spine-w:2.5px; --node-w:11px; --node-h:2.5px;
+    --mark-fg:var(--foreground); --mark-fg-dim:#fafafa40;
+    position:relative; width:var(--mark-size); height:var(--mark-size); flex:none;
+  }
+  .spine-mark::before{
+    content:""; position:absolute; left:50%; top:-2px; bottom:-2px;
+    width:var(--spine-w); transform:translateX(-50%); border-radius:999px;
+    background:linear-gradient(180deg,var(--mark-fg-dim) 0%,var(--mark-fg) 42%,var(--mark-fg) 58%,var(--mark-fg-dim) 100%);
+    box-shadow:0 0 18px var(--mark-fg-dim);
+  }
+  .spine-mark .node{
+    position:absolute; left:50%; width:var(--node-w); height:var(--node-h);
+    transform:translateX(-50%); border-radius:999px; background:var(--mark-fg); opacity:.92;
+  }
+  .spine-mark .node:nth-child(1){ top:3px; opacity:.55; }
+  .spine-mark .node:nth-child(2){ top:50%; margin-top:-1.25px; width:calc(var(--node-w) + 5px); box-shadow:0 0 10px var(--mark-fg-dim); }
+  .spine-mark .node:nth-child(3){ bottom:3px; opacity:.55; }
+  .spine-wordmark{ font-size:14px; font-weight:600; letter-spacing:-.03em; }
+
+  .nav-links{ display:flex; align-items:center; gap:26px; }
+  .nav-links a{ font-size:13px; color:var(--muted); text-decoration:none; transition:color .15s; }
+  .nav-links a:hover, .nav-links a.active{ color:var(--foreground); }
+  @media (max-width:900px){ .nav-links{ display:none; } }
+
+  .btn{
+    display:inline-flex; align-items:center; justify-content:center;
+    border-radius:5px; background:var(--foreground); color:#0a0a0a;
+    font-size:14px; font-weight:500; padding:10px 20px;
+    text-decoration:none; transition:opacity .15s;
+  }
+  .btn:hover{ opacity:.88; }
+  .btn.lg{ font-size:17px; padding:14px 32px; }
+  .btn.ghost{ background:transparent; color:var(--foreground); border:1px solid var(--line-bright); }
+  .btn.ghost:hover{ background:var(--panel-raised); }
+
+  /* ---------- layout rails ---------- */
+  .rail{ max-width:var(--max); margin:0 auto; border-left:1px solid var(--line); border-right:1px solid var(--line); }
+  section.block{ border-bottom:1px solid var(--line); padding:64px 48px; }
+  @media (max-width:760px){ section.block{ padding:44px 22px; } }
+
+  .eyebrow{
+    font-family:"Geist Mono", monospace; font-size:11px; letter-spacing:.14em;
+    text-transform:uppercase; color:var(--muted-dim); margin:0 0 18px;
+    display:flex; align-items:center; gap:10px;
+  }
+  .eyebrow::after{ content:""; flex:1; height:1px; background:var(--line); }
+
+  h1{ font-size:clamp(38px,6vw,54px); font-weight:400; line-height:1.06; letter-spacing:-.03em; margin:0; }
+  h2{ font-size:clamp(26px,3.6vw,38px); font-weight:400; line-height:1.12; letter-spacing:-.025em; margin:0 0 20px; }
+  h3{ font-size:17px; font-weight:600; letter-spacing:-.01em; margin:0 0 8px; }
+  p{ margin:0 0 16px; color:var(--muted); max-width:62ch; }
+  p.lead{ font-size:clamp(17px,2vw,20px); line-height:1.55; color:var(--muted); max-width:56ch; }
+  strong{ color:var(--foreground); font-weight:600; }
+  .fg{ color:var(--foreground); }
+
+  /* ---------- hero ---------- */
+  .hero{ display:grid; grid-template-columns:1.05fr .95fr; gap:48px; align-items:center; }
+  @media (max-width:900px){ .hero{ grid-template-columns:1fr; gap:32px; } }
+  .hero-sub{ margin-top:22px; font-size:19px; color:var(--muted); max-width:44ch; }
+  .credit{ display:flex; flex-direction:column; gap:10px; margin-top:36px; }
+  .credit span{ font-size:12px; color:var(--muted-dim); }
+  .credit b{ color:var(--muted); font-weight:500; letter-spacing:.06em; }
+
+  .card{
+    background:var(--panel); border:1px solid var(--line); border-radius:12px; padding:22px;
+  }
+  .card.raised{ background:var(--panel-raised); }
+
+  .pitchline{
+    border:1px solid var(--line-bright); border-radius:12px; background:var(--panel);
+    padding:26px 26px 24px;
+  }
+  .pitchline .k{ font-family:"Geist Mono", monospace; font-size:10.5px; letter-spacing:.16em; text-transform:uppercase; color:var(--muted-dim); }
+  .pitchline .v{ font-size:26px; letter-spacing:-.02em; margin-top:8px; color:var(--foreground); line-height:1.25; }
+  .pitchline hr{ border:0; border-top:1px solid var(--line); margin:20px 0; }
+  .pitchline p{ margin:0; font-size:14.5px; }
+
+  .scrollcue{ margin-top:40px; font-family:"Geist Mono", monospace; font-size:11px; letter-spacing:.14em; text-transform:uppercase; color:var(--muted-dim); display:flex; align-items:center; gap:10px; }
+  .scrollcue .arrow{ animation:bob 1.8s ease-in-out infinite; display:inline-block; }
+  @keyframes bob{ 0%,100%{ transform:translateY(0); } 50%{ transform:translateY(4px); } }
+
+  /* ---------- grids ---------- */
+  .grid{ display:grid; gap:16px; }
+  .g2{ grid-template-columns:repeat(2,1fr); }
+  .g3{ grid-template-columns:repeat(3,1fr); }
+  .g4{ grid-template-columns:repeat(4,1fr); }
+  @media (max-width:900px){ .g3,.g4{ grid-template-columns:repeat(2,1fr); } }
+  @media (max-width:620px){ .g2,.g3,.g4{ grid-template-columns:1fr; } }
+
+  .stat .k{ font-family:"Geist Mono", monospace; font-size:10.5px; letter-spacing:.14em; text-transform:uppercase; color:var(--muted-dim); }
+  .stat .v{ font-size:30px; font-weight:600; letter-spacing:-.03em; margin:8px 0 4px; color:var(--foreground); }
+  .stat .n{ font-size:12.5px; color:var(--muted-dim); line-height:1.45; }
+
+  /* numbered differentiator cards */
+  .num-card{ position:relative; padding-top:26px; }
+  .num-card .num{
+    font-family:"Geist Mono", monospace; font-size:11px; color:var(--muted-dim);
+    letter-spacing:.14em; position:absolute; top:20px; left:22px;
+  }
+  .num-card h3{ margin-top:22px; }
+  .num-card p{ font-size:14.5px; margin-bottom:0; }
+
+  .kill{ color:var(--muted); font-size:14.5px; }
+  .kill .bad{ color:#f87171; }
+  .kill .good{ color:var(--accent); }
+
+  ul.clean{ margin:0; padding-left:18px; color:var(--muted); }
+  ul.clean li{ margin-bottom:8px; font-size:14.5px; }
+  ul.clean li::marker{ color:var(--muted-dim); }
+
+  /* ---------- product shots ---------- */
+  figure.shot{ margin:0; }
+  .frame{
+    border:1px solid var(--line); border-radius:12px; background:var(--panel);
+    overflow:hidden; cursor:zoom-in; transition:border-color .18s, transform .18s;
+  }
+  .frame:hover{ border-color:var(--line-bright); }
+  .frame .bar{
+    display:flex; align-items:center; gap:6px; padding:9px 13px;
+    border-bottom:1px solid var(--line); background:var(--panel-raised);
+  }
+  .dot{ width:9px; height:9px; border-radius:50%; }
+  .frame .bar .label{
+    margin-left:8px; font-family:"Geist Mono", monospace; font-size:10px;
+    letter-spacing:.12em; text-transform:uppercase; color:var(--muted-dim);
+  }
+  .frame img{ display:block; width:100%; height:auto; }
+  figcaption{ margin-top:12px; font-size:13.5px; color:var(--muted-dim); line-height:1.5; max-width:70ch; }
+  figcaption b{ color:var(--muted); font-weight:500; }
+
+  /* ---------- table ---------- */
+  .table-wrap{ overflow-x:auto; border:1px solid var(--line); border-radius:12px; background:var(--panel); }
+  table{ width:100%; border-collapse:collapse; font-size:13px; min-width:820px; }
+  thead th{
+    text-align:left; font-family:"Geist Mono", monospace; font-size:10px; font-weight:500;
+    letter-spacing:.1em; text-transform:uppercase; color:var(--muted-dim);
+    padding:14px 12px; border-bottom:1px solid var(--line); white-space:nowrap; vertical-align:bottom;
+  }
+  thead th:not(:first-child){ text-align:center; }
+  tbody td{ padding:11px 12px; border-bottom:1px solid var(--line); color:var(--muted); }
+  tbody td:not(:first-child){ text-align:center; }
+  tbody tr:last-child td{ border-bottom:none; }
+  tbody tr:hover{ background:rgba(255,255,255,.028); }
+  tbody tr.us{ background:rgba(74,222,128,.05); }
+  tbody tr.us td{ color:var(--foreground); }
+  tbody tr.us td:first-child{ font-weight:600; }
+  .pill{ display:inline-block; min-width:38px; font-size:10.5px; font-family:"Geist Mono", monospace; padding:3px 8px; border-radius:999px; border:1px solid var(--line); }
+  .pill.y{ color:var(--accent); border-color:var(--accent-dim); background:rgba(74,222,128,.08); }
+  .pill.p{ color:var(--warn); border-color:rgba(245,158,11,.28); background:rgba(245,158,11,.07); }
+  .pill.n{ color:var(--muted-dim); }
+
+  /* ---------- market ---------- */
+  .market{ display:grid; grid-template-columns:1fr 1fr; gap:36px; align-items:center; }
+  @media (max-width:900px){ .market{ grid-template-columns:1fr; } }
+  .market-row{ display:flex; align-items:baseline; gap:14px; padding:16px 0; border-bottom:1px solid var(--line); }
+  .market-row:last-child{ border-bottom:none; }
+  .market-row .tag{ font-family:"Geist Mono", monospace; font-size:11px; letter-spacing:.14em; color:var(--muted-dim); width:52px; flex:none; }
+  .market-row .amt{ font-size:26px; font-weight:600; letter-spacing:-.02em; width:110px; flex:none; }
+  .market-row .desc{ font-size:13px; color:var(--muted-dim); line-height:1.45; }
+
+  /* ---------- accordion ---------- */
+  details.acc{ border:1px solid var(--line); border-radius:10px; background:var(--panel); margin-top:12px; }
+  details.acc summary{
+    cursor:pointer; list-style:none; padding:14px 18px;
+    display:flex; align-items:center; gap:12px; font-size:14px; color:var(--muted);
+  }
+  details.acc summary::-webkit-details-marker{ display:none; }
+  details.acc summary:hover{ color:var(--foreground); }
+  details.acc summary .chev{ margin-left:auto; color:var(--muted-dim); transition:transform .18s; }
+  details.acc[open] summary .chev{ transform:rotate(180deg); }
+  details.acc .body{ padding:0 18px 18px; border-top:1px solid var(--line); padding-top:16px; }
+  details.acc .body p{ font-size:14px; }
+  details.acc .body p:last-child{ margin-bottom:0; }
+
+  /* ---------- timeline ---------- */
+  .tl{ position:relative; padding-left:26px; }
+  .tl::before{ content:""; position:absolute; left:5px; top:6px; bottom:6px; width:1px; background:var(--line); }
+  .tl-item{ position:relative; padding-bottom:22px; }
+  .tl-item:last-child{ padding-bottom:0; }
+  .tl-item::before{
+    content:""; position:absolute; left:-24px; top:7px; width:9px; height:9px; border-radius:50%;
+    background:var(--panel); border:1px solid var(--muted-dim);
+  }
+  .tl-item.now::before{ background:var(--accent); border-color:var(--accent); box-shadow:0 0 10px var(--accent-dim); }
+  .tl-item .when{ font-family:"Geist Mono", monospace; font-size:11px; letter-spacing:.1em; text-transform:uppercase; color:var(--muted-dim); }
+  .tl-item .what{ font-size:14.5px; color:var(--muted); margin-top:4px; }
+
+  /* ---------- misc bits ---------- */
+  .chips{ display:flex; flex-wrap:wrap; gap:8px; }
+  .chip{
+    font-family:"Geist Mono", monospace; font-size:11px; letter-spacing:.06em;
+    padding:6px 11px; border:1px solid var(--line); border-radius:999px; color:var(--muted-dim);
+  }
+  .chip.on{ color:var(--accent); border-color:var(--accent-dim); background:rgba(74,222,128,.06); }
+  .quote{
+    border-left:2px solid var(--line-bright); padding:4px 0 4px 20px;
+    font-size:17px; color:var(--muted); max-width:56ch;
+  }
+  svg.diagram{ display:block; width:100%; height:auto; overflow:visible; }
+  svg.diagram.capped{ max-width:420px; margin:0 auto; }
+
+
+  /* ---------- landscape scatter (ported from combined_valuation_est_across_categories.html) ---------- */
+  #vizRoot{
+    --surface-1:#0a0a0a;
+    --text-primary:#fafafa;
+    --text-secondary:#a3a3a3;
+    --text-muted:#737373;
+    --grid:#1a1a1a;
+    --axis:#3d3d3d;
+    --border:rgba(250,250,250,0.12);
+    --accent:#3987e5;
+    --accent-ring:#86b6ef;
+    --fe-con:#3987e5;
+    --fe-dev:#8b7cf7;
+    --be-con:#e5a039;
+    --be-dev:#3ecf8e;
+    --be-int:#f07167;
+    --spine:#f0c14b;
+  }
+  #vizRoot .card-sub{ font-size:12.5px; color:var(--muted-dim); margin:0 0 12px; line-height:1.5; max-width:none; }
+  #vizRoot .card-sub strong{ color:var(--foreground); font-weight:600; }
+  #vizRoot svg{ display:block; width:100%; height:auto; overflow:visible; }
+  #vizRoot .grid-line{ stroke:var(--grid); stroke-width:1; shape-rendering:crispEdges; }
+  #vizRoot .axis-line{ stroke:var(--axis); stroke-width:1; shape-rendering:crispEdges; }
+  #vizRoot .tick-label{ fill:var(--text-muted); font-size:10.5px; font-family:"Geist Mono", monospace; }
+  #vizRoot .axis-title{ fill:var(--text-secondary); font-size:11.5px; font-weight:600; }
+  #vizRoot .pt-ring-surface{ fill:none; stroke:var(--panel); stroke-width:2px; }
+  #vizRoot .pt-label{ fill:var(--text-primary); font-size:11px; }
+  #vizRoot .legends{ display:flex; flex-wrap:wrap; gap:26px; align-items:flex-start; margin:8px 0 4px; padding-top:14px; border-top:1px solid var(--line); }
+  #vizRoot .legend-title{ font-size:11px; color:var(--muted); margin-bottom:6px; font-weight:600; }
+  #vizRoot .alpha-grad{ width:170px; height:12px; border-radius:3px; border:1px solid var(--line-bright); }
+  #vizRoot .alpha-ticks{ display:flex; justify-content:space-between; width:170px; font-size:10px; color:var(--muted-dim); margin-top:3px; font-family:"Geist Mono", monospace; }
+  #vizRoot .shape-legend{ display:flex; flex-direction:column; gap:6px; font-size:12px; color:var(--muted); }
+  #vizRoot .shape-row{ display:flex; align-items:center; gap:8px; }
+  #vizRoot .sw{ flex:none; width:16px; height:16px; }
+  #vizRoot .swatch-line{ width:16px; height:0; border-top:1.6px dashed var(--muted-dim); align-self:center; }
+  #vizRoot .qdot{ display:inline-block; width:8px; height:8px; border-radius:50%; margin-right:6px; vertical-align:middle; flex:none; }
+  #vizRoot .filters{ display:flex; flex-wrap:wrap; gap:8px; margin:0 0 12px; }
+  #vizRoot .chip{
+    font-size:11.5px; padding:5px 10px; border-radius:999px; border:1px solid var(--line-bright);
+    background:transparent; color:var(--muted); cursor:pointer; font-family:inherit;
+  }
+  #vizRoot .chip.active{ color:var(--foreground); border-color:rgba(250,250,250,0.35); background:rgba(250,250,250,0.06); }
+  #vizRoot .chart-wrap{ position:relative; margin-top:4px; }
+  #vizRoot .isolate-btn{
+    position:absolute; top:8px; right:8px; z-index:4;
+    font-size:11.5px; padding:6px 11px; border-radius:8px;
+    border:1px solid var(--line-bright); background:rgba(0,0,0,0.88);
+    color:var(--muted); cursor:pointer; backdrop-filter:blur(6px); font-family:inherit;
+  }
+  #vizRoot .isolate-btn:hover, #vizRoot .isolate-btn.active{
+    color:var(--foreground); border-color:rgba(240,193,75,0.55);
+  }
+  #vizRoot .isolate-btn.active{ background:#000; color:var(--spine); }
+  #vizRoot .chart-wrap.isolate-on svg{ background:#000; }
+  #vizRoot .chart-wrap.isolate-on .grid-line{ opacity:0; }
+  #vizRoot .zone-label{ font-size:12px; font-weight:650; letter-spacing:0.02em; }
+
+  #chartTip{
+    --text-secondary: var(--muted);
+    --text-primary: var(--foreground);
+    position:fixed; pointer-events:none; z-index:75; opacity:0; transition:opacity .08s ease;
+    background:var(--panel-raised); border:1px solid var(--line-bright); border-radius:8px;
+    padding:11px 13px; font-size:12px; color:var(--foreground); max-width:340px;
+    box-shadow:0 6px 24px rgba(0,0,0,.6);
+  }
+  #chartTip .tt-name{ font-weight:650; font-size:13px; margin-bottom:2px; }
+  #chartTip .tt-cat{ color:var(--muted-dim); font-size:10.5px; margin-bottom:8px; }
+  #chartTip .tt-row{ display:flex; justify-content:space-between; gap:14px; margin-bottom:3px; }
+  #chartTip .tt-k{ color:var(--muted); }
+  #chartTip .tt-v{ font-weight:600; font-variant-numeric:tabular-nums; }
+  #chartTip .tt-desc{ margin-top:8px; color:var(--muted); line-height:1.45; font-size:11.5px; }
+  #chartTip .tt-flag{ margin-top:7px; color:var(--muted-dim); font-size:10px; line-height:1.4; }
+
+  /* ---------- reveal on scroll ---------- */
+  .rv{ opacity:0; transform:translateY(14px); transition:opacity .6s ease, transform .6s ease; }
+  .rv.in{ opacity:1; transform:none; }
+  @media (prefers-reduced-motion:reduce){ .rv{ opacity:1; transform:none; transition:none; } html{ scroll-behavior:auto; } }
+
+  /* ---------- lightbox ---------- */
+  #lightbox{
+    position:fixed; inset:0; z-index:80; display:none; align-items:center; justify-content:center;
+    background:rgba(0,0,0,.94); padding:32px; cursor:zoom-out; backdrop-filter:blur(4px);
+  }
+  #lightbox.on{ display:flex; }
+  #lightbox img{ max-width:100%; max-height:100%; border:1px solid var(--line); border-radius:8px; }
+
+  footer.end{ max-width:var(--max); margin:0 auto; border-left:1px solid var(--line); border-right:1px solid var(--line); padding:28px 48px 60px; }
+  footer.end p{ font-size:12px; color:var(--muted-dim); margin:0; }
+</style>
+</head>
+<body>
+
+<div id="progress"></div>
+
+<header class="nav">
+  <div class="inner">
+    <a class="spine-logo" href="#top" aria-label="Spine">
+      <span class="spine-mark-wrap">
+        <span class="spine-mark" aria-hidden="true"><span class="node"></span><span class="node"></span><span class="node"></span></span>
+      </span>
+      <span class="spine-wordmark">Spine</span>
+    </a>
+    <nav class="nav-links">
+      <a href="#problem">Problem</a>
+      <a href="#whynow">Why now</a>
+      <a href="#solution">Solution</a>
+      <a href="#different">Differentiation</a>
+      <a href="#product">Product</a>
+      <a href="#competitors">Competitors</a>
+      <a href="#market">Market</a>
+      <a href="#gtm">GTM</a>
+      <a href="#ask">Ask</a>
+    </nav>
+    <a class="btn" href="https://www.spine-ai-app.dev/" target="_blank" rel="noopener">Try now</a>
+  </div>
+</header>
+
+<main class="rail" id="top">
+
+  <!-- ============ HERO ============ -->
+  <section class="block">
+    <div class="hero">
+      <div>
+        <h1>AI engineering is hard.<br />It shouldn&rsquo;t be.</h1>
+        <p class="hero-sub">Vibe coding for AI engineering and backend code. Build production-level systems while being non-technical &mdash; we handle the hosting, and you can export to code later.</p>
+        <div style="margin-top:32px; display:flex; gap:12px; flex-wrap:wrap;">
+          <a class="btn lg" href="https://www.spine-ai-app.dev/" target="_blank" rel="noopener">Try now</a>
+          <a class="btn lg ghost" href="#problem">Read the pitch</a>
+        </div>
+        <div class="credit">
+          <span>developed by engineers from <b>KPMG</b></span>
+          <span>built at the <b>ANTLER</b> hackathon &middot; independent, not funded</span>
+        </div>
+      </div>
+
+      <div class="pitchline rv">
+        <div class="k">One line</div>
+        <div class="v">Lovable for backend.</div>
+        <p style="margin-top:6px; font-size:13.5px; color:var(--muted-dim);">with a focus on AI</p>
+        <hr />
+        <div class="k">Who&rsquo;s building it</div>
+        <p style="margin-top:8px;">
+          <strong>Henry</strong> &mdash; AI engineer at KPMG, in a team of ~12 with 5 PhDs.
+          I&rsquo;ve worked on production-grade financial automation with AI, and lead the development of
+          our team&rsquo;s shared library of internal code infrastructure.
+        </p>
+      </div>
+    </div>
+
+    <div class="scrollcue"><span class="arrow">&darr;</span> scroll</div>
+  </section>
+
+  <!-- ============ PROBLEM ============ -->
+  <section class="block" id="problem">
+    <p class="eyebrow">01 &mdash; The problem</p>
+    <h2>Companies are cutting AI spend<br />because the results aren&rsquo;t there.</h2>
+    <p class="lead">
+      It&rsquo;s widely publicised that large companies are starting to cut AI spend after subpar results.
+      Small startups are struggling to implement interpretable, accurate, and cost-efficient AI engineering
+      without spending $200k a year on a single engineer.
+    </p>
+
+    <div class="grid g3 rv" style="margin-top:36px;">
+      <div class="card stat">
+        <div class="k">Requirement</div>
+        <div class="v">Interpretable</div>
+        <div class="n">Embedding RAG is a black box. When it fails, nobody can say why.</div>
+      </div>
+      <div class="card stat">
+        <div class="k">Requirement</div>
+        <div class="v">Accurate</div>
+        <div class="n">Production quality bars, not demo quality bars.</div>
+      </div>
+      <div class="card stat">
+        <div class="k">Requirement</div>
+        <div class="v">Cost-efficient</div>
+        <div class="n">Per-run economics that survive contact with real volume.</div>
+      </div>
+    </div>
+
+    <div class="card rv" style="margin-top:16px; border-color:var(--line-bright);">
+      <div class="quote">
+        Demand for high-quality AI engineering is extremely high &mdash; but companies are cutting funding
+        without seeing results.
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ ICP ============ -->
+  <section class="block" id="icp">
+    <p class="eyebrow">02 &mdash; Who feels it most</p>
+    <div class="grid g2" style="align-items:center; gap:40px;">
+      <div>
+        <h2>Technical founders of &lsquo;AI-native&rsquo; startups<br />without specific AI-engineering experience.</h2>
+        <p class="lead">
+          Startup founders are at risk of losing their jobs within months without high-quality AI engineering.
+        </p>
+      </div>
+      <div class="card rv">
+        <div class="chips">
+          <span class="chip on">AI-native startups</span>
+          <span class="chip on">Technical founders</span>
+          <span class="chip on">No AI-eng hire</span>
+          <span class="chip">Agencies</span>
+          <span class="chip">SMBs shipping AI features</span>
+        </div>
+        <p style="margin:20px 0 0; font-size:14.5px;">
+          The alternative on the table today is spending <span class="fg">$200k a year</span> on a single
+          engineer &mdash; if they can even hire one in time.
+        </p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ WHY NOW ============ -->
+  <section class="block" id="whynow">
+    <p class="eyebrow">03 &mdash; Why now</p>
+    <h2>Vibe coding is about to automate the backend.<br />Lovable still doesn&rsquo;t have one.</h2>
+    <p class="lead">
+      Lovable and similar vibe-coding solutions are lacking the backend code required to make a working product.
+      We could be the piece for non-technical builders looking to complete their product without learning Claude Code.
+    </p>
+
+    <div class="grid g2 rv" style="margin-top:32px; gap:16px;">
+      <div class="card num-card">
+        <span class="num">SHIFT 01</span>
+        <h3>Vibe coding is eating the backend</h3>
+        <p class="kill">
+          Vibe coding is about to automate large parts of backend work. The window is open now, before that work
+          is fully absorbed into frontier coding agents.
+        </p>
+      </div>
+      <div class="card num-card">
+        <span class="num">SHIFT 02</span>
+        <h3>Lovable still needs a backend</h3>
+        <p class="kill">
+          Lovable and similar tools generate the front end. They don&rsquo;t generate the backend required to make
+          a working product. We could be the <span class="good">piece</span> for non-technical builders looking
+          to complete a product without learning Claude Code.
+        </p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ SOLUTION ============ -->
+  <section class="block" id="solution">
+    <p class="eyebrow">04 &mdash; The solution</p>
+    <h2>Build production systems<br />while being non-technical.</h2>
+    <p class="lead">
+      We offer vibe coding for AI engineering and backend code, so you can build production-level systems
+      while being non-technical. We handle the hosting, and automate the backend development with AI using
+      our deep production experience &mdash; with the option to export to code later.
+    </p>
+
+    <!-- AI : flow diagram — prompt to deployed backend, mirrors the actual product tabs -->
+    <div class="card rv" style="margin-top:32px; padding:34px 26px;">
+      <svg class="diagram" viewBox="0 0 1080 148" role="img" aria-label="Flow from prompt to deployed backend">
+        <defs>
+          <marker id="ar" markerWidth="9" markerHeight="9" refX="7" refY="4.5" orient="auto">
+            <path d="M0,0 L8,4.5 L0,9 z" fill="#737373" />
+          </marker>
+        </defs>
+        <g font-family="Geist Mono, monospace">
+          <!-- node 1 -->
+          <rect x="4" y="52" width="176" height="86" rx="9" fill="#121212" stroke="#1a1a1a" />
+          <text x="92" y="84" fill="#fafafa" font-size="13.5" text-anchor="middle" font-family="Geist, sans-serif">Describe it</text>
+          <text x="92" y="106" fill="#737373" font-size="11" text-anchor="middle">plain English</text>
+          <line x1="188" y1="95" x2="216" y2="95" stroke="#737373" stroke-width="1.2" marker-end="url(#ar)" />
+
+          <!-- node 2 -->
+          <rect x="224" y="52" width="176" height="86" rx="9" fill="#121212" stroke="#1a1a1a" />
+          <text x="312" y="84" fill="#fafafa" font-size="13.5" text-anchor="middle" font-family="Geist, sans-serif">Typed structures</text>
+          <text x="312" y="106" fill="#737373" font-size="11" text-anchor="middle">schema enforced</text>
+          <line x1="408" y1="95" x2="436" y2="95" stroke="#737373" stroke-width="1.2" marker-end="url(#ar)" />
+
+          <!-- node 3 -->
+          <rect x="444" y="52" width="176" height="86" rx="9" fill="#121212" stroke="#1a1a1a" />
+          <text x="532" y="84" fill="#fafafa" font-size="13.5" text-anchor="middle" font-family="Geist, sans-serif">Modular pipeline</text>
+          <text x="532" y="106" fill="#737373" font-size="11" text-anchor="middle">cached steps</text>
+          <line x1="628" y1="95" x2="656" y2="95" stroke="#737373" stroke-width="1.2" marker-end="url(#ar)" />
+
+          <!-- node 4 -->
+          <rect x="664" y="52" width="176" height="86" rx="9" fill="#121212" stroke="#1a1a1a" />
+          <text x="752" y="84" fill="#fafafa" font-size="13.5" text-anchor="middle" font-family="Geist, sans-serif">Traced runs</text>
+          <text x="752" y="106" fill="#737373" font-size="11" text-anchor="middle">step-level eval</text>
+          <line x1="848" y1="95" x2="876" y2="95" stroke="#737373" stroke-width="1.2" marker-end="url(#ar)" />
+
+          <!-- node 5 -->
+          <rect x="884" y="52" width="192" height="86" rx="9" fill="#0f1a12" stroke="#4ade8040" />
+          <text x="980" y="84" fill="#4ade80" font-size="13.5" text-anchor="middle" font-family="Geist, sans-serif">Deployed</text>
+          <text x="980" y="106" fill="#737373" font-size="11" text-anchor="middle">link &middot; api &middot; excel</text>
+
+          <text x="4" y="26" fill="#737373" font-size="10.5" letter-spacing="1.6">YOU DO THIS</text>
+          <text x="444" y="26" fill="#737373" font-size="10.5" letter-spacing="1.6">WE DO THIS</text>
+          <text x="884" y="26" fill="#737373" font-size="10.5" letter-spacing="1.6">SHIPPED</text>
+          <line x1="4" y1="34" x2="180" y2="34" stroke="#1a1a1a" />
+          <line x1="444" y1="34" x2="840" y2="34" stroke="#1a1a1a" />
+          <line x1="884" y1="34" x2="1076" y2="34" stroke="#1a1a1a" />
+        </g>
+      </svg>
+    </div>
+
+    <div class="grid g3 rv" style="margin-top:16px;">
+      <div class="card">
+        <h3>Export to code later</h3>
+        <p style="font-size:14.5px; margin-bottom:0;">
+          Eject the whole pipeline when you&rsquo;re ready. The output is code, not a locked flowchart &mdash;
+          developers take over the low-level details from there.
+        </p>
+      </div>
+      <div class="card">
+        <h3>Vibe coding for execs</h3>
+        <p style="font-size:14.5px; margin-bottom:0;">
+          We&rsquo;re targeting our vibe-coding solution to execs: production systems, without being technical.
+        </p>
+      </div>
+      <div class="card">
+        <h3>A dev tool for developers</h3>
+        <p style="font-size:14.5px; margin-bottom:0;">
+          And our engineering-tool solution for developers, with easy handoff between the two.
+        </p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ DIFFERENTIATION ============ -->
+  <section class="block" id="different">
+    <p class="eyebrow">05 &mdash; Differentiation</p>
+    <h2>We&rsquo;re very opinionated about AI engineering,<br />and it&rsquo;s built into the platform.</h2>
+    <p class="lead">
+      We&rsquo;ll save you the gruesome details, but we believe this translates into
+      <span class="fg">higher reliability</span> and
+      <span class="fg">cheaper development and inference</span>.
+    </p>
+
+    <div class="card rv" style="margin-top:32px; border-color:var(--line-bright);">
+      <h3>One example</h3>
+      <p class="kill" style="margin-bottom:0; max-width:none;">
+        We can often run inference at a <span class="good">tenth or hundredth of a cent</span> per call
+        by avoiding agent-harness overhead, which is around <span class="fg">30 thousand tokens</span>.
+      </p>
+    </div>
+
+    <!-- AI : the 37x number is the sharpest single stat in the deck — give it its own visual -->
+    <div class="grid g2 rv" style="margin-top:16px; gap:16px; align-items:stretch;">
+      <div class="card">
+        <div class="stat"><div class="k">Cost per equivalent task</div></div>
+        <svg class="diagram" viewBox="0 0 520 172" role="img" aria-label="Agent cost versus direct response cost" style="margin-top:18px;">
+          <g font-family="Geist Mono, monospace" font-size="11.5">
+            <text x="0" y="26" fill="#a3a3a3">Agent loop</text>
+            <rect x="0" y="36" width="500" height="30" rx="4" fill="#ef4444" opacity="0.22" />
+            <rect x="0" y="36" width="500" height="30" rx="4" fill="none" stroke="#ef444455" />
+            <text x="490" y="56" fill="#f87171" text-anchor="end" font-size="13">up to 37&times;</text>
+
+            <text x="0" y="106" fill="#a3a3a3">Direct structured response</text>
+            <rect x="0" y="116" width="13.5" height="30" rx="4" fill="#4ade80" opacity="0.5" />
+            <text x="26" y="136" fill="#4ade80" font-size="13">1&times;</text>
+          </g>
+        </svg>
+        <p style="margin:16px 0 0; font-size:13px; color:var(--muted-dim);">
+          By some measurements agents run 37&times; the cost of a direct chatbot response. We avoid that
+          30-thousand-token harness overhead &mdash; agents stay available in Spine, they just aren&rsquo;t the default.
+          <a href="https://www.youtube.com/watch?v=8ji5vURIllM&amp;t=267s" target="_blank" rel="noopener"
+             style="color:var(--muted); text-decoration:underline; text-underline-offset:3px;">source &rarr;</a>
+        </p>
+      </div>
+
+      <div class="card">
+        <div class="stat"><div class="k">Code shape</div></div>
+        <svg class="diagram" viewBox="0 0 520 172" role="img" aria-label="Tangled blob versus modular cached steps" style="margin-top:18px;">
+          <g font-family="Geist Mono, monospace" font-size="11">
+            <text x="0" y="16" fill="#737373">CLAUDE CODE</text>
+            <path d="M20,60 C70,20 110,96 160,52 C205,14 190,92 140,84 C90,76 130,36 62,44 C24,48 44,86 96,66 C150,46 108,26 40,70"
+                  fill="none" stroke="#f87171" stroke-width="1.5" opacity=".8" />
+            <text x="0" y="122" fill="#737373">one blob &middot; hard to isolate a failure</text>
+
+            <line x1="256" y1="6" x2="256" y2="140" stroke="#1a1a1a" />
+
+            <text x="290" y="16" fill="#737373">SPINE</text>
+            <g fill="#0f1a12" stroke="#4ade8055">
+              <rect x="290" y="34" width="46" height="34" rx="6" />
+              <rect x="356" y="34" width="46" height="34" rx="6" />
+              <rect x="422" y="34" width="46" height="34" rx="6" />
+              <rect x="290" y="80" width="46" height="34" rx="6" />
+              <rect x="356" y="80" width="46" height="34" rx="6" />
+              <rect x="422" y="80" width="46" height="34" rx="6" />
+            </g>
+            <g stroke="#4ade8033" stroke-width="1.2">
+              <line x1="336" y1="51" x2="356" y2="51" /><line x1="402" y1="51" x2="422" y2="51" />
+              <line x1="336" y1="97" x2="356" y2="97" /><line x1="402" y1="97" x2="422" y2="97" />
+            </g>
+            <text x="290" y="136" fill="#737373">typed steps &middot; cached &middot; individually traceable</text>
+          </g>
+        </svg>
+        <p style="margin:16px 0 0; font-size:13px; color:var(--muted-dim);">
+          Structured output makes error tracing and isolation automatic &mdash; the key inhibitor to raw
+          Claude Code vibe coding.
+        </p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ PRODUCT ============ -->
+  <section class="block" id="product">
+    <p class="eyebrow">06 &mdash; Technical deep dive</p>
+    <h2>The product, today.</h2>
+    <p class="lead">
+      A fully chargeable Stripe-integrated product and a vibe-coding agent. Click any shot to enlarge.
+    </p>
+
+    <div class="grid" style="gap:44px; margin-top:40px;">
+
+      <figure class="shot rv">
+        <div class="frame" data-zoom="images/vibe_tab.png">
+          <div class="bar">
+            <span class="dot" style="background:#ff5f57"></span><span class="dot" style="background:#febc2e"></span><span class="dot" style="background:#28c840"></span>
+            <span class="label">Vibe &mdash; describe what you want to build</span>
+          </div>
+          <img src="images/vibe_tab.png" alt="Spine vibe tab, an agent chat that proposes structures, pipeline steps and test documents" loading="lazy" />
+        </div>
+        <figcaption>
+          <b>The vibe agent.</b> It proposes structures, pipeline steps with correct wiring, docs and sample test
+          documents, then applies them on approval. Invalid pipelines are caught and retried automatically before
+          you ever see them. This is the surface we&rsquo;re betting on for non-technical founders.
+        </figcaption>
+      </figure>
+
+      <figure class="shot rv">
+        <div class="frame" data-zoom="images/dev_page_1_zoomed.png">
+          <div class="bar">
+            <span class="dot" style="background:#ff5f57"></span><span class="dot" style="background:#febc2e"></span><span class="dot" style="background:#28c840"></span>
+            <span class="label">Build &mdash; typed structures</span>
+          </div>
+          <img src="images/dev_page_1_zoomed.png" alt="Structure editor with typed fields, descriptions, examples, min-max and required flags, plus reusable type aliases" loading="lazy" />
+        </div>
+        <figcaption>
+          <b>Typed schema enforcement.</b> Fields, types, descriptions, examples, min&ndash;max and required flags,
+          with reusable type aliases like <span class="mono">quote_span_t</span> shared across the project.
+          Structures generate the prompts, so most users never write one.
+        </figcaption>
+      </figure>
+
+      <figure class="shot rv">
+        <div class="frame" data-zoom="images/dev_page_2_zoomed.png">
+          <div class="bar">
+            <span class="dot" style="background:#ff5f57"></span><span class="dot" style="background:#febc2e"></span><span class="dot" style="background:#28c840"></span>
+            <span class="label">Build &mdash; pipeline</span>
+          </div>
+          <img src="images/dev_page_2_zoomed.png" alt="Pipeline builder wiring typed steps together, showing average run time, cost per run and cached step count" loading="lazy" />
+        </div>
+        <figcaption>
+          <b>Modular pipeline.</b> Each step is separate, cached and independently inspectable. This is a real legal
+          evaluation pipeline &mdash; typed input to typed output at every hop, mixing LLM calls with custom code, running at
+          <b>$0.002384 per run with 8 steps cached</b>. Per-step models are chosen per task, so the extraction step here
+          runs on DeepSeek rather than a frontier model.
+        </figcaption>
+      </figure>
+
+      <figure class="shot rv">
+        <div class="frame" data-zoom="images/download_code.png">
+          <div class="bar">
+            <span class="dot" style="background:#ff5f57"></span><span class="dot" style="background:#febc2e"></span><span class="dot" style="background:#28c840"></span>
+            <span class="label">Export &mdash; eject the whole pipeline</span>
+          </div>
+          <img src="images/download_code.png" alt="Pipeline export dialog offering TypeScript, Python, Rust, Go, BAML, a gRPC connector, an inference UI and setup files" loading="lazy" />
+        </div>
+        <figcaption>
+          <b>This is the developer handoff.</b> Pipeline code in TypeScript, Python, Rust, Go or BAML, plus a gRPC
+          connector, an inference UI with the step trace, sample documents and setup files &mdash; no secrets in the
+          generated code. A non-technical founder builds it here; their engineer takes the code and owns every
+          low-level detail from then on.
+        </figcaption>
+      </figure>
+
+      <figure class="shot rv">
+        <div class="frame" data-zoom="images/visualised_logging.png">
+          <div class="bar">
+            <span class="dot" style="background:#ff5f57"></span><span class="dot" style="background:#febc2e"></span><span class="dot" style="background:#28c840"></span>
+            <span class="label">Logging &mdash; step-level run trace</span>
+          </div>
+          <img src="images/visualised_logging.png" alt="Per-step run trace with input and output token distributions, latency, retries and per-step cost" loading="lazy" />
+        </div>
+        <figcaption>
+          <b>This is what interpretability actually looks like.</b> Per-step cost ($0.001 range), input/output size
+          and latency distributions across attempts, validation results, and recovered retries called out explicitly
+          &mdash; &ldquo;3 failures were automatically retried, the step still succeeded&rdquo;. When a test case diverges,
+          this trace is what gets fed back for the fix.
+        </figcaption>
+      </figure>
+
+      <figure class="shot rv">
+        <div class="frame" data-zoom="images/integrated_file_system_1.png">
+          <div class="bar">
+            <span class="dot" style="background:#ff5f57"></span><span class="dot" style="background:#febc2e"></span><span class="dot" style="background:#28c840"></span>
+            <span class="label">Documents &mdash; integrated file system</span>
+          </div>
+          <img src="images/integrated_file_system_1.png" alt="Document picker filtering the store by type and filename rule, showing excluded files with the reason" loading="lazy" />
+        </div>
+        <figcaption>
+          <b>Typing extends to files.</b> Inputs declare what they accept, so the store filters itself and shows
+          you <em>why</em> a document was excluded rather than failing at runtime.
+        </figcaption>
+      </figure>
+
+      <figure class="shot rv">
+        <div class="frame" data-zoom="images/excel_view_for_non_technical.png">
+          <div class="bar">
+            <span class="dot" style="background:#ff5f57"></span><span class="dot" style="background:#febc2e"></span><span class="dot" style="background:#28c840"></span>
+            <span class="label">Output &mdash; native Excel view</span>
+          </div>
+          <img src="images/excel_view_for_non_technical.png" alt="Structured output rendered as a spreadsheet table with tree, table and JSON toggles" loading="lazy" />
+        </div>
+        <figcaption>
+          <b>Excel natively.</b> Because output is typed, the same result renders as a tree, a table or JSON.
+          Non-technical users get a spreadsheet; engineers get the JSON.
+        </figcaption>
+      </figure>
+
+      <figure class="shot rv">
+        <div class="frame" data-zoom="images/one_click_deploy_api_or_website.png">
+          <div class="bar">
+            <span class="dot" style="background:#ff5f57"></span><span class="dot" style="background:#febc2e"></span><span class="dot" style="background:#28c840"></span>
+            <span class="label">Share &mdash; one-click deploy</span>
+          </div>
+          <img src="images/one_click_deploy_api_or_website.png" alt="Deployment panel with link, API and marketplace tabs, who-pays selection and live deployment spend caps" loading="lazy" />
+        </div>
+        <figcaption>
+          <b>Hosting is the whole point.</b> Ship a public run page, an API, or a marketplace listing &mdash;
+          and choose who pays, with spend caps. A Claude Code user still has to solve this themselves.
+        </figcaption>
+      </figure>
+
+      <figure class="shot rv">
+        <div class="frame" data-zoom="images/pricing.png">
+          <div class="bar">
+            <span class="dot" style="background:#ff5f57"></span><span class="dot" style="background:#febc2e"></span><span class="dot" style="background:#28c840"></span>
+            <span class="label">Billing &mdash; live</span>
+          </div>
+          <img src="images/pricing.png" alt="Billing and pricing surface, live and chargeable" loading="lazy" />
+        </div>
+        <figcaption>
+          <b>Chargeable today.</b> Stripe, billing, credits and inference markup are already wired &mdash; this
+          isn&rsquo;t a prototype with a waitlist behind it.
+        </figcaption>
+      </figure>
+
+    </div>
+  </section>
+
+  <!-- ============ PROGRESS ============ -->
+  <section class="block" id="progress-section">
+    <p class="eyebrow">07 &mdash; Development progress</p>
+    <div class="grid g2" style="gap:40px; align-items:start;">
+      <div>
+        <h2>Two weeks, 120k lines,<br />a chargeable product.</h2>
+        <p class="lead">
+          With around two weeks of full-time development we&rsquo;ve produced 120k lines of code, a fully
+          chargeable Stripe-integrated product, and a vibe-coding agent. Future focus: guiding someone
+          non-technical to a highly reliable backend, using friendly formats like Excel.
+        </p>
+      </div>
+      <div class="card rv">
+        <div class="tl">
+          <div class="tl-item">
+            <div class="when">Shipped</div>
+            <div class="what">Typed structures, modular pipelines, step-level eval harness, run observability, code eject to Python / TypeScript.</div>
+          </div>
+          <div class="tl-item">
+            <div class="when">Shipped</div>
+            <div class="what">Hosting, public run links, API deploy, Stripe billing with inference markup, creator monetization.</div>
+          </div>
+          <div class="tl-item now">
+            <div class="when">Now &mdash; prototype</div>
+            <div class="what">Vibe coding agent: describe it, agent proposes and applies the whole project.</div>
+          </div>
+          <div class="tl-item">
+            <div class="when">Next</div>
+            <div class="what">Agent that walks a non-technical founder to a production-reliable backend, end to end.</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="grid g4 rv" style="margin-top:32px;">
+      <div class="card stat"><div class="k">Build time</div><div class="v">2 wks</div><div class="n">full-time, solo</div></div>
+      <div class="card stat"><div class="k">Codebase</div><div class="v">120k</div><div class="n">lines of code</div></div>
+      <div class="card stat"><div class="k">Measured run</div><div class="v">$0.0024</div><div class="n">legal eval pipeline, 8 steps cached</div></div>
+      <div class="card stat"><div class="k">Status</div><div class="v">Live</div><div class="n">Stripe-integrated</div></div>
+    </div>
+  </section>
+
+  <!-- ============ COMPETITORS ============ -->
+  <section class="block" id="competitors">
+    <p class="eyebrow">08 &mdash; Competitors</p>
+    <h2>~90 companies mapped.<br /></h2>
+    <p class="lead">
+      We&rsquo;ve conducted extensive competitor analysis and tried a subset of their products.
+      We&rsquo;ve identified around 90 companies which are either direct or adjacent competitors.
+      The leading product we&rsquo;ve observed is Relevance AI at $13M ARR and growing quickly.
+    </p>
+
+    <div class="grid g2 rv" style="margin-top:28px; gap:16px;">
+      <div class="card">
+        <h3>Relevance AI &mdash; $13M ARR</h3>
+        <p style="font-size:14.5px; margin-bottom:0;">
+          From my experience at KPMG, I know Relevance AI isn&rsquo;t adopted by leadership or developers
+          outside of demos. Is that because the product isn&rsquo;t needed? Absolutely not &mdash;
+          I developed <span class="fg">50k lines of code inside KPMG</span> to mimic what Relevance AI
+          does, but at scale.
+        </p>
+      </div>
+      <div class="card">
+        <h3>The real competitor is already inside the company</h3>
+        <p style="font-size:14.5px; margin-bottom:0;">
+          Our competitors are not only public companies in our space, but the
+          <span class="fg">pre-existing codebases inside the companies we sell to</span>.
+        </p>
+      </div>
+    </div>
+
+    <!-- AI : show rather than assert that the category leader is demo-ware -->
+    <div class="grid g2 rv" style="margin-top:32px; gap:16px;">
+      <figure class="shot">
+        <div class="frame" data-zoom="images/relevance_AI.png">
+          <div class="bar">
+            <span class="dot" style="background:#ff5f57"></span><span class="dot" style="background:#febc2e"></span><span class="dot" style="background:#28c840"></span>
+            <span class="label">Relevance AI &mdash; the builder</span>
+          </div>
+          <img src="images/relevance_AI.png" alt="Relevance AI agent builder: a single free-text prompt box, a model picker, tools and a knowledge drag-and-drop panel" loading="lazy" />
+        </div>
+        <figcaption>
+          <b>The whole build surface is a prompt box.</b> One free-text instruction, a model picker, a tool toggle
+          and a drag-and-drop knowledge panel. There are no types, no per-step boundaries and nothing to trace
+          when an answer comes back wrong.
+        </figcaption>
+      </figure>
+      <figure class="shot">
+        <div class="frame" data-zoom="images/relevance_share.png">
+          <div class="bar">
+            <span class="dot" style="background:#ff5f57"></span><span class="dot" style="background:#febc2e"></span><span class="dot" style="background:#28c840"></span>
+            <span class="label">Relevance AI &mdash; the output</span>
+          </div>
+          <img src="images/relevance_share.png" alt="Relevance AI share dialog: chat UI, embed snippet, shareable link and styling options with a mock conversation" loading="lazy" />
+        </div>
+        <figcaption>
+          <b>And the output is a styled chat widget.</b> Primary colour, starting prompts, a mock conversation, and
+          &ldquo;chats on the free plan are cleared after 30 days&rdquo;. This is a demo tool that happens to do
+          $13M ARR &mdash; which tells you how little the category has had to deliver so far.
+        </figcaption>
+      </figure>
+    </div>
+
+    <div class="card rv" id="vizRoot" style="margin-top:32px;">
+      <h3>ARR vs. valuation — colour = quadrant, opacity = similarity to Spine</h3>
+      <p class="card-sub">X = ARR ($M, log). Y = valuation ($M, log). <strong>Solid dot</strong> = both axes are recent point figures. <strong>Vertical bar</strong> = ARR known, valuation is a range. <strong>Horizontal bar</strong> = valuation known, ARR is a range. <strong>Box</strong> = both axes are ranges. Red box (bottom left) = ARR ≤ $100M and valuation ≤ $1B — below VC funding. Gold box = Spine m36 parked at Make.com, around $1B. Filter a quadrant from the chips; Spine stays on. <strong>Target only</strong> hides every other mark. Hover a mark for detail.</p>
+      <div class="filters" id="filters"></div>
+      <div class="chart-wrap" id="chartWrap">
+        <button type="button" class="isolate-btn" id="isolateBtn">Target only</button>
+        <div id="chartHost"></div>
+      </div>
+      <div class="legends">
+        <div class="legend-block">
+          <div class="legend-title">Quadrant (colour)</div>
+          <div class="shape-legend">
+            <div class="shape-row"><span class="qdot" style="background:var(--fe-con)"></span> Front-end × consumer</div>
+            <div class="shape-row"><span class="qdot" style="background:var(--fe-dev)"></span> Front-end × developer</div>
+            <div class="shape-row"><span class="qdot" style="background:var(--be-con)"></span> Back-end × consumer</div>
+            <div class="shape-row"><span class="qdot" style="background:var(--be-dev)"></span> Back-end × developer</div>
+            <div class="shape-row"><span class="qdot" style="background:var(--be-int)"></span> Back-end × developer (integrations)</div>
+            <div class="shape-row"><span class="qdot" style="background:var(--spine)"></span> Spine Target (~$1B)</div>
+            <div class="shape-row"><span class="sw" style="background:rgba(224,56,56,0.35); height:12px; border-radius:2px;"></span> Below VC funding (ARR ≤ $100M, val ≤ $1B)</div>
+          </div>
+        </div>
+        <div class="legend-block">
+          <div class="legend-title">Similarity to Spine (opacity)</div>
+          <div class="alpha-grad" id="alphaGrad"></div>
+          <div class="alpha-ticks"><span>0</span><span>5</span><span>10</span></div>
+        </div>
+        <div class="legend-block">
+          <div class="legend-title">How the figure was resolved</div>
+          <div class="shape-legend">
+            <div class="shape-row">
+              <svg class="sw" viewBox="0 0 16 16"><circle cx="8" cy="8" r="5.5" fill="#3987e5" opacity="0.85"/></svg>
+              Both axes are point figures
+            </div>
+            <div class="shape-row">
+              <svg class="sw" viewBox="0 0 16 16"><rect x="5" y="1.5" width="6" height="13" rx="3" fill="#3987e5" opacity="0.4"/><rect x="5" y="1.5" width="6" height="13" rx="3" fill="none" stroke="#86b6ef" stroke-width="1" stroke-dasharray="2.5 2"/><line x1="5.5" y1="8" x2="10.5" y2="8" stroke="#3987e5" stroke-width="1.8"/></svg>
+              Valuation is a range (vertical)
+            </div>
+            <div class="shape-row">
+              <svg class="sw" viewBox="0 0 16 16"><rect x="1.5" y="5" width="13" height="6" rx="3" fill="#3987e5" opacity="0.4"/><rect x="1.5" y="5" width="13" height="6" rx="3" fill="none" stroke="#86b6ef" stroke-width="1" stroke-dasharray="2.5 2"/><line x1="8" y1="5.5" x2="8" y2="10.5" stroke="#3987e5" stroke-width="1.8"/></svg>
+              ARR is a range (horizontal)
+            </div>
+            <div class="shape-row">
+              <svg class="sw" viewBox="0 0 16 16"><rect x="2" y="3" width="12" height="10" rx="2" fill="#3987e5" opacity="0.28"/><rect x="2" y="3" width="12" height="10" rx="2" fill="none" stroke="#86b6ef" stroke-width="1" stroke-dasharray="2.5 2"/><path d="M5 8h6M8 5v6" stroke="#3987e5" stroke-width="1.4"/></svg>
+              Both axes are ranges (box)
+            </div>
+            <div class="shape-row"><span class="swatch-line sw" style="height:0"></span> <span id="fitLegend">Fitted trend</span></div>
+          </div>
+        </div>
+        <div class="legend-block">
+          <div class="legend-title">Why a figure becomes a band</div>
+          <div class="shape-legend" style="max-width:235px">
+            <div><strong style="color:var(--foreground)">reported</strong> — good sources disagree, or the company gave a floor and a target</div>
+            <div><strong style="color:var(--foreground)">stale</strong> — one solid figure, too old to still be true</div>
+            <div><strong style="color:var(--foreground)">modeled</strong> — nothing on this axis; band spans the peer-multiple IQR</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <h3 style="margin:44px 0 6px; font-size:15px;">Feature comparison</h3>
+    <p style="font-size:13px; color:var(--muted-dim); margin-bottom:16px;">A small subset of high-level features across the landscape.</p>
+    <div class="table-wrap rv">
+      <table>
+        <thead>
+          <tr>
+            <th>Platform</th>
+            <th>Visual<br />builder</th>
+            <th>Typed schema<br />enforcement</th>
+            <th>Multi-language<br />code eject</th>
+            <th>Step-level<br />eval harness</th>
+            <th>Run<br />observability</th>
+            <th>Creator<br />monetization</th>
+            <th>Self-host /<br />custom LLM</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr class="us">
+            <td>Spine</td>
+            <td><span class="pill y">Yes</span></td><td><span class="pill y">Yes</span></td><td><span class="pill y">Yes</span></td>
+            <td><span class="pill y">Yes</span></td><td><span class="pill y">Yes</span></td><td><span class="pill y">Yes</span></td>
+            <td><span class="pill p">Part</span></td>
+          </tr>
+          <tr>
+            <td>Dify AI</td>
+            <td><span class="pill y">Yes</span></td><td><span class="pill p">Part</span></td><td><span class="pill n">&mdash;</span></td>
+            <td><span class="pill p">Part</span></td><td><span class="pill y">Yes</span></td><td><span class="pill n">&mdash;</span></td>
+            <td><span class="pill y">Yes</span></td>
+          </tr>
+          <tr>
+            <td>Vellum AI</td>
+            <td><span class="pill y">Yes</span></td><td><span class="pill y">Yes</span></td><td><span class="pill p">Part</span></td>
+            <td><span class="pill y">Yes</span></td><td><span class="pill y">Yes</span></td><td><span class="pill n">&mdash;</span></td>
+            <td><span class="pill n">&mdash;</span></td>
+          </tr>
+          <tr>
+            <td>StackAI</td>
+            <td><span class="pill y">Yes</span></td><td><span class="pill n">&mdash;</span></td><td><span class="pill n">&mdash;</span></td>
+            <td><span class="pill p">Part</span></td><td><span class="pill p">Part</span></td><td><span class="pill n">&mdash;</span></td>
+            <td><span class="pill p">Part</span></td>
+          </tr>
+          <tr>
+            <td>Windmill</td>
+            <td><span class="pill y">Yes</span></td><td><span class="pill p">Part</span></td><td><span class="pill p">Part</span></td>
+            <td><span class="pill n">&mdash;</span></td><td><span class="pill y">Yes</span></td><td><span class="pill n">&mdash;</span></td>
+            <td><span class="pill y">Yes</span></td>
+          </tr>
+          <tr>
+            <td>Relevance AI</td>
+            <td><span class="pill y">Yes</span></td><td><span class="pill n">&mdash;</span></td><td><span class="pill n">&mdash;</span></td>
+            <td><span class="pill n">&mdash;</span></td><td><span class="pill p">Part</span></td><td><span class="pill n">&mdash;</span></td>
+            <td><span class="pill n">&mdash;</span></td>
+          </tr>
+          <tr>
+            <td>Gumloop</td>
+            <td><span class="pill y">Yes</span></td><td><span class="pill n">&mdash;</span></td><td><span class="pill n">&mdash;</span></td>
+            <td><span class="pill n">&mdash;</span></td><td><span class="pill p">Part</span></td><td><span class="pill p">Part</span></td>
+            <td><span class="pill n">&mdash;</span></td>
+          </tr>
+          <tr>
+            <td>BoundaryML</td>
+            <td><span class="pill n">&mdash;</span></td><td><span class="pill y">Yes</span></td><td><span class="pill y">Yes</span></td>
+            <td><span class="pill p">Part</span></td><td><span class="pill p">Part</span></td><td><span class="pill n">&mdash;</span></td>
+            <td><span class="pill y">Yes</span></td>
+          </tr>
+          <tr>
+            <td>Flowise</td>
+            <td><span class="pill y">Yes</span></td><td><span class="pill n">&mdash;</span></td><td><span class="pill n">&mdash;</span></td>
+            <td><span class="pill n">&mdash;</span></td><td><span class="pill p">Part</span></td><td><span class="pill n">&mdash;</span></td>
+            <td><span class="pill y">Yes</span></td>
+          </tr>
+          <tr>
+            <td>Langflow</td>
+            <td><span class="pill y">Yes</span></td><td><span class="pill n">&mdash;</span></td><td><span class="pill n">&mdash;</span></td>
+            <td><span class="pill n">&mdash;</span></td><td><span class="pill p">Part</span></td><td><span class="pill n">&mdash;</span></td>
+            <td><span class="pill y">Yes</span></td>
+          </tr>
+          <tr>
+            <td>Wordware</td>
+            <td><span class="pill y">Yes</span></td><td><span class="pill p">Part</span></td><td><span class="pill n">&mdash;</span></td>
+            <td><span class="pill n">&mdash;</span></td><td><span class="pill p">Part</span></td><td><span class="pill p">Part</span></td>
+            <td><span class="pill n">&mdash;</span></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <p style="margin-top:14px; font-size:12.5px; color:var(--muted-dim);">
+      Full five-cell landscape with methodology, scenarios and the tool list:
+      <a href="combined_valuation_est_across_categories.html" style="color:var(--muted); text-decoration:underline; text-underline-offset:3px;">open the landscape chart &rarr;</a>
+    </p>
+  </section>
+
+  <!-- ============ VALIDATION ============ -->
+  <section class="block" id="validation">
+    <p class="eyebrow">09 &mdash; Validation</p>
+    <h2>Severe, urgent pain &mdash;<br />on both sides of the market.</h2>
+    <p class="lead">
+      I&rsquo;ve interviewed developers from large enterprises and small startup founders experiencing
+      severe and urgent pain with AI engineering.
+    </p>
+
+    <div class="grid g2 rv" style="margin-top:32px; gap:16px;">
+      <div class="card">
+        <h3>Startups don&rsquo;t have the vocabulary</h3>
+        <p style="font-size:14.5px; margin-bottom:0;">
+          A small AI startup wasn&rsquo;t even familiar with the AI-engineering terminology required
+          to develop a suitable solution.
+        </p>
+      </div>
+      <div class="card">
+        <h3>Enterprises can&rsquo;t ship</h3>
+        <p style="font-size:14.5px; margin-bottom:0;">
+          Despite PhD qualifications, teams are often struggling to ship to production.
+        </p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ MARKET ============ -->
+  <section class="block" id="market">
+    <p class="eyebrow">10 &mdash; TAM / SAM / SOM</p>
+    <h2>TAM SAM SOM</h2>
+    <p style="font-size:13px; color:var(--muted-dim); margin-bottom:14px;">
+      TAM &mdash; Total Addressable Market &nbsp;&middot;&nbsp;
+      SAM &mdash; Serviceable Addressable Market &nbsp;&middot;&nbsp;
+      SOM &mdash; Serviceable Obtainable Market
+    </p>
+    <p class="lead">
+      TAM $25B &middot; SAM $3.5B &middot; SOM $40&ndash;80M ARR / ~$1B by month 36, parked at Make.com on the landscape. Split, because the two legs
+      carry opposite risk profiles and a single blended number hides both.
+    </p>
+
+    <div class="market rv" style="margin-top:32px;">
+      <div class="grid" style="gap:16px;">
+        <div class="card">
+          <h3>Consumer &mdash; the outcome</h3>
+          <p style="font-size:14px;">
+            Prompt-to-app at $4.7B, growing 38% a year. The only leg with demonstrated distribution velocity:
+            Lovable went $200M &rarr; $500M ARR in seven months, Bolt hit $40M in five.
+            <span class="fg">$100M ARR is 7% of this SAM.</span> Low confidence, uncapped &mdash; this is the leg
+            that returns a fund.
+          </p>
+          <p style="font-size:14px; margin-bottom:0; color:var(--muted-dim);">
+            Which means Lovable, Replit and Bolt are competitors, not metaphors. They generate apps; we generate
+            backends that run at a third of a cent per document.
+          </p>
+        </div>
+        <div class="card">
+          <h3>Enterprise &mdash; the floor</h3>
+          <p style="font-size:14px;">
+            LLMOps ($7.1B), agent platforms ($5.3B excluding the hyperscalers) and AI implementation services
+            ($14B), de-duplicated. Contract revenue: 150&ndash;300 teams at $8&ndash;15k plus two to four
+            implementations at $200k&ndash;1M.
+          </p>
+          <p style="font-size:14px; margin-bottom:0; color:var(--muted-dim);">
+            High confidence, capped near the $1&ndash;13M peer base rate. This is the leg that means we don&rsquo;t die.
+          </p>
+        </div>
+      </div>
+
+      <!-- AI : nested squares — area is roughly proportional to log scale, not linear, or SOM would be invisible -->
+      <div class="card" style="padding:30px;">
+        <svg class="diagram capped" viewBox="0 0 420 300" role="img" aria-label="Nested TAM SAM SOM diagram">
+          <g font-family="Geist Mono, monospace">
+            <rect x="10" y="10" width="400" height="280" rx="12" fill="#0d1410" stroke="#1f2a22" />
+            <text x="26" y="34" fill="#737373" font-size="10.5" letter-spacing="1.5">TAM</text>
+            <text x="26" y="56" fill="#fafafa" font-size="18">$25B</text>
+
+            <rect x="70" y="86" width="280" height="180" rx="10" fill="#12241a" stroke="#2c4436" />
+            <text x="86" y="110" fill="#737373" font-size="10.5" letter-spacing="1.5">SAM</text>
+            <text x="86" y="132" fill="#fafafa" font-size="16">$3.5B</text>
+
+            <rect x="126" y="150" width="188" height="100" rx="8" fill="#16321f" stroke="#4ade8055" />
+            <text x="142" y="174" fill="#4ade80" font-size="10.5" letter-spacing="1.5">SOM</text>
+            <text x="142" y="196" fill="#4ade80" font-size="15">~$1B</text>
+            <text x="142" y="216" fill="#4ade8099" font-size="12.5">$40–80M ARR</text>
+            <text x="142" y="236" fill="#737373" font-size="10">m36 · Make.com</text>
+          </g>
+        </svg>
+        <p style="margin:16px 0 0; font-size:11.5px; color:var(--muted-dim);">Areas indicative, not to linear scale.</p>
+      </div>
+    </div>
+
+    <details class="acc rv">
+      <summary>How the split is derived &mdash; and what can kill it <span class="chev">&#9662;</span></summary>
+      <div class="body">
+        <p>
+          <strong>Consumer cut.</strong> Prompt-to-app and vibe coding is $4.7B in 2026 at a 38% CAGR, reaching ~$17B by
+          2030. Mordor&rsquo;s no-code AI platform print of $4.88B is the same budget line arriving independently at the
+          same place. SAM is that market after a ~65% geography cut for NA / Western Europe / ANZ and a further cut to the
+          builders who need a backend rather than a front end &mdash; ~$1.5B. Bottom-up: ~150k reachable teams at a
+          $2&ndash;3k blended self-serve price (peers run $59&ndash;159/mo) with inference markup on top.
+        </p>
+        <p>
+          <strong>Enterprise cut.</strong> LLMOps software at $7.1B (TBRC), agent platforms at $5.3B on the narrow
+          definition that excludes Azure/AWS/Google, and AI implementation services at $14B. These overlap heavily;
+          de-duplicated the layer is ~$20B, growing to ~$68B by 2030. SAM is $20B &times; ~65% geography &times; ~15% for
+          buyer and wedge &asymp; $2B &mdash; we do not win the F500, they buy Databricks or Big Four. Bottom-up agrees:
+          ~40k reachable funded and mid-market teams at a ~$25k ACV is ~$1B of software, plus ~$1B of productisable
+          implementation spend.
+        </p>
+        <p>
+          <strong>Why the base clears the peer mark.</strong> The direct peer cohort clusters between $1M and $13M ARR:
+          Dify $3M at three years, Relevance AI $12.6M, Vellum $3.5M, StackAI $2.9M (acquired by Asana for $75M). An $8M
+          base is above Dify&rsquo;s three-year figure because Dify is pure software with no services leg &mdash;
+          $200k&ndash;1M implementation contracts are booked revenue, not PLG revenue. That is the whole justification,
+          and it only becomes visible once the legs are separated.
+        </p>
+        <p>
+          <strong>What can kill this.</strong> Two things. If founders keep shipping backends in Claude Code, the
+          enterprise tooling leg collapses to the visual-builder niche &mdash; already only ~$40&ndash;70M of captured
+          ARR. And services compresses the multiple: implementation runs 30&ndash;40% margin and managed services
+          50&ndash;65% against 70&ndash;80% for software, and investors mark services at 1&ndash;2&times; revenue against
+          10&ndash;25&times; for software. Services funds the consumer motion; it is deliberately not the growth story.
+        </p>
+      </div>
+    </details>
+  </section>
+
+  <!-- ============ TRACTION ============ -->
+  <section class="block" id="traction">
+    <p class="eyebrow">11 &mdash; Traction</p>
+    <div class="grid g2" style="gap:40px; align-items:start;">
+      <div>
+        <h2>Light on traction.<br />That&rsquo;s the current focus.</h2>
+        <p class="lead">
+          For context: I was going to pivot from this idea, so we&rsquo;re light on traction at the moment
+          &mdash; and that&rsquo;s our current main focus.
+        </p>
+      </div>
+      <div class="card rv">
+        <h3>Industry connections, a phone call away</h3>
+        <p style="font-size:14.5px; margin-bottom:0;">
+          Strong industry connections with <span class="fg">NAB, KPMG, and AI-engineering agencies</span>,
+          which I&rsquo;m planning to leverage.
+        </p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ PRICING ============ -->
+  <section class="block" id="pricing">
+    <p class="eyebrow">12 &mdash; Pricing</p>
+    <h2>Free with inference markup first.<br />Three revenue legs after.</h2>
+    <p class="lead">
+      Initially free with an inference markup, to get maximum user feedback. Later, a synergistic
+      multi-pronged approach, where we cater to:
+    </p>
+
+    <div class="grid g3 rv" style="margin-top:32px;">
+      <div class="card num-card">
+        <span class="num">LEG 01</span>
+        <h3>Vibe-coding consumers</h3>
+        <p>Vibe-coding consumers, to drive our name brand. This is the distribution engine.</p>
+      </div>
+      <div class="card num-card">
+        <span class="num">LEG 02</span>
+        <h3>Enterprise dev tooling</h3>
+        <p>Enterprise development tooling and vibe coding for teams already building.</p>
+      </div>
+      <div class="card num-card">
+        <span class="num">LEG 03</span>
+        <h3>Enterprise consulting</h3>
+        <p>And enterprise consulting services.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ GTM ============ -->
+  <section class="block" id="gtm">
+    <p class="eyebrow">13 &mdash; Go to market</p>
+    <h2>Hyper-augmented vibe coding<br />at developer rates.</h2>
+    <p class="lead">
+      We are reaching out to AI startup founders to sell hyper-augmented vibe coding at developer rates,
+      to get real product feedback, testing, and initial cash flow.
+    </p>
+
+    <div class="grid g2 rv" style="margin-top:32px; gap:16px;">
+      <div class="card num-card">
+        <span class="num">NOW</span>
+        <h3>AI startup founders</h3>
+        <p>Sell hyper-augmented vibe coding at developer rates. Get real product feedback, testing, and initial cash flow.</p>
+      </div>
+      <div class="card num-card">
+        <span class="num">IN PARALLEL</span>
+        <h3>Larger companies</h3>
+        <p>At the same time, we&rsquo;re pitching to larger companies for trials.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ MOAT ============ -->
+  <section class="block" id="moat">
+    <p class="eyebrow">14 &mdash; The moat</p>
+    <div class="grid g2" style="gap:40px; align-items:start;">
+      <div>
+        <h2>Lowest friction to a<br />reliable backend.</h2>
+        <p class="lead">
+          We are the lowest-friction solution to engineering and deploying a backend, with exceptional
+          backend reliability and development speed from novel insights.
+        </p>
+      </div>
+      <div class="card rv" style="border-color:var(--line-bright);">
+        <p style="font-size:15px; margin-bottom:0;">
+          Opinionated AI engineering, baked in: higher reliability, cheaper development and inference,
+          and a path from non-technical vibe coding to exported code.
+        </p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ THE ASK ============ -->
+  <section class="block" id="ask">
+    <p class="eyebrow">15 &mdash; The ask</p>
+    <div class="grid g2" style="gap:40px; align-items:start;">
+      <div>
+        <h2>$200k for 5%,<br />at a $4M valuation.</h2>
+        <p class="lead">
+          We require minimal funding with our development pace. The product is built, hosted and already
+          chargeable &mdash; this is not a raise to reach a first version.
+        </p>
+      </div>
+      <div class="grid rv" style="gap:16px;">
+        <div class="pitchline">
+          <div class="k">Raising</div>
+          <div class="v">$200,000</div>
+          <hr />
+          <div class="k">For</div>
+          <div class="v">5% equity</div>
+          <hr />
+          <div class="k">Valuation</div>
+          <div class="v">$4,000,000</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ CLOSE ============ -->
+  <section class="block" id="close" style="padding-top:80px; padding-bottom:80px;">
+    <h2 style="font-size:clamp(30px,4.6vw,46px);">Lovable for backend.</h2>
+    <p class="lead" style="margin-bottom:32px;">
+      Vibe coding for AI engineering and backend code. Production-level systems, while being non-technical.
+      Hosted, exportable, and cheap enough to run.
+    </p>
+    <div style="display:flex; gap:12px; flex-wrap:wrap;">
+      <a class="btn lg" href="https://www.spine-ai-app.dev/" target="_blank" rel="noopener">Try now</a>
+      <a class="btn lg ghost" href="#top">Back to top</a>
+    </div>
+    <div class="credit" style="margin-top:40px;">
+      <span>developed by engineers from <b>KPMG</b></span>
+      <span>built at the <b>ANTLER</b> hackathon &middot; independent, not funded</span>
+    </div>
+  </section>
+
+</main>
+
+<footer class="end">
+  <p>&copy; 2026 Spine. All rights reserved.</p>
+</footer>
+
+<div id="lightbox" role="dialog" aria-modal="true" aria-label="Enlarged screenshot"><img alt="" /></div>
+<div id="chartTip"></div>
+
+<script>
+  const progress = document.getElementById("progress");
+
+  // AI : reveal by measuring rather than IntersectionObserver — an anchor jump skips
+  // past elements entirely, and observed-but-never-intersected blocks stay invisible.
+  let pending = Array.from(document.querySelectorAll(".rv"));
+
+  const onScroll = () => {
+    const h = document.documentElement.scrollHeight - window.innerHeight;
+    progress.style.width = (h > 0 ? (window.scrollY / h) * 100 : 0) + "%";
+
+    pending = pending.filter((el) => {
+      if (el.getBoundingClientRect().top >= window.innerHeight - 60) return true;
+      el.classList.add("in");
+      return false;
+    });
+  };
+
+  window.addEventListener("scroll", onScroll, { passive: true });
+  window.addEventListener("resize", onScroll);
+  onScroll();
+
+  // AI : nav highlight follows the section currently filling the viewport
+  const navLinks = Array.from(document.querySelectorAll(".nav-links a"));
+  const targets = navLinks
+    .map((a) => document.querySelector(a.getAttribute("href")))
+    .filter(Boolean);
+  const spy = new IntersectionObserver(
+    (entries) => {
+      entries.forEach((e) => {
+        if (!e.isIntersecting) return;
+        navLinks.forEach((a) =>
+          a.classList.toggle("active", a.getAttribute("href") === "#" + e.target.id)
+        );
+      });
+    },
+    { rootMargin: "-45% 0px -50% 0px" }
+  );
+  targets.forEach((t) => spy.observe(t));
+
+  // AI : click-to-zoom on product shots
+  const lightbox = document.getElementById("lightbox");
+  const lightboxImg = lightbox.querySelector("img");
+  document.querySelectorAll("[data-zoom]").forEach((frame) => {
+    frame.addEventListener("click", () => {
+      lightboxImg.src = frame.getAttribute("data-zoom");
+      lightbox.classList.add("on");
+      document.body.style.overflow = "hidden";
+    });
+  });
+  const closeLightbox = () => {
+    lightbox.classList.remove("on");
+    document.body.style.overflow = "";
+  };
+  lightbox.addEventListener("click", closeLightbox);
+  window.addEventListener("keydown", (e) => {
+    if (e.key === "Escape") closeLightbox();
+  });
+
+
+  // AI : landscape scatter — ported from combined_valuation_est_across_categories.html
+  const PAYLOAD = {"generated":"2026-08-13","peer_multiple":{"p25":16.7,"median":23.2,"p75":27.4,"n":15},"fit":{"a":19.974156090753844,"b":1.012281554033738,"r2":0.9421273521648966,"n":23},"fit_no_cursor":{"a":19.10543924140827,"b":1.0275610045620416,"r2":0.9310820867283589,"n":22},"companies":[{"name":"Lovable","layer":"frontend","audience":"consumer","gtm":"consumer","technical":"non-technical","category":"Prompt-to-app builder","similarity":8,"desc":"Vibe-coding: prompt to a hosted React/Supabase app. Spine's consumer-builder analog \u2014 the pitch line is 'Lovable for backend'.","arr":{"kind":"point","point":500,"lo":null,"hi":null,"as_of":"2026-06-01","note":"self-reported annualised run-rate; TechCrunch at Series C. Tracking toward ~$600M by end-Aug 2026.","mid":500},"valuation":{"kind":"point","point":13300,"lo":null,"hi":null,"as_of":"2026-08-12","note":"$400M Series C led by Menlo + EQT Scaleup Europe Fund, announced 12 Aug 2026.","mid":13300},"sources":["https://techcrunch.com/2026/08/12/lovable-confirms-new-13-3b-valuation-raises-another-400m/","https://lovable.dev/blog/series-c"],"arr_mid":500,"val_mid":13300,"shape":"point"},{"name":"Bolt.new (StackBlitz)","layer":"frontend","audience":"consumer","gtm":"consumer","technical":"non-technical","category":"Prompt-to-app builder","similarity":7,"desc":"Browser-native full-stack builder on WebContainers. Same consumer prompt-to-app motion Spine wants for AI pipelines.","arr":{"kind":"range_stale","point":null,"lo":40,"hi":190,"as_of":"2025-03-15","note":"last disclosed $40M Mar 2025; upper bound = that figure grown at the front-end cohort's ~3\u00d7/yr over 17 months.","mid":87.17797887081348},"valuation":{"kind":"range_stale","point":null,"lo":700,"hi":2800,"as_of":"2025-01-15","note":"$700M Jan 2025 Series B; later rounds widely referenced but undisclosed.","mid":1400.0},"sources":["https://sacra.com/c/bolt-new/"],"arr_mid":87.17797887081348,"val_mid":1400.0,"shape":"box"},{"name":"Base44 (Wix)","layer":"frontend","audience":"consumer","gtm":"consumer","technical":"non-technical","category":"Prompt-to-app builder","similarity":7,"desc":"Backend-first prompt-to-app (db, auth, hosting) acquired by Wix. Product-line, not a standalone company.","arr":{"kind":"point","point":100,"lo":null,"hi":null,"as_of":"2026-02-01","note":"~$100M ARR stated by Wix management on the Q4 2025 earnings call.","mid":100},"valuation":{"kind":"range_modeled","point":null,"lo":1700.0,"hi":2910.0,"as_of":null,"note":"no standalone valuation; band = ARR \u00d7 peer-multiple IQR (17\u00d7\u201329.1\u00d7)","mid":2224.1852440837747},"sources":["https://finance.yahoo.com/news/wix-com-q4-earnings-call-165003576.html"],"arr_mid":100,"val_mid":2224.1852440837747,"shape":"vband"},{"name":"Emergent","layer":"frontend","audience":"consumer","gtm":"consumer","technical":"non-technical","category":"Prompt-to-app builder","similarity":7,"desc":"Autonomous-agent app builder for non-technical founders. Fastest launch-to-unicorn in the consumer builder set.","arr":{"kind":"point","point":120,"lo":null,"hi":null,"as_of":"2026-07-15","note":"$120M annualised run-rate disclosed at Series C.","mid":120},"valuation":{"kind":"point","point":1500,"lo":null,"hi":null,"as_of":"2026-07-15","note":"$130M Series C led by Creaegis, post-money.","mid":1500},"sources":["https://techcrunch.com/2026/07/15/indian-ai-coding-startup-emergent-becomes-a-unicorn-just-over-a-year-after-launch/"],"arr_mid":120,"val_mid":1500,"shape":"point"},{"name":"Framer","layer":"frontend","audience":"consumer","gtm":"consumer","technical":"non-technical","category":"Visual site builder","similarity":4,"desc":"Canvas that publishes production sites, with AI layout. Adjacent visual-builder incumbent, not an AI-eng tool.","arr":{"kind":"range_reported","point":null,"lo":50,"hi":100,"as_of":"2025-08-28","note":"$50M disclosed at Aug 2025 Series D; company target $100M for 2026.","mid":70.71067811865476},"valuation":{"kind":"point","point":2000,"lo":null,"hi":null,"as_of":"2025-08-28","note":"$100M Series D led by Meritech.","mid":2000},"sources":["https://sacra.com/c/framer/"],"arr_mid":70.71067811865476,"val_mid":2000,"shape":"hband"},{"name":"Cursor (Anysphere)","layer":"frontend","audience":"developer","gtm":"both","technical":"technical","category":"AI code editor","similarity":5,"desc":"AI-first VS Code fork. Ceiling reference for how developer tooling is priced \u2014 not a pipeline product. Interviews in the pitch found enterprise AI eng happening here, not in Relevance.","arr":{"kind":"range_reported","point":null,"lo":3000,"hi":4000,"as_of":"2026-06-16","note":"$3B annualised late Apr 2026 and $4B+ by Jun 2026; self-reported run-rate, not audited.","mid":3464.1016151377544},"valuation":{"kind":"point","point":60000,"lo":null,"hi":null,"as_of":"2026-06-16","note":"SpaceX all-stock acquisition announced 16 Jun 2026, pending close \u2014 a deal price, not a financing mark.","mid":60000},"sources":["https://www.forbes.com/sites/sandycarter/2026/06/16/spacex-buys-cursor-in-largest-startup-acquisition-ever-at-60-billion/"],"arr_mid":3464.1016151377544,"val_mid":60000,"shape":"hband"},{"name":"Replit","layer":"frontend","audience":"developer","gtm":"both","technical":"both","category":"Browser IDE + agent","similarity":6,"desc":"Browser IDE with an autonomous build agent. Spans consumer and developer \u2014 the closest full-stack analog to Spine's graduated complexity.","arr":{"kind":"range_reported","point":null,"lo":150,"hi":1000,"as_of":"2025-09-10","note":"last disclosed $150M Sep 2025; company guided to $1B by end-2026 and did not update at the Series D.","mid":387.2983346207417},"valuation":{"kind":"point","point":9000,"lo":null,"hi":null,"as_of":"2026-03-11","note":"$400M Series D led by Georgian, 11 Mar 2026.","mid":9000},"sources":["https://fnex.com/replit-raises-400m-at-9b-valuation/"],"arr_mid":387.2983346207417,"val_mid":9000,"shape":"hband"},{"name":"Vercel","layer":"frontend","audience":"developer","gtm":"enterprise","technical":"technical","category":"Front-end cloud + AI tooling","similarity":4,"desc":"Next.js hosting/deploy. Spine's hosting/share/API surface is the AI-eng equivalent of what Vercel is for front ends.","arr":{"kind":"point","point":340,"lo":null,"hi":null,"as_of":"2026-02-01","note":"Sacra estimate, up from $305M at end-2025.","mid":340},"valuation":{"kind":"range_reported","point":null,"lo":8100,"hi":9300,"as_of":"2025-09-30","note":"$9.3B primary mark from Sep 2025 Series F vs ~$8.1B implied by secondary blocks.","mid":8679.285684893659},"sources":["https://sacra.com/c/vercel/"],"arr_mid":340,"val_mid":8679.285684893659,"shape":"vband"},{"name":"v0 (Vercel)","layer":"frontend","audience":"developer","gtm":"consumer","technical":"technical","category":"Prompt-to-UI generator","similarity":6,"desc":"Text-to-UI inside Vercel. Product line \u2014 neither v0 ARR nor a v0 valuation is broken out.","arr":{"kind":"range_modeled","point":null,"lo":30,"hi":90,"as_of":"2026-02-01","note":"not broken out; band from Vercel's $340M total ARR vs v0's reported 4M users on a $20/mo tier, majority Teams/Enterprise.","mid":51.96152422706632},"valuation":{"kind":"range_modeled","point":null,"lo":510.0,"hi":2619.0,"as_of":null,"note":"no standalone valuation; band = ARR \u00d7 peer-multiple IQR (17\u00d7\u201329.1\u00d7)","mid":1155.7205544594246},"sources":["https://sacra.com/c/vercel/"],"arr_mid":51.96152422706632,"val_mid":1155.7205544594246,"shape":"box"},{"name":"Webflow","layer":"frontend","audience":"developer","gtm":"consumer","technical":"both","category":"Visual site builder","similarity":3,"desc":"Visual development with CMS and code export. Incumbent the AI builders are attacking; included as a mature visual-builder multiple.","arr":{"kind":"point","point":212.5,"lo":null,"hi":null,"as_of":"2026-05-01","note":"widely reported ARR, stable series.","mid":212.5},"valuation":{"kind":"point","point":4000,"lo":null,"hi":null,"as_of":"2025-01-01","note":"last primary mark.","mid":4000},"sources":["https://productgrowth.in/tools/no-code/webflow/"],"arr_mid":212.5,"val_mid":4000,"shape":"point"},{"name":"Retool","layer":"frontend","audience":"developer","gtm":"enterprise","technical":"technical","category":"Internal-app builder","similarity":5,"desc":"Low-code internal tools now shipping AppGen + Agents. Developer-built UIs on live data \u2014 closest front-end analog to Spine's inference/run UI for enterprises.","arr":{"kind":"point","point":120,"lo":null,"hi":null,"as_of":"2025-10-01","note":"Sacra: $120M ARR Oct 2025, up from $90M end-2024.","mid":120},"valuation":{"kind":"range_reported","point":null,"lo":2700,"hi":3200,"as_of":"2022-07-01","note":"Series C Jul 2022 at $3.2B; UpMarket also cites $2.7B. Still the 2026 cited mark \u2014 four years stale as a primary.","mid":2939.3876913398135},"sources":["https://sacra.com/c/retool/"],"arr_mid":120,"val_mid":2939.3876913398135,"shape":"vband"},{"name":"Zapier","layer":"backend","audience":"integrations","gtm":"both","technical":"non-technical","category":"No-code iPaaS","similarity":6,"desc":"The consumer automation incumbent. Spine's share/marketplace/earnings motion is the AI-eng version of Zapier's 'anyone can publish a zap'.","arr":{"kind":"point","point":420,"lo":null,"hi":null,"as_of":"2026-03-01","note":"$420M ARR in Q1 2026 (ARR Club); 3.8M users, 69% of Fortune 1000. Profitable on $2.7M raised.","mid":420},"valuation":{"kind":"point","point":5000,"lo":null,"hi":null,"as_of":"2026-02-01","note":"widely cited $5B mark (2021 secondary, still the 2026 figure in Sacra/AskCyborg).","mid":5000},"sources":["https://www.arr.club/signal/zapier-arr-hit-420m-in-q1-2026"],"arr_mid":420,"val_mid":5000,"shape":"point"},{"name":"Make (Celonis)","layer":"backend","audience":"consumer","gtm":"enterprise","technical":"non-technical","category":"Visual automation","similarity":5,"desc":"Visual orchestration inside Celonis (acquired Integromat 2020). Product line, not a standalone company.","arr":{"kind":"range_stale","point":null,"lo":52.6,"hi":80,"as_of":"2025-09-02","note":"Latka $52.6M Sep 2025; upper bound = ~1.5\u00d7/yr cohort growth over 11 months.","mid":64.86909896090742},"valuation":{"kind":"range_modeled","point":null,"lo":894.2,"hi":2328.0,"as_of":null,"note":"no standalone valuation; band = ARR \u00d7 peer-multiple IQR (17\u00d7\u201329.1\u00d7)","mid":1442.808927058604},"sources":["https://getlatka.com/companies/make.com"],"arr_mid":64.86909896090742,"val_mid":1442.808927058604,"shape":"box"},{"name":"Gumloop","layer":"backend","audience":"consumer","gtm":"enterprise","technical":"non-technical","category":"No-code AI workflow","similarity":8,"desc":"Visual canvas of editable Python nodes; shareable agents. Closest consumer back-end analog to Spine's non-technical builder + share.","arr":{"kind":"range_reported","point":null,"lo":10,"hi":25,"as_of":"2026-03-12","note":"Series B coverage cited ARR north of $10M with 300% QoQ growth. Latka $1.1M is pre-round and stale. Upper bound spans StartupHub's $13.5M band plus implied growth.","mid":15.811388300841896},"valuation":{"kind":"range_modeled","point":null,"lo":170.0,"hi":727.5,"as_of":null,"note":"no standalone valuation; band = ARR \u00d7 peer-multiple IQR (17\u00d7\u201329.1\u00d7)","mid":351.6745654721137},"sources":["https://gmacouncil.org/news/gumloop-raises-50m-series-b-led-by-benchmark-to-empower-no-code-ai-agent-building-for-enterprise-workflows-automating-multi-step-tasks-across-marketing-to-finance","https://betakit.com/vancouver-founded-gumloop-sticks-50-million-usd-series-b-round-to-let-employees-build-their-own-ai-agents/"],"arr_mid":15.811388300841896,"val_mid":351.6745654721137,"shape":"box"},{"name":"Relevance AI","layer":"backend","audience":"consumer","gtm":"enterprise","technical":"non-technical","category":"No-code AI agent builder","similarity":6,"desc":"No-code 'AI workforce' builder. The current pitch's category leader \u2014 and, from KPMG use, a demo tool rather than production infrastructure.","arr":{"kind":"range_reported","point":null,"lo":12.6,"hi":13.5,"as_of":"2026-03-01","note":"Latka ~$12.6M (2025); Finro Q1 2026 cites ~$13M. No company-disclosed ARR at the May 2025 Series B.","mid":13.042239071570494},"valuation":{"kind":"range_reported","point":null,"lo":37.8,"hi":120,"as_of":"2026-03-01","note":"Latka model $37.8M vs Finro Q1 2026 ~$120M on ~$13M revenue (9.5\u00d7). Series B $24M (Bessemer, May 2025) did not disclose post-money.","mid":67.34983296193094},"sources":["https://techcrunch.com/2025/05/06/relevance-ai-raises-24m-series-b-to-help-anyone-build-teams-of-ai-agents/","https://www.finrofca.com/news/ai-agents-valuation-multiples-q1-2026"],"arr_mid":13.042239071570494,"val_mid":67.34983296193094,"shape":"box"},{"name":"n8n","layer":"backend","audience":"integrations","gtm":"enterprise","technical":"technical","category":"Visual workflow + code","similarity":9,"desc":"Fair-code visual workflows with JS/Python nodes, self-host, evals, agents. The original Spine brief ('n8n-style AI engineering'). SAP strategic investment May 2026.","arr":{"kind":"range_stale","point":null,"lo":40,"hi":130,"as_of":"2025-07-01","note":"Sacra: $40M ARR Jul 2025. SAP's May 2026 $5.2B mark did not refresh ARR. Upper bound = 3\u00d7/yr cohort growth over 13 months. 10\u00d7 YoY was claimed at Series C; that is not used as the cap.","mid":72.11102550927978},"valuation":{"kind":"point","point":5200,"lo":null,"hi":null,"as_of":"2026-05-12","note":"SAP strategic investment values n8n at $5.2B (company blog + Bloomberg), up from $2.5B Accel Series C Oct 2025.","mid":5200},"sources":["https://blog.n8n.io/n8n-sap/","https://sacra.com/c/n8n/"],"arr_mid":72.11102550927978,"val_mid":5200,"shape":"hband"},{"name":"LangChain","layer":"backend","audience":"developer","gtm":"enterprise","technical":"technical","category":"Agent engineering platform","similarity":7,"desc":"Open-source agents + LangSmith evals/observability + a no-code builder. Developer platform Spine overlaps on evals, tracing, and typed chains.","arr":{"kind":"range_reported","point":null,"lo":16,"hi":35,"as_of":"2025-10-21","note":"TechCrunch Jul 2025 pegged $12\u201316M; at Series B a spokesperson said that was 'low for where we are today'. Band from that floor to ~2\u00d7 over the following year.","mid":23.664319132398465},"valuation":{"kind":"point","point":1250,"lo":null,"hi":null,"as_of":"2025-10-21","note":"$125M Series B led by IVP at $1.25B, Oct 2025.","mid":1250},"sources":["https://www.langchain.com/blog/series-b","https://techcrunch.com/2025/10/21/open-source-agentic-startup-langchain-hits-1-25b-valuation/"],"arr_mid":23.664319132398465,"val_mid":1250,"shape":"hband"},{"name":"Dify AI","layer":"backend","audience":"developer","gtm":"enterprise","technical":"technical","category":"LLM app dev platform","similarity":9,"desc":"Open-source visual agentic workflows + production infra. Closest shipped product to Spine (typed-ish, hosted, OSS). 1.4M self-hosted instances.","arr":{"kind":"range_reported","point":null,"lo":3,"hi":7,"as_of":"2026-03-09","note":"~$3M ARR in 2025 third-party estimates (ToolJunction/EveryDev). Not disclosed at the $30M Pre-A. Upper bound is the old pitch's modeled $7M from the $180M \u00f7 ~25\u00d7 peer multiple.","mid":4.58257569495584},"valuation":{"kind":"point","point":180,"lo":null,"hi":null,"as_of":"2026-03-09","note":"$30M Series Pre-A at $180M, led by HSG, 9 Mar 2026 (BusinessWire).","mid":180},"sources":["https://www.businesswire.com/news/home/20260309511426/en/Dify-Raises-%2430-million-Series-Pre-A-to-Power-Enterprise-Grade-Agentic-Workflows"],"arr_mid":4.58257569495584,"val_mid":180,"shape":"hband"},{"name":"Windmill","layer":"backend","audience":"developer","gtm":"enterprise","technical":"technical","category":"Script-to-workflow platform","similarity":8,"desc":"Open-source scripts \u2192 workflows, internal apps, UIs. Code-first + hosting \u2014 Spine's TypeScript/Python steps and export story.","arr":{"kind":"range_reported","point":null,"lo":2.7,"hi":4.0,"as_of":"2026-06-01","note":"$2.7M ARR in 2024 disclosures; founder-adjacent June 2026 post claimed $4M ARR and profitability on a 7-person team.","mid":3.286335345030997},"valuation":{"kind":"range_modeled","point":null,"lo":45.9,"hi":116.4,"as_of":null,"note":"no standalone valuation; band = ARR \u00d7 peer-multiple IQR (17\u00d7\u201329.1\u00d7)","mid":73.09418581528904},"sources":["https://productgrowth.in/tools/automation/windmill/"],"arr_mid":3.286335345030997,"val_mid":73.09418581528904,"shape":"box"},{"name":"Vellum AI","layer":"backend","audience":"developer","gtm":"enterprise","technical":"technical","category":"LLM app dev platform","similarity":8,"desc":"Build / test / evaluate / deploy production LLM apps. Strongest overlap on Spine's testing tab and eval harness.","arr":{"kind":"range_stale","point":null,"lo":3.5,"hi":7.7,"as_of":"2024-12-01","note":"Latka ~$3.5M (2024). $20M Series A Jul 2025 did not disclose ARR; upper bound = ~2\u00d7/yr over ~13 months.","mid":5.191338940966964},"valuation":{"kind":"range_modeled","point":null,"lo":59.5,"hi":224.1,"as_of":null,"note":"no standalone valuation; band = ARR \u00d7 peer-multiple IQR (17\u00d7\u201329.1\u00d7)","mid":115.47272405204616},"sources":["https://vellum.ai/blog/announcing-our-20m-series-a"],"arr_mid":5.191338940966964,"val_mid":115.47272405204616,"shape":"box"},{"name":"StackAI","layer":"backend","audience":"developer","gtm":"enterprise","technical":"both","category":"No-code AI agent platform","similarity":7,"desc":"Enterprise no-code agents across Salesforce/ERP. Realised exit: Asana acquired it for ~$75M cash, 28 May 2026.","arr":{"kind":"range_stale","point":null,"lo":2.9,"hi":4.4,"as_of":"2025-06-01","note":"2025 third-party ~$2.9M. Asana said the deal adds ~50 bps to FY27 growth \u2014 not a current ARR. Upper bound = 1.5\u00d7 over a year.","mid":3.57211421989835},"valuation":{"kind":"point","point":75,"lo":null,"hi":null,"as_of":"2026-05-28","note":"Asana acquisition price ~$75M cash (company 8-K / TechCrunch).","mid":75},"sources":["https://techcrunch.com/2026/05/28/asana-acquires-no-code-agent-builder-stack-ai/"],"arr_mid":3.57211421989835,"val_mid":75,"shape":"hband"},{"name":"Flowise","layer":"backend","audience":"developer","gtm":"consumer","technical":"technical","category":"Visual LLM workflow builder","similarity":7,"desc":"Open-source drag-and-drop LLM/agent builder, self-hostable. The OSS floor of the back-end developer box.","arr":{"kind":"range_reported","point":null,"lo":0.6,"hi":1.0,"as_of":"2026-01-01","note":"TrueRecurring $50k MRR Jan 2026 ($0.6M ARR); Latka $1M (late 2024).","mid":0.7745966692414834},"valuation":{"kind":"range_modeled","point":null,"lo":2.3,"hi":10.0,"as_of":"2025-04-10","note":"Latka M&A-offer model $2.3M; upper bound is a thin slice of the peer-multiple IQR on $0.6\u20131.0M ARR.","mid":4.795831523312719},"sources":["https://getlatka.com/companies/flowiseai.com"],"arr_mid":0.7745966692414834,"val_mid":4.795831523312719,"shape":"box"},{"name":"BoundaryML (BAML)","layer":"backend","audience":"developer","gtm":"enterprise","technical":"technical","category":"Typed LLM output / codegen","similarity":8,"desc":"DSL for typed structured LLM output and multi-language codegen. Spine ships BAML as an export target.","arr":{"kind":"range_stale","point":null,"lo":0.33,"hi":0.6,"as_of":"2025-06-01","note":"2025 third-party ~$0.33M; bootstrapped, no VC round found. Too small to plot reliably.","mid":0.4449719092257398},"valuation":{"kind":"range_modeled","point":null,"lo":5.6,"hi":17.5,"as_of":null,"note":"no standalone valuation; band = ARR \u00d7 peer-multiple IQR (17\u00d7\u201329.1\u00d7)","mid":9.899494936611665},"sources":[],"arr_mid":0.4449719092257398,"val_mid":9.899494936611665,"shape":"box"},{"name":"Spine (m36 potential)","layer":"spine","audience":"both","gtm":"both","technical":"both","category":"Typed AI-eng platform","similarity":10,"is_spine":true,"desc":"m36 projection parked at Make.com: ~$40\u201380M ARR around a $1B valuation. Asking today is $4M (5% for $200k).","arr":{"kind":"range_reported","point":null,"lo":40,"hi":80,"as_of":"2026-08-13","note":"Moved out to Make.com's ARR band (~$53\u201380M). Pitch bull SOM was $40M; Make is the nearest back-end consumer automation comp at ~$1B modeled val.","mid":56.568542494923804},"valuation":{"kind":"range_modeled","point":null,"lo":900,"hi":1200,"as_of":"2026-08-13","note":"Around $1B, sitting with Make.com (modeled $0.9\u20132.3B). Inside the $100M\u2013$1B venture-fundable band; not a current mark.","mid":1039.2304845413264},"sources":[],"arr_mid":56.568542494923804,"val_mid":1039.2304845413264,"shape":"box"}]};
+
+const DATA = PAYLOAD.companies;
+const FIT  = PAYLOAD.fit;
+const PM   = PAYLOAD.peer_multiple;
+
+function fmtM(m){
+  if(m == null) return "\u2014";
+  if(m >= 1000) return "$" + (m/1000).toFixed(m >= 10000 ? 0 : 1) + "B";
+  if(m >= 10)   return "$" + Math.round(m) + "M";
+  return "$" + m.toFixed(1) + "M";
+}
+function fmtAxis(v){ return v >= 1000 ? "$" + (v/1000) + "B" : "$" + v + "M"; }
+function metricText(m){
+  if(m.kind === "point") return fmtM(m.point);
+  if(m.lo != null)       return fmtM(m.lo) + "\u2013" + fmtM(m.hi);
+  return "\u2014";
+}
+const BASIS = { point:"point", range_reported:"reported", range_stale:"stale",
+                range_modeled:"modeled", none:"none" };
+
+const QUAD = {
+  "frontend-consumer":  { fill:"#3987e5", ring:"#86b6ef", label:"Front-end \u00d7 consumer" },
+  "frontend-developer": { fill:"#8b7cf7", ring:"#c4b8ff", label:"Front-end \u00d7 developer" },
+  "backend-consumer":   { fill:"#e5a039", ring:"#f0c98a", label:"Back-end \u00d7 consumer" },
+  "backend-developer":  { fill:"#3ecf8e", ring:"#8eebc0", label:"Back-end \u00d7 developer" },
+  "backend-integrations":{ fill:"#f07167", ring:"#f7a8a0", label:"Back-end \u00d7 developer (integrations)" },
+  "spine-both":         { fill:"#f0c14b", ring:"#ffe08a", label:"Spine (all five)" },
+};
+function quadKey(d){ return d.layer + "-" + d.audience; }
+function quadOf(d){ return QUAD[quadKey(d)] || QUAD["spine-both"]; }
+function isSpine(d){ return !!d.is_spine; }
+const COMPS = DATA.filter(d => !isSpine(d));
+
+DATA.forEach(d => {
+  d.quadLabel = quadOf(d).label;
+  d.mult = (d.val_mid && d.arr_mid) ? d.val_mid / d.arr_mid : null;
+});
+
+/* ---------- chart ---------- */
+const W = 1140, H = 560, M = {top: 20, right: 40, bottom: 52, left: 74};
+const plotW = W - M.left - M.right, plotH = H - M.top - M.bottom;
+
+const arrDomain = [0.4, 6000];
+const valDomain = [4, 90000];
+
+const lg = Math.log10;
+function xScale(v){
+  const t = (lg(v) - lg(arrDomain[0])) / (lg(arrDomain[1]) - lg(arrDomain[0]));
+  return M.left + t * plotW;
+}
+function yScale(v){
+  const t = (lg(v) - lg(valDomain[0])) / (lg(valDomain[1]) - lg(valDomain[0]));
+  return M.top + (1 - t) * plotH;
+}
+function alphaFor(sim){ return 0.20 + 0.72 * (sim / 10); }
+const clampX = v => Math.min(Math.max(v, arrDomain[0]), arrDomain[1]);
+const clampY = v => Math.min(Math.max(v, valDomain[0]), valDomain[1]);
+
+const xTicks = [1, 10, 100, 1000, 5000];
+const yTicks = [10, 100, 1000, 10000, 50000];
+const skipGridX = new Set([100]);
+const skipGridY = new Set([1000]);
+
+const LABELS = {
+  "Cursor (Anysphere)":    {ref:"left",        dx:-10, dy:-12, anchor:"end"},
+  "Lovable":               {ref:"center",      dx: 13, dy: -9, anchor:"start"},
+  "Replit":                {ref:"right",       dx: 10, dy:  4, anchor:"start"},
+  "Zapier":                {ref:"left",        dx:-10, dy:  4, anchor:"end"},
+  "n8n":                   {ref:"right",       dx: 10, dy: -8, anchor:"start"},
+  "Dify AI":               {ref:"left",        dx: -9, dy: -8, anchor:"end"},
+  "Relevance AI":          {ref:"bottom",      dx:  0, dy: 16, anchor:"middle"},
+  "Make (Celonis)":        {ref:"topright",    dx:  8, dy: -10, anchor:"start"},
+  "Spine (m36 potential)": {ref:"left",        dx:-10, dy: -8, anchor:"end"},
+};
+
+function geom(d){
+  const a = d.arr, v = d.valuation;
+  const ax = a.kind === "point" ? [a.point, a.point] : [clampX(a.lo), clampX(a.hi)];
+  const vy = v.kind === "point" ? [v.point, v.point] : [clampY(v.lo), clampY(v.hi)];
+  return {
+    x1: xScale(ax[0]), x2: xScale(ax[1]),
+    y1: yScale(vy[1]),
+    y2: yScale(vy[0]),
+    cx: xScale(clampX(d.arr_mid)), cy: yScale(clampY(d.val_mid)),
+  };
+}
+
+let HITBOX = [];
+let activeFilter = "all";
+let isolateTarget = false;
+
+function visible(d){
+  if(isolateTarget) return isSpine(d);
+  if(isSpine(d)) return true;
+  if(activeFilter === "all") return true;
+  return quadKey(d) === activeFilter;
+}
+
+function drawChart(){
+  HITBOX = [];
+  let svg = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Log-log scatter of ARR against valuation across five Spine-relevant markets">`;
+  // AI : isolate mode is a dark plot with only the Spine m36 ARR / valuation box
+  svg += `<rect x="0" y="0" width="${W}" height="${H}" fill="#000000"></rect>`;
+
+  if(!isolateTarget){
+    xTicks.forEach(v => {
+      if(skipGridX.has(v)) return;
+      const x = xScale(v);
+      svg += `<line class="grid-line" x1="${x}" x2="${x}" y1="${M.top}" y2="${M.top+plotH}"></line>`;
+    });
+    yTicks.forEach(v => {
+      if(skipGridY.has(v)) return;
+      const y = yScale(v);
+      svg += `<line class="grid-line" x1="${M.left}" x2="${M.left+plotW}" y1="${y}" y2="${y}"></line>`;
+    });
+  }
+  xTicks.forEach(v => {
+    const x = xScale(v);
+    svg += `<text class="tick-label" x="${x}" y="${M.top+plotH+16}" text-anchor="middle">${fmtAxis(v)}</text>`;
+  });
+  yTicks.forEach(v => {
+    const y = yScale(v);
+    svg += `<text class="tick-label" x="${M.left-8}" y="${y+3}" text-anchor="end">${fmtAxis(v)}</text>`;
+  });
+  svg += `<line class="axis-line" x1="${M.left}" x2="${M.left+plotW}" y1="${M.top+plotH}" y2="${M.top+plotH}"></line>`;
+  svg += `<line class="axis-line" x1="${M.left}" x2="${M.left}" y1="${M.top}" y2="${M.top+plotH}"></line>`;
+  svg += `<text class="axis-title" x="${M.left+plotW/2}" y="${H-8}" text-anchor="middle">ARR, $M (log scale)</text>`;
+  svg += `<text class="axis-title" transform="translate(18,${M.top+plotH/2}) rotate(-90)" text-anchor="middle">Valuation, $M (log scale)</text>`;
+
+  // AI : below-VC box is bottom-left, ARR ≤ $100M and valuation ≤ $1B
+  {
+    const x0 = M.left, x1 = xScale(100);
+    const yTop = yScale(1000), yBot = M.top + plotH;
+    svg += `<rect x="${x0}" y="${yTop}" width="${(x1-x0).toFixed(1)}" height="${(yBot-yTop).toFixed(1)}" fill="rgba(224,56,56,0.16)" stroke="rgba(224,56,56,0.55)" stroke-width="1.3" pointer-events="none"></rect>`;
+    svg += `<text class="zone-label" x="${x0+12}" y="${(yBot-12).toFixed(1)}" fill="#f07167">below VC funding</text>`;
+  }
+
+  if(FIT.a && !isolateTarget){
+    const steps = 60; let path = '';
+    for(let i = 0; i <= steps; i++){
+      const lx = lg(arrDomain[0]) + (i/steps)*(lg(arrDomain[1]) - lg(arrDomain[0]));
+      const av = Math.pow(10, lx);
+      const vv = FIT.a * Math.pow(av, FIT.b);
+      path += (i === 0 ? 'M' : 'L') + xScale(av).toFixed(1) + ',' + yScale(clampY(vv)).toFixed(1) + ' ';
+    }
+    svg += `<path d="${path}" fill="none" stroke="var(--text-muted)" stroke-width="1.6" stroke-dasharray="5 4" opacity="0.7"></path>`;
+  }
+
+  const BAND_W = 11;
+  const drawOrder = DATA.map((d, i) => ({d, i}))
+    .filter(o => o.d.shape !== "omitted" && visible(o.d))
+    .sort((p, q) => {
+      const area = o => { const g = geom(o); return Math.max(g.x2-g.x1, 6) * Math.max(g.y2-g.y1, 6); };
+      return area(q.d) - area(p.d);
+    });
+
+  drawOrder.forEach(({d, i}) => {
+    const g = geom(d), a = alphaFor(d.similarity);
+    const col = quadOf(d);
+    const fill = `fill:${col.fill}`;
+    const stroke = `stroke:${col.ring}`;
+    svg += `<g class="mark" data-i="${i}">`;
+
+    if(d.shape === "point"){
+      svg += `<circle cx="${g.cx}" cy="${g.cy}" r="8" style="${fill};opacity:${a.toFixed(2)}"></circle>`;
+      svg += `<circle class="pt-ring-surface" cx="${g.cx}" cy="${g.cy}" r="8"></circle>`;
+    } else if(d.shape === "vband"){
+      const x = g.cx - BAND_W/2;
+      const h = Math.max(g.y2 - g.y1, BAND_W);
+      const yTop = (g.y2 - g.y1) < BAND_W ? g.cy - BAND_W/2 : g.y1;
+      svg += `<rect x="${x}" y="${yTop}" width="${BAND_W}" height="${h}" rx="${BAND_W/2}" style="${fill};opacity:${(a*0.42).toFixed(2)}"></rect>`;
+      svg += `<rect x="${x}" y="${yTop}" width="${BAND_W}" height="${h}" rx="${BAND_W/2}" fill="none" stroke-width="1.2" stroke-dasharray="3 2.5" style="${stroke};opacity:${(a*0.9).toFixed(2)}"></rect>`;
+      svg += `<line x1="${x+1}" x2="${x+BAND_W-1}" y1="${g.cy}" y2="${g.cy}" stroke-width="2" stroke-linecap="round" style="stroke:${col.fill};opacity:${a.toFixed(2)}"></line>`;
+    } else if(d.shape === "hband"){
+      const y = g.cy - BAND_W/2;
+      const w = Math.max(g.x2 - g.x1, BAND_W);
+      const xL = (g.x2 - g.x1) < BAND_W ? g.cx - BAND_W/2 : g.x1;
+      svg += `<rect x="${xL}" y="${y}" width="${w}" height="${BAND_W}" rx="${BAND_W/2}" style="${fill};opacity:${(a*0.42).toFixed(2)}"></rect>`;
+      svg += `<rect x="${xL}" y="${y}" width="${w}" height="${BAND_W}" rx="${BAND_W/2}" fill="none" stroke-width="1.2" stroke-dasharray="3 2.5" style="${stroke};opacity:${(a*0.9).toFixed(2)}"></rect>`;
+      svg += `<line x1="${g.cx}" x2="${g.cx}" y1="${y+1}" y2="${y+BAND_W-1}" stroke-width="2" stroke-linecap="round" style="stroke:${col.fill};opacity:${a.toFixed(2)}"></line>`;
+    } else {
+      const w = Math.max(g.x2 - g.x1, BAND_W), h = Math.max(g.y2 - g.y1, BAND_W);
+      const edgeW = isSpine(d) ? 2.0 : 1.2;
+      const fillA = isolateTarget && isSpine(d) ? 0.38 : (a*(isSpine(d)?0.22:0.15));
+      svg += `<rect x="${g.x1}" y="${g.y1}" width="${w}" height="${h}" rx="4" style="${fill};opacity:${fillA.toFixed(2)}"></rect>`;
+      svg += `<rect x="${g.x1}" y="${g.y1}" width="${w}" height="${h}" rx="4" fill="none" stroke-width="${edgeW}" stroke-dasharray="3 2.5" style="${stroke};opacity:${(a*0.95).toFixed(2)}"></rect>`;
+      svg += `<line x1="${g.cx-4}" x2="${g.cx+4}" y1="${g.cy}" y2="${g.cy}" stroke-width="1.6" stroke-linecap="round" style="${stroke};opacity:${a.toFixed(2)}"></line>`;
+      svg += `<line x1="${g.cx}" x2="${g.cx}" y1="${g.cy-4}" y2="${g.cy+4}" stroke-width="1.6" stroke-linecap="round" style="${stroke};opacity:${a.toFixed(2)}"></line>`;
+    }
+
+    const pad = 7;
+    const bx1 = Math.min(g.x1, g.cx) - pad, bx2 = Math.max(g.x2, g.cx) + pad;
+    const by1 = Math.min(g.y1, g.cy) - pad, by2 = Math.max(g.y2, g.cy) + pad;
+    HITBOX.push({ i, x1:bx1, y1:by1, x2:bx2, y2:by2, area:(bx2-bx1)*(by2-by1) });
+
+    const L = LABELS[d.name];
+    if(L){
+      let lx, ly;
+      switch(L.ref){
+        case "left":        lx = g.x1; ly = g.cy; break;
+        case "right":       lx = g.x2; ly = g.cy; break;
+        case "top":         lx = g.cx; ly = g.y1; break;
+        case "bottom":      lx = g.cx; ly = g.y2; break;
+        case "topright":    lx = g.x2; ly = g.y1; break;
+        case "bottomright": lx = g.x2; ly = g.y2; break;
+        case "bottomleft":  lx = g.x1; ly = g.y2; break;
+        default:            lx = g.cx; ly = g.cy;
+      }
+      const short = isSpine(d) ? "Spine m36" : d.name.replace(/\s*\(.*?\)\s*/g, '');
+      svg += `<text class="pt-label" x="${lx + L.dx}" y="${ly + L.dy}" text-anchor="${L.anchor}" style="opacity:${Math.max(0.55, a).toFixed(2)}">${short}</text>`;
+      if(isolateTarget && isSpine(d)){
+        svg += `<text class="pt-label" x="${g.cx}" y="${g.y2 + 16}" text-anchor="middle" style="opacity:0.9">ARR ${metricText(d.arr)}</text>`;
+        svg += `<text class="pt-label" x="${g.x2 + 10}" y="${g.cy + 4}" text-anchor="start" style="opacity:0.9">val ${metricText(d.valuation)}</text>`;
+      }
+    }
+    svg += `</g>`;
+  });
+
+  svg += `</svg>`;
+  document.getElementById('chartHost').innerHTML = svg;
+  HITBOX.sort((a, b) => a.area - b.area);
+  document.getElementById('chartWrap').classList.toggle('isolate-on', isolateTarget);
+  const isoBtn = document.getElementById('isolateBtn');
+  isoBtn.classList.toggle('active', isolateTarget);
+  isoBtn.textContent = isolateTarget ? "Show all" : "Target only";
+}
+
+document.getElementById('fitLegend').innerHTML = FIT.a
+  ? `Fitted trend: val \u2248 ${FIT.a.toFixed(1)} \u00d7 ARR<sup>${FIT.b.toFixed(2)}</sup> (R\u00b2=${FIT.r2.toFixed(2)}, n=${FIT.n})`
+  : 'Fitted trend unavailable';
+
+(function paintAlphaGrad(){
+  const accent = getComputedStyle(document.getElementById('vizRoot')).getPropertyValue('--accent').trim();
+  const hex = accent.replace('#','');
+  const rgba = a => `rgba(${parseInt(hex.substring(0,2),16)},${parseInt(hex.substring(2,4),16)},${parseInt(hex.substring(4,6),16)},${a})`;
+  document.getElementById('alphaGrad').style.background =
+    `linear-gradient(90deg, ${rgba(alphaFor(0))}, ${rgba(alphaFor(10))})`;
+})();
+
+const FILTERS = [
+  { id:"all", label:"All cells" },
+  { id:"frontend-consumer", label:"Front-end \u00d7 consumer" },
+  { id:"frontend-developer", label:"Front-end \u00d7 developer" },
+  { id:"backend-consumer", label:"Back-end \u00d7 consumer" },
+  { id:"backend-developer", label:"Back-end \u00d7 developer" },
+  { id:"backend-integrations", label:"Back-end \u00d7 developer (integrations)" },
+];
+function paintFilters(){
+  document.getElementById('filters').innerHTML = FILTERS.map(f =>
+    `<button class="chip${f.id===activeFilter?' active':''}" data-filter="${f.id}">${f.label}</button>`
+  ).join('');
+  document.querySelectorAll('#filters .chip').forEach(btn => {
+    btn.addEventListener('click', () => setFilter(btn.dataset.filter));
+  });
+}
+function setFilter(id){
+  activeFilter = (activeFilter === id && id !== "all") ? "all" : id;
+  paintFilters();
+  drawChart();
+}
+paintFilters();
+drawChart();
+
+document.getElementById('isolateBtn').addEventListener('click', () => {
+  isolateTarget = !isolateTarget;
+  drawChart();
+});
+
+/* ---------- hover ---------- */
+const tooltip = document.getElementById('chartTip');
+const chartHost = document.getElementById('chartHost');
+
+function multText(d){
+  const a = d.arr, v = d.valuation;
+  const lo = (v.lo != null ? v.lo : v.point) / (a.hi != null ? a.hi : a.point);
+  const hi = (v.hi != null ? v.hi : v.point) / (a.lo != null ? a.lo : a.point);
+  return Math.abs(hi - lo) < 0.05
+    ? lo.toFixed(1) + "\u00d7"
+    : lo.toFixed(1) + "\u2013" + hi.toFixed(1) + "\u00d7";
+}
+
+chartHost.addEventListener('mousemove', e => {
+  const svgEl = chartHost.querySelector('svg');
+  if(!svgEl) return;
+  const r = svgEl.getBoundingClientRect();
+  const px = (e.clientX - r.left) / r.width  * W;
+  const py = (e.clientY - r.top)  / r.height * H;
+  const inside = HITBOX.filter(h => px >= h.x1 && px <= h.x2 && py >= h.y1 && py <= h.y2);
+  if(!inside.length){ tooltip.style.opacity = 0; svgEl.style.cursor = 'default'; return; }
+  const hit = inside.reduce((best, h) => {
+    const dist = k => Math.hypot(px - (k.x1+k.x2)/2, py - (k.y1+k.y2)/2);
+    const db = dist(best), dh = dist(h);
+    return dh < db - 0.5 ? h : (Math.abs(dh - db) <= 0.5 && h.area < best.area ? h : best);
+  });
+  const d = DATA[hit.i];
+  svgEl.style.cursor = 'pointer';
+  const notes = ["arr","valuation"]
+    .filter(k => d[k].kind !== "point")
+    .map(k => `<div class="tt-flag"><strong style="color:var(--text-secondary)">${k === "arr" ? "ARR" : "Valuation"} (${BASIS[d[k].kind]}):</strong> ${d[k].note}</div>`)
+    .join('');
+  tooltip.innerHTML = `
+    <div class="tt-name">${d.name}</div>
+    <div class="tt-cat">${d.quadLabel} \u00b7 ${d.category} \u00b7 similarity ${d.similarity}/10</div>
+    <div class="tt-row"><span class="tt-k">Valuation</span><span class="tt-v">${metricText(d.valuation)}</span></div>
+    <div class="tt-row"><span class="tt-k">ARR</span><span class="tt-v">${metricText(d.arr)}</span></div>
+    <div class="tt-row"><span class="tt-k">Implied multiple</span><span class="tt-v">${multText(d)}</span></div>
+    <div class="tt-desc">${d.desc}</div>
+    ${notes}`;
+  tooltip.style.left = Math.min(e.clientX + 16, window.innerWidth - 356) + 'px';
+  tooltip.style.top  = Math.min(e.clientY + 16, window.innerHeight - tooltip.offsetHeight - 12) + 'px';
+  tooltip.style.opacity = 1;
+});
+chartHost.addEventListener('mouseleave', () => { tooltip.style.opacity = 0; });
+</script>
+</body>
+</html>

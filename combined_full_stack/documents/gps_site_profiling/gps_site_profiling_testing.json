@@ -1,0 +1,9 @@
+{
+  "description": "Test scaffold for GPS Site Profiling — inputs are pinned; fill the null expected outputs from a verified run (only listed steps are checked).",
+  "inputs": {
+    "GPS Site Catalog": "gps_site_locations.json"
+  },
+  "expectedOutputs": {
+    "Similarity Analysis Output": null
+  }
+}

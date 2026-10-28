@@ -1,0 +1,6 @@
+{
+  "description": "Storyboard short — Higgsfield stills + 720p clip play in Inference. Set HIGGSFIELD_API_KEY in Settings → Secrets.",
+  "inputs": {
+    "Brief": "brief.json"
+  }
+}

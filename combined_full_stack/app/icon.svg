@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" role="img" aria-label="Spine">
+  <!-- dark background -->
+  <rect width="32" height="32" rx="6" fill="#0a0a0a"/>
+  <!-- spine line -->
+  <rect x="14.5" y="3" width="3" height="26" rx="1.5" fill="#fafafa" opacity="0.6"/>
+  <!-- top node -->
+  <rect x="8" y="6" width="16" height="3" rx="1.5" fill="#fafafa" opacity="0.5"/>
+  <!-- middle node — full brightness, widest -->
+  <rect x="6" y="14.5" width="20" height="3" rx="1.5" fill="#fafafa"/>
+  <!-- bottom node -->
+  <rect x="8" y="23" width="16" height="3" rx="1.5" fill="#fafafa" opacity="0.5"/>
+</svg>

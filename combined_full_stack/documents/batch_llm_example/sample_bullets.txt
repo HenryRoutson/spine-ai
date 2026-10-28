@@ -1,0 +1,5 @@
+Product launch checklist
+- Finalize pricing tiers
+- Write onboarding emails
+- Set up analytics dashboard
+- Review security audit findings

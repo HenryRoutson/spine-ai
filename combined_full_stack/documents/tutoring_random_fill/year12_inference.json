@@ -1,0 +1,6 @@
+{
+  "description": "Year 12 differentiation — 3 random integer fills of one template.",
+  "inputs": {
+    "Request": "year12_request.json"
+  }
+}

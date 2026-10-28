@@ -1,0 +1,361 @@
+{
+  "id": "p_gps_sites",
+  "name": "GPS Site Profiling",
+  "kind": "geospatial-intel",
+  "models": [
+    {
+      "id": "m_site",
+      "name": "GPSLocation",
+      "description": "One GPS site location from the input catalog.",
+      "fields": [
+        {
+          "id": "f_site_id",
+          "name": "site_id",
+          "type": "text",
+          "optional": false,
+          "description": "Stable site identifier"
+        },
+        {
+          "id": "f_name",
+          "name": "name",
+          "type": "text",
+          "optional": false,
+          "description": "Human-readable site label"
+        },
+        {
+          "id": "f_lat",
+          "name": "latitude",
+          "type": "float",
+          "optional": false,
+          "description": "WGS84 latitude"
+        },
+        {
+          "id": "f_lon",
+          "name": "longitude",
+          "type": "float",
+          "optional": false,
+          "description": "WGS84 longitude"
+        },
+        {
+          "id": "f_notes",
+          "name": "notes",
+          "type": "text",
+          "optional": true,
+          "description": "Analyst notes from the source catalog"
+        }
+      ]
+    },
+    {
+      "id": "m_profile",
+      "name": "SiteProfile",
+      "description": "Geospatial and contextual profile for one site.",
+      "fields": [
+        {
+          "id": "f_site_id",
+          "name": "site_id",
+          "type": "text",
+          "optional": false,
+          "description": "Matches the input site id"
+        },
+        {
+          "id": "f_name",
+          "name": "name",
+          "type": "text",
+          "optional": false,
+          "description": "Site name"
+        },
+        {
+          "id": "f_country",
+          "name": "country",
+          "type": "text",
+          "optional": false,
+          "description": "Likely country or territory"
+        },
+        {
+          "id": "f_region",
+          "name": "region",
+          "type": "text",
+          "optional": false,
+          "description": "Region or province"
+        },
+        {
+          "id": "f_settlement",
+          "name": "nearest_settlement",
+          "type": "text",
+          "optional": false,
+          "description": "Nearest city or settlement",
+          "deterministic": false
+        },
+        {
+          "id": "f_climate",
+          "name": "climate_zone",
+          "type": "text",
+          "optional": false,
+          "description": "Climate classification (e.g. subarctic, polar, temperate)",
+          "deterministic": false
+        },
+        {
+          "id": "f_cold",
+          "name": "is_cold_location",
+          "type": "bool",
+          "optional": false,
+          "description": "True if routinely below freezing for much of the year"
+        },
+        {
+          "id": "f_facility",
+          "name": "facility_type_guess",
+          "type": "text",
+          "optional": false,
+          "description": "Best guess: research lab, military, industrial, logistics, etc.",
+          "deterministic": false
+        },
+        {
+          "id": "f_research",
+          "name": "is_likely_research_lab",
+          "type": "bool",
+          "optional": false,
+          "description": "True if the site plausibly hosts scientific research"
+        },
+        {
+          "id": "f_russian",
+          "name": "is_russian_or_post_soviet",
+          "type": "bool",
+          "optional": false,
+          "description": "True if in Russia or a former Soviet state"
+        },
+        {
+          "id": "f_summary",
+          "name": "profile_summary",
+          "type": "text",
+          "optional": false,
+          "description": "Two-sentence analyst profile of the location",
+          "deterministic": false
+        }
+      ]
+    },
+    {
+      "id": "m_bundle",
+      "name": "ProfileCollection",
+      "description": "All site profiles bundled for cross-site similarity analysis.",
+      "fields": [
+        {
+          "id": "f_count",
+          "name": "site_count",
+          "type": "int",
+          "optional": false,
+          "description": "Number of profiled sites"
+        },
+        {
+          "id": "f_profiles",
+          "name": "profiles_json",
+          "type": "text",
+          "optional": false,
+          "description": "JSON array of all SiteProfile records"
+        }
+      ]
+    },
+    {
+      "id": "m_report",
+      "name": "SimilarityReport",
+      "description": "Cross-site similarity clusters and trait groupings.",
+      "fields": [
+        {
+          "id": "f_summary",
+          "name": "executive_summary",
+          "type": "text",
+          "optional": false,
+          "description": "High-level findings across all sites",
+          "deterministic": false
+        },
+        {
+          "id": "f_clusters",
+          "name": "similarity_clusters",
+          "type": "list[text]",
+          "optional": false,
+          "description": "Named clusters with member site ids and shared traits",
+          "deterministic": false
+        },
+        {
+          "id": "f_russian",
+          "name": "russian_site_ids",
+          "type": "list[text]",
+          "optional": false,
+          "description": "Sites flagged as Russian or post-Soviet"
+        },
+        {
+          "id": "f_labs",
+          "name": "research_lab_site_ids",
+          "type": "list[text]",
+          "optional": false,
+          "description": "Sites flagged as likely research facilities"
+        },
+        {
+          "id": "f_cold",
+          "name": "cold_location_site_ids",
+          "type": "list[text]",
+          "optional": false,
+          "description": "Sites in cold or polar climates"
+        },
+        {
+          "id": "f_pairs",
+          "name": "notable_pairs",
+          "type": "list[text]",
+          "optional": false,
+          "description": "Most similar site pairs with brief rationale",
+          "deterministic": false
+        }
+      ]
+    }
+  ],
+  "modules": [
+    {
+      "id": "mod_input",
+      "kind": "input",
+      "label": "GPS Site Catalog",
+      "inputType": "text",
+      "inputDescription": "JSON catalog of GPS sites with coordinates, names, and facility notes",
+      "outStructureId": "m_builtin_document",
+      "cached": true,
+      "avgMs": 90,
+      "avgCostCents": 0,
+      "note": "JSON catalog of GPS sites with coordinates, names, and facility notes"
+    },
+    {
+      "id": "mod_parse",
+      "kind": "custom-code",
+      "label": "Parse GPS Sites",
+      "note": "JSON catalog → list[GPSLocation]. No LLM cost.",
+      "inputDescription": "GPS site catalog Document from the upload step, ready to parse into site locations",
+      "inStructureId": "m_builtin_document",
+      "outStructureId": "m_site",
+      "cached": true,
+      "avgMs": 5,
+      "avgCostCents": 0,
+      "fallbackList": [
+        {
+          "typescript": "(d) => JSON.parse(d.content).sites"
+        }
+      ],
+      "outType": {
+        "kind": "list",
+        "item": {
+          "kind": "ref",
+          "modelId": "m_site"
+        }
+      }
+    },
+    {
+      "id": "mod_profile",
+      "kind": "llm-batch",
+      "label": "Profile Each Location",
+      "note": "list[GPSLocation] → list[SiteProfile]. One structured LLM call per site.",
+      "inputDescription": "List of GPSLocation objects — site id, coordinates, name, and notes",
+      "inStructureId": "m_site",
+      "outStructureId": "m_profile",
+      "prompt": "Profile this GPS site from its coordinates and notes. Infer country, region, nearest settlement, and climate zone from latitude/longitude. Set is_cold_location true for polar, subarctic, or routinely sub-zero climates. Guess facility_type_guess from the name and notes (research lab, military, industrial, logistics, etc.). Set is_likely_research_lab and is_russian_or_post_soviet from geography and context. Keep the same site_id and name as the input. Write a concise two-sentence profile_summary.",
+      "model": "deepseek-v4",
+      "cached": true,
+      "avgMs": 2200,
+      "avgCostCents": 5,
+      "outType": {
+        "kind": "list",
+        "item": {
+          "kind": "ref",
+          "modelId": "m_profile"
+        }
+      }
+    },
+    {
+      "id": "mod_bundle",
+      "kind": "custom-code",
+      "label": "Bundle Profiles",
+      "note": "list[SiteProfile] → ProfileCollection for the cross-site similarity step.",
+      "inputDescription": "List of SiteProfile objects — inferred geography and facility traits per GPS site",
+      "inStructureId": "m_profile",
+      "outStructureId": "m_bundle",
+      "cached": true,
+      "avgMs": 5,
+      "avgCostCents": 0,
+      "fallbackList": [
+        {
+          "typescript": "(profiles) => ({ site_count: profiles.length, profiles_json: JSON.stringify(profiles, null, 2) })"
+        }
+      ]
+    },
+    {
+      "id": "mod_similarity",
+      "kind": "llm",
+      "label": "Evaluate Similarities",
+      "note": "ProfileCollection → SimilarityReport (single object, not a list).",
+      "inputDescription": "ProfileCollection with profiles_json — all site profiles serialized for cross-site analysis",
+      "inStructureId": "m_bundle",
+      "outStructureId": "m_report",
+      "prompt": "Analyze all site profiles in profiles_json. Group sites into similarity_clusters — each entry should name the cluster, list member site_ids, and explain shared traits (e.g. Russian Arctic installations, polar research hubs, high-security western labs). Populate russian_site_ids, research_lab_site_ids, and cold_location_site_ids from the profiles. List notable_pairs of the most similar sites with a one-line rationale each. Write an executive_summary of the overall pattern. Return one SimilarityReport object, not an array.",
+      "model": "deepseek-v4",
+      "cached": true,
+      "avgMs": 3200,
+      "avgCostCents": 8
+    },
+    {
+      "id": "mod_output",
+      "kind": "output",
+      "label": "Similarity Analysis Output",
+      "inputDescription": "Single SimilarityReport object — clusters, notable pairs, and executive summary",
+      "inStructureId": "m_report",
+      "outStructureId": "m_report",
+      "cached": true,
+      "avgMs": 40,
+      "avgCostCents": 0,
+      "note": ""
+    }
+  ],
+  "strategies": [
+    {
+      "id": "s_single_gps",
+      "kind": "single-llm",
+      "name": "Single LLM Call",
+      "enabled": true,
+      "model": "deepseek-v4",
+      "accuracy": 79,
+      "latencyMs": 5200,
+      "costCents": 10,
+      "passRate": 90
+    },
+    {
+      "id": "s_agent_gps",
+      "kind": "claude-code",
+      "name": "Agent (Frontier)",
+      "enabled": true,
+      "model": "deepseek-v4",
+      "accuracy": 93,
+      "latencyMs": 32000,
+      "costCents": 180,
+      "passRate": 97
+    },
+    {
+      "id": "s_cheap_gps",
+      "kind": "cheap-agent",
+      "name": "Agent (Cheap Model)",
+      "enabled": true,
+      "model": "deepseek-v4",
+      "accuracy": 83,
+      "latencyMs": 21000,
+      "costCents": 14,
+      "passRate": 89
+    }
+  ],
+  "docs": [
+    {
+      "name": "gps_site_locations.json",
+      "type": "text",
+      "label": "inference",
+      "file": "gps_site_profiling/gps_site_locations.json"
+    },
+    {
+      "name": "gps_site_profiling_testing.json",
+      "type": "json",
+      "label": "training",
+      "file": "gps_site_profiling/gps_site_profiling_testing.json"
+    }
+  ]
+}

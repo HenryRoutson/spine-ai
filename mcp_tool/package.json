@@ -1,0 +1,24 @@
+{
+  "name": "spine-pinpoint-mcp",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "node ./spine-mcp.mjs",
+    "print-config": "tsx --tsconfig tsconfig.json scripts/print-client-config.ts",
+    "benchmark-bridge": "tsx --tsconfig tsconfig.json scripts/benchmark_bridge.ts",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:perf": "vitest run src/mcp-vibe-perf.test.ts"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.29.0",
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@types/node": "^24",
+    "tsx": "^4.20.5",
+    "typescript": "5.7.3",
+    "vitest": "^3.2.4"
+  }
+}

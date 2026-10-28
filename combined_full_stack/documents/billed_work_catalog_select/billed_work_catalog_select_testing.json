@@ -1,0 +1,14 @@
+{
+  "description": "Billed Work Catalog Select — golden fixtures for deterministic steps; LLM steps use null placeholders.",
+  "inputs": {
+    "Work Description": "billed_work_description.txt",
+    "Job Example Library": "job_example_library.json",
+    "Work Item Catalog": "work_item_catalog.json"
+  },
+  "expectedOutputs": {
+    "Select Relevant Jobs": null,
+    "Select Relevant Work Items": null,
+    "Draft Billed Work": null,
+    "Billed Work Output": null
+  }
+}

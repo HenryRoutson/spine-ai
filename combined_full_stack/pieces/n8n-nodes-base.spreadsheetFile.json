@@ -1,0 +1,24 @@
+{
+  "id": "n8n-nodes-base.spreadsheetFile",
+  "n8nNodeType": "n8n-nodes-base.spreadsheetFile",
+  "displayName": "Parse CSV",
+  "description": "Parse a CSV string field into row objects (first line = headers).",
+  "category": "files",
+  "props": [
+    {
+      "name": "field",
+      "displayName": "CSV field",
+      "type": "string",
+      "required": true,
+      "default": "csv"
+    },
+    {
+      "name": "outputField",
+      "displayName": "Rows field",
+      "type": "string",
+      "required": true,
+      "default": "rows"
+    }
+  ],
+  "n8nCode": "const field = String($parameter.field ?? \"csv\");\nconst outField = String($parameter.outputField ?? \"rows\");\nfunction parseCsv(text) {\n  const lines = String(text ?? \"\").split(/\\r?\\n/).filter((l) => l.trim().length);\n  if (!lines.length) return [];\n  const headers = lines[0].split(\",\").map((h) => h.trim());\n  return lines.slice(1).map((line) => {\n    const cells = line.split(\",\");\n    const row = {};\n    headers.forEach((h, i) => { row[h] = (cells[i] ?? \"\").trim(); });\n    return row;\n  });\n}\nreturn items.map((item) => ({\n  json: { ...item.json, [outField]: parseCsv(item.json?.[field]) },\n}));"
+}

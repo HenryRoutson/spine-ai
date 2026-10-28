@@ -1,0 +1,69 @@
+# CI — unit tests; MCP vibe perf; live OpenRouter parity when OPENROUTER_API_KEY is available
+name: ci
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+
+defaults:
+  run:
+    working-directory: combined_full_stack
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: combined_full_stack/package-lock.json
+      - name: Install
+        run: npm ci
+      # AI : catch missing names / bad imports before deploy (same class of failure as next build tsc).
+      - name: Typecheck
+        run: npm run typecheck
+      - name: Unit tests
+        # AI : offline only — live OpenRouter parity is a separate step (never Next.js / browser).
+        run: npm test
+      - name: Live parity (flash + seed)
+        env:
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+          OPENROUTER_SEED: "42"
+          PARITY_QUIET: "1"
+        # AI : secrets context is not allowed in if: — gate on the injected env instead.
+        run: |
+          if [ -z "${OPENROUTER_API_KEY}" ]; then
+            echo "Skipping live parity — OPENROUTER_API_KEY not configured"
+            exit 0
+          fi
+          npm run test:parity
+
+  # AI : mcp_tool aliases into combined_full_stack — install both; catch vibe context/latency regressions.
+  mcp:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: |
+            combined_full_stack/package-lock.json
+            mcp_tool/package-lock.json
+      - name: Install app deps
+        working-directory: combined_full_stack
+        run: npm ci
+      - name: Install MCP deps
+        working-directory: mcp_tool
+        run: npm ci
+      - name: MCP typecheck
+        working-directory: mcp_tool
+        run: npm run typecheck
+      - name: MCP tests (incl. vibe perf budgets)
+        working-directory: mcp_tool
+        run: npm test

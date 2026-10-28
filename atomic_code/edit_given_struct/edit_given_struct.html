@@ -1,0 +1,1282 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Structure editor — Pydantic / Zod</title>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --bg: #0f172a;
+  --surface: #1e293b;
+  --surface2: #334155;
+  --border: #475569;
+  --text: #f1f5f9;
+  --muted: #94a3b8;
+  --ok: #22c55e;
+  --warn: #f59e0b;
+  --err: #ef4444;
+  --accent: #3b82f6;
+  --accent2: #8b5cf6;
+  --radius: 8px;
+  --mono: "SF Mono", "Fira Code", "Cascadia Code", monospace;
+}
+
+html, body { height: 100%; }
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  display: grid;
+  grid-template-rows: auto auto 1fr;
+  overflow: hidden;
+}
+
+header {
+  padding: 14px 18px;
+  border-bottom: 1px solid var(--surface2);
+  background: #0b1220;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+header h1 { font-size: 15px; font-weight: 600; letter-spacing: -0.02em; }
+header p { font-size: 12px; color: var(--muted); flex: 1; }
+
+.ex-tabs { display: flex; gap: 4px; flex-wrap: wrap; }
+.ex-tab {
+  padding: 5px 11px;
+  font-size: 11.5px;
+  color: var(--muted);
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.15s;
+  font-family: inherit;
+  white-space: nowrap;
+}
+.ex-tab:hover { background: var(--surface); color: var(--text); }
+.ex-tab.active { background: var(--accent); color: #fff; border-color: var(--accent); }
+.ex-tab.zod.active { background: var(--accent2); border-color: var(--accent2); }
+
+#statusBar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 18px;
+  border-bottom: 1px solid var(--surface2);
+  background: #0b1220;
+  font-size: 12px;
+}
+.status-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+.status-pill.ok { background: color-mix(in srgb, var(--ok) 18%, transparent); color: #86efac; }
+.status-pill.err { background: color-mix(in srgb, var(--err) 18%, transparent); color: #fca5a5; }
+.status-pill.idle { background: var(--surface); color: var(--muted); }
+.status-detail { color: var(--muted); font-size: 11px; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+main {
+  display: grid;
+  grid-template-columns: minmax(280px, 34%) 1fr;
+  overflow: hidden;
+}
+
+.panel {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border-right: 1px solid var(--surface2);
+}
+.panel:last-child { border-right: none; }
+
+.panel-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--surface2);
+  background: #0b1220;
+  flex-shrink: 0;
+}
+.panel-head h2 {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--muted);
+}
+.panel-head .badge {
+  font-size: 10px;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 999px;
+}
+.badge-pydantic { background: #14532d; color: #86efac; }
+.badge-zod { background: #4c1d95; color: #c4b5fd; }
+
+.schema-lang {
+  display: flex;
+  gap: 4px;
+}
+.lang-btn {
+  padding: 4px 9px;
+  font-size: 10px;
+  font-weight: 600;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--muted);
+  cursor: pointer;
+  font-family: inherit;
+}
+.lang-btn.active { color: var(--text); border-color: var(--accent); }
+
+#schemaInput {
+  flex: 1;
+  resize: none;
+  border: none;
+  outline: none;
+  padding: 14px;
+  font-family: var(--mono);
+  font-size: 12px;
+  line-height: 1.55;
+  background: #0a0f1a;
+  color: #e2e8f0;
+  tab-size: 2;
+}
+
+.schema-actions {
+  display: flex;
+  gap: 8px;
+  padding: 10px 14px;
+  border-top: 1px solid var(--surface2);
+  background: #0b1220;
+  flex-shrink: 0;
+}
+
+button {
+  padding: 8px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.15s;
+  font-family: inherit;
+}
+button:hover { background: var(--surface2); }
+button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+button.primary:hover { background: #2563eb; }
+button.ghost { background: transparent; }
+
+.mode-tabs { display: flex; gap: 4px; }
+.mode-tab {
+  padding: 5px 12px;
+  font-size: 11px;
+  font-weight: 600;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--muted);
+  cursor: pointer;
+  font-family: inherit;
+}
+.mode-tab.active { background: var(--accent); border-color: var(--accent); color: #fff; }
+
+#formPanel, #jsonPanel { flex: 1; overflow: auto; }
+#formPanel { padding: 16px; }
+#jsonPanel { display: none; flex-direction: column; }
+
+#jsonEditor {
+  flex: 1;
+  resize: none;
+  border: none;
+  outline: none;
+  padding: 14px;
+  font-family: var(--mono);
+  font-size: 12px;
+  line-height: 1.55;
+  background: #0a0f1a;
+  color: #e2e8f0;
+  tab-size: 2;
+}
+
+.json-actions {
+  display: flex;
+  gap: 8px;
+  padding: 10px 14px;
+  border-top: 1px solid var(--surface2);
+  background: #0b1220;
+  flex-shrink: 0;
+}
+
+/* ── Form fields ───────────────────────────────────────── */
+.form-root-title {
+  font-size: 18px;
+  font-weight: 600;
+  margin-bottom: 4px;
+  letter-spacing: -0.02em;
+}
+.form-root-desc {
+  font-size: 12px;
+  color: var(--muted);
+  margin-bottom: 18px;
+  line-height: 1.5;
+}
+
+.field {
+  margin-bottom: 14px;
+}
+.field-label {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+.field-label span.name {
+  font-size: 13px;
+  font-weight: 500;
+}
+.field-label span.req {
+  font-size: 10px;
+  font-weight: 700;
+  color: #fca5a5;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.field-label span.opt {
+  font-size: 10px;
+  color: var(--muted);
+}
+.field-label span.type-tag {
+  margin-left: auto;
+  font-size: 10px;
+  font-weight: 600;
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: var(--surface2);
+  color: var(--muted);
+}
+.field-desc {
+  font-size: 11px;
+  color: var(--muted);
+  margin-bottom: 6px;
+  line-height: 1.4;
+}
+
+input[type="text"], input[type="number"], input[type="email"], input[type="url"], input[type="datetime-local"], select, textarea.field-text {
+  width: 100%;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--text);
+  font-size: 13px;
+  font-family: inherit;
+  outline: none;
+  transition: border-color 0.15s;
+}
+input:focus, select:focus, textarea.field-text:focus {
+  border-color: var(--accent);
+}
+input.invalid, select.invalid, textarea.invalid {
+  border-color: var(--err);
+  background: color-mix(in srgb, var(--err) 8%, var(--surface));
+}
+.field-err {
+  font-size: 11px;
+  color: #fca5a5;
+  margin-top: 4px;
+}
+
+.toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  cursor: pointer;
+  user-select: none;
+}
+.toggle input { display: none; }
+.toggle-track {
+  width: 40px;
+  height: 22px;
+  border-radius: 999px;
+  background: var(--surface2);
+  position: relative;
+  transition: background 0.15s;
+}
+.toggle input:checked + .toggle-track { background: var(--accent); }
+.toggle-thumb {
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #fff;
+  transition: transform 0.15s;
+}
+.toggle input:checked + .toggle-track .toggle-thumb { transform: translateX(18px); }
+.toggle-label { font-size: 13px; color: var(--muted); }
+
+.group-card {
+  border: 1px solid var(--surface2);
+  border-radius: var(--radius);
+  background: color-mix(in srgb, var(--surface) 60%, #0b1220);
+  padding: 12px;
+  margin-top: 4px;
+}
+.group-card > .field-label { margin-bottom: 10px; }
+
+.list-wrap { margin-top: 4px; }
+.list-item {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 8px;
+  align-items: start;
+  padding: 10px;
+  margin-bottom: 8px;
+  border: 1px solid var(--surface2);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+.list-item-body { min-width: 0; }
+.list-item-idx {
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-bottom: 8px;
+}
+.btn-icon {
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+  line-height: 1;
+  color: var(--muted);
+}
+.btn-icon:hover { color: #fca5a5; background: color-mix(in srgb, var(--err) 12%, var(--surface)); }
+.btn-add {
+  width: 100%;
+  margin-top: 4px;
+  border-style: dashed;
+  color: var(--muted);
+  font-size: 11px;
+}
+.btn-add:hover { color: var(--text); border-color: var(--accent); }
+
+.empty-msg {
+  color: var(--muted);
+  font-size: 12px;
+  padding: 24px;
+  text-align: center;
+  line-height: 1.6;
+}
+</style>
+</head>
+<body>
+
+<header>
+  <div>
+    <h1>Structure editor</h1>
+    <p>Paste a Pydantic or Zod struct, then edit data as JSON or a guided form.</p>
+  </div>
+  <div class="ex-tabs" id="exampleTabs"></div>
+</header>
+
+<div id="statusBar">
+  <span class="status-pill idle" id="statusPill">No schema</span>
+  <span class="status-detail" id="statusDetail">Pick an example or paste a struct, then click Parse schema.</span>
+</div>
+
+<main>
+  <section class="panel">
+    <div class="panel-head">
+      <h2>Schema source</h2>
+      <div class="schema-lang">
+        <button class="lang-btn active" data-lang="pydantic" onclick="setLang('pydantic')">Pydantic</button>
+        <button class="lang-btn" data-lang="zod" onclick="setLang('zod')">Zod</button>
+      </div>
+    </div>
+    <textarea id="schemaInput" spellcheck="false" placeholder="Paste a Pydantic class or Zod object here…"></textarea>
+    <div class="schema-actions">
+      <button class="primary" onclick="parseSchema()">Parse schema</button>
+      <button onclick="generateExampleData()">Generate example</button>
+    </div>
+  </section>
+
+  <section class="panel">
+    <div class="panel-head">
+      <h2>Data</h2>
+      <div style="display:flex;gap:8px;align-items:center">
+        <span class="badge badge-pydantic" id="schemaBadge" style="display:none"></span>
+        <div class="mode-tabs">
+          <button class="mode-tab active" data-mode="form" onclick="setMode('form')">Guided form</button>
+          <button class="mode-tab" data-mode="json" onclick="setMode('json')">JSON</button>
+        </div>
+      </div>
+    </div>
+    <div id="formPanel">
+      <div class="empty-msg">Parse a schema to unlock the guided form.</div>
+    </div>
+    <div id="jsonPanel">
+      <textarea id="jsonEditor" spellcheck="false" placeholder="{}"></textarea>
+      <div class="json-actions">
+        <button class="primary" onclick="applyJson()">Apply JSON</button>
+        <button onclick="syncJsonFromData()">Reset from form</button>
+        <button class="ghost" onclick="formatJson()">Format</button>
+      </div>
+    </div>
+  </section>
+</main>
+
+<script>
+// AI : lightweight schema IR — enough for form + validation without a full parser
+/** @typedef {'string'|'number'|'integer'|'boolean'|'array'|'object'} SchemaType */
+/** @typedef {{ key: string, title?: string, description?: string, type: SchemaType, format?: string, enum?: string[], required: boolean, minimum?: number, maximum?: number, minLength?: number, maxLength?: number, pattern?: string, items?: SchemaNode, properties?: Record<string, SchemaNode>, requiredKeys?: string[] }} SchemaNode */
+
+/** @type {SchemaNode|null} */
+let rootSchema = null;
+/** @type {Record<string, unknown>} */
+let currentData = {};
+let currentLang = 'pydantic';
+let currentMode = 'form';
+/** @type {Record<string, string>} */
+let fieldErrors = {};
+
+const EXAMPLES = {
+  user_profile: {
+    lang: 'pydantic',
+    label: 'User profile',
+    schema: `class UserProfile(BaseModel):
+    """A registered user on the platform."""
+    id: str = Field(description="Assigned at registration", min_length=10)
+    email: str = Field(description="Must be unique", pattern=r"^[^@]+@[^@]+\\.[^@]+$")
+    full_name: str = Field(description="Display name", min_length=2, max_length=120)
+    age: Optional[int] = Field(default=None, ge=13, le=120)
+    role: str = Field(description="Access level", default="viewer")
+    is_active: bool = Field(description="Inactive accounts cannot log in", default=True)
+    created_at: datetime = Field(description="When the account was created")
+    tags: list[str] = Field(description="Admin labels", default_factory=list)
+    address: Address
+
+class Address(BaseModel):
+    street: str
+    city: str
+    postcode: Optional[str] = None
+    country: str = Field(min_length=2, max_length=2)`,
+    data: {
+      id: 'usr_01HZXK7QP3',
+      email: 'sarah.chen@acme.com',
+      full_name: 'Sarah Chen',
+      age: 34,
+      role: 'admin',
+      is_active: true,
+      created_at: '2024-03-15T09:00:00Z',
+      tags: ['beta', 'enterprise'],
+      address: { street: '42 Harbour View Rd', city: 'Sydney', postcode: '2000', country: 'AU' },
+    },
+  },
+  product: {
+    lang: 'zod',
+    label: 'Product',
+    schema: `const Product = z.object({
+  sku: z.string().regex(/^PRD-[0-9]{3,6}$/).describe("Unique product code"),
+  name: z.string().min(3).max(200).describe("Product name"),
+  description: z.string().max(5000).optional(),
+  price: z.number().positive().describe("Price in AUD"),
+  category: z.enum(["electronics", "clothing", "food", "home", "sports"]),
+  in_stock: z.boolean().default(true),
+  stock_count: z.number().int().min(0).optional(),
+  images: z.array(z.object({
+    url: z.string().url(),
+    alt: z.string().optional(),
+    is_primary: z.boolean().default(false),
+  })).min(1).max(10),
+});`,
+    data: {
+      sku: 'PRD-0042',
+      name: 'Wireless Keyboard',
+      description: 'Low-profile mechanical keyboard with USB-C.',
+      price: 129,
+      category: 'electronics',
+      in_stock: true,
+      stock_count: 48,
+      images: [
+        { url: 'https://cdn.example.com/kb-main.jpg', alt: 'Front view', is_primary: true },
+        { url: 'https://cdn.example.com/kb-side.jpg', alt: 'Side profile', is_primary: false },
+      ],
+    },
+  },
+  investment_memo: {
+    lang: 'pydantic',
+    label: 'Investment memo',
+    schema: `class InvestmentMemo(BaseModel):
+    """Due diligence summary for a portfolio company."""
+    company_name: str = Field(description="Legal or trading name")
+    sector: str
+    stage: str = Field(description="e.g. Seed, Series A")
+    thesis: str = Field(description="Why we invested", max_length=2000)
+    arr_usd: float = Field(ge=0, description="Annual recurring revenue")
+    headcount: int = Field(ge=1)
+    founded_year: int = Field(ge=1900, le=2100)
+    is_profitable: bool = False
+    risks: list[str] = Field(default_factory=list)
+    founders: list[Founder]
+
+class Founder(BaseModel):
+    name: str
+    title: str
+    linkedin: Optional[str] = None`,
+    data: {
+      company_name: 'NeuralFlow',
+      sector: 'AI Infrastructure',
+      stage: 'Series B',
+      thesis: 'Strong technical team with accelerating enterprise adoption.',
+      arr_usd: 8_500_000,
+      headcount: 48,
+      founded_year: 2021,
+      is_profitable: false,
+      risks: ['Competitive market', 'Long enterprise sales cycles'],
+      founders: [
+        { name: 'Mia Torres', title: 'CEO', linkedin: 'linkedin.com/in/mia-torres' },
+        { name: 'Sam Park', title: 'CTO', linkedin: 'linkedin.com/in/sam-park' },
+      ],
+    },
+  },
+  team_member: {
+    lang: 'zod',
+    label: 'Team member',
+    schema: `const TeamMember = z.object({
+  name: z.string().min(1),
+  email: z.string().email(),
+  department: z.enum(["engineering", "sales", "ops", "legal"]),
+  is_manager: z.boolean(),
+  start_date: z.string().datetime().optional(),
+  skills: z.array(z.string()).default([]),
+  manager: z.object({
+    name: z.string(),
+    email: z.string().email(),
+  }).optional(),
+});`,
+    data: {
+      name: 'James Wu',
+      email: 'james.wu@carbonledger.io',
+      department: 'engineering',
+      is_manager: false,
+      start_date: '2023-04-01T00:00:00Z',
+      skills: ['python', 'climate modelling'],
+      manager: { name: 'Anika Patel', email: 'anika@carbonledger.io' },
+    },
+  },
+};
+
+// ── Example tabs ──────────────────────────────────────────────────────────────
+function buildExampleTabs() {
+  const el = document.getElementById('exampleTabs');
+  Object.entries(EXAMPLES).forEach(([key, ex]) => {
+    const btn = document.createElement('button');
+    btn.className = `ex-tab ${ex.lang === 'zod' ? 'zod' : ''}`;
+    btn.textContent = ex.label;
+    btn.onclick = () => loadExample(key);
+    btn.dataset.key = key;
+    el.appendChild(btn);
+  });
+}
+
+function loadExample(key) {
+  const ex = EXAMPLES[key];
+  if (!ex) return;
+  currentLang = ex.lang;
+  setLang(ex.lang, false);
+  document.getElementById('schemaInput').value = ex.schema.trim();
+  document.querySelectorAll('.ex-tab').forEach((b) => b.classList.toggle('active', b.dataset.key === key));
+  parseSchema();
+  currentData = structuredClone(ex.data);
+  fieldErrors = {};
+  renderAll();
+  setStatus('ok', `Loaded “${ex.label}” example`);
+}
+
+function setLang(lang, updateBtns = true) {
+  currentLang = lang;
+  if (updateBtns) {
+    document.querySelectorAll('.lang-btn').forEach((b) => b.classList.toggle('active', b.dataset.lang === lang));
+  }
+}
+
+function setMode(mode) {
+  currentMode = mode;
+  document.querySelectorAll('.mode-tab').forEach((b) => b.classList.toggle('active', b.dataset.mode === mode));
+  document.getElementById('formPanel').style.display = mode === 'form' ? 'block' : 'none';
+  document.getElementById('jsonPanel').style.display = mode === 'json' ? 'flex' : 'none';
+  if (mode === 'json') syncJsonFromData();
+}
+
+// ── Parsing ───────────────────────────────────────────────────────────────────
+function parseSchema() {
+  const src = document.getElementById('schemaInput').value.trim();
+  if (!src) {
+    setStatus('err', 'Paste a struct first');
+    return;
+  }
+  try {
+    rootSchema = currentLang === 'pydantic' ? parsePydantic(src) : parseZod(src);
+    currentData = defaultFromSchema(rootSchema);
+    fieldErrors = {};
+    renderAll();
+    const n = countFields(rootSchema);
+    setStatus('ok', `Parsed ${rootSchema.title || 'struct'} — ${n} field${n === 1 ? '' : 's'}`);
+  } catch (e) {
+    rootSchema = null;
+    renderAll();
+    setStatus('err', e.message || String(e));
+  }
+}
+
+function countFields(node) {
+  if (!node.properties) return 0;
+  let n = Object.keys(node.properties).length;
+  for (const sub of Object.values(node.properties)) {
+    if (sub.properties) n += countFields(sub);
+    if (sub.items?.properties) n += countFields(sub.items);
+  }
+  return n;
+}
+
+function parsePydantic(src) {
+  /** @type {Record<string, { doc?: string, fields: Record<string, { typeStr: string, defaultPart?: string }>, required: string[] }>} */
+  const raw = {};
+  const blocks = src.split(/(?=^class\s+\w+)/m).filter(Boolean);
+  for (const block of blocks) {
+    const m = block.match(/^class\s+(\w+)\s*\(\s*BaseModel\s*\)\s*:/);
+    if (!m) continue;
+    const name = m[1];
+    const doc = block.match(/"""(.*?)"""/s)?.[1]?.trim();
+    const body = block.slice(block.indexOf(':') + 1);
+    const fields = {};
+    const required = [];
+    for (const line of body.split('\n')) {
+      const trimmed = line.trim();
+      if (!trimmed || trimmed.startsWith('#') || trimmed.startsWith('"""') || trimmed.startsWith("'''")) continue;
+      const fm = trimmed.match(/^(\w+)\s*:\s*(.+?)(?:\s*=\s*(.+))?$/);
+      if (!fm) continue;
+      const [, key, typeStr, defaultPart] = fm;
+      const optional = /^Optional\[/.test(typeStr) || /=\s*None/.test(defaultPart || '') || /default\s*=/.test(defaultPart || '');
+      if (!optional) required.push(key);
+      fields[key] = { typeStr, defaultPart };
+    }
+    raw[name] = { doc, fields, required };
+  }
+  const rootName = Object.keys(raw)[0];
+  if (!rootName) throw new Error('No Pydantic BaseModel class found');
+
+  /** @type {Record<string, SchemaNode>} */
+  const models = {};
+  // AI : two-pass so nested models can be declared after the root class
+  for (const [name, def] of Object.entries(raw)) {
+    const fields = {};
+    for (const [key, spec] of Object.entries(def.fields)) {
+      fields[key] = pydanticTypeToNode(key, spec.typeStr, spec.defaultPart, models, raw);
+    }
+    models[name] = {
+      key: name,
+      title: humanize(name),
+      description: def.doc,
+      type: 'object',
+      required: true,
+      properties: fields,
+      requiredKeys: def.required,
+    };
+  }
+  return models[rootName];
+}
+
+function pydanticTypeToNode(key, typeStr, defaultPart, models, rawModels) {
+  const desc = defaultPart?.match(/description\s*=\s*["']([^"']+)["']/)?.[1];
+  const node = { key, title: humanize(key), description: desc, required: true, type: 'string' };
+
+  const ge = numConstraint(defaultPart, 'ge');
+  const le = numConstraint(defaultPart, 'le');
+  const minLen = numConstraint(defaultPart, 'min_length');
+  const maxLen = numConstraint(defaultPart, 'max_length');
+  if (ge != null) node.minimum = ge;
+  if (le != null) node.maximum = le;
+  if (minLen != null) node.minLength = minLen;
+  if (maxLen != null) node.maxLength = maxLen;
+  const pat = defaultPart?.match(/pattern\s*=\s*r?["']([^"']+)["']/)?.[1];
+  if (pat) node.pattern = pat;
+
+  const base = typeStr.replace(/^Optional\[(.+)\]$/, '$1').trim();
+  if (/^str$|^text$/.test(base)) {
+    node.type = 'string';
+    if (/email/i.test(desc || key)) node.format = 'email';
+  } else if (/^int$/.test(base)) node.type = 'integer';
+  else if (/^float$|^Decimal$/.test(base)) node.type = 'number';
+  else if (/^bool$/.test(base)) node.type = 'boolean';
+  else if (/^datetime$/.test(base)) { node.type = 'string'; node.format = 'date-time'; }
+  else if (/^list\[(\w+)\]$|^List\[(\w+)\]$/.test(base)) {
+    const inner = base.match(/\[(\w+)\]/)?.[1];
+    node.type = 'array';
+    node.items = inner && (models[inner] || rawModels?.[inner])
+      ? structuredClone(models[inner] || buildPydanticModelNode(inner, rawModels, models))
+      : pydanticScalar(inner || 'str');
+  } else if (models[base] || rawModels?.[base]) {
+    const resolved = models[base] || buildPydanticModelNode(base, rawModels, models);
+    node.type = 'object';
+    node.properties = structuredClone(resolved.properties);
+    node.requiredKeys = [...(resolved.requiredKeys || [])];
+    node.title = resolved.title;
+    node.description = node.description || resolved.description;
+  } else {
+    node.type = 'string';
+  }
+  node.required = !/^Optional\[/.test(typeStr) && !/=\s*None/.test(defaultPart || '');
+  return node;
+}
+
+function buildPydanticModelNode(name, rawModels, models) {
+  if (models[name]) return models[name];
+  const def = rawModels[name];
+  if (!def) return { key: name, type: 'object', required: true, properties: {}, requiredKeys: [] };
+  const fields = {};
+  for (const [key, spec] of Object.entries(def.fields)) {
+    fields[key] = pydanticTypeToNode(key, spec.typeStr, spec.defaultPart, models, rawModels);
+  }
+  const node = {
+    key: name,
+    title: humanize(name),
+    description: def.doc,
+    type: 'object',
+    required: true,
+    properties: fields,
+    requiredKeys: def.required,
+  };
+  models[name] = node;
+  return node;
+}
+
+function pydanticScalar(t) {
+  if (t === 'int') return { key: 'item', type: 'integer', required: true };
+  if (t === 'float') return { key: 'item', type: 'number', required: true };
+  if (t === 'bool') return { key: 'item', type: 'boolean', required: true };
+  return { key: 'item', type: 'string', required: true };
+}
+
+function parseZod(src) {
+  const title = src.match(/const\s+(\w+)\s*=/)?.[1];
+  const objBody = extractBalanced(src, src.indexOf('z.object(') + 'z.object('.length);
+  if (!objBody) throw new Error('No z.object({ ... }) found');
+  const { properties, required } = parseZodObjectBody(objBody);
+  return {
+    key: title || 'Root',
+    title: title ? humanize(title) : 'Struct',
+    type: 'object',
+    required: true,
+    properties,
+    requiredKeys: required,
+  };
+}
+
+function parseZodObjectBody(body) {
+  const properties = {};
+  const required = [];
+  let depth = 0;
+  let chunk = '';
+  const parts = [];
+  for (const ch of body) {
+    if (ch === '{' || ch === '(' || ch === '[') depth++;
+    if (ch === '}' || ch === ')' || ch === ']') depth--;
+    if (ch === ',' && depth === 0) {
+      parts.push(chunk.trim());
+      chunk = '';
+      continue;
+    }
+    chunk += ch;
+  }
+  if (chunk.trim()) parts.push(chunk.trim());
+
+  for (const part of parts) {
+    const m = part.match(/^(\w+)\s*:\s*(.+)$/s);
+    if (!m) continue;
+    const [, key, expr] = m;
+    const node = parseZodExpr(key, expr.trim());
+    properties[key] = node;
+    if (node.required) required.push(key);
+  }
+  return { properties, required };
+}
+
+function parseZodExpr(key, expr) {
+  const describe = expr.match(/\.describe\(\s*["']([^"']+)["']\s*\)/)?.[1];
+  const optional = /\.optional\(\)/.test(expr);
+  const def = /\.default\(([^)]+)\)/.test(expr);
+  let core = expr
+    .replace(/\.describe\([^)]*\)/g, '')
+    .replace(/\.optional\(\)/g, '')
+    .replace(/\.default\([^)]*\)/g, '')
+    .replace(/\.default\(\[\]\)/g, '')
+    .trim();
+
+  const node = { key, title: humanize(key), description: describe, required: !optional && !def, type: 'string' };
+
+  if (/^z\.string\(\)/.test(core) || core.startsWith('z.string()')) {
+    node.type = 'string';
+    const min = core.match(/\.min\((\d+)\)/)?.[1];
+    const max = core.match(/\.max\((\d+)\)/)?.[1];
+    if (min) node.minLength = +min;
+    if (max) node.maxLength = +max;
+    if (/\.email\(\)/.test(core)) node.format = 'email';
+    if (/\.url\(\)/.test(core)) node.format = 'uri';
+    const pat = core.match(/\.regex\(\s*\/(.+)\/[^)]*\)/)?.[1];
+    if (pat) node.pattern = pat;
+  } else if (/^z\.number\(\)/.test(core)) {
+    node.type = 'number';
+    const min = core.match(/\.min\(([^)]+)\)/)?.[1];
+    if (min) node.minimum = +min;
+    if (/\.positive\(\)/.test(core)) node.minimum = 0.0001;
+    if (/\.int\(\)/.test(core)) node.type = 'integer';
+  } else if (/^z\.boolean\(\)/.test(core)) {
+    node.type = 'boolean';
+  } else if (/^z\.enum\(/.test(core)) {
+    node.type = 'string';
+    const vals = core.match(/\[([^\]]+)\]/)?.[1];
+    node.enum = vals ? vals.split(',').map((s) => s.trim().replace(/^["']|["']$/g, '')) : [];
+  } else if (/^z\.array\(/.test(core)) {
+    node.type = 'array';
+    const innerStart = core.indexOf('z.array(') + 'z.array('.length;
+    const inner = extractBalanced(core, innerStart);
+    if (inner?.startsWith('z.object')) {
+      const ob = extractBalanced(inner, inner.indexOf('z.object(') + 'z.object('.length);
+      const parsed = parseZodObjectBody(ob);
+      node.items = {
+        key: 'item',
+        type: 'object',
+        required: true,
+        properties: parsed.properties,
+        requiredKeys: parsed.required,
+        title: 'Item',
+      };
+    } else {
+      node.items = parseZodExpr('item', inner);
+    }
+    const min = core.match(/\.min\((\d+)\)/)?.[1];
+    const max = core.match(/\.max\((\d+)\)/)?.[1];
+    if (min) node.minLength = +min;
+    if (max) node.maxLength = +max;
+  } else if (/^z\.object\(/.test(core)) {
+    node.type = 'object';
+    const ob = extractBalanced(core, core.indexOf('z.object(') + 'z.object('.length);
+    const parsed = parseZodObjectBody(ob);
+    node.properties = parsed.properties;
+    node.requiredKeys = parsed.required;
+  } else if (/^z\.string\(\)\.datetime\(\)/.test(core) || /\.datetime\(\)/.test(core)) {
+    node.type = 'string';
+    node.format = 'date-time';
+  }
+
+  return node;
+}
+
+function extractBalanced(src, start) {
+  let depth = 0;
+  let out = '';
+  for (let i = start; i < src.length; i++) {
+    const ch = src[i];
+    if (ch === '(' || ch === '{' || ch === '[') depth++;
+    if (ch === ')' || ch === '}' || ch === ']') {
+      depth--;
+      if (depth < 0) break;
+    }
+    out += ch;
+    if (depth === 0 && (ch === ')' || ch === '}' || ch === ']')) break;
+  }
+  return out;
+}
+
+function numConstraint(s, name) {
+  const m = s?.match(new RegExp(`${name}\\s*=\\s*(-?\\d+(?:\\.\\d+)?)`));
+  return m ? +m[1] : null;
+}
+
+function humanize(s) {
+  return s.replace(/_/g, ' ').replace(/([a-z])([A-Z])/g, '$1 $2').replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
+// ── Defaults & example generation ─────────────────────────────────────────────
+function defaultFromSchema(node) {
+  if (node.type === 'object' && node.properties) {
+    const o = {};
+    for (const [k, sub] of Object.entries(node.properties)) {
+      if (!sub.required && Math.random() > 0.7) continue;
+      o[k] = defaultFromSchema(sub);
+    }
+    return o;
+  }
+  if (node.type === 'array') {
+    const n = node.minLength ? Math.max(1, node.minLength) : 1;
+    return Array.from({ length: Math.min(n, 2) }, () => defaultFromSchema(node.items || { type: 'string', required: true, key: 'item' }));
+  }
+  return exampleScalar(node);
+}
+
+function exampleScalar(node) {
+  if (node.enum?.length) return node.enum[0];
+  if (node.type === 'boolean') return true;
+  if (node.type === 'integer') return node.minimum != null ? Math.max(node.minimum, 1) : 1;
+  if (node.type === 'number') return node.minimum != null ? Math.max(node.minimum, 1) : 9.99;
+  if (node.format === 'email') return 'user@example.com';
+  if (node.format === 'uri') return 'https://example.com/item';
+  if (node.format === 'date-time') return new Date().toISOString();
+  if (node.pattern?.includes('PRD')) return 'PRD-001';
+  if (node.key === 'country') return 'AU';
+  if (node.minLength) return 'x'.repeat(node.minLength);
+  return node.title || 'text';
+}
+
+function generateExampleData() {
+  if (!rootSchema) { parseSchema(); if (!rootSchema) return; }
+  currentData = defaultFromSchema(rootSchema);
+  fieldErrors = {};
+  renderAll();
+  setStatus('ok', 'Generated example data from schema');
+}
+
+// ── Validation ────────────────────────────────────────────────────────────────
+function validateData(data, node, path = '') {
+  const errors = {};
+  if (node.type === 'object' && node.properties) {
+    if (typeof data !== 'object' || data === null || Array.isArray(data)) {
+      errors[path || 'root'] = 'Expected a group of fields';
+      return errors;
+    }
+    for (const [k, sub] of Object.entries(node.properties)) {
+      const p = path ? `${path}.${k}` : k;
+      const val = data[k];
+      const missing = val === undefined || val === null || val === '';
+      if (sub.required && missing && sub.type !== 'boolean') {
+        errors[p] = 'Required';
+        continue;
+      }
+      if (!missing) Object.assign(errors, validateData(val, sub, p));
+    }
+    return errors;
+  }
+  if (node.type === 'array') {
+    if (!Array.isArray(data)) { errors[path] = 'Expected a list'; return errors; }
+    if (node.minLength != null && data.length < node.minLength) errors[path] = `At least ${node.minLength} item(s)`;
+    if (node.maxLength != null && data.length > node.maxLength) errors[path] = `At most ${node.maxLength} item(s)`;
+    data.forEach((item, i) => Object.assign(errors, validateData(item, node.items || { type: 'string', required: true, key: 'item' }, `${path}[${i}]`)));
+    return errors;
+  }
+  if (data === undefined || data === null || data === '') return errors;
+
+  if (node.type === 'integer' && (!Number.isInteger(data) || typeof data !== 'number')) errors[path] = 'Must be a whole number';
+  if (node.type === 'number' && typeof data !== 'number') errors[path] = 'Must be a number';
+  if (node.type === 'boolean' && typeof data !== 'boolean') errors[path] = 'Must be yes or no';
+  if (node.type === 'string' && typeof data !== 'string') errors[path] = 'Must be text';
+
+  if (typeof data === 'string') {
+    if (node.minLength != null && data.length < node.minLength) errors[path] = `At least ${node.minLength} characters`;
+    if (node.maxLength != null && data.length > node.maxLength) errors[path] = `At most ${node.maxLength} characters`;
+    if (node.format === 'email' && !/^[^@]+@[^@]+\.[^@]+$/.test(data)) errors[path] = 'Invalid email';
+    if (node.format === 'uri' && !/^https?:\/\/.+/.test(data)) errors[path] = 'Invalid URL';
+    if (node.pattern) {
+      try { if (!new RegExp(node.pattern).test(data)) errors[path] = 'Invalid format'; } catch { /* skip */ }
+    }
+    if (node.enum && !node.enum.includes(data)) errors[path] = 'Pick a valid option';
+  }
+  if (typeof data === 'number') {
+    if (node.minimum != null && data < node.minimum) errors[path] = `Minimum ${node.minimum}`;
+    if (node.maximum != null && data > node.maximum) errors[path] = `Maximum ${node.maximum}`;
+  }
+  return errors;
+}
+
+function runValidation() {
+  if (!rootSchema) return;
+  fieldErrors = validateData(currentData, rootSchema);
+  const ok = Object.keys(fieldErrors).length === 0;
+  setStatus(ok ? 'ok' : 'err', ok ? 'Data matches schema' : `${Object.keys(fieldErrors).length} validation issue(s)`);
+  return ok;
+}
+
+// ── Form rendering ────────────────────────────────────────────────────────────
+function friendlyType(node) {
+  if (node.enum) return 'Choice';
+  if (node.format === 'date-time') return 'Date & time';
+  if (node.format === 'email') return 'Email';
+  if (node.format === 'uri') return 'URL';
+  return { string: 'Text', number: 'Number', integer: 'Number', boolean: 'Yes / No', array: 'List', object: 'Group' }[node.type] || 'Value';
+}
+
+function renderAll() {
+  const badge = document.getElementById('schemaBadge');
+  if (rootSchema) {
+    badge.style.display = 'inline';
+    badge.className = `badge badge-${currentLang}`;
+    badge.textContent = currentLang === 'pydantic' ? 'Pydantic' : 'Zod';
+    renderForm();
+    if (currentMode === 'json') syncJsonFromData();
+    runValidation();
+  } else {
+    badge.style.display = 'none';
+    document.getElementById('formPanel').innerHTML = '<div class="empty-msg">Parse a schema to unlock the guided form.</div>';
+    document.getElementById('jsonEditor').value = '';
+  }
+}
+
+function renderForm() {
+  const panel = document.getElementById('formPanel');
+  panel.innerHTML = '';
+  if (!rootSchema) return;
+
+  if (rootSchema.title) {
+    const h = document.createElement('div');
+    h.className = 'form-root-title';
+    h.textContent = rootSchema.title;
+    panel.appendChild(h);
+  }
+  if (rootSchema.description) {
+    const d = document.createElement('div');
+    d.className = 'form-root-desc';
+    d.textContent = rootSchema.description;
+    panel.appendChild(d);
+  }
+
+  for (const [key, sub] of Object.entries(rootSchema.properties || {})) {
+    panel.appendChild(renderField(key, sub, currentData, (val) => {
+      currentData[key] = val;
+      syncJsonFromData();
+      runValidation();
+      renderForm();
+    }));
+  }
+}
+
+function renderField(key, node, dataObj, onChange, path = key) {
+  const wrap = document.createElement('div');
+  wrap.className = 'field';
+
+  const label = document.createElement('div');
+  label.className = 'field-label';
+  label.innerHTML = `<span class="name">${esc(node.title || humanize(key))}</span>
+    <span class="${node.required ? 'req' : 'opt'}">${node.required ? 'Required' : 'Optional'}</span>
+    <span class="type-tag">${friendlyType(node)}</span>`;
+  wrap.appendChild(label);
+
+  if (node.description) {
+    const d = document.createElement('div');
+    d.className = 'field-desc';
+    d.textContent = node.description;
+    wrap.appendChild(d);
+  }
+
+  const err = fieldErrors[path];
+
+  if (node.type === 'object' && node.properties) {
+    const card = document.createElement('div');
+    card.className = 'group-card';
+    if (!dataObj[key] || typeof dataObj[key] !== 'object') dataObj[key] = {};
+    for (const [ck, sub] of Object.entries(node.properties)) {
+      card.appendChild(renderField(ck, sub, dataObj[key], (val) => {
+        dataObj[key][ck] = val;
+        onChange(dataObj[key]);
+      }, `${path}.${ck}`));
+    }
+    wrap.appendChild(card);
+  } else if (node.type === 'array') {
+    wrap.appendChild(renderList(key, node, dataObj, onChange, path));
+  } else if (node.type === 'boolean') {
+    const lbl = document.createElement('label');
+    lbl.className = 'toggle';
+    const checked = !!dataObj[key];
+    lbl.innerHTML = `<input type="checkbox" ${checked ? 'checked' : ''}>
+      <span class="toggle-track"><span class="toggle-thumb"></span></span>
+      <span class="toggle-label">${checked ? 'Yes' : 'No'}</span>`;
+    lbl.querySelector('input').onchange = (e) => {
+      dataObj[key] = e.target.checked;
+      lbl.querySelector('.toggle-label').textContent = e.target.checked ? 'Yes' : 'No';
+      onChange(dataObj[key]);
+    };
+    wrap.appendChild(lbl);
+  } else if (node.enum) {
+    const sel = document.createElement('select');
+    if (!node.required) sel.appendChild(new Option('—', ''));
+    node.enum.forEach((v) => sel.appendChild(new Option(v, v)));
+    sel.value = dataObj[key] ?? '';
+    if (err) sel.classList.add('invalid');
+    sel.onchange = () => { dataObj[key] = sel.value; onChange(dataObj[key]); };
+    wrap.appendChild(sel);
+  } else if (node.type === 'integer' || node.type === 'number') {
+    const inp = document.createElement('input');
+    inp.type = 'number';
+    inp.step = node.type === 'integer' ? '1' : 'any';
+    if (node.minimum != null) inp.min = node.minimum;
+    if (node.maximum != null) inp.max = node.maximum;
+    inp.value = dataObj[key] ?? '';
+    if (err) inp.classList.add('invalid');
+    inp.oninput = () => {
+      const v = inp.value === '' ? '' : (node.type === 'integer' ? parseInt(inp.value, 10) : parseFloat(inp.value));
+      dataObj[key] = v;
+      onChange(v);
+    };
+    wrap.appendChild(inp);
+  } else {
+    const inp = document.createElement('input');
+    inp.type = node.format === 'email' ? 'email' : node.format === 'uri' ? 'url' : node.format === 'date-time' ? 'datetime-local' : 'text';
+    let val = dataObj[key] ?? '';
+    if (node.format === 'date-time' && val) {
+      try { val = new Date(val).toISOString().slice(0, 16); } catch { /* keep */ }
+    }
+    inp.value = val;
+    if (err) inp.classList.add('invalid');
+    inp.oninput = () => {
+      let v = inp.value;
+      if (node.format === 'date-time' && v) v = new Date(v).toISOString();
+      dataObj[key] = v;
+      onChange(v);
+    };
+    wrap.appendChild(inp);
+  }
+
+  if (err) {
+    const e = document.createElement('div');
+    e.className = 'field-err';
+    e.textContent = err;
+    wrap.appendChild(e);
+  }
+  return wrap;
+}
+
+function renderList(key, node, dataObj, onChange, path) {
+  const wrap = document.createElement('div');
+  wrap.className = 'list-wrap';
+  if (!Array.isArray(dataObj[key])) dataObj[key] = [];
+
+  const err = fieldErrors[path];
+  if (err) {
+    const e = document.createElement('div');
+    e.className = 'field-err';
+    e.textContent = err;
+    wrap.appendChild(e);
+  }
+
+  dataObj[key].forEach((item, idx) => {
+    const row = document.createElement('div');
+    row.className = 'list-item';
+    const body = document.createElement('div');
+    body.className = 'list-item-body';
+    const idxLbl = document.createElement('div');
+    idxLbl.className = 'list-item-idx';
+    idxLbl.textContent = `Item ${idx + 1}`;
+    body.appendChild(idxLbl);
+
+    const itemPath = `${path}[${idx}]`;
+    if (node.items?.type === 'object' && node.items.properties) {
+      if (!item || typeof item !== 'object') dataObj[key][idx] = {};
+      for (const [ck, sub] of Object.entries(node.items.properties)) {
+        body.appendChild(renderField(ck, sub, dataObj[key][idx], () => onChange(dataObj[key]), `${itemPath}.${ck}`));
+      }
+    } else {
+      const sub = node.items || { type: 'string', required: true, key: 'item' };
+      const inp = document.createElement('input');
+      inp.type = 'text';
+      inp.value = item ?? '';
+      if (fieldErrors[itemPath]) inp.classList.add('invalid');
+      inp.oninput = () => { dataObj[key][idx] = inp.value; onChange(dataObj[key]); };
+      body.appendChild(inp);
+    }
+    row.appendChild(body);
+
+    const rm = document.createElement('button');
+    rm.className = 'btn-icon';
+    rm.textContent = '×';
+    rm.title = 'Remove';
+    rm.onclick = () => {
+      dataObj[key].splice(idx, 1);
+      onChange(dataObj[key]);
+      renderForm();
+    };
+    row.appendChild(rm);
+    wrap.appendChild(row);
+  });
+
+  const add = document.createElement('button');
+  add.className = 'btn-add';
+  add.textContent = '+ Add item';
+  add.onclick = () => {
+    const d = node.items?.type === 'object'
+      ? defaultFromSchema(node.items)
+      : exampleScalar(node.items || { type: 'string', required: true, key: 'item' });
+    dataObj[key].push(d);
+    onChange(dataObj[key]);
+    renderForm();
+  };
+  wrap.appendChild(add);
+  return wrap;
+}
+
+// ── JSON mode ─────────────────────────────────────────────────────────────────
+function syncJsonFromData() {
+  document.getElementById('jsonEditor').value = JSON.stringify(currentData, null, 2);
+}
+
+function formatJson() {
+  try {
+    const v = JSON.parse(document.getElementById('jsonEditor').value);
+    document.getElementById('jsonEditor').value = JSON.stringify(v, null, 2);
+  } catch (e) {
+    setStatus('err', 'Invalid JSON — cannot format');
+  }
+}
+
+function applyJson() {
+  try {
+    const v = JSON.parse(document.getElementById('jsonEditor').value);
+    currentData = v;
+    fieldErrors = validateData(currentData, rootSchema);
+    renderForm();
+    const ok = Object.keys(fieldErrors).length === 0;
+    setStatus(ok ? 'ok' : 'err', ok ? 'JSON applied and valid' : `JSON applied — ${Object.keys(fieldErrors).length} issue(s)`);
+  } catch (e) {
+    setStatus('err', 'Invalid JSON: ' + e.message);
+  }
+}
+
+// ── Status ────────────────────────────────────────────────────────────────────
+function setStatus(kind, detail) {
+  const pill = document.getElementById('statusPill');
+  pill.className = 'status-pill ' + (kind === 'ok' ? 'ok' : kind === 'err' ? 'err' : 'idle');
+  pill.textContent = kind === 'ok' ? 'Valid' : kind === 'err' ? 'Issues' : 'No schema';
+  document.getElementById('statusDetail').textContent = detail;
+}
+
+function esc(s) {
+  return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
+// ── Boot ──────────────────────────────────────────────────────────────────────
+buildExampleTabs();
+loadExample('user_profile');
+</script>
+</body>
+</html>

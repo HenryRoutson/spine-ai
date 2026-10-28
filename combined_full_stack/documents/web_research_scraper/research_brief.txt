@@ -1,0 +1,8 @@
+# Parallel web research: Ray and n8n
+
+How can a Python team scrape many public web pages in parallel, and where does n8n fit as a web-search / orchestration layer in front of that scrape?
+
+Cover:
+- Ray tasks for fan-out HTTP fetches
+- n8n for search APIs (SerpAPI, Tavily, HTTP Request)
+- What belongs in search vs scrape vs LLM extract

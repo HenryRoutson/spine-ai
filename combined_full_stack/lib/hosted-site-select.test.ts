@@ -1,0 +1,70 @@
+import { describe, expect, it } from "vitest"
+import {
+  patchHostedSiteHtmlText,
+  patchHostedSiteHtmlUniqueText,
+  stampHostedSiteHsIds,
+  stripHostedSiteHsIds,
+} from "@/lib/hosted-site-select"
+import { splitHostedSiteSlots } from "@/lib/hosted-site-slots"
+
+describe("hosted site click-to-edit", () => {
+  it("stamps stable data-hs-id on opening tags and strips them", () => {
+    const html = `<header class="hs-hero"><h1 class="hs-title">Hello</h1></header>`
+    const stamped = stampHostedSiteHsIds(html)
+    expect(stamped).toContain('data-hs-id="1"')
+    expect(stamped).toContain('data-hs-id="2"')
+    expect(stripHostedSiteHsIds(stamped)).toBe(html)
+  })
+
+  it("patches text by data-hs-id without an LLM", () => {
+    const html = `<header class="hs-hero"><h1 class="hs-title">{{tagline}}</h1></header>`
+    const stamped = stampHostedSiteHsIds(html)
+    const h1 = /data-hs-id="(\d+)"/.exec(stamped.slice(stamped.indexOf("<h1")))
+    expect(h1?.[1]).toBeTruthy()
+    const next = patchHostedSiteHtmlText(html, h1![1]!, "Invoice ops")
+    expect(next).toContain("Invoice ops")
+    expect(next).not.toContain("{{tagline}}")
+    expect(next).not.toContain("data-hs-id")
+  })
+
+  it("does not replace a wrapper that still has nested tags", () => {
+    const html = `<header class="hs-hero"><h1>Example Domain</h1><p>Lede</p></header>`
+    const stamped = stampHostedSiteHsIds(html)
+    const headerId = /data-hs-id="(\d+)"/.exec(stamped)?.[1]
+    expect(headerId).toBe("1")
+    expect(patchHostedSiteHtmlText(html, headerId!, "wiped")).toBe(html)
+    const h1Id = /<h1[^>]*data-hs-id="(\d+)"/.exec(stamped)?.[1]
+    expect(patchHostedSiteHtmlText(html, h1Id!, "Cloned")).toContain("Cloned")
+  })
+
+  it("patches a unique text occurrence when hs-id is not on the source", () => {
+    const html = `<h1>Example Domain</h1><p>Docs</p>`
+    expect(patchHostedSiteHtmlUniqueText(html, "Example Domain", "Cloned")).toBe(
+      `<h1>Cloned</h1><p>Docs</p>`,
+    )
+    expect(patchHostedSiteHtmlUniqueText(`<h1>Docs</h1><p>Docs</p>`, "Docs", "X")).toBeNull()
+  })
+})
+
+describe("hosted site extra slots", () => {
+  it("splits {{output}} {{chatbot}} {{docs}} alongside {{run}}", () => {
+    const html = `<h1>Hi</h1>{{docs}}{{run}}{{output}}{{chatbot}}`
+    const segments = splitHostedSiteSlots(html)
+    expect(segments.map((s) => (s.kind === "slot" ? s.slot : "html"))).toEqual([
+      "html",
+      "docs",
+      "run",
+      "output",
+      "chatbot",
+    ])
+  })
+
+  it("splits {{pay}} and named {{table:Model}} slots", () => {
+    const html = `<section>{{pay}}</section>{{table:Lead}}`
+    const segments = splitHostedSiteSlots(html)
+    expect(segments.filter((s) => s.kind === "slot")).toEqual([
+      { kind: "slot", slot: "pay" },
+      { kind: "slot", slot: "table", alias: "Lead" },
+    ])
+  })
+})

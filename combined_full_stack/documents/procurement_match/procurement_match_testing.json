@@ -1,0 +1,11 @@
+{
+  "description": "Test scaffold for Procurement Three-Way Match — inputs are pinned; fill the null expected outputs from a verified run (only listed steps are checked).",
+  "inputs": {
+    "Purchase Order": "acme_purchase_order_po77821.md",
+    "Delivery Note": "acme_delivery_note_dn99214.md",
+    "Vendor Invoice": "acme_vendor_invoice_inv44102.md"
+  },
+  "expectedOutputs": {
+    "Match Report": null
+  }
+}

@@ -1,0 +1,24 @@
+{
+  "id": "n8n-nodes-base.dateTime",
+  "n8nNodeType": "n8n-nodes-base.dateTime",
+  "displayName": "Date & time",
+  "description": "Copy a date field into an ISO-ish string on each item.",
+  "category": "transform",
+  "props": [
+    {
+      "name": "field",
+      "displayName": "Date field",
+      "type": "string",
+      "required": true,
+      "default": "created_at"
+    },
+    {
+      "name": "outputField",
+      "displayName": "Output field",
+      "type": "string",
+      "required": true,
+      "default": "iso"
+    }
+  ],
+  "n8nCode": "const field = String($parameter.field ?? \"created_at\");\nconst outField = String($parameter.outputField ?? \"iso\");\nreturn items.map((item) => {\n  const raw = item.json?.[field];\n  const d = new Date(String(raw ?? \"\"));\n  const iso = Number.isNaN(d.getTime()) ? String(raw ?? \"\") : d.toISOString();\n  return { json: { ...item.json, [outField]: iso } };\n});"
+}

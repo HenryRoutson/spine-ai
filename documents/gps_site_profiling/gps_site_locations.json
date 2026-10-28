@@ -1,0 +1,61 @@
+{
+  "purpose": "Satellite survey batch — candidate GPS site locations for geospatial profiling",
+  "sites": [
+    {
+      "site_id": "S-001",
+      "name": "Akademgorodok Sector 7",
+      "latitude": 54.8488,
+      "longitude": 83.0899,
+      "notes": "Dense antenna arrays; institutional campus layout near Novosibirsk"
+    },
+    {
+      "site_id": "S-002",
+      "name": "Vorkuta Perimeter Site",
+      "latitude": 67.4979,
+      "longitude": 64.0525,
+      "notes": "Remote fenced compound; permafrost region; minimal road access"
+    },
+    {
+      "site_id": "S-003",
+      "name": "McMurdo Ridge Station",
+      "latitude": -77.8419,
+      "longitude": 166.6863,
+      "notes": "Polar research logistics hub; year-round scientific activity"
+    },
+    {
+      "site_id": "S-004",
+      "name": "Los Alamos Mesa Facility",
+      "latitude": 35.8800,
+      "longitude": -106.3031,
+      "notes": "High-security research campus; restricted airspace"
+    },
+    {
+      "site_id": "S-005",
+      "name": "Murmansk Coastal Array",
+      "latitude": 68.9585,
+      "longitude": 33.0827,
+      "notes": "Arctic port-adjacent installation; radar domes visible"
+    },
+    {
+      "site_id": "S-006",
+      "name": "CERN Prevessin Campus",
+      "latitude": 46.3110,
+      "longitude": 6.0450,
+      "notes": "Particle physics research complex; cross-border EU footprint"
+    },
+    {
+      "site_id": "S-007",
+      "name": "Pevek Northern Relay",
+      "latitude": 69.7028,
+      "longitude": 170.2997,
+      "notes": "Far-northeast Russian Arctic site; ice-free port season only"
+    },
+    {
+      "site_id": "S-008",
+      "name": "Thule Air Base Annex",
+      "latitude": 76.5312,
+      "longitude": -68.7032,
+      "notes": "High-latitude military-science installation; Greenland ice cap proximity"
+    }
+  ]
+}

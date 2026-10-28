@@ -1,0 +1,351 @@
+{
+  "id": "p_example_select",
+  "name": "Example Select Demo",
+  "kind": "example-select-demo",
+  "models": [
+    {
+      "id": "m_scope_ex",
+      "name": "ScopeExample",
+      "description": "One reference scope-of-works row from the example library.",
+      "fields": [
+        {
+          "id": "f_id",
+          "name": "id",
+          "type": "text",
+          "optional": false,
+          "description": "Stable example id"
+        },
+        {
+          "id": "f_title",
+          "name": "title",
+          "type": "text",
+          "optional": false,
+          "description": "Short label"
+        },
+        {
+          "id": "f_scope",
+          "name": "scope_text",
+          "type": "text",
+          "optional": false,
+          "description": "Past scope of works body"
+        }
+      ]
+    },
+    {
+      "id": "m_selected",
+      "name": "SelectedExample",
+      "description": "Relevant example after example-select — includes selection_reason chain-of-thought.",
+      "fields": [
+        {
+          "id": "f_id",
+          "name": "id",
+          "type": "text",
+          "optional": false,
+          "description": "Matches library id"
+        },
+        {
+          "id": "f_title",
+          "name": "title",
+          "type": "text",
+          "optional": false,
+          "description": "Short label"
+        },
+        {
+          "id": "f_scope",
+          "name": "scope_text",
+          "type": "text",
+          "optional": false,
+          "description": "Past scope body"
+        },
+        {
+          "id": "f_reason",
+          "name": "selection_reason",
+          "type": "text",
+          "optional": false,
+          "description": "Why this example is useful for the current case",
+          "deterministic": false,
+          "minLength": 1
+        }
+      ]
+    },
+    {
+      "id": "m_draft_req",
+      "name": "ScopeDraftRequest",
+      "description": "Merged description + filtered examples for the final LLM.",
+      "fields": [
+        {
+          "id": "f_desc",
+          "name": "description",
+          "type": "text",
+          "optional": false,
+          "description": "Current damage case"
+        },
+        {
+          "id": "f_examples",
+          "name": "selected_examples",
+          "type": "list[model]",
+          "ref": "m_selected",
+          "optional": false,
+          "description": "LLM-filtered reference rows",
+          "minItems": 1
+        }
+      ]
+    },
+    {
+      "id": "m_scope_draft",
+      "name": "ScopeDraft",
+      "description": "Draft scope of works for the new case.",
+      "fields": [
+        {
+          "id": "f_title",
+          "name": "title",
+          "type": "text",
+          "optional": false,
+          "description": "Short job title",
+          "deterministic": false
+        },
+        {
+          "id": "f_scope",
+          "name": "scope_of_works",
+          "type": "text",
+          "optional": false,
+          "description": "Numbered scope lines",
+          "deterministic": false
+        }
+      ]
+    }
+  ],
+  "modules": [
+    {
+      "id": "mod_damage_in",
+      "kind": "input",
+      "label": "Damage Case",
+      "inputType": "text",
+      "inputNameContains": "damage_case",
+      "inputDescription": "Plain-text description of the new damage case",
+      "outStructureId": "m_builtin_document",
+      "cached": true,
+      "avgMs": 80,
+      "avgCostCents": 0,
+      "note": "New leak description — example-select reads Document.content as {description}"
+    },
+    {
+      "id": "mod_library_in",
+      "kind": "input",
+      "label": "Example Library",
+      "inputType": "json",
+      "inputNameContains": "example_library",
+      "inputDescription": "JSON array of past scope-of-works rows (id, title, scope_text)",
+      "outStructureId": "m_scope_ex",
+      "cached": true,
+      "avgMs": 80,
+      "avgCostCents": 0,
+      "note": "Reference example library — JSON array on the spine for example-select",
+      "outType": {
+        "kind": "list",
+        "item": { "kind": "ref", "modelId": "m_scope_ex" }
+      }
+    },
+    {
+      "id": "mod_select",
+      "kind": "example-select",
+      "label": "Select Relevant Examples",
+      "note": "LLM relevance filter — cached prefix + per-item is_relevant; not embedding RAG.",
+      "inputDescription": "list[ScopeExample] from the example library JSON",
+      "inStructureId": "m_scope_ex",
+      "outStructureId": "m_selected",
+      "exampleContextLabel": "Damage Case",
+      "exampleContextField": "content",
+      "exampleReasonField": "selection_reason",
+      "prompt": "Find useful examples to help create a scope of works for this description of the works.\n\nDESCRIPTION:\n\n{description}\n\nPOSSIBLE USEFUL EXAMPLE:\n\n{example}",
+      "model": "deepseek-v4",
+      "costLimitCents": 100,
+      "cached": true,
+      "avgMs": 2200,
+      "avgCostCents": 3,
+      "outType": {
+        "kind": "list",
+        "item": { "kind": "ref", "modelId": "m_selected" }
+      }
+    },
+    {
+      "id": "mod_assemble",
+      "kind": "assemble",
+      "label": "Assemble Draft Request",
+      "note": "Zip Damage Case.content with selected_examples → ScopeDraftRequest.",
+      "inputDescription": "Filtered SelectedExample rows with selection_reason",
+      "inStructureId": "m_selected",
+      "outStructureId": "m_draft_req",
+      "inType": {
+        "kind": "list",
+        "item": { "kind": "ref", "modelId": "m_selected" }
+      },
+      "outType": {
+        "kind": "ref",
+        "modelId": "m_draft_req"
+      },
+      "assembleBindings": {
+        "description": { "kind": "path", "from": { "label": "Damage Case" }, "path": "content" },
+        "selected_examples": { "kind": "spine" }
+      },
+      "cached": true,
+      "avgMs": 5,
+      "avgCostCents": 0
+    },
+    {
+      "id": "mod_draft",
+      "kind": "llm",
+      "label": "Draft Scope",
+      "note": "Final scope using selected examples and their selection_reason fields.",
+      "inputDescription": "ScopeDraftRequest with description and selected_examples",
+      "inStructureId": "m_draft_req",
+      "outStructureId": "m_scope_draft",
+      "prompt": "Write a numbered scope of works for the damage description. Use selected_examples only as style and coverage guidance — each row includes selection_reason explaining why it was chosen. Do not copy irrelevant work from distractor examples. Output a concise title and scope_of_works.",
+      "model": "deepseek-v4",
+      "cached": true,
+      "avgMs": 1800,
+      "avgCostCents": 4
+    },
+    {
+      "id": "mod_output",
+      "kind": "output",
+      "label": "Scope Output",
+      "inputDescription": "ScopeDraft with title and scope_of_works",
+      "inStructureId": "m_scope_draft",
+      "outStructureId": "m_scope_draft",
+      "cached": true,
+      "avgMs": 40,
+      "avgCostCents": 0,
+      "note": ""
+    }
+  ],
+  "strategies": [
+    {
+      "id": "s_single",
+      "kind": "single-llm",
+      "name": "Single LLM Call",
+      "enabled": true,
+      "model": "deepseek-v4",
+      "accuracy": 80,
+      "latencyMs": 4200,
+      "costCents": 7,
+      "passRate": 90
+    },
+    {
+      "id": "s_agent",
+      "kind": "claude-code",
+      "name": "Agent (Frontier)",
+      "enabled": true,
+      "model": "deepseek-v4",
+      "accuracy": 92,
+      "latencyMs": 24000,
+      "costCents": 120,
+      "passRate": 97
+    },
+    {
+      "id": "s_cheap",
+      "kind": "cheap-agent",
+      "name": "Agent (Cheap Model)",
+      "enabled": true,
+      "model": "deepseek-v4",
+      "accuracy": 82,
+      "latencyMs": 15000,
+      "costCents": 10,
+      "passRate": 88
+    }
+  ],
+  "docs": [
+    {
+      "name": "damage_case.txt",
+      "type": "text",
+      "label": "inference",
+      "file": "example_select_demo/damage_case.txt"
+    },
+    {
+      "name": "damage_case_roof_storm.txt",
+      "type": "text",
+      "label": "inference",
+      "file": "example_select_demo/damage_case_roof_storm.txt"
+    },
+    {
+      "name": "damage_case_kitchen_reno.txt",
+      "type": "text",
+      "label": "inference",
+      "file": "example_select_demo/damage_case_kitchen_reno.txt"
+    },
+    {
+      "name": "example_library.json",
+      "type": "json",
+      "label": "inference",
+      "file": "example_select_demo/example_library.json"
+    },
+    {
+      "name": "example_select_demo_inference.json",
+      "type": "json",
+      "label": "inference",
+      "file": "example_select_demo/example_select_demo_inference.json"
+    },
+    {
+      "name": "roof_storm_inference.json",
+      "type": "json",
+      "label": "inference",
+      "file": "example_select_demo/roof_storm_inference.json"
+    },
+    {
+      "name": "kitchen_reno_inference.json",
+      "type": "json",
+      "label": "inference",
+      "file": "example_select_demo/kitchen_reno_inference.json"
+    },
+    {
+      "name": "example_select_demo_testing.json",
+      "type": "json",
+      "label": "training",
+      "file": "example_select_demo/example_select_demo_testing.json"
+    },
+    {
+      "name": "roof_storm_testing.json",
+      "type": "json",
+      "label": "training",
+      "file": "example_select_demo/roof_storm_testing.json"
+    },
+    {
+      "name": "kitchen_reno_testing.json",
+      "type": "json",
+      "label": "training",
+      "file": "example_select_demo/kitchen_reno_testing.json"
+    },
+    {
+      "name": "example_select_demo_README.md",
+      "type": "text",
+      "label": "training",
+      "file": "example_select_demo/README.md"
+    }
+  ],
+  "inferencePresets": [
+    {
+      "name": "Bathroom leak (default)",
+      "description": "Default inference preset — damage_case.txt + example_library.json",
+      "inputs": {
+        "Damage Case": "damage_case.txt",
+        "Example Library": "example_library.json"
+      }
+    },
+    {
+      "name": "Roof storm",
+      "description": "Roof storm scenario — damage_case_roof_storm.txt + example_library.json",
+      "inputs": {
+        "Damage Case": "damage_case_roof_storm.txt",
+        "Example Library": "example_library.json"
+      }
+    },
+    {
+      "name": "Kitchen reno",
+      "description": "Kitchen cabinetry scenario — damage_case_kitchen_reno.txt + example_library.json",
+      "inputs": {
+        "Damage Case": "damage_case_kitchen_reno.txt",
+        "Example Library": "example_library.json"
+      }
+    }
+  ]
+}

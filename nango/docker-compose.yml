@@ -1,0 +1,67 @@
+# AI : Free self-host Nango (auth + proxy only). Do not mount n8n/nango source; image ships providers.yaml.
+# Official: https://nango.dev/docs/guides/platform/self-hosting
+name: spine-nango
+
+services:
+  nango-db:
+    image: postgres:16.0-alpine
+    container_name: spine-nango-db
+    environment:
+      POSTGRES_USER: nango
+      POSTGRES_PASSWORD: nango
+      POSTGRES_DB: nango
+    volumes:
+      - nango-db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U nango -d nango"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+    networks:
+      - nango
+    restart: unless-stopped
+
+  nango-redis:
+    image: redis:7.2.4
+    container_name: spine-nango-redis
+    networks:
+      - nango
+    restart: unless-stopped
+
+  nango-server:
+    # AI : pin to frontend SDK (@nangohq/frontend 0.71.4). linux/amd64 — Apple Silicon uses qemu.
+    image: nangohq/nango-server:hosted-0.71.4
+    container_name: spine-nango-server
+    platform: linux/amd64
+    env_file:
+      - .env
+    environment:
+      NANGO_DB_USER: nango
+      NANGO_DB_PASSWORD: nango
+      NANGO_DB_HOST: nango-db
+      NANGO_DB_NAME: nango
+      NANGO_DB_PORT: "5432"
+      RECORDS_DATABASE_URL: postgresql://nango:nango@nango-db:5432/nango
+      NANGO_REDIS_URL: redis://nango-redis:6379
+      SERVER_PORT: "3003"
+      NANGO_CONNECT_UI_PORT: "3009"
+      FLAG_SERVE_CONNECT_UI: "true"
+      NANGO_LOGS_ENABLED: "false"
+      CSP_REPORT_ONLY: "true"
+    ports:
+      - "3003:3003"
+      - "3009:3009"
+    depends_on:
+      nango-db:
+        condition: service_healthy
+      nango-redis:
+        condition: service_started
+    networks:
+      - nango
+    restart: unless-stopped
+
+networks:
+  nango:
+
+volumes:
+  nango-db-data:

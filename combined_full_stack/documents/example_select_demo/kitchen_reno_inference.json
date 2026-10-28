@@ -1,0 +1,7 @@
+{
+  "description": "Cabinetry-only kitchen job — example-select should keep the renovation example and drop structural leak scopes.",
+  "inputs": {
+    "Damage Case": "damage_case_kitchen_reno.txt",
+    "Example Library": "example_library.json"
+  }
+}

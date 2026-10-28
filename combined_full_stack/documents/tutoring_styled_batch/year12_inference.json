@@ -1,0 +1,6 @@
+{
+  "description": "Year 12 differentiation — 3 differently styled questions via llm-batch.",
+  "inputs": {
+    "Request": "year12_request.json"
+  }
+}

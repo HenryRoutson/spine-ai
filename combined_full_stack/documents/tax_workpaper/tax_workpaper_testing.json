@@ -1,0 +1,10 @@
+{
+  "description": "Test scaffold for Tax Workpaper Preparer — inputs are pinned; fill the null expected outputs from a verified run (only listed steps are checked).",
+  "inputs": {
+    "W-2": "alex_morgan_w2_2024.md",
+    "1099-MISC": "alex_morgan_1099_misc.md"
+  },
+  "expectedOutputs": {
+    "Client Workpaper": null
+  }
+}

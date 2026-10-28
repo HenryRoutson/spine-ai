@@ -1,0 +1,180 @@
+{
+  "id": "p_invoice_triage_fork",
+  "name": "Invoice Triage Fork",
+  "kind": "finance-ops",
+  "models": [
+    {
+      "id": "m_invoice",
+      "name": "ParsedInvoice",
+      "description": "Header fields from the invoice.",
+      "fields": [
+        { "id": "f_vendor", "name": "vendor", "type": "text", "optional": false, "description": "Vendor name" },
+        { "id": "f_amount", "name": "amount", "type": "text", "optional": false, "description": "Amount due" },
+        { "id": "f_number", "name": "invoice_number", "type": "text", "optional": false, "description": "Invoice id" }
+      ]
+    },
+    {
+      "id": "m_gl",
+      "name": "GlCode",
+      "description": "Suggested GL coding.",
+      "fields": [
+        { "id": "f_gl", "name": "code", "type": "text", "optional": false, "description": "GL account" },
+        { "id": "f_gl_why", "name": "reason", "type": "text", "optional": false, "description": "Why this code" }
+      ]
+    },
+    {
+      "id": "m_fraud",
+      "name": "FraudSignal",
+      "description": "Policy API result.",
+      "fields": [
+        { "id": "f_ok", "name": "ok", "type": "text", "optional": false, "description": "pass or review" },
+        { "id": "f_detail", "name": "detail", "type": "text", "optional": false, "description": "Policy note" }
+      ]
+    },
+    {
+      "id": "m_vendor",
+      "name": "VendorMatch",
+      "description": "Matched vendor catalog row.",
+      "fields": [
+        { "id": "f_vendor_id", "name": "vendor_id", "type": "text", "optional": false, "description": "Catalog id" },
+        { "id": "f_vendor_name", "name": "name", "type": "text", "optional": false, "description": "Canonical name" }
+      ]
+    },
+    {
+      "id": "m_triage",
+      "name": "InvoiceTriage",
+      "description": "Assembled fork output for human review.",
+      "fields": [
+        { "id": "f_t_invoice", "name": "invoice", "type": "model", "optional": false, "description": "Parsed invoice", "ref": "m_invoice" },
+        { "id": "f_t_gl", "name": "gl", "type": "model", "optional": false, "description": "GL suggestion", "ref": "m_gl" },
+        { "id": "f_t_fraud", "name": "fraud", "type": "model", "optional": false, "description": "Fraud signal", "ref": "m_fraud" },
+        { "id": "f_t_vendor", "name": "vendor", "type": "model", "optional": false, "description": "Vendor match", "ref": "m_vendor" }
+      ]
+    }
+  ],
+  "modules": [
+    {
+      "id": "mod_in",
+      "kind": "input",
+      "label": "Invoice",
+      "note": "Vendor invoice upload",
+      "inputType": "text",
+      "inputNameContains": "invoice",
+      "outStructureId": "m_builtin_document",
+      "inputDescription": "Raw invoice text"
+    },
+    {
+      "id": "mod_parse",
+      "kind": "llm",
+      "label": "Parse Invoice",
+      "note": "Header extract",
+      "inStructureId": "m_builtin_document",
+      "outStructureId": "m_invoice",
+      "inputDescription": "Invoice Document",
+      "prompt": "Extract vendor, amount, and invoice_number.",
+      "model": "deepseek-v4"
+    },
+    {
+      "id": "mod_fork",
+      "kind": "fork",
+      "label": "Triage",
+      "note": "GL, fraud policy, and vendor match in parallel then assemble",
+      "forkJoin": "assemble",
+      "outStructureId": "m_triage",
+      "assembleBindings": {
+        "invoice": { "kind": "spine" },
+        "gl": { "kind": "state", "label": "GL Code" },
+        "fraud": { "kind": "state", "label": "Assert Fraud" },
+        "vendor": { "kind": "state", "label": "Match Vendor" }
+      },
+      "forkBranches": [
+        {
+          "id": "fbr_gl",
+          "label": "GL",
+          "modules": [
+            {
+              "id": "mod_gl",
+              "kind": "llm",
+              "label": "GL Code",
+              "note": "Suggest a GL account",
+              "inStructureId": "m_invoice",
+              "outStructureId": "m_gl",
+              "inputDescription": "Parsed invoice",
+              "prompt": "Suggest a GL code and a one-line reason.",
+              "model": "deepseek-v4"
+            }
+          ]
+        },
+        {
+          "id": "fbr_fraud",
+          "label": "Fraud",
+          "modules": [
+            {
+              "id": "mod_fraud_hook",
+              "kind": "webhook",
+              "label": "Fraud Policy",
+              "note": "POST invoice to policy API",
+              "inStructureId": "m_invoice",
+              "outStructureId": "m_fraud",
+              "webhookUrl": "https://example.com/fraud-policy",
+              "webhookMethod": "POST",
+              "inputDescription": "Parsed invoice for policy scoring"
+            },
+            {
+              "id": "mod_fraud_assert",
+              "kind": "assert",
+              "label": "Assert Fraud",
+              "note": "Policy response has ok",
+              "inStructureId": "m_fraud",
+              "outStructureId": "m_fraud",
+              "fallbackList": [{ "typescript": "assert(input && input.ok)" }]
+            }
+          ]
+        },
+        {
+          "id": "fbr_vendor",
+          "label": "Vendor",
+          "modules": [
+            {
+              "id": "mod_vendor",
+              "kind": "llm",
+              "label": "Match Vendor",
+              "note": "Canonical vendor (catalog-style extract)",
+              "inStructureId": "m_invoice",
+              "outStructureId": "m_vendor",
+              "inputDescription": "Parsed invoice vendor string",
+              "prompt": "Map vendor to vendor_id and canonical name. Use vendor as name when unknown; vendor_id = slug.",
+              "model": "deepseek-v4"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "mod_review",
+      "kind": "human-review",
+      "label": "Review Triage",
+      "note": "Approve coding before posting",
+      "inStructureId": "m_triage",
+      "outStructureId": "m_triage",
+      "inputDescription": "Assembled invoice + GL + fraud + vendor"
+    },
+    {
+      "id": "mod_out",
+      "kind": "output",
+      "label": "Posted Invoice",
+      "inStructureId": "m_triage",
+      "outStructureId": "m_triage",
+      "inputDescription": "Approved InvoiceTriage"
+    }
+  ],
+  "strategies": [
+    { "id": "s_single", "kind": "single-llm", "name": "Single LLM Call", "enabled": true, "model": "deepseek-v4", "accuracy": 78, "latencyMs": 3200, "costCents": 8, "passRate": 90 },
+    { "id": "s_agent", "kind": "claude-code", "name": "Agent (Frontier)", "enabled": true, "model": "deepseek-v4", "accuracy": 92, "latencyMs": 28000, "costCents": 160, "passRate": 97 },
+    { "id": "s_cheap", "kind": "cheap-agent", "name": "Agent (Cheap Model)", "enabled": true, "model": "deepseek-v4", "accuracy": 82, "latencyMs": 18000, "costCents": 12, "passRate": 89 }
+  ],
+  "docs": [
+    { "name": "invoice_8841.md", "type": "text", "label": "inference", "file": "invoice_triage_fork/invoice_8841.md" },
+    { "name": "invoice_triage_fork_testing.json", "type": "json", "label": "training", "file": "invoice_triage_fork/invoice_triage_fork_testing.json" }
+  ]
+}

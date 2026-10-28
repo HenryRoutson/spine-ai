@@ -1,0 +1,17 @@
+[
+  {
+    "filename": "homework_student_sam.md",
+    "content": "# Algebra II — Homework 7 — Student: Sam Rivera\n\n## Section A — Linear equations (10 pts)\n\n**Q1.** Solve for x: 3x + 7 = 22  \nStudent work: 3x = 15, x = 5\n\n**Q2.** Solve for y: 2(y - 4) = 10  \nStudent work: 2y - 8 = 10, 2y = 18, y = 9\n\n## Section B — Quadratic factoring (15 pts)\n\n**Q3.** Factor: x² + 5x + 6  \nStudent work: (x + 2)(x + 3)\n\n**Q4.** Solve: x² - 9 = 0  \nStudent work: x = 3 only\n\n## Section C — Word problems (15 pts)\n\n**Q5.** A train leaves at 2pm at 60 mph. Another leaves at 3pm at 90 mph on the same line. When do they meet if 210 miles apart?  \nStudent work: \"They meet at 5pm\" — no working shown.\n",
+    "doc_id": "seed_homework_student_sam.md"
+  },
+  {
+    "filename": "homework_student_jordan.md",
+    "content": "# Algebra II — Homework 7 — Student: Jordan Lee\n\n## Section A — Linear equations (10 pts)\n\n**Q1.** Solve for x: 3x + 7 = 22  \nStudent work: 3x = 15, x = 5 ✓\n\n**Q2.** Solve for y: 2(y - 4) = 10  \nStudent work: 2y - 8 = 10, 2y = 18, y = 8\n\n## Section B — Quadratic factoring (15 pts)\n\n**Q3.** Factor: x² + 5x + 6  \nStudent work: (x + 2)(x + 3)\n\n**Q4.** Solve: x² - 9 = 0  \nStudent work: (x - 3)(x + 3) = 0, x = 3 or x = -3\n\n## Section C — Word problems (15 pts)\n\n**Q5.** A train leaves at 2pm at 60 mph. Another leaves at 3pm at 90 mph on the same line. When do they meet if 210 miles apart?  \nStudent work: Let t = hours after 3pm. 60(t+1) + 90t = 210 → t = 1, meet at 4pm.\n",
+    "doc_id": "seed_homework_student_jordan.md"
+  },
+  {
+    "filename": "homework_student_alex.md",
+    "content": "# Algebra II — Homework 7 — Student: Alex Kim\n\n## Section A — Linear equations (10 pts)\n\n**Q1.** Solve for x: 3x + 7 = 22  \nStudent work: x = 5\n\n**Q2.** Solve for y: 2(y - 4) = 10  \nStudent work: y = 9\n\n## Section B — Quadratic factoring (15 pts)\n\n**Q3.** Factor: x² + 5x + 6  \nStudent work: (x + 3)(x + 2)\n\n**Q4.** Solve: x² - 9 = 0  \nStudent work: x = ±3\n\n## Section C — Word problems (15 pts)\n\n**Q5.** A train leaves at 2pm at 60 mph. Another leaves at 3pm at 90 mph on the same line. When do they meet if 210 miles apart?  \nStudent work: drew diagram, 60d + 90d = 210, d = 1.4 hr after 2pm → about 3:24pm.\n",
+    "doc_id": "seed_homework_student_alex.md"
+  }
+]

@@ -1,0 +1,373 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI Engineering Tooling Landscape — ARR vs Valuation vs Similarity</title>
+<style>
+  /* dark theme only — fixed, no light-mode branch */
+  .viz-root{
+    color-scheme: dark;
+    --surface-1:      #1a1a19;
+    --page:           #0d0d0d;
+    --text-primary:   #ffffff;
+    --text-secondary: #c3c2b7;
+    --text-muted:     #a5a49c;
+    --grid:           #2c2c2a;
+    --axis:           #4a4a47;
+    --border:         rgba(255,255,255,0.14);
+    --accent:         #3987e5;
+    --accent-ring:    #86b6ef;
+  }
+
+  * { box-sizing: border-box; }
+  html, body { margin:0; padding:0; background: #0d0d0d; }
+  body{
+    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+    color: #ffffff;
+  }
+  .viz-root{ max-width: 1180px; margin: 0 auto; padding: 28px 20px 60px; background: var(--page); }
+
+  header.top{ margin-bottom: 18px; }
+  h1{ font-size: 21px; font-weight: 650; margin: 0 0 4px; letter-spacing: -0.01em; color: var(--text-primary); }
+  .subtitle{ font-size: 13.5px; color: var(--text-secondary); max-width: 760px; line-height:1.5; }
+
+  /* stat tiles */
+  .stats{ display:grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin: 18px 0 22px; }
+  .tile{ background: var(--surface-1); border: 1px solid var(--border); border-radius: 10px; padding: 14px 16px; }
+  .tile .label{ font-size: 11.5px; color: var(--text-secondary); margin-bottom: 6px; }
+  .tile .value{ font-size: 22px; font-weight: 650; letter-spacing:-0.01em; color: var(--text-primary); }
+  .tile .note{ font-size: 11px; color: var(--text-muted); margin-top: 4px; line-height:1.4; }
+
+  /* chart card */
+  .card{ background: var(--surface-1); border: 1px solid var(--border); border-radius: 12px; padding: 18px 18px 10px; margin-bottom: 22px; }
+  .card h2{ font-size: 14.5px; font-weight: 650; margin: 0 0 2px; color: var(--text-primary); }
+  .card .card-sub{ font-size: 12px; color: var(--text-secondary); margin-bottom: 10px; }
+
+  svg{ display:block; width:100%; height:auto; overflow: visible; }
+  .grid-line{ stroke: var(--grid); stroke-width:1; shape-rendering: crispEdges; }
+  .axis-line{ stroke: var(--axis); stroke-width:1; shape-rendering: crispEdges; }
+  .tick-label{ fill: var(--text-muted); font-size: 10.5px; }
+  .axis-title{ fill: var(--text-secondary); font-size: 11.5px; font-weight: 600; }
+
+  .pt{ fill: var(--accent); cursor: pointer; }
+  .pt-ring-surface{ fill: none; stroke: var(--surface-1); stroke-width: 2px; pointer-events:none; }
+  .pt-imputed-ring{ fill: none; stroke: var(--text-muted); stroke-width: 1.4px; stroke-dasharray: 2.5 2; pointer-events:none; }
+  .pt-label{ fill: var(--text-primary); font-size: 11px; pointer-events:none; }
+
+  /* legends */
+  .legends{ display:flex; flex-wrap:wrap; gap: 26px; align-items:center; margin: 4px 0 14px; padding-top: 4px; }
+  .legend-block .legend-title{ font-size: 11px; color: var(--text-secondary); margin-bottom: 6px; font-weight:600; }
+  .alpha-grad{ width: 170px; height: 12px; border-radius: 3px; border: 1px solid var(--border); }
+  .alpha-ticks{ display:flex; justify-content:space-between; width:170px; font-size: 10px; color: var(--text-muted); margin-top:3px; }
+  .shape-legend{ display:flex; flex-direction:column; gap:6px; font-size: 11.5px; color: var(--text-secondary); }
+  .shape-row{ display:flex; align-items:center; gap:8px; }
+  .swatch-solid, .swatch-ring{ width:12px; height:12px; border-radius:50%; flex:none; }
+  .swatch-solid{ background: var(--accent); opacity:0.85; }
+  .swatch-ring{ background: var(--accent); opacity:0.45; border: 1.4px dashed var(--text-muted); }
+  .swatch-line{ width:16px; height:0; border-top: 1.6px dashed var(--text-muted); border-radius:0; background:none; align-self:center; }
+
+  /* tooltip */
+  #tooltip{
+    position: fixed; pointer-events:none; z-index: 50; opacity:0; transition: opacity 0.08s ease;
+    background: var(--surface-1); border: 1px solid var(--border); border-radius: 8px;
+    padding: 10px 12px; font-size: 11.5px; color: var(--text-primary); max-width: 280px;
+    box-shadow: 0 6px 24px rgba(0,0,0,0.5);
+  }
+  #tooltip .tt-name{ font-weight: 650; font-size: 12.5px; margin-bottom: 2px; color: var(--text-primary); }
+  #tooltip .tt-cat{ color: var(--text-muted); font-size: 10.5px; margin-bottom: 6px; }
+  #tooltip .tt-row{ display:flex; justify-content:space-between; gap:14px; margin-bottom:2px; }
+  #tooltip .tt-k{ color: var(--text-secondary); }
+  #tooltip .tt-v{ font-weight:600; font-variant-numeric: tabular-nums; color: var(--text-primary); }
+  #tooltip .tt-desc{ margin-top:6px; color: var(--text-secondary); line-height:1.4; }
+  #tooltip .tt-flag{ margin-top:6px; color: var(--text-muted); font-size:10px; line-height:1.4; }
+
+  /* table */
+  .table-wrap{ overflow-x:auto; }
+  table{ width:100%; border-collapse: collapse; font-size: 12px; }
+  thead th{
+    text-align:left; font-size: 10.5px; text-transform: uppercase; letter-spacing:0.03em;
+    color: var(--text-muted); border-bottom: 1px solid var(--grid); padding: 8px 10px; cursor:pointer; user-select:none;
+    white-space: nowrap;
+  }
+  thead th:hover{ color: var(--text-secondary); }
+  tbody td{ padding: 7px 10px; border-bottom: 1px solid var(--grid); vertical-align: top; color: var(--text-primary); }
+  tbody tr:hover{ background: rgba(255,255,255,0.05); }
+  td.num{ text-align:right; font-variant-numeric: tabular-nums; white-space:nowrap; }
+  td.name{ font-weight:600; max-width: 220px; color: var(--text-primary); }
+  td.desc{ color: var(--text-secondary); font-size: 11.5px; max-width: 340px; }
+  .flag{ display:inline-block; font-size:9.5px; padding:1px 5px; border-radius:4px; margin-left:5px; border:1px solid var(--border); color: var(--text-muted); }
+
+  footer.methodology{ font-size: 11.5px; color: var(--text-secondary); line-height:1.6; margin-top: 8px; }
+  footer.methodology h3{ font-size:12.5px; color: var(--text-primary); margin: 16px 0 6px; }
+  footer.methodology ul{ margin: 4px 0; padding-left: 18px; }
+  footer.methodology strong{ color: var(--text-primary); }
+
+  @media (max-width: 760px){
+    .stats{ grid-template-columns: repeat(2,1fr); }
+  }
+</style>
+</head>
+<body>
+<div class="viz-root" id="vizRoot">
+
+  <header class="top">
+    <h1>AI Engineering Tooling Landscape — top matches</h1>
+    <div class="subtitle">ARR vs. valuation for the tools scoring <strong>similarity ≥ 7/10</strong> against the brief: <em>"an n8n-style AI engineering tool with typed schemas, hosting, and code export — a Lovable for AI engineering."</em> Filtered down from the full 52-tool research pass, with n8n removed and Relevance AI added back in by request. Point opacity encodes similarity (0–10); the line is a fitted power-law trend of valuation on ARR. Log–log scale.</div>
+  </header>
+
+  <div class="stats" id="statTiles"></div>
+
+  <div class="card">
+    <h2>ARR vs. valuation, opacity = similarity, with fitted trend</h2>
+    <div class="card-sub">X = ARR ($M, log). Y = valuation ($M, log). Solid dot = both figures disclosed/estimated directly. Dashed-ring dot = one axis modeled from the peer valuation:ARR multiple (see methodology). Dashed line = power-law least-squares fit, valuation ≈ 16.6 × ARR^0.83 (R² = 0.47, n = 8 plotted tools). 3 tools with neither figure public are omitted from the plot — full list in the table below.</div>
+    <div id="chartHost"></div>
+    <div class="legends">
+      <div class="legend-block">
+        <div class="legend-title">Similarity to brief (opacity)</div>
+        <div class="alpha-grad" id="alphaGrad"></div>
+        <div class="alpha-ticks"><span>0</span><span>5</span><span>10</span></div>
+      </div>
+      <div class="legend-block">
+        <div class="legend-title">Data quality</div>
+        <div class="shape-legend">
+          <div class="shape-row"><span class="swatch-solid"></span> Both figures disclosed / estimated</div>
+          <div class="shape-row"><span class="swatch-ring"></span> One axis modeled (peer multiple)</div>
+          <div class="shape-row"><span class="swatch-line"></span> Fitted trend: val ≈ 16.6 × ARR<sup>0.83</sup> (R²=0.47)</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>Filtered tool list (11 of 52 researched)</h2>
+    <div class="card-sub">10 tools scoring ≥7/10 similarity, plus Relevance AI (6/10) added back in by request; n8n removed by request. Click a column header to sort. Valuation / ARR in $M. "Modeled" = imputed from the ~25.4× median valuation:ARR multiple observed across the 16 tools (in the full 52-tool research set) with both figures disclosed — shown for chart completeness only, excluded from the totals above.</div>
+    <div class="table-wrap">
+      <table id="dataTable">
+        <thead>
+          <tr>
+            <th data-key="name">Company</th>
+            <th data-key="category">Category</th>
+            <th data-key="valuation" class="num">Valuation $M</th>
+            <th data-key="arr" class="num">ARR $M</th>
+            <th data-key="similarity" class="num">Similarity /10</th>
+            <th data-key="desc">What it does</th>
+          </tr>
+        </thead>
+        <tbody id="tableBody"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <footer class="methodology">
+    <h3>Methodology &amp; caveats</h3>
+    <ul>
+      <li><strong>Filter applied:</strong> started from the full 52-tool research pass, kept the 10 tools scoring ≥7/10 similarity to the brief, then <strong>removed n8n</strong> and <strong>added Relevance AI</strong> (relevanceai.com — 6/10 similarity, below the cutoff) by explicit request, for 11 tools total.</li>
+      <li><strong>Research:</strong> parallel web-search passes prioritizing primary sources (company blogs, press releases, TechCrunch/Bloomberg/SiliconANGLE) over third-party estimators (GetLatka, Sacra) where both existed. Figures current as of August 2026.</li>
+      <li><strong>Similarity score (0–10):</strong> scored by hand against the brief. This set is dominated by visual/no-code AI-agent and LLM-workflow builders with hosting and a typed/code-export story — the closest analogs to "n8n + Lovable for AI engineering."</li>
+      <li><strong>Fitted curve:</strong> ordinary least-squares regression of log10(valuation) on log10(ARR) across the 8 plotted tools (real figures where disclosed, peer-modeled where not) — valuation ≈ 16.6 × ARR<sup>0.83</sup>, R² = 0.47. With only 8 points and 3 of them peer-modeled on one axis, treat this as a rough visual trend, not a precise pricing model.</li>
+      <li><strong>Total valuation:</strong> straight sum of disclosed/credibly-reported valuations among these 11 tools (4 have one: Flowise, StackAI, Relevance AI, Dify AI). Removing the low-similarity mega-caps (Anthropic, OpenAI, Cursor, etc.) that dominated the original full-list total is what keeps this in the billions rather than trillions.</li>
+      <li><strong>Proportional (overlap) valuation:</strong> Σ(valuation × similarity ÷ 10) across those same 4 tools.</li>
+      <li><strong>Modeled figures (chart only):</strong> for tools with only ARR or only valuation disclosed, the missing axis is imputed using the ~25.4× median valuation:ARR multiple observed across the full 52-tool research set. A rough peer proxy, not a researched number — exists only so the tool can appear on the scatter plot, and is excluded from the total/proportional valuation figures. Flagged with a dashed ring on the chart and "modeled" in the table.</li>
+      <li><strong>Excluded from the plot (no usable figure on either axis):</strong> Langflow (now part of DataStax, no independent figures), Wordware, and BuildShip — all still appear in the table.</li>
+    </ul>
+  </footer>
+
+</div>
+
+<div id="tooltip"></div>
+
+<script>
+const DATA = [{"name": "Relevance AI", "category": "No-code AI agent builder", "valuation": 37.8, "val_real": 37.8, "val_conf": "estimate", "val_note": "Latka model, not a confirmed post-money", "val_imputed": false, "arr": 12.6, "arr_real": 12.6, "arr_conf": "estimate", "arr_note": "2025 estimate", "arr_imputed": false, "similarity": 6, "desc": "No-code platform (app.relevanceai.com) for building/deploying multi-agent 'AI workforces'; added back in below the ≥7 cutoff by request.", "plotted": true}, {"name": "Langflow (DataStax)", "category": "Visual LLM workflow builder", "valuation": null, "val_real": null, "val_conf": "na", "val_note": "folded into DataStax since 2024 acquisition, no independent figure", "val_imputed": false, "arr": null, "arr_real": null, "arr_conf": "na", "arr_note": "not broken out", "arr_imputed": false, "similarity": 8, "desc": "Open-source visual builder for RAG/LLM agent pipelines; close analog of the reference concept.", "plotted": false}, {"name": "Flowise", "category": "Visual LLM workflow builder", "valuation": 2.3, "val_real": 2.3, "val_conf": "estimate", "val_note": "low-confidence M&A-offer model, bootstrapped", "val_imputed": false, "arr": 1, "arr_real": 1, "arr_conf": "estimate", "arr_note": "2024 estimate", "arr_imputed": false, "similarity": 8, "desc": "Open-source drag-and-drop LLM/agent workflow builder, self-hostable.", "plotted": true}, {"name": "Gumloop", "category": "No-code AI workflow builder", "valuation": 27.97, "val_real": null, "val_conf": "na", "val_note": "$50M Series B Mar 2026, valuation undisclosed", "val_imputed": true, "arr": 1.1, "arr_real": 1.1, "arr_conf": "estimate", "arr_note": "stale/low-confidence pre-Series B estimate", "arr_imputed": false, "similarity": 8, "desc": "No-code platform for building/sharing AI agents that run multi-step workflow tasks.", "plotted": true}, {"name": "Dify AI", "category": "LLM app dev platform", "valuation": 180, "val_real": 180, "val_conf": "confirmed", "val_note": "Series Pre-A, Mar 2026", "val_imputed": false, "arr": 7.08, "arr_real": null, "arr_conf": "na", "arr_note": "undisclosed; 1.4M self-hosted instances", "arr_imputed": true, "similarity": 7, "desc": "Open-source visual agentic-workflow builder + production infra (RAG, tools, deploy/API).", "plotted": true}, {"name": "BoundaryML (BAML)", "category": "Typed LLM output / codegen", "valuation": 8.39, "val_real": null, "val_conf": "na", "val_note": "no VC round found, likely bootstrapped", "val_imputed": true, "arr": 0.33, "arr_real": 0.33, "arr_conf": "estimate", "arr_note": "2025 estimate", "arr_imputed": false, "similarity": 8, "desc": "Language/toolchain for typed, structured LLM output generation and reliable agents -- strong overlap on the 'types' and 'code export' theme.", "plotted": true}, {"name": "Vellum AI", "category": "LLM app dev platform", "valuation": 89.01, "val_real": null, "val_conf": "na", "val_note": "$20M Series A Jul 2025, no valuation disclosed", "val_imputed": true, "arr": 3.5, "arr_real": 3.5, "arr_conf": "estimate", "arr_note": "2024 estimate", "arr_imputed": false, "similarity": 7, "desc": "Build/test/evaluate/deploy production LLM apps -- workflow orchestration + eval + monitoring.", "plotted": true}, {"name": "StackAI", "category": "No-code AI agent platform", "valuation": 75, "val_real": 75, "val_conf": "confirmed", "val_note": "Asana acquisition price, May 2026", "val_imputed": false, "arr": 2.9, "arr_real": 2.9, "arr_conf": "estimate", "arr_note": "2025 estimate", "arr_imputed": false, "similarity": 7, "desc": "No-code enterprise AI agent/workflow platform integrating with Salesforce/Slack/GSuite.", "plotted": true}, {"name": "Wordware", "category": "AI agent IDE", "valuation": null, "val_real": null, "val_conf": "na", "val_note": "$30M seed Nov 2024, no valuation disclosed", "val_imputed": false, "arr": null, "arr_real": null, "arr_conf": "na", "arr_note": "undisclosed", "arr_imputed": false, "similarity": 7, "desc": "Web IDE ('full-stack OS for AI dev') for building/deploying agents via natural language, for both engineers and non-technical builders.", "plotted": false}, {"name": "Windmill", "category": "Script-to-workflow platform", "valuation": 68.66, "val_real": null, "val_conf": "na", "val_note": "bootstrapped, no VC round found", "val_imputed": true, "arr": 2.7, "arr_real": 2.7, "arr_conf": "estimate", "arr_note": "2024 estimate", "arr_imputed": false, "similarity": 7, "desc": "Open-source platform turning scripts into workflows/internal apps/UIs, with AI-agent/MCP tool support; strong overlap (workflow + hosting + code-first).", "plotted": true}, {"name": "BuildShip", "category": "Low-code backend/workflow builder", "valuation": null, "val_real": null, "val_conf": "na", "val_note": "seed round, amount undisclosed", "val_imputed": false, "arr": null, "arr_real": null, "arr_conf": "na", "arr_note": "no data", "arr_imputed": false, "similarity": 7, "desc": "Low-code visual backend/workflow builder with AI-node support for APIs, automations, agent backends.", "plotted": false}];
+const MEDIAN_MULT = 25.43103448275862;
+
+function fmtMoney(m){
+  if(m == null) return "—";
+  if(m >= 1000) return "$" + (m/1000).toFixed(m>=100000?0:1) + "B";
+  if(m >= 1) return "$" + m.toFixed(m>=10?0:1) + "M";
+  return "$" + m.toFixed(2) + "M";
+}
+function fmtMoneyFull(m){
+  if(m==null) return "—";
+  return "$" + m.toLocaleString(undefined,{maximumFractionDigits: m<10?2:0}) + "M";
+}
+
+// ---------- stat tiles ----------
+const disclosed = DATA.filter(d => d.val_real);
+const totalVal = disclosed.reduce((s,d)=>s+d.val_real,0);
+const propVal = disclosed.reduce((s,d)=>s+d.val_real*d.similarity/10,0);
+const overlapPct = (propVal/totalVal*100);
+
+const tiles = [
+  {label:"Total valuation (disclosed)", value:fmtMoney(totalVal), note: disclosed.length + " of " + DATA.length + " tools have a disclosed/credibly-reported valuation"},
+  {label:"Proportional (overlap) valuation", value:fmtMoney(propVal), note:"Σ(valuation × similarity/10) — weights each company's valuation by how closely it matches the brief"},
+  {label:"Overlap ratio", value: overlapPct.toFixed(1)+"%", note:"share of total disclosed valuation concentrated in the closest-similarity tools"},
+  {label:"Tools shown / plotted", value: DATA.length + " / " + DATA.filter(d=>d.plotted).length, note:"≥7 similarity, minus n8n, plus Relevance AI · 3 omitted from the scatter (no ARR or valuation figure)"},
+];
+document.getElementById('statTiles').innerHTML = tiles.map(t=>`
+  <div class="tile">
+    <div class="label">${t.label}</div>
+    <div class="value">${t.value}</div>
+    <div class="note">${t.note}</div>
+  </div>`).join('');
+
+// ---------- chart ----------
+const W = 1140, H = 560, M = {top: 20, right: 30, bottom: 52, left: 66};
+const plotW = W - M.left - M.right, plotH = H - M.top - M.bottom;
+
+const plotted = DATA.filter(d => d.plotted);
+const arrDomain = [0.1, 100];   // $M, log10
+const valDomain = [1, 1000];    // $M, log10
+const FIT = { a: 16.624249790948344, b: 0.8344969334824385, r2: 0.4656398150584687 }; // valuation = a * ARR^b
+
+function xScale(arr){
+  const t = (Math.log10(arr) - Math.log10(arrDomain[0])) / (Math.log10(arrDomain[1]) - Math.log10(arrDomain[0]));
+  return M.left + t * plotW;
+}
+function yScale(val){
+  const t = (Math.log10(val) - Math.log10(valDomain[0])) / (Math.log10(valDomain[1]) - Math.log10(valDomain[0]));
+  return M.top + (1-t) * plotH;
+}
+function alphaFor(sim){ return 0.20 + 0.72 * (sim/10); }
+
+const xTicks = [0.1,1,10,100];
+const yTicks = [1,10,100,1000];
+
+// labels: all 8 plotted points get a direct label; offsets hand-tuned to dodge
+// the tight StackAI / Windmill / Vellum cluster.
+const LABELS = {
+  "Relevance AI":    {dx: 10, dy: 4},
+  "Dify AI":         {dx: 10, dy: -10},
+  "Vellum AI":       {dx: 12, dy: -8},
+  "StackAI":         {dx: -10, dy: -14, anchor: "end"},
+  "Windmill":        {dx: -10, dy: 19, anchor: "end"},
+  "Gumloop":         {dx: 10, dy: 4},
+  "BoundaryML (BAML)": {dx: 10, dy: 4},
+  "Flowise":         {dx: 10, dy: -10},
+};
+
+let svg = `<svg viewBox="0 0 ${W} ${H}">`;
+
+// gridlines + x axis
+xTicks.forEach(v=>{
+  const x = xScale(v);
+  svg += `<line class="grid-line" x1="${x}" x2="${x}" y1="${M.top}" y2="${M.top+plotH}"></line>`;
+  svg += `<text class="tick-label" x="${x}" y="${M.top+plotH+16}" text-anchor="middle">${v>=1000?(v/1000)+"K":v}</text>`;
+});
+yTicks.forEach(v=>{
+  const y = yScale(v);
+  svg += `<line class="grid-line" x1="${M.left}" x2="${M.left+plotW}" y1="${y}" y2="${y}"></line>`;
+  svg += `<text class="tick-label" x="${M.left-8}" y="${y+3}" text-anchor="end">${v>=1000?(v/1000)+"K":v}</text>`;
+});
+svg += `<line class="axis-line" x1="${M.left}" x2="${M.left+plotW}" y1="${M.top+plotH}" y2="${M.top+plotH}"></line>`;
+svg += `<line class="axis-line" x1="${M.left}" x2="${M.left}" y1="${M.top}" y2="${M.top+plotH}"></line>`;
+svg += `<text class="axis-title" x="${M.left+plotW/2}" y="${H-8}" text-anchor="middle">ARR, $M (log scale)</text>`;
+svg += `<text class="axis-title" transform="translate(16,${M.top+plotH/2}) rotate(-90)" text-anchor="middle">Valuation, $M (log scale)</text>`;
+
+// fitted power-law trend: valuation = a * ARR^b, drawn across the full x domain
+{
+  const steps = 40;
+  let d = '';
+  for(let i=0;i<=steps;i++){
+    const logx = Math.log10(arrDomain[0]) + (i/steps)*(Math.log10(arrDomain[1])-Math.log10(arrDomain[0]));
+    const arrVal = Math.pow(10, logx);
+    const valVal = FIT.a * Math.pow(arrVal, FIT.b);
+    const px = xScale(arrVal), py = yScale(Math.max(valDomain[0], Math.min(valDomain[1], valVal)));
+    d += (i===0 ? 'M' : 'L') + px.toFixed(1) + ',' + py.toFixed(1) + ' ';
+  }
+  svg += `<path d="${d}" fill="none" stroke="var(--text-muted)" stroke-width="1.6" stroke-dasharray="5 4" opacity="0.75"></path>`;
+}
+
+// points
+plotted.forEach((d,i)=>{
+  const cx = xScale(d.arr), cy = yScale(d.valuation);
+  const a = alphaFor(d.similarity);
+  const r = 8;
+  svg += `<g class="pt-group" data-i="${i}">`;
+  svg += `<circle class="pt" cx="${cx}" cy="${cy}" r="${r}" style="opacity:${a.toFixed(2)}"></circle>`;
+  svg += `<circle class="pt-ring-surface" cx="${cx}" cy="${cy}" r="${r}"></circle>`;
+  if(d.val_imputed || d.arr_imputed){
+    svg += `<circle class="pt-imputed-ring" cx="${cx}" cy="${cy}" r="${r+2.5}"></circle>`;
+  }
+  const lbl = LABELS[d.name];
+  if(lbl){
+    const short = d.name.replace(/\s*\(.*?\)\s*/g,'');
+    const anchor = lbl.anchor || 'start';
+    svg += `<text class="pt-label" x="${cx+lbl.dx}" y="${cy+lbl.dy}" text-anchor="${anchor}">${short}</text>`;
+  }
+  svg += `</g>`;
+});
+
+svg += `</svg>`;
+document.getElementById('chartHost').innerHTML = svg;
+
+// alpha gradient legend
+function paintAlphaGrad(){
+  const accent = getComputedStyle(document.getElementById('vizRoot')).getPropertyValue('--accent').trim();
+  const grad = document.getElementById('alphaGrad');
+  const c0 = hexToRgba(accent, alphaFor(0));
+  const c10 = hexToRgba(accent, alphaFor(10));
+  grad.style.background = `linear-gradient(90deg, ${c0}, ${c10})`;
+}
+function hexToRgba(hex, a){
+  hex = hex.replace('#','');
+  const r = parseInt(hex.substring(0,2),16), g = parseInt(hex.substring(2,4),16), b = parseInt(hex.substring(4,6),16);
+  return `rgba(${r},${g},${b},${a})`;
+}
+paintAlphaGrad();
+
+// tooltip
+const tooltip = document.getElementById('tooltip');
+document.querySelectorAll('.pt-group').forEach(g=>{
+  const d = plotted[+g.dataset.i];
+  g.addEventListener('mousemove', (e)=>{
+    let flag = '';
+    if(d.val_imputed) flag = `Valuation modeled from ARR × ${MEDIAN_MULT.toFixed(1)}x peer multiple (not independently disclosed).`;
+    if(d.arr_imputed) flag = `ARR modeled from valuation ÷ ${MEDIAN_MULT.toFixed(1)}x peer multiple (not independently disclosed).`;
+    tooltip.innerHTML = `
+      <div class="tt-name">${d.name}</div>
+      <div class="tt-cat">${d.category}</div>
+      <div class="tt-row"><span class="tt-k">Valuation</span><span class="tt-v">${fmtMoneyFull(d.valuation)}${d.val_imputed?' *':''}</span></div>
+      <div class="tt-row"><span class="tt-k">ARR</span><span class="tt-v">${fmtMoneyFull(d.arr)}${d.arr_imputed?' *':''}</span></div>
+      <div class="tt-row"><span class="tt-k">Similarity</span><span class="tt-v">${d.similarity}/10</span></div>
+      <div class="tt-desc">${d.desc}</div>
+      ${flag ? `<div class="tt-flag">* ${flag}</div>` : ''}
+    `;
+    tooltip.style.left = (e.clientX+16)+'px';
+    tooltip.style.top = (e.clientY+16)+'px';
+    tooltip.style.opacity = 1;
+  });
+  g.addEventListener('mouseleave', ()=>{ tooltip.style.opacity = 0; });
+});
+
+// ---------- table ----------
+let sortKey = 'valuation', sortDir = -1;
+function renderTable(){
+  const rows = [...DATA].sort((a,b)=>{
+    let av = a[sortKey], bv = b[sortKey];
+    if(av == null) av = sortDir===1 ? Infinity : -Infinity;
+    if(bv == null) bv = sortDir===1 ? Infinity : -Infinity;
+    if(typeof av === 'string') return sortDir * av.localeCompare(bv);
+    return sortDir * (av - bv);
+  });
+  document.getElementById('tableBody').innerHTML = rows.map(d=>`
+    <tr>
+      <td class="name">${d.name}</td>
+      <td>${d.category}</td>
+      <td class="num">${d.val_real!=null ? fmtMoneyFull(d.val_real) : (d.valuation!=null ? fmtMoneyFull(d.valuation)+' <span class="flag">modeled</span>' : '—')}</td>
+      <td class="num">${d.arr_real!=null ? fmtMoneyFull(d.arr_real) : (d.arr!=null ? fmtMoneyFull(d.arr)+' <span class="flag">modeled</span>' : '—')}</td>
+      <td class="num">${d.similarity}</td>
+      <td class="desc">${d.desc}</td>
+    </tr>`).join('');
+}
+document.querySelectorAll('#dataTable thead th').forEach(th=>{
+  th.addEventListener('click', ()=>{
+    const key = th.dataset.key;
+    if(sortKey===key) sortDir *= -1; else { sortKey = key; sortDir = key==='name'||key==='category'||key==='desc' ? 1 : -1; }
+    renderTable();
+  });
+});
+renderTable();
+</script>
+</body>
+</html>

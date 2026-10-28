@@ -1,0 +1,122 @@
+[
+  {
+    "student_label": "Sam Rivera",
+    "section_id": "A",
+    "title": "Section A — Linear equations — Q1",
+    "body": "Solve for x: 3x + 7 = 22\nStudent work: 3x = 15, x = 5",
+    "max_score": 5,
+    "criteria": "Award exactly one total (max 5) by summing only these components: 2 pts for subtracting 7 to get 3x=15; 2 pts for dividing to x=5; 1 pt for stating final answer x=5. If only the final answer x=5 is shown with no intermediate steps, award exactly 3 pts (not 5). Wrong answer or blank: 0."
+  },
+  {
+    "student_label": "Sam Rivera",
+    "section_id": "A",
+    "title": "Section A — Linear equations — Q2",
+    "body": "Solve for y: 2(y - 4) = 10\nStudent work: 2y - 8 = 10, 2y = 18, y = 9",
+    "max_score": 5,
+    "criteria": "Apply exactly one band — never sum components when an alternate band applies. Band B first: if student shows 2y−8=10 and 2y=18 but final y ≠ 9, award exactly 2 pts. Band C next: if only final answer y=9 appears with no intermediate steps (no distributing, no 2y=18), award exactly 3 pts — a correct answer alone is not full marks. Band A: if full method with y=9, sum components for exactly 5 pts (1 pt distributing to 2y−8=10; 1 pt adding 8 to 2y=18; 1 pt dividing by 2; 2 pts final y=9). Otherwise: 0."
+  },
+  {
+    "student_label": "Sam Rivera",
+    "section_id": "B",
+    "title": "Section B — Quadratic factoring — Q3",
+    "body": "Factor: x² + 5x + 6\nStudent work: (x + 2)(x + 3)",
+    "max_score": 5,
+    "criteria": "Exactly 5 pts for correct factorisation (x+2)(x+3) or equivalent order; exactly 0 otherwise. No other scores."
+  },
+  {
+    "student_label": "Sam Rivera",
+    "section_id": "B",
+    "title": "Section B — Quadratic factoring — Q4",
+    "body": "Solve: x² - 9 = 0\nStudent work: x = 3 only",
+    "max_score": 10,
+    "criteria": "Award exactly one of: 10 pts if both roots x=3 AND x=−3 are stated (±3 counts as both); 5 pts if only one root is given OR factorisation is shown without both roots stated; 0 if wrong roots or no valid work."
+  },
+  {
+    "student_label": "Sam Rivera",
+    "section_id": "C",
+    "title": "Section C — Word problems — Q5",
+    "body": "A train leaves at 2pm at 60 mph. Another leaves at 3pm at 90 mph on the same line. When do they meet if 210 miles apart?\nStudent work: \"They meet at 5pm\" — no working shown.",
+    "max_score": 15,
+    "criteria": "If correct meeting time 4pm AND a valid distance-rate equation (e.g. 60(t+1)+90t=210): award exactly 15 pts (diagram not required). Otherwise sum only: 5 pts if diagram/sketch shown or explicitly described; 5 pts if a valid distance-rate equation is set up; 3 pts (not 5) if an equation is attempted but uses the wrong distance model (e.g. 60d+90d=210); 5 pts if meeting time is 4pm. Wrong meeting time caps total at 10 even with diagram and equation attempt. Final answer with no equation and no diagram: exactly 0."
+  },
+  {
+    "student_label": "Jordan Lee",
+    "section_id": "A",
+    "title": "Section A — Linear equations — Q1",
+    "body": "Solve for x: 3x + 7 = 22\nStudent work: 3x = 15, x = 5 ✓",
+    "max_score": 5,
+    "criteria": "Award exactly one total (max 5) by summing only these components: 2 pts for subtracting 7 to get 3x=15; 2 pts for dividing to x=5; 1 pt for stating final answer x=5. If only the final answer x=5 is shown with no intermediate steps, award exactly 3 pts (not 5). Wrong answer or blank: 0."
+  },
+  {
+    "student_label": "Jordan Lee",
+    "section_id": "A",
+    "title": "Section A — Linear equations — Q2",
+    "body": "Solve for y: 2(y - 4) = 10\nStudent work: 2y - 8 = 10, 2y = 18, y = 8",
+    "max_score": 5,
+    "criteria": "Apply exactly one band — never sum components when an alternate band applies. Band B first: if student shows 2y−8=10 and 2y=18 but final y ≠ 9, award exactly 2 pts. Band C next: if only final answer y=9 appears with no intermediate steps (no distributing, no 2y=18), award exactly 3 pts — a correct answer alone is not full marks. Band A: if full method with y=9, sum components for exactly 5 pts (1 pt distributing to 2y−8=10; 1 pt adding 8 to 2y=18; 1 pt dividing by 2; 2 pts final y=9). Otherwise: 0."
+  },
+  {
+    "student_label": "Jordan Lee",
+    "section_id": "B",
+    "title": "Section B — Quadratic factoring — Q3",
+    "body": "Factor: x² + 5x + 6\nStudent work: (x + 2)(x + 3)",
+    "max_score": 5,
+    "criteria": "Exactly 5 pts for correct factorisation (x+2)(x+3) or equivalent order; exactly 0 otherwise. No other scores."
+  },
+  {
+    "student_label": "Jordan Lee",
+    "section_id": "B",
+    "title": "Section B — Quadratic factoring — Q4",
+    "body": "Solve: x² - 9 = 0\nStudent work: (x - 3)(x + 3) = 0, x = 3 or x = -3",
+    "max_score": 10,
+    "criteria": "Award exactly one of: 10 pts if both roots x=3 AND x=−3 are stated (±3 counts as both); 5 pts if only one root is given OR factorisation is shown without both roots stated; 0 if wrong roots or no valid work."
+  },
+  {
+    "student_label": "Jordan Lee",
+    "section_id": "C",
+    "title": "Section C — Word problems — Q5",
+    "body": "A train leaves at 2pm at 60 mph. Another leaves at 3pm at 90 mph on the same line. When do they meet if 210 miles apart?\nStudent work: Let t = hours after 3pm. 60(t+1) + 90t = 210 → t = 1, meet at 4pm.",
+    "max_score": 15,
+    "criteria": "If correct meeting time 4pm AND a valid distance-rate equation (e.g. 60(t+1)+90t=210): award exactly 15 pts (diagram not required). Otherwise sum only: 5 pts if diagram/sketch shown or explicitly described; 5 pts if a valid distance-rate equation is set up; 3 pts (not 5) if an equation is attempted but uses the wrong distance model (e.g. 60d+90d=210); 5 pts if meeting time is 4pm. Wrong meeting time caps total at 10 even with diagram and equation attempt. Final answer with no equation and no diagram: exactly 0."
+  },
+  {
+    "student_label": "Alex Kim",
+    "section_id": "A",
+    "title": "Section A — Linear equations — Q1",
+    "body": "Solve for x: 3x + 7 = 22\nStudent work: x = 5",
+    "max_score": 5,
+    "criteria": "Award exactly one total (max 5) by summing only these components: 2 pts for subtracting 7 to get 3x=15; 2 pts for dividing to x=5; 1 pt for stating final answer x=5. If only the final answer x=5 is shown with no intermediate steps, award exactly 3 pts (not 5). Wrong answer or blank: 0."
+  },
+  {
+    "student_label": "Alex Kim",
+    "section_id": "A",
+    "title": "Section A — Linear equations — Q2",
+    "body": "Solve for y: 2(y - 4) = 10\nStudent work: y = 9",
+    "max_score": 5,
+    "criteria": "Apply exactly one band — never sum components when an alternate band applies. Band B first: if student shows 2y−8=10 and 2y=18 but final y ≠ 9, award exactly 2 pts. Band C next: if only final answer y=9 appears with no intermediate steps (no distributing, no 2y=18), award exactly 3 pts — a correct answer alone is not full marks. Band A: if full method with y=9, sum components for exactly 5 pts (1 pt distributing to 2y−8=10; 1 pt adding 8 to 2y=18; 1 pt dividing by 2; 2 pts final y=9). Otherwise: 0."
+  },
+  {
+    "student_label": "Alex Kim",
+    "section_id": "B",
+    "title": "Section B — Quadratic factoring — Q3",
+    "body": "Factor: x² + 5x + 6\nStudent work: (x + 3)(x + 2)",
+    "max_score": 5,
+    "criteria": "Exactly 5 pts for correct factorisation (x+2)(x+3) or equivalent order; exactly 0 otherwise. No other scores."
+  },
+  {
+    "student_label": "Alex Kim",
+    "section_id": "B",
+    "title": "Section B — Quadratic factoring — Q4",
+    "body": "Solve: x² - 9 = 0\nStudent work: x = ±3",
+    "max_score": 10,
+    "criteria": "Award exactly one of: 10 pts if both roots x=3 AND x=−3 are stated (±3 counts as both); 5 pts if only one root is given OR factorisation is shown without both roots stated; 0 if wrong roots or no valid work."
+  },
+  {
+    "student_label": "Alex Kim",
+    "section_id": "C",
+    "title": "Section C — Word problems — Q5",
+    "body": "A train leaves at 2pm at 60 mph. Another leaves at 3pm at 90 mph on the same line. When do they meet if 210 miles apart?\nStudent work: drew diagram, 60d + 90d = 210, d = 1.4 hr after 2pm → about 3:24pm.",
+    "max_score": 15,
+    "criteria": "If correct meeting time 4pm AND a valid distance-rate equation (e.g. 60(t+1)+90t=210): award exactly 15 pts (diagram not required). Otherwise sum only: 5 pts if diagram/sketch shown or explicitly described; 5 pts if a valid distance-rate equation is set up; 3 pts (not 5) if an equation is attempted but uses the wrong distance model (e.g. 60d+90d=210); 5 pts if meeting time is 4pm. Wrong meeting time caps total at 10 even with diagram and equation attempt. Final answer with no equation and no diagram: exactly 0."
+  }
+]

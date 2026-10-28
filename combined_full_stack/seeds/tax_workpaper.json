@@ -1,0 +1,272 @@
+{
+  "id": "p_tax_workpaper",
+  "name": "Tax Workpaper Preparer",
+  "kind": "tax-prep",
+  "models": [
+    {
+      "id": "m_row",
+      "name": "TableRow",
+      "description": "One markdown table row as JSON (parsed before LLM steps).",
+      "fields": [
+        {
+          "id": "f_rid",
+          "name": "row_id",
+          "type": "text",
+          "optional": false,
+          "description": "Stable row id"
+        },
+        {
+          "id": "f_cells",
+          "name": "cells_json",
+          "type": "text",
+          "optional": false,
+          "description": "Row object as JSON string"
+        }
+      ]
+    },
+    {
+      "id": "m_combined",
+      "name": "TaxFormInput",
+      "auto": true,
+      "description": "W-2 parsed rows + 1099 document.",
+      "fields": [
+        {
+          "id": "f_misc",
+          "name": "form_1099",
+          "type": "document",
+          "optional": false,
+          "description": "1099-MISC document"
+        },
+        {
+          "id": "f_w2",
+          "name": "w2_rows",
+          "type": "list[model]",
+          "optional": false,
+          "description": "Parsed W-2 boxes",
+          "ref": "m_row"
+        }
+      ]
+    },
+    {
+      "id": "m_merged2",
+      "name": "MergedTwoTables",
+      "description": "Two parsed tables as JSON strings.",
+      "fields": [
+        {
+          "id": "f_a",
+          "name": "table_a_json",
+          "type": "json",
+          "optional": false,
+          "description": "First table JSON array"
+        },
+        {
+          "id": "f_b",
+          "name": "table_b_json",
+          "type": "json",
+          "optional": false,
+          "description": "Second table JSON array"
+        }
+      ]
+    },
+    {
+      "id": "m_field",
+      "name": "WorkpaperField",
+      "description": "One sourced field on the client workpaper.",
+      "fields": [
+        {
+          "id": "f_name",
+          "name": "field_name",
+          "type": "text",
+          "optional": false,
+          "description": "Workpaper field label"
+        },
+        {
+          "id": "f_val",
+          "name": "value",
+          "type": "text",
+          "optional": false,
+          "description": "Normalized value"
+        },
+        {
+          "id": "f_src",
+          "name": "source_form",
+          "type": "text",
+          "optional": false,
+          "description": "W-2 or 1099"
+        },
+        {
+          "id": "f_box",
+          "name": "source_box",
+          "type": "text",
+          "optional": true,
+          "description": "Form box or field"
+        }
+      ]
+    }
+  ],
+  "modules": [
+    {
+      "id": "mod_in_w2",
+      "kind": "input",
+      "label": "W-2",
+      "inputType": "text",
+      "inputNameContains": "w2_2024",
+      "outStructureId": "m_builtin_document",
+      "cached": true,
+      "avgMs": 90,
+      "avgCostCents": 0,
+      "inputDescription": "W-2 wage statement for tax year 2024 as a markdown table of box values"
+    },
+    {
+      "id": "mod_parse_w2",
+      "kind": "custom-code",
+      "label": "Parse W-2 Table",
+      "note": "Markdown table → CSV-style cells → JSON rows (no raw markdown to LLM).",
+      "inputDescription": "TableRow list parsed from the W-2 wage statement markdown table",
+      "inStructureId": "m_builtin_document",
+      "outStructureId": "m_row",
+      "cached": true,
+      "avgMs": 8,
+      "avgCostCents": 0,
+      "fallbackList": [
+        {
+          "typescript": "const splitMdRow=(r)=>r.slice(1,-1).split(\"|\").map(c=>c.trim());const mdTableToRows=(body)=>{const t=[];const lines=body.split(\"\\n\");let i=0,ti=0;while(i<lines.length){const line=lines[i].trim();if(!line.startsWith(\"|\")||!line.endsWith(\"|\")){i++;continue;}const block=[];while(i<lines.length){const l=lines[i].trim();if(!l.startsWith(\"|\")||!l.endsWith(\"|\"))break;block.push(l);i++;}if(block.length<2)continue;const headers=splitMdRow(block[0]);const data=block.slice(2).filter(l=>!/^[|][\\s\\-:|]+[|]$/.test(l));t.push({name:\"table_\"+ ++ti,rows:data.map(ln=>{const c=splitMdRow(ln);const o={};headers.forEach((h,j)=>o[h]=c[j]??\"\");return o;})});}return t;};const mdFirstTableRows=(body)=>(mdTableToRows(body)[0]?.rows??[]);(doc)=>mdFirstTableRows(doc.content).map((row,i)=>({row_id:String(i+1),cells_json:JSON.stringify(row)}))"
+        }
+      ],
+      "outType": {
+        "kind": "list",
+        "item": {
+          "kind": "ref",
+          "modelId": "m_row"
+        }
+      }
+    },
+    {
+      "id": "mod_in_1099",
+      "kind": "input",
+      "label": "1099-MISC",
+      "inputType": "text",
+      "inputNameContains": "1099",
+      "outStructureId": "m_builtin_document",
+      "cached": true,
+      "avgMs": 90,
+      "avgCostCents": 0,
+      "inputDescription": "1099-MISC supplemental income form as a markdown table"
+    },
+    {
+      "id": "mod_combine",
+      "kind": "combine",
+      "label": "Combine Inputs",
+      "inStructureId": "m_row",
+      "outStructureId": "m_combined",
+      "cached": true,
+      "avgMs": 40,
+      "avgCostCents": 0,
+      "inputDescription": "Parsed W-2 box rows from the first input, ready to merge with the 1099 document"
+    },
+    {
+      "id": "mod_merge",
+      "kind": "custom-code",
+      "label": "Merge Form Tables",
+      "note": "Markdown table → CSV-style cells → JSON rows (no raw markdown to LLM).",
+      "inputDescription": "Combined tax input — W-2 row JSON in table_a_json and 1099 fields in table_b_json",
+      "inStructureId": "m_combined",
+      "outStructureId": "m_merged2",
+      "cached": true,
+      "avgMs": 8,
+      "avgCostCents": 0,
+      "fallbackList": [
+        {
+          "typescript": "const splitMdRow=(r)=>r.slice(1,-1).split(\"|\").map(c=>c.trim());const mdTableToRows=(body)=>{const t=[];const lines=body.split(\"\\n\");let i=0,ti=0;while(i<lines.length){const line=lines[i].trim();if(!line.startsWith(\"|\")||!line.endsWith(\"|\")){i++;continue;}const block=[];while(i<lines.length){const l=lines[i].trim();if(!l.startsWith(\"|\")||!l.endsWith(\"|\"))break;block.push(l);i++;}if(block.length<2)continue;const headers=splitMdRow(block[0]);const data=block.slice(2).filter(l=>!/^[|][\\s\\-:|]+[|]$/.test(l));t.push({name:\"table_\"+ ++ti,rows:data.map(ln=>{const c=splitMdRow(ln);const o={};headers.forEach((h,j)=>o[h]=c[j]??\"\");return o;})});}return t;};const mdFirstTableRows=(body)=>(mdTableToRows(body)[0]?.rows??[]);(combined)=>({table_a_json:JSON.stringify(combined.w2_rows.map((r)=>JSON.parse(r.cells_json))),table_b_json:JSON.stringify(mdFirstTableRows(combined.form_1099.content))})"
+        }
+      ]
+    },
+    {
+      "id": "mod_workpaper",
+      "kind": "llm",
+      "label": "Populate Workpaper",
+      "inStructureId": "m_merged2",
+      "outStructureId": "m_field",
+      "inputDescription": "Merged form tables — parsed W-2 rows and 1099 field rows as JSON arrays",
+      "prompt": "table_a_json is parsed W-2 box rows; table_b_json is parsed 1099 field rows. Emit standardized WorkpaperField entries for wages, federal withholding, 401(k), state tax, and 1099 other income — each with source_form and source_box.",
+      "model": "deepseek-v4",
+      "cached": true,
+      "avgMs": 2600,
+      "avgCostCents": 8,
+      "outType": {
+        "kind": "list",
+        "item": {
+          "kind": "ref",
+          "modelId": "m_field"
+        }
+      }
+    },
+    {
+      "id": "mod_out",
+      "kind": "output",
+      "label": "Client Workpaper",
+      "inStructureId": "m_field",
+      "outStructureId": "m_field",
+      "cached": true,
+      "avgMs": 40,
+      "avgCostCents": 0,
+      "inputDescription": "List of WorkpaperField entries sourced from W-2 and 1099 forms",
+      "outType": {
+        "kind": "list",
+        "item": {
+          "kind": "ref",
+          "modelId": "m_field"
+        }
+      }
+    }
+  ],
+  "strategies": [
+    {
+      "id": "s_single_tax",
+      "kind": "single-llm",
+      "name": "Single LLM Call",
+      "enabled": true,
+      "model": "deepseek-v4",
+      "accuracy": 78,
+      "latencyMs": 3200,
+      "costCents": 8,
+      "passRate": 90
+    },
+    {
+      "id": "s_agent_tax",
+      "kind": "claude-code",
+      "name": "Agent (Frontier)",
+      "enabled": true,
+      "model": "deepseek-v4",
+      "accuracy": 92,
+      "latencyMs": 28000,
+      "costCents": 160,
+      "passRate": 97
+    },
+    {
+      "id": "s_cheap_tax",
+      "kind": "cheap-agent",
+      "name": "Agent (Cheap Model)",
+      "enabled": true,
+      "model": "deepseek-v4",
+      "accuracy": 82,
+      "latencyMs": 18000,
+      "costCents": 12,
+      "passRate": 89
+    }
+  ],
+  "docs": [
+    {
+      "name": "alex_morgan_w2_2024.md",
+      "type": "text",
+      "label": "inference",
+      "file": "tax_workpaper/w2_2024.md"
+    },
+    {
+      "name": "alex_morgan_1099_misc.md",
+      "type": "text",
+      "label": "inference",
+      "file": "tax_workpaper/form_1099_misc.md"
+    }
+  ]
+}

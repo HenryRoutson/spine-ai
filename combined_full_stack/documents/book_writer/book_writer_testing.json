@@ -1,0 +1,9 @@
+{
+  "description": "Whole Book Writer — brief → chapter outline → enrich jobs → llm-batch chapters → markdown manuscript. Fill nulls from a verified run (only listed steps are checked).",
+  "inputs": {
+    "Brief": "short_mystery_brief.json"
+  },
+  "expectedOutputs": {
+    "Full Book Markdown": null
+  }
+}

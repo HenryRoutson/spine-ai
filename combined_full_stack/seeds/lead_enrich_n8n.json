@@ -1,0 +1,140 @@
+{
+  "id": "p_lead_enrich_n8n",
+  "name": "Lead Enrich Fork (n8n pieces)",
+  "kind": "sales-ops",
+  "models": [
+    {
+      "id": "m_lead",
+      "name": "InboundLead",
+      "description": "Website form lead.",
+      "fields": [
+        { "id": "f_name", "name": "name", "type": "text", "optional": false, "description": "Contact name" },
+        { "id": "f_email", "name": "email", "type": "text", "optional": false, "description": "Email" },
+        { "id": "f_company", "name": "company", "type": "text", "optional": false, "description": "Company" },
+        { "id": "f_created", "name": "created_at", "type": "text", "optional": false, "description": "Created timestamp" }
+      ]
+    },
+    {
+      "id": "m_hashed",
+      "name": "HashedLead",
+      "description": "Lead plus local email hash (not a vendor API).",
+      "fields": [
+        { "id": "f_h_name", "name": "name", "type": "text", "optional": false, "description": "Contact name" },
+        { "id": "f_h_email", "name": "email", "type": "text", "optional": false, "description": "Email" },
+        { "id": "f_h_company", "name": "company", "type": "text", "optional": false, "description": "Company" },
+        { "id": "f_h_created", "name": "created_at", "type": "text", "optional": false, "description": "Created timestamp" },
+        { "id": "f_h_hash", "name": "hash", "type": "text", "optional": false, "description": "Local hash of email" }
+      ]
+    },
+    {
+      "id": "m_named",
+      "name": "NamedLead",
+      "description": "Renamed display fields via Set.",
+      "fields": [
+        { "id": "f_n_contact", "name": "contact", "type": "text", "optional": false, "description": "Display name" },
+        { "id": "f_n_org", "name": "org", "type": "text", "optional": false, "description": "Display company" }
+      ]
+    },
+    {
+      "id": "m_dated",
+      "name": "DatedLead",
+      "description": "Lead with ISO date copy.",
+      "fields": [
+        { "id": "f_d_name", "name": "name", "type": "text", "optional": false, "description": "Contact name" },
+        { "id": "f_d_email", "name": "email", "type": "text", "optional": false, "description": "Email" },
+        { "id": "f_d_company", "name": "company", "type": "text", "optional": false, "description": "Company" },
+        { "id": "f_d_created", "name": "created_at", "type": "text", "optional": false, "description": "Created timestamp" },
+        { "id": "f_d_iso", "name": "iso", "type": "text", "optional": false, "description": "ISO datetime" }
+      ]
+    }
+  ],
+  "modules": [
+    {
+      "id": "mod_in",
+      "kind": "input",
+      "label": "Inbound Lead",
+      "note": "JSON form payload",
+      "inputType": "json",
+      "inputNameContains": "inbound_lead",
+      "outStructureId": "m_lead",
+      "inputDescription": "Lead JSON"
+    },
+    {
+      "id": "mod_fork",
+      "kind": "fork",
+      "label": "Enrich",
+      "note": "Hash, rename, and date-format in parallel n8n pieces",
+      "forkJoin": "product",
+      "forkBranches": [
+        {
+          "id": "fbr_hash",
+          "label": "Hash",
+          "modules": [
+            {
+              "id": "mod_hash",
+              "kind": "n8n",
+              "label": "Hash Email",
+              "note": "n8n Crypto — local djb2, not a SaaS",
+              "inStructureId": "m_lead",
+              "outStructureId": "m_hashed",
+              "n8nNodeType": "n8n-nodes-base.crypto",
+              "n8nParameters": { "field": "email", "outputField": "hash" },
+              "inputDescription": "Inbound lead"
+            }
+          ]
+        },
+        {
+          "id": "fbr_set",
+          "label": "Normalize",
+          "modules": [
+            {
+              "id": "mod_set",
+              "kind": "n8n",
+              "label": "Set Display Fields",
+              "note": "n8n Set",
+              "inStructureId": "m_lead",
+              "outStructureId": "m_named",
+              "n8nNodeType": "n8n-nodes-base.set",
+              "n8nParameters": {
+                "keepOnlySet": true,
+                "assignments": { "contact": "={{ $json.name }}", "org": "={{ $json.company }}" }
+              },
+              "inputDescription": "Inbound lead"
+            }
+          ]
+        },
+        {
+          "id": "fbr_date",
+          "label": "Date",
+          "modules": [
+            {
+              "id": "mod_date",
+              "kind": "n8n",
+              "label": "Format Date",
+              "note": "n8n DateTime",
+              "inStructureId": "m_lead",
+              "outStructureId": "m_dated",
+              "n8nNodeType": "n8n-nodes-base.dateTime",
+              "n8nParameters": { "field": "created_at", "outputField": "iso" },
+              "inputDescription": "Inbound lead"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "mod_out",
+      "kind": "output",
+      "label": "Enriched Lead",
+      "inStructureId": "sm_fork_mod_fork",
+      "outStructureId": "sm_fork_mod_fork",
+      "inputDescription": "Fork product of hash, set, date"
+    }
+  ],
+  "strategies": [
+    { "id": "s_single", "kind": "single-llm", "name": "Single LLM Call", "enabled": true, "model": "deepseek-v4", "accuracy": 78, "latencyMs": 400, "costCents": 1, "passRate": 90 }
+  ],
+  "docs": [
+    { "name": "inbound_lead.json", "type": "json", "label": "inference", "file": "lead_enrich_n8n/inbound_lead.json" }
+  ]
+}

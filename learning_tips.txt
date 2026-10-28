@@ -1,0 +1,15 @@
+This file contains a list of tips for how to use the software, 
+which should be shown with loading animations.
+Display messages for a duration proportional to their length.
+
+
+
+
+
+
+
+- Use the feedback button to request features or send issues.
+- Use the agent button to develop quicly
+- For image or layout based inputs, there is an OCR option in the input step.
+- Projects can be exported to python, typescript, or rust in the pipeline tab.
+TODO might need more and to rephase

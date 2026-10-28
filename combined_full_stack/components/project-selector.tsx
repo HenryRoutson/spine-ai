@@ -1,0 +1,435 @@
+"use client"
+
+import { useEffect, useRef, useState } from "react"
+import { Check, ChevronDown, GitBranch, Globe, LayoutGrid, Loader2, Pencil, Plus } from "lucide-react"
+import { AnimatedRemovalItem } from "@/components/animated-removal-item"
+import { DeleteButton } from "@/components/delete-button"
+import { Button } from "@/components/ui/button"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuGroup,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
+import { Input } from "@/components/ui/input"
+import { navigateToProjectPicker } from "@/lib/app-mode-nav"
+import { guiDefaultWorkspaceWindow, isAccountWindow } from "@/lib/app-nav-config"
+import { useAppShell } from "@/lib/app-shell"
+import { AppWindowId } from "@/lib/app-window-id"
+import { API_ROUTES } from "@/lib/api-routes"
+import { apiJson } from "@/lib/api-client"
+import { isSiteLinkId } from "@/lib/hosted-site"
+import { readHideDeveloperTools, useHideDeveloperTools } from "@/lib/developer-tools-settings"
+import {
+  PROJECT_DELETE_SETTINGS_CHANGED_EVENT,
+  readQuickProjectDelete,
+} from "@/lib/project-delete-settings"
+import { useBrowserPrefEvent } from "@/lib/use-browser-pref-event"
+import { warmProjectPrefetches } from "@/lib/project-state-cache"
+import { useAnimatedRemoval } from "@/lib/use-animated-removal"
+import { useStore } from "@/lib/store"
+import type { SharedLinkRecord } from "@/lib/shared-link-types"
+import type { Project } from "@/lib/types"
+import { spineActionProps } from "@/lib/core/parity"
+import { cn } from "@/lib/utils"
+import { listedWebsitePipelineBindings, websiteDisplayName, websitesUsingProject, type pipeline_website_delete_action, type website_dependent } from "@/lib/website-pipelines"
+import { DeletePipelineDialog } from "@/components/delete-pipeline-dialog"
+
+function ProjectRenameInput({
+  initialName,
+  onCommit,
+  onCancel,
+}: {
+  initialName: string
+  onCommit: (name: string) => void
+  onCancel: () => void
+}) {
+  const valueRef = useRef(initialName)
+  const skipBlurCommit = useRef(false)
+
+  return (
+    <div
+      className="px-1.5 py-1"
+      // AI : menu items steal focus / typeahead on pointer + keyboard — block both.
+      onPointerDown={(e) => e.preventDefault()}
+      onKeyDownCapture={(e) => e.stopPropagation()}
+      onKeyUpCapture={(e) => e.stopPropagation()}
+    >
+      <Input
+        defaultValue={initialName}
+        onChange={(e) => {
+          valueRef.current = e.target.value
+        }}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") {
+            e.preventDefault()
+            skipBlurCommit.current = true
+            onCommit(valueRef.current)
+          }
+          if (e.key === "Escape") {
+            skipBlurCommit.current = true
+            onCancel()
+          }
+        }}
+        onBlur={() => {
+          if (skipBlurCommit.current) {
+            skipBlurCommit.current = false
+            return
+          }
+          onCommit(valueRef.current)
+        }}
+        onClick={(e) => e.stopPropagation()}
+        autoFocus
+        className="h-7 text-xs"
+      />
+    </div>
+  )
+}
+
+export function ProjectSelector({ embed = false }: { embed?: boolean }) {
+  const { editingWebsite } = useAppShell()
+  if (editingWebsite) return <WebsiteWorkspaceSelector embed={embed} site={editingWebsite} />
+  return <PipelineWorkspaceSelector embed={embed} />
+}
+
+function WebsiteWorkspaceSelector({ embed, site }: { embed: boolean; site: SharedLinkRecord }) {
+  const { projects, project, setActiveProjectId } = useStore()
+  const { openWebsiteEditor, clearWebsiteEditor, setActiveWindow } = useAppShell()
+  const hideDeveloperTools = useHideDeveloperTools()
+  const [sites, setSites] = useState<SharedLinkRecord[]>([])
+  const listedSites = sites.some((row) => row.id === site.id) ? sites : [site, ...sites]
+  const bindings = listedWebsitePipelineBindings(site.siteOptions.pipelineBindings ?? [])
+
+  useEffect(() => {
+    let cancelled = false
+    void apiJson<{ links: SharedLinkRecord[] }>(API_ROUTES.sharedLinks)
+      .then((body) => {
+        if (cancelled) return
+        setSites((body.links ?? []).filter((link) => isSiteLinkId(link.id) && !link.revoked))
+      })
+      .catch(() => {
+        if (!cancelled) setSites([])
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [site.id])
+
+  function openPipeline(projectId: typeof project.id) {
+    // AI : Leave the Lovable page studio — pipeline workspace owns Inference / Schedule / Structures.
+    clearWebsiteEditor()
+    if (projectId !== project.id) setActiveProjectId(projectId)
+    setActiveWindow(guiDefaultWorkspaceWindow(hideDeveloperTools, false))
+  }
+
+  return (
+    <div className="flex items-center gap-1.5">
+      <DropdownMenu>
+        <DropdownMenuTrigger className="flex items-center gap-2 rounded-md border border-border bg-secondary px-2.5 py-1.5 text-xs transition-colors hover:bg-accent">
+          <span className="font-mono text-[10px] text-muted-foreground">Website</span>
+          <span className="h-1.5 w-1.5 rounded-full bg-primary" />
+          <span className="max-w-[180px] truncate font-medium">{websiteDisplayName(site)}</span>
+          <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="start" className="w-64">
+          <DropdownMenuGroup>
+            <DropdownMenuLabel className="font-mono text-[10px] text-muted-foreground">
+              websites
+            </DropdownMenuLabel>
+          </DropdownMenuGroup>
+          <DropdownMenuSeparator />
+          <DropdownMenuGroup>
+            {listedSites.map((row) => (
+              <DropdownMenuItem
+                key={row.id}
+                onClick={() => {
+                  openWebsiteEditor(row)
+                  if (row.projectId && row.projectId !== project.id) setActiveProjectId(row.projectId)
+                }}
+                className="flex items-center justify-between gap-2 text-xs"
+                {...spineActionProps("website.open")}
+              >
+                <span className="flex min-w-0 items-center gap-1.5">
+                  <Globe className="h-3 w-3 shrink-0 text-muted-foreground" />
+                  <span className="truncate font-medium">{websiteDisplayName(row)}</span>
+                </span>
+                {row.id === site.id ? <Check className="h-3.5 w-3.5 text-primary" /> : null}
+              </DropdownMenuItem>
+            ))}
+          </DropdownMenuGroup>
+          <DropdownMenuSeparator />
+          <DropdownMenuGroup>
+            <DropdownMenuLabel className="font-mono text-[10px] text-muted-foreground">
+              backend — open to edit
+            </DropdownMenuLabel>
+          </DropdownMenuGroup>
+          <DropdownMenuGroup>
+            {bindings.length === 0 ? (
+              <DropdownMenuItem disabled className="text-xs text-muted-foreground">
+                Attach a pipeline on the page, then open it here
+              </DropdownMenuItem>
+            ) : (
+              bindings.map((binding) => {
+              const name = projects.find((p) => p.id === binding.projectId)?.name ?? binding.alias
+              return (
+                <DropdownMenuItem
+                  key={binding.projectId}
+                  onClick={() => openPipeline(binding.projectId)}
+                  className="flex items-center gap-2 text-xs"
+                  {...spineActionProps("website.open-backend")}
+                >
+                  <GitBranch className="h-3 w-3 shrink-0 text-muted-foreground" />
+                  <span className="min-w-0 truncate font-medium">{name}</span>
+                  <span className="font-mono text-[10px] text-muted-foreground">{binding.alias}</span>
+                </DropdownMenuItem>
+              )
+            })
+            )}
+          </DropdownMenuGroup>
+        </DropdownMenuContent>
+      </DropdownMenu>
+      {!embed ? (
+        <Button
+          type="button"
+          variant="secondary"
+          size="xs"
+          className="h-[30px] gap-1.5 px-2.5 text-xs"
+          onClick={() => {
+            clearWebsiteEditor()
+            navigateToProjectPicker("websites")
+          }}
+          title="Browse all websites"
+          spineId="nav.picker.websites"
+        >
+          <LayoutGrid className="h-3.5 w-3.5" />
+          <span className="hidden sm:inline">All websites…</span>
+        </Button>
+      ) : null}
+    </div>
+  )
+}
+
+function PipelineWorkspaceSelector({ embed = false }: { embed?: boolean }) {
+  const { projects, project, setActiveProjectId, prefetchProject, addProject, renameProject, deleteProject } =
+    useStore()
+  const { activeWindow, setActiveWindow, clearWebsiteEditor } = useAppShell()
+  const [editing, setEditing] = useState<{ id: string; initialName: string } | null>(null)
+  const [addingProject, setAddingProject] = useState(false)
+  const { isDeleting, isExiting, runDelete, mergeWithGhosts } = useAnimatedRemoval<Project>()
+  const quickDelete = useBrowserPrefEvent(PROJECT_DELETE_SETTINGS_CHANGED_EVENT, readQuickProjectDelete)
+  const displayProjects = mergeWithGhosts(projects)
+  const [pendingDelete, setPendingDelete] = useState<{
+    project: Project
+    sites: website_dependent[]
+  } | null>(null)
+
+  function startRename(id: string, name: string) {
+    setEditing({ id, initialName: name })
+  }
+
+  function commitRename(id: string, name: string) {
+    renameProject(id, name)
+    setEditing(null)
+  }
+
+  async function handleAddProject() {
+    setAddingProject(true)
+    try {
+      await addProject()
+    } finally {
+      setAddingProject(false)
+    }
+  }
+
+  function handleAllPipelines() {
+    clearWebsiteEditor()
+    navigateToProjectPicker("pipelines")
+  }
+
+  async function requestDelete(p: Project) {
+    try {
+      const body = await apiJson<{ links: SharedLinkRecord[] }>(API_ROUTES.sharedLinks)
+      const bound = websitesUsingProject(
+        (body.links ?? []).filter((link) => isSiteLinkId(link.id) && !link.revoked),
+        p.id,
+      )
+      if (bound.length > 0) {
+        setPendingDelete({ project: p, sites: bound })
+        return
+      }
+    } catch {
+      // AI : if the site list fails, still allow delete — server 409 will restore on conflict.
+    }
+    void runDelete(p, projects, () => deleteProject(p.id))
+  }
+
+  function confirmPendingDelete(action: pipeline_website_delete_action) {
+    const pending = pendingDelete
+    if (!pending) return
+    setPendingDelete(null)
+    void runDelete(pending.project, projects, () =>
+      deleteProject(pending.project.id, { websiteAction: action }),
+    )
+  }
+
+  function warmAllProjects() {
+    warmProjectPrefetches(
+      projects.map((p) => p.id),
+      prefetchProject,
+    )
+  }
+
+  return (
+    <div className="flex items-center gap-1.5">
+      <DropdownMenu
+        onOpenChange={(open) => {
+          if (open) warmAllProjects()
+        }}
+      >
+        <DropdownMenuTrigger className="flex items-center gap-2 rounded-md border border-border bg-secondary px-2.5 py-1.5 text-xs transition-colors hover:bg-accent">
+          <span className="font-mono text-[10px] text-muted-foreground">Pipeline</span>
+          <span className="h-1.5 w-1.5 rounded-full bg-primary" />
+          <span className="max-w-[180px] truncate font-medium">{project.name}</span>
+          <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="start" className="w-64">
+        <DropdownMenuGroup>
+          <DropdownMenuLabel className="font-mono text-[10px] text-muted-foreground">
+            pipelines
+          </DropdownMenuLabel>
+        </DropdownMenuGroup>
+        <DropdownMenuSeparator />
+        <DropdownMenuGroup>
+          {displayProjects.map((p) =>
+            editing?.id === p.id ? (
+              <ProjectRenameInput
+                key={p.id}
+                initialName={editing.initialName}
+                onCommit={(name) => commitRename(p.id, name)}
+                onCancel={() => setEditing(null)}
+              />
+            ) : (
+              <AnimatedRemovalItem
+                key={p.id}
+                itemId={p.id}
+                isExiting={isExiting(p.id)}
+                as="div"
+                className={cn(isDeleting(p.id) && "opacity-60")}
+              >
+                <DropdownMenuItem
+                  onMouseEnter={() => prefetchProject(p.id)}
+                  onFocus={() => prefetchProject(p.id)}
+                  onClick={() => {
+                    clearWebsiteEditor()
+                    setActiveProjectId(p.id)
+                    // AI : Pipeline dropdown is L0 for the open pipeline — leave Billing/Settings back into it.
+                    if (isAccountWindow(activeWindow)) {
+                      setActiveWindow(
+                        readHideDeveloperTools() ? AppWindowId.Inference : AppWindowId.Structure,
+                      )
+                    }
+                  }}
+                  className="group flex items-center justify-between gap-2 text-xs"
+                >
+                  <span className="flex min-w-0 flex-1 flex-col">
+                    <span className="truncate font-medium">{p.name}</span>
+                    <span className="font-mono text-[10px] text-muted-foreground">
+                      {p.kind}
+                      {p.createdAt != null
+                        ? ` · ${new Date(p.createdAt).toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" })}`
+                        : ""}
+                    </span>
+                  </span>
+                  <div className="flex shrink-0 items-center gap-1">
+                    {!embed && (
+                      <>
+                        <Button
+                          type="button"
+                          size="icon"
+                          variant="ghost"
+                          className="h-6 w-6 opacity-0 group-hover:opacity-100"
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            e.preventDefault()
+                            startRename(p.id, p.name)
+                          }}
+                          aria-label={`Rename ${p.name}`}
+                          spineId="project.rename"
+                        >
+                          <Pencil className="h-3 w-3" />
+                        </Button>
+                        {quickDelete ? (
+                          <DeleteButton
+                            type="button"
+                            size="icon"
+                            variant="ghost"
+                            className="h-6 w-6 opacity-0 group-hover:opacity-100"
+                            deleting={isDeleting(p.id)}
+                            label={`Delete ${p.name}`}
+                            spineId="project.delete"
+                            onClick={(e: React.MouseEvent) => {
+                              e.stopPropagation()
+                              e.preventDefault()
+                              void requestDelete(p)
+                            }}
+                          />
+                        ) : null}
+                      </>
+                    )}
+                    {p.id === project.id && <Check className="h-3.5 w-3.5 text-primary" />}
+                  </div>
+                </DropdownMenuItem>
+              </AnimatedRemovalItem>
+            ),
+          )}
+        </DropdownMenuGroup>
+        </DropdownMenuContent>
+      </DropdownMenu>
+      {!embed ? (
+        <>
+          <Button
+            type="button"
+            variant="secondary"
+            size="xs"
+            className="h-[30px] gap-1.5 px-2.5 text-xs"
+            onClick={handleAllPipelines}
+          title="Browse all pipelines"
+          spineId="project.browse-all"
+          >
+            <LayoutGrid className="h-3.5 w-3.5" />
+            <span className="hidden sm:inline">All pipelines…</span>
+          </Button>
+          <Button
+            type="button"
+            variant="secondary"
+            size="xs"
+            className="h-[30px] gap-1.5 px-2.5 text-xs text-primary"
+            onClick={() => void handleAddProject()}
+            disabled={addingProject}
+            aria-busy={addingProject}
+            title="Create a new pipeline"
+            spineId="project.add"
+          >
+            {addingProject ? (
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+            ) : (
+              <Plus className="h-3.5 w-3.5" />
+            )}
+            <span className="hidden sm:inline">New pipeline</span>
+          </Button>
+        </>
+      ) : null}
+      {pendingDelete ? (
+        <DeletePipelineDialog
+          pipelineName={pendingDelete.project.name}
+          sites={pendingDelete.sites}
+          onCancel={() => setPendingDelete(null)}
+          onConfirm={confirmPendingDelete}
+        />
+      ) : null}
+    </div>
+  )
+}

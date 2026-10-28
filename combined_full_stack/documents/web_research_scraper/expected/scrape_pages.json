@@ -1,0 +1,20 @@
+[
+  {
+    "url": "https://docs.ray.io/en/latest/ray-overview/index.html",
+    "title": "Ray: A distributed compute engine",
+    "text": "Ray: A distributed compute engine Ray Ray is an open-source unified framework for scaling AI and Python applications. It provides a core distributed runtime plus libraries for data, train, tune, serve, and RLlib. Key abstractions: tasks (stateless functions), actors (stateful workers), and objects (immutable values in the object store). Install with pip install ray . The same code runs on a laptop or a cluster.",
+    "status": "ok"
+  },
+  {
+    "url": "https://docs.n8n.io/",
+    "title": "n8n workflow automation",
+    "text": "n8n workflow automation n8n n8n is a source-available workflow automation tool. Teams use HTTP Request, Webhook, and search nodes (SerpAPI, Google, Tavily) to collect URLs without writing a crawler. A typical research workflow: Webhook trigger receives a query, a search node returns organic results, HTTP Request fetches each page, then the workflow POSTs JSON {query, results} to a pipeline webhook. Self-host n8n and call it with N8N_BASE_URL plus an API key. Prefer action nodes, not trigger listeners, when embedding n8n in a pipeline.",
+    "status": "ok"
+  },
+  {
+    "url": "https://www.python.org/doc/",
+    "title": "Fetching pages from Python",
+    "text": "Fetching pages from Python Python HTTP fetches Use urllib or httpx to download HTML. Strip script and style tags before sending text to an LLM. Keep a User-Agent and a timeout. For tests, store HTML snapshots on each search hit so the scrape step is deterministic. For production export, fan out live fetches with Ray tasks. Do not scrape sites that forbid bots. Respect robots.txt and rate limits.",
+    "status": "ok"
+  }
+]

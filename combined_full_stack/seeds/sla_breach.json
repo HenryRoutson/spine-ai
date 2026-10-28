@@ -1,0 +1,181 @@
+{
+  "id": "p_sla_breach",
+  "name": "Vendor SLA Breach Report",
+  "kind": "vendor-ops",
+  "models": [
+    {
+      "id": "m_parsed",
+      "name": "ParsedTable",
+      "description": "Markdown table converted to JSON rows.",
+      "fields": [
+        {
+          "id": "f_rows",
+          "name": "rows_json",
+          "type": "text",
+          "optional": false,
+          "description": "JSON array of row objects"
+        },
+        {
+          "id": "f_count",
+          "name": "row_count",
+          "type": "int",
+          "optional": false,
+          "description": "Number of data rows"
+        }
+      ]
+    },
+    {
+      "id": "m_breach",
+      "name": "SlaBreachRow",
+      "description": "One service breach line for account managers.",
+      "fields": [
+        {
+          "id": "f_svc",
+          "name": "service",
+          "type": "text",
+          "optional": false,
+          "description": "Service name"
+        },
+        {
+          "id": "f_uptime",
+          "name": "uptime_pct",
+          "type": "float",
+          "optional": false,
+          "description": "Measured uptime"
+        },
+        {
+          "id": "f_breach",
+          "name": "breached",
+          "type": "bool",
+          "optional": false,
+          "description": "Below SLA target"
+        },
+        {
+          "id": "f_credit",
+          "name": "credit_note",
+          "type": "text",
+          "optional": true,
+          "description": "Contract credit if any"
+        }
+      ]
+    }
+  ],
+  "modules": [
+    {
+      "id": "mod_in",
+      "kind": "input",
+      "label": "SLA Uptime Report",
+      "inputType": "text",
+      "inputNameContains": "sla_uptime",
+      "outStructureId": "m_builtin_document",
+      "cached": true,
+      "avgMs": 90,
+      "avgCostCents": 0,
+      "inputDescription": "Vendor SLA uptime report markdown table with measured availability per service"
+    },
+    {
+      "id": "mod_parse",
+      "kind": "custom-code",
+      "label": "Parse Uptime Table",
+      "note": "Markdown table → CSV-style cells → JSON rows (no raw markdown to LLM).",
+      "inputDescription": "ParsedTable parsed from the vendor SLA uptime report markdown table",
+      "inStructureId": "m_builtin_document",
+      "outStructureId": "m_parsed",
+      "cached": true,
+      "avgMs": 8,
+      "avgCostCents": 0,
+      "fallbackList": [
+        {
+          "typescript": "const splitMdRow=(r)=>r.slice(1,-1).split(\"|\").map(c=>c.trim());const mdTableToRows=(body)=>{const t=[];const lines=body.split(\"\\n\");let i=0,ti=0;while(i<lines.length){const line=lines[i].trim();if(!line.startsWith(\"|\")||!line.endsWith(\"|\")){i++;continue;}const block=[];while(i<lines.length){const l=lines[i].trim();if(!l.startsWith(\"|\")||!l.endsWith(\"|\"))break;block.push(l);i++;}if(block.length<2)continue;const headers=splitMdRow(block[0]);const data=block.slice(2).filter(l=>!/^[|][\\s\\-:|]+[|]$/.test(l));t.push({name:\"table_\"+ ++ti,rows:data.map(ln=>{const c=splitMdRow(ln);const o={};headers.forEach((h,j)=>o[h]=c[j]??\"\");return o;})});}return t;};const mdFirstTableRows=(body)=>(mdTableToRows(body)[0]?.rows??[]);(doc)=>({rows_json:JSON.stringify(mdFirstTableRows(doc.content)),row_count:mdFirstTableRows(doc.content).length})"
+        }
+      ]
+    },
+    {
+      "id": "mod_breach",
+      "kind": "llm",
+      "label": "Build Breach Table",
+      "inStructureId": "m_parsed",
+      "outStructureId": "m_breach",
+      "inputDescription": "ParsedTable with rows_json — JSON array of uptime rows from the SLA report",
+      "prompt": "rows_json is a JSON array parsed from the uptime markdown table. Emit one SlaBreachRow per service with breached=true when the Breach column is yes. Include credit_note from the document narrative when breached.",
+      "model": "deepseek-v4",
+      "cached": true,
+      "avgMs": 2200,
+      "avgCostCents": 7,
+      "outType": {
+        "kind": "list",
+        "item": {
+          "kind": "ref",
+          "modelId": "m_breach"
+        }
+      }
+    },
+    {
+      "id": "mod_out",
+      "kind": "output",
+      "label": "Breach Table",
+      "inStructureId": "m_breach",
+      "outStructureId": "m_breach",
+      "cached": true,
+      "avgMs": 40,
+      "avgCostCents": 0,
+      "inputDescription": "List of SlaBreachRow records — one breach verdict per monitored service",
+      "outType": {
+        "kind": "list",
+        "item": {
+          "kind": "ref",
+          "modelId": "m_breach"
+        }
+      }
+    }
+  ],
+  "strategies": [
+    {
+      "id": "s_single_sla",
+      "kind": "single-llm",
+      "name": "Single LLM Call",
+      "enabled": true,
+      "model": "deepseek-v4",
+      "accuracy": 78,
+      "latencyMs": 3200,
+      "costCents": 8,
+      "passRate": 90
+    },
+    {
+      "id": "s_agent_sla",
+      "kind": "claude-code",
+      "name": "Agent (Frontier)",
+      "enabled": true,
+      "model": "deepseek-v4",
+      "accuracy": 92,
+      "latencyMs": 28000,
+      "costCents": 160,
+      "passRate": 97
+    },
+    {
+      "id": "s_cheap_sla",
+      "kind": "cheap-agent",
+      "name": "Agent (Cheap Model)",
+      "enabled": true,
+      "model": "deepseek-v4",
+      "accuracy": 82,
+      "latencyMs": 18000,
+      "costCents": 12,
+      "passRate": 89
+    }
+  ],
+  "docs": [
+    {
+      "name": "cloudhost_sla_uptime_march_2025.md",
+      "type": "text",
+      "label": "inference",
+      "file": "sla_breach/sla_uptime_report.md"
+    },
+    {
+      "name": "sla_breach_testing.json",
+      "type": "json",
+      "label": "training",
+      "file": "sla_breach/sla_breach_testing.json"
+    }
+  ]
+}

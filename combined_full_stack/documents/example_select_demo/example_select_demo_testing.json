@@ -1,0 +1,12 @@
+{
+  "description": "Example Select demo — golden fixtures for deterministic steps; LLM steps use null placeholders.",
+  "inputs": {
+    "Damage Case": "damage_case.txt",
+    "Example Library": "example_library.json"
+  },
+  "expectedOutputs": {
+    "Select Relevant Examples": null,
+    "Draft Scope": null,
+    "Scope Output": null
+  }
+}

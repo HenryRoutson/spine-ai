@@ -1,0 +1,10 @@
+{
+  "description": "Test scaffold for Bank Statement Reconciler — inputs are pinned; fill the null expected outputs from a verified run (only listed steps are checked).",
+  "inputs": {
+    "Open Invoices": "open_invoices.md",
+    "Bank Statement": "march_bank_statement.md"
+  },
+  "expectedOutputs": {
+    "Reconciliation": null
+  }
+}

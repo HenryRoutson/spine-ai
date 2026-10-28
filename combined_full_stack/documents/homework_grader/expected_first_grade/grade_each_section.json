@@ -1,0 +1,13 @@
+[
+  { "student_label": "Riley Park", "section_id": "A", "score": 2, "max_score": 2 },
+  { "student_label": "Riley Park", "section_id": "A", "score": 2, "max_score": 2 },
+  {
+    "student_label": "Riley Park",
+    "section_id": "A",
+    "score": 1,
+    "max_score": 2,
+    "mistake_explanation": "Exactly 1 pt — counting-back shown but final answer 5 is wrong (correct answer is 4)."
+  },
+  { "student_label": "Riley Park", "section_id": "B", "score": 2, "max_score": 2 },
+  { "student_label": "Riley Park", "section_id": "B", "score": 2, "max_score": 2 }
+]

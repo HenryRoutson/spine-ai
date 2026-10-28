@@ -1,0 +1,918 @@
+// AI : canonical Project / PipelineModule / FieldType contract for this repo.
+// AI : DONE (jank-frontend-stub-drift) — no v0 ai-pipeline-builder stub lives here; this file is source of truth.
+
+import type { TypeExpr } from "./type_expr";
+import type { ExampleSelectVerdict } from "@/lib/example-select-verdicts";
+import type { PipelineModule } from "./pipeline-module-union";
+
+export type { TypeExpr } from "./type_expr";
+export type {
+  PipelineModule,
+  PipelineModuleBag,
+  PipelineModuleOf,
+  PipelineModulePatch,
+  PipelineModuleShared,
+} from "./pipeline-module-union";
+
+export type ProjectId = string & { __brand: "ProjectId" };
+export type StructureModelId = string & { __brand: "StructureModelId" };
+export type TypeAliasId = string & { __brand: "TypeAliasId" };
+export type ModuleId = string & { __brand: "ModuleId" };
+export type DocId = string & { __brand: "ContentHash" }; // content hash == id
+// AI : DocId is document.id PRIMARY KEY. Quotes and file blobs REFERENCES this row.
+export type RunId = string & { __brand: "RunId" };
+export type ModelId = string; // demo model id or routed ref "provider:modelId" (see parseRoutedModel)
+export type OpenRouterSlug = string & { __brand: "OpenRouterSlug" };
+export type LlmProviderId = string & { __brand: "LlmProviderId" };
+export type ProviderModelId = string & { __brand: "ProviderModelId" };
+
+// AI : string values are the persisted wire/DB format (seeds/*.json + supabase rows) — do not rename.
+export enum FieldType {
+  Text = "text",
+  Int = "int",
+  Float = "float",
+  Bool = "bool",
+  Datetime = "datetime",
+  Document = "document",
+  ListDocument = "list[document]",
+  Json = "json",
+  ListText = "list[text]",
+  TupleTextQuote = "tuple[text,quote]",
+  ListTupleTextQuote = "list[tuple[text,quote]]",
+  Model = "model",
+  ListModel = "list[model]",
+  // AI : type params in a field are typeExpr { kind: "named", name: "T" } — substitute via StructureModel.params / TypeAlias.params.
+  // AI : FieldTypes are the SQL column/table annotation LLMs already know.
+  // AI :   text/int/float/bool/datetime → TEXT/INTEGER/REAL/INTEGER/TEXT; optional → NULL; json/markdown/latex → TEXT.
+  // AI :   document → row in `document` (pk id); list[document] → 1:N. quote → FK document(id) + start/end.
+  // AI :   model / list[model] without fk → nested JSON column OR child table; with fk → REFERENCES.
+}
+
+// AI : shown in Structure builder when a field uses type json
+export const JSON_FIELD_PREFER_STRUCTURE_MSG =
+  "JSON fields store serialized data — prefer a typed structure (model / list[model]) when you can.";
+
+export type FieldRelation =
+  | { kind: "pk" }
+  | { kind: "fk"; to: { modelId: StructureModelId; field: string } };
+
+export interface ModelField {
+  id: string;
+  name: string;
+  type: FieldType;
+  optional: boolean;
+  description: string;
+  examples?: string[]; // AI : sample values — shown in structure UI and emitted in pydantic / LLM schema hints
+  negativeExamples?: string[]; // AI : counterexamples — invalid values the LLM must not emit
+  ref?: StructureModelId; // referenced model id when type === "model" | "list[model]"
+  minItems?: number; // AI : min length for list[…] / set[…]; min entry count for map[…, …]
+  maxItems?: number; // AI : max length for list[…] / set[…]; max entry count for map[…, …]
+  minLength?: number; // AI : minimum string length when type is text (or text-like)
+  maxLength?: number; // AI : maximum string length when type is text (or text-like)
+  typeExpr?: TypeExpr; // AI : when set, overrides type/ref — full Python-style type expression
+  // AI : field-level flag (spec § Testing) — false = probabilistic, the value varies across runs
+  // AI : (LLM prose like a summary or feedback) so tests ignore it. Missing/true = deterministic
+  // AI : (a maths answer, an enum like answer_ABCD) → exact-compared.
+  deterministic?: boolean;
+  // AI : ± allowed on int/float test compare — field-level (spec § Testing), not per test file.
+  testTolerance?: number;
+  // AI : relation is persisted (seeds + schema.sql). Runtime type stays text/int.
+  // AI : DONE (sql-id-ref) — Structure UI Key column authors relation; branded work_item_id_string in codegen.
+  // AI :   Nested field.ref stays embed; relation is row-id FK. See lib/sql-id-roadmap.ts.
+  // AI : TODO (type-join) — validity: fk field type equals target pk. Lookup-embed views without Python joins.
+  relation?: FieldRelation;
+}
+
+// AI : ModelField keys that resolve a field's TypeExpr — typeExpr overrides legacy type/ref.
+export enum ModelFieldTypeSource {
+  Type = "type",
+  Ref = "ref",
+  TypeExpr = "typeExpr",
+}
+
+export type ModelFieldTypeSourcePick = Pick<
+  ModelField,
+  ModelFieldTypeSource.Type | ModelFieldTypeSource.Ref | ModelFieldTypeSource.TypeExpr
+>;
+
+export type ModelFieldLegacyTypePick = Pick<ModelField, ModelFieldTypeSource.Type | ModelFieldTypeSource.Ref>;
+
+// AI : meta-type — one field row inside a StructureDef (structure-of-structures)
+export type StructureFieldDef = Pick<
+  ModelField,
+  "id" | "name" | "type" | "optional" | "description" | "examples" | "negativeExamples" | "ref" | "minItems" | "maxItems" | "minLength" | "maxLength" | "typeExpr" | "deterministic" | "testTolerance" | "relation"
+>;
+
+export interface TolerantFieldPath {
+  path: string;
+  tolerance: number;
+}
+
+// AI : meta-type — JSON-serializable shape used to define StructureModel entries in seeds / assistants
+export interface StructureDef {
+  id: StructureModelId;
+  name: string;
+  description: string;
+  fields: StructureFieldDef[];
+  auto?: boolean;
+  dynamic?: boolean; // AI : inferred at runtime (e.g. homework MarkingSchema from template)
+  sourceDocId?: DocId; // AI : document this structure was inferred from
+};
+
+export interface StructureModel {
+  id: StructureModelId;
+  name: string;
+  description: string;
+  fields: ModelField[];
+  auto?: boolean; // generated automatically (e.g. by a combine step)
+  dynamic?: boolean; // AI : content shape varies per run — validated against this generic schema
+  shared?: boolean; // AI : injected into every project — not persisted per project
+  locked?: boolean; // AI : read-only in Structure UI — cannot rename, edit fields, or delete
+  sourceDocId?: DocId; // AI : document this structure was inferred from — links back in Structure tab
+  // AI : type params — Ref { modelId, args } / Generic Name[T] instantiate field typeExprs.
+  // AI : author via TypeParamsField, assistant params, CLI --params, MCP params. Codegen: class TreeNode[T](BaseModel).
+  params?: string[];
+  // AI : TODO (media-view-B-binding) — defaultView?: ViewBinding — builtin | custom | field path.
+  // AI :   Used when this model appears in inference/logging/share if the step has no view of its own.
+  // AI : TODO (type-join) — pk lives on ModelField.relation, not here. Lookup-embed derives views; do not flatten models to 3NF.
+  // AI : DONE (sql-id-ref) — branded ids + catalog/index are lib/sql-id-*.ts; this type stays the table.
+  // AI : StructureModel = CREATE TABLE (or VIEW). Nested list[model] is either a child table
+  // AI :   or a JSON column — declare which. Generics/trees can stay JSON until someone needs adjacency-list SQL.
+}
+
+// AI : standalone reusable type — not a struct with fields; referenced by name in type expressions.
+export interface TypeAlias {
+  id: TypeAliasId;
+  name: string;
+  description: string;
+  expr: TypeExpr;
+  shared?: boolean; // AI : injected into every project — not persisted per project
+  locked?: boolean; // AI : read-only in Structure UI
+  // AI : parametric alias — Pair[A,B] via Generic name+args → substitute into expr.
+  params?: string[];
+}
+
+// AI : string values are the persisted wire/DB format — do not rename.
+export enum InputType {
+  Pdf = "pdf",
+  Excel = "excel",
+  Word = "word",
+  Json = "json",
+  Text = "text",
+  Markdown = "markdown",
+  Latex = "latex",
+  Web = "web",
+  Image = "image",
+  Audio = "audio",
+  Video = "video",
+  // AI : DONE (media-view-A-types) — Audio | Video are mime wrappers. Not TypeExpr kinds. Blob stays document.blob.
+  // AI : TODO (media-view-E-step) — Model3d mime wrapper when CAD lands.
+  // AI : InputType is document.mime / blob wrapper, not a separate type universe.
+  // AI :   pdf/image/word → BLOB + mime; json/text/markdown/latex → TEXT content (blob optional).
+  // AI :   sqlite/.sql dump as an input loads tables into the run catalog instead of nested JSON files.
+  // AI : TODO (sql-id-ref) — later slice: .sqlite / .sql InputType → catalog tables (lib/sql-id-roadmap.ts).
+}
+
+// AI : input steps accept one type or a subset — e.g. ["word", "pdf"] for company filings.
+export type InputTypeSpec = InputType | InputType[];
+
+// AI : string values are the persisted wire/DB format — do not rename.
+export enum ModuleKind {
+  Input = "input",
+  Llm = "llm",
+  LlmBatch = "llm-batch", // AI : backend addition — one structured call per list item, merged typed list out
+  ExampleSelect = "example-select", // AI : LLM relevance filter per list item — chain_of_thought + is_relevant, not embedding RAG
+  // AI : TODO (example-select-view) — filter on a prompt view of each item; spine passthrough stays the full row + reason.
+  Quote = "quote", // AI : deterministic — resolve LLM quote strings → source-linked spans
+  // AI : Link Quotes fills quote_span(doc_id FK, start, end). quote_string_t is the LLM
+  // AI :   wire type before the FK+offsets exist (INSERT pending resolve).
+  DocToText = "doc-to-text", // AI : auto — parser/OCR fills Document.content; not user-addable
+  // AI : UPDATE document SET content = extracted WHERE id = ?; blob stays the original bytes.
+  Transform = "transform",
+  // AI : zip spine + state["Label"] → flat product (not Combine — that is upload ⊕ one state struct).
+  Assemble = "assemble",
+  // AI : fixed author-time LLM branches on same spine input → Promise.all → flat product join.
+  Parallel = "parallel",
+  // AI : nested linear lanes + join (not Parallel LLM-only). See lib/server/fork-roadmap.ts.
+  Fork = "fork",
+  // AI : exclusive Then/Else lanes — run one side from a bool spine field. Else may be empty (passthrough).
+  IfElse = "if-else",
+  // AI : exclusive N-way match on a spine field. Comparisons stay in custom-code; this is switch/case.
+  Case = "case",
+  // AI : optional join after if/case — without it exclusive paths are sinks and the spine stops.
+  ControlJoin = "control-join",
+  Combine = "combine",
+  Chunk = "chunk", // AI : split text / document into list chunks (generated TS)
+  Merge = "merge", // AI : recursive structural merge — dict deep, list concat/union/dedupe, per-path rules
+  CustomCode = "custom-code",
+  Assert = "assert", // AI : validate pipeline state — passthrough spine; code reads step["Label"] keys
+  HumanReview = "human-review", // AI : pause in Inference — operator approves or rejects before continuing
+  Webhook = "webhook", // AI : server-side HTTP call — search APIs, Zapier, internal services (generic URL)
+  // AI : hosted-app SQL — SELECT/UPDATE/INSERT against app_sql_rows for the website or project.
+  Sql = "sql",
+  // AI : DONE (n8n-stage-A) — N8n = typed catalog piece + local Code-node JS (no live vendor APIs).
+  N8n = "n8n",
+  // AI : DONE (connect-A-kind) — live Slack/Gmail/Sheets via Nango; hidden in Vibe.
+  Connect = "connect",
+  // AI : DONE (media-view-D-job) — no RemoteJob kind. Async media = webhook poll + ingest (pipeline, not a connector catalog).
+  Chatbot = "chatbot", // AI : pause for prompted chat — spine in ChatbotPrompt, out ChatbotResult
+  Output = "output",
+}
+
+// AI : chatbot session length — single exchange vs loop until Exit.
+export enum ChatbotMode {
+  Single = "single",
+  UntilExit = "until-exit",
+}
+
+// AI : webhook step HTTP verbs — GET omitted (no JSON body contract).
+export enum WebhookMethod {
+  Post = "POST",
+  Put = "PUT",
+  Patch = "PATCH",
+}
+
+// AI : wrap = { input, state? } (default). raw = POST the typed spine as the JSON body (async media APIs).
+export enum WebhookBodyMode {
+  Wrap = "wrap",
+  Raw = "raw",
+}
+
+export enum CustomCodeLanguage {
+  TypeScript = "typescript",
+  Python = "python",
+}
+
+// AI : structural merge strategies — mirror atomic_code/merger/merger.py wire values.
+export enum MergeListStrategy {
+  Concat = "concat",
+  ConcatDedupe = "concat_dedupe",
+  ConcatAssertNoDuplicates = "concat_assert_no_duplicates",
+  Union = "union",
+  UnionAssert = "union_assert",
+  Intersect = "intersect",
+  IntersectAssert = "intersect_assert",
+  Replace = "replace",
+  ReplaceAssert = "replace_assert",
+  Prepend = "prepend",
+  PrependAssert = "prepend_assert",
+  // AI : pairwise deep-merge by index; leftover items from the longer list are kept
+  Zip = "zip",
+}
+
+export enum MergeDictStrategy {
+  Deep = "deep",
+  Shallow = "shallow",
+  Replace = "replace",
+}
+
+export enum MergeScalarStrategy {
+  Last = "last",
+  First = "first",
+  Error = "error",
+}
+
+export interface MergeLayerPolicy {
+  list?: MergeListStrategy;
+  dict?: MergeDictStrategy;
+  scalar?: MergeScalarStrategy;
+  // AI : property path on list items for union/intersect/dedupe — e.g. "id" or "meta.id".
+  itemKey?: string;
+}
+
+export interface MergePolicyRule {
+  path: string;
+  policy: MergeLayerPolicy;
+};
+
+export interface MergePolicy {
+  default?: MergeLayerPolicy;
+  rules?: MergePolicyRule[];
+};
+
+// AI : assemble field source — spine / state label / dotted path into either.
+export type AssembleSource =
+  | { kind: "spine" }
+  | { kind: "state"; label: string }
+  | { kind: "path"; from: "spine" | { label: string }; path: string };
+
+// AI : parallel branch — one structured LLM call; field becomes a key on the joined product.
+export type ParallelBranch = {
+  id: string;
+  field: string;
+  prompt: string;
+  outStructureId: StructureModelId;
+  model?: ModelId;
+  note?: string;
+};
+
+// AI : fork join — product auto-zips lane last outputs; assemble/merge reuse those step fields.
+export type ForkJoin = "product" | "assemble" | "merge";
+
+// AI : one linear lane inside a Fork — unique ids/labels across the whole tree.
+export type ForkBranch = {
+  id: string;
+  label: string;
+  modules: PipelineModule[];
+  // AI : case arm — exact match on the discriminant. Empty / "_" / "*" / "default" is the default arm.
+  match?: string;
+};
+
+// AI : if-else condition — bool spine path only. Comparisons live in custom-code / Python.
+export enum IfConditionKind {
+  Path = "path",
+}
+
+export type IfCondition = { kind: IfConditionKind.Path; path: string };
+
+// AI : one language key per entry — e.g. { "typescript": "(input) => input" } or { "python": "..." }.
+export interface CustomCodeEntry { typescript?: string; python?: string };
+
+// AI : input — built-in PDF/text parser at upload vs OpenRouter vision OCR (handwriting, scans).
+export enum DocParseMode {
+  Parser = "parser",
+  Llm = "llm",
+}
+
+// AI : legacy run logs may still reference list-merge (now ModuleKind.Merge).
+export enum LegacyModuleKind {
+  ListMerge = "list-merge", // AI : migrated to ModuleKind.Merge on project sync
+}
+export type RunStepKind = ModuleKind | LegacyModuleKind;
+
+// AI : DONE (arch-module-union) — PipelineModule is the per-kind union in pipeline-module-union.ts.
+// AI : TODO (media-view-B-binding) — view?: ViewBinding on output (or any previewable step).
+// AI : TODO (spec) — outputDescription + checkOutputDescription (post-step LLM output guard).
+// AI : TODO (spec) — dynamicOutputSchema on llm steps for variable homework-style marking schemas.
+// AI : TODO (jank-doc-name-match) — inputNameContains filename substring; wrong-but-matching files still bind.
+// AI : TODO (example-select-view) — examplePromptFields / item template; type-join examplePromptJoins.
+
+
+type step_label_string = string;
+type doc_name_string = string;
+
+export enum InputCompatNormalize {
+  LowerTrim = "lower-trim",
+  QuestionId = "question-id",
+  QuestionIdSet = "question-id-set",
+}
+
+export enum InputCompatExtractorKind {
+  JsonPath = "json-path",
+  TextRegex = "text-regex",
+  QuestionIdsText = "question-ids-text",
+}
+
+export interface JsonPathExtractor {
+  kind: InputCompatExtractorKind.JsonPath;
+  path: string;
+  normalize?: InputCompatNormalize;
+}
+
+export interface TextRegexExtractor {
+  kind: InputCompatExtractorKind.TextRegex;
+  pattern: string;
+  group?: number;
+  flags?: string;
+  normalize?: InputCompatNormalize;
+}
+
+export interface QuestionIdsTextExtractor {
+  kind: InputCompatExtractorKind.QuestionIdsText;
+}
+
+export type InputCompatExtractor = JsonPathExtractor | TextRegexExtractor | QuestionIdsTextExtractor;
+
+export enum InputCompatCompare {
+  Equal = "equal",
+  SetEqual = "set-equal",
+}
+
+export interface InputCompatKey {
+  label: string;
+  upstream: InputCompatExtractor;
+  local: InputCompatExtractor;
+  compare?: InputCompatCompare;
+}
+
+export interface InputCompatWith {
+  moduleId: ModuleId;
+  keys: InputCompatKey[];
+}
+
+// AI : a named, pre-selected inference run — input step label → bundled doc name(s).
+// AI : optional per-preset golden outputs let assert steps pass on non-default inputs.
+export interface InferencePreset {
+  name: string;
+  description?: string;
+  inputs: Record<step_label_string, doc_name_string | doc_name_string[]>;
+  expectedOutputs?: Record<step_label_string, unknown>;
+}
+
+export type pipeline_function_id = string & { __brand: "pipeline_function_id" };
+
+export type structure_row_id = string & { __brand: "structure_row_id" };
+
+export type structure_row = {
+  id: structure_row_id;
+  modelId: StructureModelId;
+  data: Record<string, unknown>;
+  createdAt: number;
+};
+
+export type project_row_store = Record<string, structure_row[]>;
+
+// AI : one runnable function (pipeline spine) inside a project that shares structures + rows.
+export type PipelineFunction = {
+  id: pipeline_function_id;
+  name: string;
+  modules: PipelineModule[];
+};
+
+// AI : a project owns shared structures and one or more functions (active function = modules).
+export interface Project {
+  id: ProjectId;
+  name: string;
+  kind: string;
+  models: StructureModel[];
+  typeAliases?: TypeAlias[];
+  // AI : outer spine of the active function; Fork nests per-lane modules[]. flattenPipelineModules for logs/cache.
+  modules: PipelineModule[];
+  functions?: PipelineFunction[];
+  activeFunctionId?: pipeline_function_id;
+  // AI : typed rows in projects.data jsonb — dedicated structure_rows table is later.
+  structureRows?: project_row_store;
+  strategies: Strategy[];
+  seedDocNames?: string[]; // AI : filenames from seeds/*.json — scopes inference inputs to this project
+  seedSecretNames?: string[]; // AI : personal secret names linked into this project (like seedDocNames)
+  expectedOutputs?: Record<string, unknown>; // AI : golden step outputs keyed by step label — assert steps compare at run time
+  inferencePresets?: InferencePreset[]; // AI : legacy seed examples — prefer *_inference.json setup files in Documents
+  llmProviders?: import("@/lib/custom-llm-providers").CustomLlmProviderDef[]; // AI : user-authored browser LLM providers
+  createdAt?: number; // AI : ms since epoch — set when blank/cloned; templates from seeds/*.json omit this
+  lastOpenedAt?: number; // AI : ms since epoch — updated when user opens/switches to this project
+  documentation?: string; // AI : freeform markdown — prepended to every agent/assistant prompt call to prevent regressions
+  langfuseExport?: boolean; // AI : when true + LANGFUSE_* env set, pipeline runs mirror to Langfuse as secondary telemetry
+  windmillExecute?: boolean; // AI : when true + WINDMILL_* env set, n8n/custom-code run on Windmill workers
+  teamId?: import("@/lib/team-types").team_id_string; // AI : shared pointer — team members view/run this owner row; bills team owner
+  teamReadOnly?: boolean; // AI : runtime — true when loaded via another member's ownership (pointer)
+  teamProjectOwnerId?: import("./require_auth").user_id_string; // AI : runtime — owner's user_id for shared-pointer projects
+  // AI : TODO (media-view-C-store) — visualizers?: ProjectVisualizer[] — sandboxed HTML, not document uploads.
+}
+
+export enum StrategyKind {
+  SingleLlm = "single-llm",
+  ClaudeCode = "claude-code",
+  CheapAgent = "cheap-agent",
+}
+
+export const STRATEGY_KINDS = [
+  StrategyKind.SingleLlm,
+  StrategyKind.ClaudeCode,
+  StrategyKind.CheapAgent,
+] as const satisfies readonly StrategyKind[];
+
+export interface Strategy {
+  id: string;
+  kind: StrategyKind;
+  name: string;
+  enabled: boolean;
+  model: ModelId;
+  accuracy: number; // 0-100
+  latencyMs: number;
+  costCents: number;
+  passRate: number; // 0-100 schema validity
+}
+
+// AI : string values are the persisted wire/DB format (seeds/*.json + supabase rows) — do not rename.
+// AI : Training is legacy naming for what the UI calls "testing" — see docLabelDisplay().
+export enum DocLabel {
+  Inference = "inference",
+  Training = "training",
+}
+
+export interface DocRef {
+  id: DocId; // content hash
+  name: string;
+  type: InputType;
+  label: DocLabel;
+  sizeKb: number;
+  uploadedAt: number;
+  preview: string;
+}
+
+// A clickable span that links extracted text back to a source document offset.
+export interface SourceQuote {
+  text: string;
+  docId: DocId;
+  start: number;
+  end: number;
+}
+
+export enum RunStepStatus {
+  Ok = "ok",
+  Cached = "cached",
+  Error = "error",
+  // AI : exclusive if/case — arm or post-split spine step that did not run.
+  Skipped = "skipped",
+}
+
+export enum LlmCallStatus {
+  Ok = "ok",
+  Error = "error",
+}
+
+// AI : what failed — provider HTTP, JSON parse, zod/pydantic schema, or post-step output check.
+export enum FailureKind {
+  Provider = "provider",
+  JsonParse = "json_parse",
+  Schema = "schema",
+  StepOutput = "step_output",
+  CostLimit = "cost_limit",
+}
+
+export interface RunFailureRecord {
+  kind: FailureKind;
+  detail: string;
+  attempt?: number;
+  recovered: boolean;
+}
+
+// AI : one OpenRouter round-trip — feeds Logging length + latency distributions.
+export interface LlmCallRecord {
+  inputChars: number;
+  outputChars: number;
+  latencyMs: number;
+  status: LlmCallStatus;
+  attempt?: number;
+  promptIndex?: number; // AI : llm-batch item index — rows in the retry grid
+  round?: number; // AI : 0-indexed logical attempt column (0 = first try, no retry)
+  httpStatus?: number;
+  failureKind?: FailureKind;
+  failureDetail?: string;
+}
+
+export type InputDescriptionCheckItem = {
+  matches: boolean;
+  reason: string;
+  label?: string;
+};
+
+export type InputDescriptionCheckResult = {
+  matches: boolean;
+  reason: string;
+  items?: InputDescriptionCheckItem[];
+};
+
+export type InputPreviewItem = { label: string; text: string };
+
+export type StepDescriptionFields = {
+  outputPreview?: string;
+  inputDescriptionCheck?: InputDescriptionCheckResult;
+  descriptionCheckLlmCalls?: LlmCallRecord[];
+  descriptionCheckCostCents?: number;
+};
+
+export interface RunStep extends Omit<StepDescriptionFields, "outputPreview"> {
+  moduleId: ModuleId;
+  kind: RunStepKind;
+  label: string;
+  model?: ModelId;
+  status: RunStepStatus;
+  ms: number;
+  costCents: number;
+  savedCostCents?: number; // AI : cache hit — original step cost avoided this run (costCents stays 0)
+  inputPreview: string;
+  inputPreviewItems?: InputPreviewItem[];
+  outputPreview: string;
+  outputPreviewItems?: InputPreviewItem[]; // AI : per-call LLM JSON — aligned with inputPreviewItems (pre-filter for example-select)
+  outputJson?: string;
+  inputDescription?: string; // AI : snapshot at run time — expected input for this step
+  docId?: DocId; // AI : source doc for input steps — powers logging trace links
+  llmCalls?: LlmCallRecord[];
+  exampleSelectVerdicts?: ExampleSelectVerdict[];
+  failures?: RunFailureRecord[];
+  serverLogs?: import("@/lib/run-types").JobLogEntry[]; // AI : mirrored ServerLogger lines for this step
+  codeProfile?: import("@/lib/code-exec-ui").StepCodeProfile; // AI : browser custom-code line timings + source snapshot
+}
+
+export type RunFingerprint = string & { __brand: "RunFingerprint" };
+export type SharedLinkId = string & { __brand: "SharedLinkId" };
+export type HostedApiId = string & { __brand: "HostedApiId" };
+export type MarketplaceListingId = string & { __brand: "MarketplaceListingId" };
+export type PipelineScheduleId = string & { __brand: "PipelineScheduleId" };
+// AI : Testing — run started from the Testing tab; flagged in Logging (spec § Testing).
+export enum RunSource {
+  App = "app",
+  SharedLink = "shared_link",
+  HostedApi = "hosted_api",
+  Assistant = "assistant",
+  Testing = "testing",
+  Schedule = "schedule",
+}
+
+// AI : persisted test verdict — expected vs actual per pinned step, attached to the run
+// AI : after the Testing tab compares the finished run against its *_testing.json file.
+export enum RunTestStepStatus {
+  Pass = "pass",
+  Fail = "fail",
+  // AI : Skipped = input/combine — same data as expected, but run trace is refs/summary only (see skipReason).
+  Skipped = "skipped",
+  NotReached = "not-reached",
+}
+
+export type RunTestProbabilisticResult = {
+  path: string;
+  pass: boolean;
+  reason: string;
+  // AI : persisted for Testing/Logging — side-by-side LLM semantic check display.
+  expected?: unknown;
+  actual?: unknown;
+};
+
+export type RunTestDeterministicDiffResult = {
+  path: string;
+  reason: string;
+  expected?: unknown;
+  actual?: unknown;
+};
+
+export type RunTestStepResult = {
+  label: string;
+  status: RunTestStepStatus;
+  diffPath?: string;
+  // AI : per-step input guard verdict from the run — combine + scored steps with inputDescription.
+  inputDescriptionCheck?: InputDescriptionCheckResult;
+  // AI : why a skipped step was not scored — input/combine traces are refs or summaries, not full values.
+  skipReason?: string;
+  // AI : probabilistic field paths (ModelField.deterministic === false) excluded from exact JSON compare.
+  ignoredPaths?: string[];
+  // AI : int/float fields with ModelField.testTolerance — compared with ± instead of exact match.
+  tolerantPaths?: TolerantFieldPath[];
+  // AI : LLM semantic check for probabilistic fields after deterministic JSON match (spec § Testing).
+  probabilisticResults?: RunTestProbabilisticResult[];
+  llmEvaluated?: boolean;
+  // AI : git-diff style unified diff of deterministic JSON cores when compare fails.
+  deterministicDiff?: string;
+  // AI : LLM chain-of-thought explanations for each deterministic diff field (spec § Testing).
+  deterministicDiffExplanations?: RunTestDeterministicDiffResult[];
+  expected?: unknown;
+  actual?: unknown;
+};
+
+export type RunTestReport = {
+  testDocName: string;
+  results: RunTestStepResult[];
+  // AI : negative test — verdict uses testOutcomePassed instead of raw step pass/fail.
+  expectFailure?: import("@/lib/test-expect-failure").TestExpectFailure;
+  inputCompatBlocked?: boolean;
+  // AI : persisted on the run row in Supabase — separate hashes so revert-to-old test/pipeline
+  // AI : re-matches a prior verdict without any client-side verdict cache.
+  testContentSig?: string;
+  pipelineSig?: string;
+  /** @deprecated legacy combined sig — match via testReportMatchesSigs only */
+  contextSig?: string;
+};
+export enum SharedLinkFundingMode {
+  SharerPays = "sharer_pays",
+  ViewerPays = "viewer_pays",
+  // AI : owner pays — viewer must sign in but is not billed.
+  ViewerSignsIn = "viewer_signs_in",
+}
+
+export enum HostedApiFundingMode {
+  OwnerPays = "owner_pays",
+  CallerPays = "caller_pays",
+}
+
+export enum RunStatus {
+  Ok = "ok",
+  Error = "error",
+  Running = "running",
+}
+
+export interface PipelineRun {
+  id: RunId;
+  startedAt: number;
+  status: RunStatus;
+  totalMs: number;
+  billedCents: number;
+  savedCents: number;
+  model: ModelId;
+  steps: RunStep[];
+  inputDocId?: DocId;
+  inputDocIds?: DocId[]; // AI : all inference inputs, in slot order — powers run dedup + logging
+  fingerprint?: RunFingerprint; // AI : hash of pipeline + inputs — identical reruns link here
+  notes?: string; // AI : freeform context for this run — set before or after inference
+  source?: RunSource;
+  test?: RunTestReport; // AI : only on source "testing" runs — keeps the verdict in Logging
+  langfuseTraceId?: string; // AI : Langfuse trace id when langfuseExport was enabled for this run
+  langfuseTraceUrl?: string; // AI : deep link into Langfuse UI (server-built from LANGFUSE_BASE_URL)
+
+  sharedLinkId?: SharedLinkId;
+  hostedApiId?: HostedApiId;
+  scheduleId?: PipelineScheduleId;
+  viewerName?: string;
+  viewerSessionId?: string;
+  triggerUserId?: string;
+  triggerUserEmail?: string;
+}
+
+export interface BillingPoint {
+  day: string;
+  [modelOrService: string]: number | string;
+}
+
+// AI : client-safe model picker row — no OpenRouter slug or raw token rates.
+export interface ModelOptionPublic {
+  id: ModelId;
+  label: string;
+  provider: string; // AI : model vendor from slug prefix (anthropic, openai, …)
+  providerId: string; // AI : LLM infrastructure id (openrouter, custom_provider, …)
+  costPer1k: number; // cents per 1k tokens (blended, OpenRouter + 40%)
+}
+
+export interface ModelOption extends ModelOptionPublic {
+  promptUsdPerToken: number; // raw OpenRouter prompt rate (USD/token)
+  completionUsdPerToken: number; // raw OpenRouter completion rate (USD/token)
+  // AI : backend-only — the real OpenRouter slug this demo id maps to.
+  slug: OpenRouterSlug;
+}
+
+export { MODEL_CATALOG, catalogEntry, catalogLabel, slugFor, providerFor, providerModelFor, parseRoutedModel, formatRoutedModel, wireModelId, type ModelCatalogEntry } from "./model_catalog";
+export { OPENROUTER_PROVIDER_ID } from "./openrouter_slugs";
+
+// AI : token usage captured on every real LLM call (feeds Logging + Billing).
+export interface TokenUsage {
+  model: ModelId;
+  promptTokens: number;
+  completionTokens: number;
+}
+
+// AI : live pricing — hydrated via GET /api/state → modelOptions (see openrouter_models.ts).
+
+// AI : default to DeepSeek V4 — cheap Chinese model, maps to deepseek/deepseek-chat, fast + reliable
+// AI : for large structured outputs (qwen-2.5-72b on OpenRouter is markedly slower here).
+export const DEFAULT_MODEL: ModelId = "openrouter:deepseek-v4";
+
+// AI : default vision model for input OCR — Gemini reads images/PDFs/handwriting well.
+export const DEFAULT_VISION_DOC_PARSE_MODEL: ModelId = "gemini-3-flash";
+
+// AI : input-description guard — DeepSeek V4 is reliable on OpenRouter (gemini-2-flash-lite slug 404s).
+export const DEFAULT_INPUT_CHECK_MODEL: ModelId = "deepseek-v4";
+
+export const DOC_PARSE_MODES: { value: DocParseMode; label: string; hint: string }[] = [
+  { value: DocParseMode.Parser, label: "Built-in parser", hint: "PDF.js text extract at upload — stored in docs.content" },
+  { value: DocParseMode.Llm, label: "Vision OCR", hint: "OpenRouter vision — cached separately in doc_vision_cache" },
+];
+
+function moduleAcceptsVisionOcr(m: PipelineModule): boolean {
+  if (m.kind === ModuleKind.DocToText) return true;
+  if (m.kind !== ModuleKind.Input || !m.inputType) return false;
+  const types = Array.isArray(m.inputType) ? m.inputType : [m.inputType];
+  return types.includes(InputType.Pdf) || types.includes(InputType.Image);
+}
+
+export function docParseModeForModule(m: PipelineModule): DocParseMode {
+  // AI : leftover useOcr on JSON/text slots must not route files through vision OCR.
+  if (m.useOcr && moduleAcceptsVisionOcr(m)) return DocParseMode.Llm;
+  return DocParseMode.Parser;
+}
+
+export function inputUsesVisionOcr(m: PipelineModule): boolean {
+  return docParseModeForModule(m) === DocParseMode.Llm;
+}
+
+// AI : step-cache model slug — vision OCR steps must not share keys with the global run model.
+export function stepModelForCache(m: PipelineModule, globalModel: ModelId): ModelId {
+  if (inputUsesVisionOcr(m)) return m.model ?? DEFAULT_VISION_DOC_PARSE_MODEL;
+  if (
+    m.kind === ModuleKind.Llm ||
+    m.kind === ModuleKind.LlmBatch ||
+    m.kind === ModuleKind.ExampleSelect
+  ) {
+    return m.model ?? globalModel;
+  }
+  return m.model ?? globalModel;
+}
+
+export const FIELD_TYPES: FieldType[] = Object.values(FieldType);
+
+export const INPUT_TYPES: { value: InputType; label: string }[] = [
+  { value: InputType.Pdf, label: "PDF" },
+  { value: InputType.Word, label: "Word" },
+  { value: InputType.Excel, label: "Excel" },
+  { value: InputType.Json, label: "JSON" },
+  { value: InputType.Text, label: "Text" },
+  { value: InputType.Markdown, label: "Markdown" },
+  { value: InputType.Latex, label: "LaTeX" },
+  { value: InputType.Web, label: "Web" },
+  { value: InputType.Image, label: "Image" },
+  { value: InputType.Audio, label: "Audio" },
+  { value: InputType.Video, label: "Video" },
+];
+
+export const MODULE_META: Record<ModuleKind, { label: string; description: string }> = {
+  [ModuleKind.Input]: {
+    label: "Input",
+    description: "Ingest a source (pdf, word, web, json…) — convert-to-text runs as the next locked step when needed",
+  },
+  [ModuleKind.DocToText]: {
+    label: "Convert to text",
+    description: "Fill Document.content from the original file — built-in parser or DeepSeek OCR, cached per document",
+  },
+  [ModuleKind.Llm]: { label: "LLM Call", description: "Run a model against a prompt + schema" },
+  [ModuleKind.LlmBatch]: { label: "Batch LLM", description: "list in → list out (one structured call per item). Wrap with Custom TS before/after when upstream/downstream is a single object." },
+  [ModuleKind.ExampleSelect]: {
+    label: "Example Select",
+    description:
+      "Filter a list of examples with a cheap LLM per item — {description} from a prior step, structured is_relevant + chain_of_thought (not embedding RAG). Prompt view (SQL SELECT / field list) is uncached {example}; spine passthrough is the full row + reason.",
+  },
+  [ModuleKind.Quote]: {
+    label: "Link Quotes",
+    description: "Match verbatim LLM quote strings against the source document and attach byte offsets (zero LLM cost)",
+  },
+  [ModuleKind.Transform]: {
+    label: "Transform",
+    description: "Deterministic reshape — list→object wrap needs a list field on the output structure, or custom TS code",
+  },
+  [ModuleKind.Assemble]: {
+    label: "Assemble",
+    description: "Zip spine + prior step labels into one flat structure (no LLM; not Combine Inputs)",
+  },
+  [ModuleKind.Parallel]: {
+    label: "Parallel LLM",
+    description: "Legacy — prefer Fork with product join (fixed LLM-only branches on the same spine)",
+  },
+  [ModuleKind.Fork]: {
+    label: "Fork",
+    description: "Split into 2–12 lanes, then join: product (field per lane), assemble (named zip), or merge (fold)",
+  },
+  [ModuleKind.IfElse]: {
+    label: "If / Else",
+    description: "Exclusive Then/Else on a bool spine field. Subsequent spine steps do not run unless you add a Join. Comparisons stay in custom-code / Python.",
+  },
+  [ModuleKind.Case]: {
+    label: "Case",
+    description: "Exclusive N-way match on a spine field (switch). Add a Join to continue the spine; without it each arm is a sink.",
+  },
+  [ModuleKind.ControlJoin]: {
+    label: "Join",
+    description: "Optional — continue the spine after if/case with the taken branch. Without Join, only the taken arm runs.",
+  },
+  [ModuleKind.Combine]: { label: "Combine Inputs", description: "Bring in another document and merge it with the spine" },
+  [ModuleKind.Chunk]: {
+    label: "Chunk",
+    description: "Split document text into a list of chunks — size, overlap, and source field are configurable",
+  },
+  [ModuleKind.Merge]: {
+    label: "Merge",
+    description: "Fold values with recursive structural merge — deep dicts, list concat/union/dedupe, per-path rules",
+  },
+  [ModuleKind.CustomCode]: {
+    label: "Custom Code",
+    description: "TypeScript or Python (input) => output with ordered fallbacks — for/while loops live here, not as graph nodes",
+  },
+  [ModuleKind.Assert]: {
+    label: "Assert",
+    description: "Check pipeline state (step[\"Label\"], len) — runs after referenced steps; passthrough",
+  },
+  [ModuleKind.HumanReview]: {
+    // AI : TODO (jank-human-review-modes) — approve/reject only; chat-until-resolution + text/voice still in TODO.txt.
+    label: "Human Review",
+    description: "Pause in Inference for approve or reject — passthrough on approval",
+  },
+  [ModuleKind.Webhook]: {
+    label: "Webhook",
+    description:
+      "HTTP call with typed spine in/out — optional poll of a status URL and fetch of a media URL into Documents. Not a vendor catalog.",
+  },
+  [ModuleKind.Sql]: {
+    label: "SQL",
+    description:
+      "Read or write the hosted app’s SQL tables (from your structures). SELECT / UPDATE / INSERT / DELETE. Host the page with {{sql:table}} and {{action:alias}}.",
+  },
+  [ModuleKind.N8n]: {
+    label: "Transform piece",
+    description:
+      "Typed local transform (Set, Filter, CSV, Hash). JavaScript on the spine — does not call Slack/Gmail. Live apps use Connect.",
+  },
+  [ModuleKind.Connect]: {
+    label: "Connect app",
+    description:
+      "Post to Slack, send Gmail, append Sheets — OAuth stays in a popup. Hidden in Vibe; typed in/out.",
+  },
+  [ModuleKind.Chatbot]: {
+    label: "Chatbot",
+    description: "Pause for prompted chat (single or until Exit) — input is locked ChatbotPrompt",
+  },
+  [ModuleKind.Output]: {
+    label: "Output",
+    description: "Materialize a named snapshot of a structure — not the pipeline's only output; add one anywhere you want an artifact",
+  },
+};
+
+export const STRATEGY_META: Record<StrategyKind, { name: string; description: string }> = {
+  [StrategyKind.SingleLlm]: { name: "Single LLM Call", description: "One direct call to the model." },
+  [StrategyKind.ClaudeCode]: { name: "Agent (Frontier)", description: "A full coding-agent instance on the task." },
+  [StrategyKind.CheapAgent]: { name: "Agent (Cheap Model)", description: "Agent loop on a low-cost open model." },
+};

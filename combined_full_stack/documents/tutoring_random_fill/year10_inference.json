@@ -1,0 +1,6 @@
+{
+  "description": "Year 10 Pythagoras — 4 random integer fills of one template.",
+  "inputs": {
+    "Request": "year10_request.json"
+  }
+}

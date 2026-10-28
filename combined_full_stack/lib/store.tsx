@@ -1,0 +1,2003 @@
+"use client"
+
+// AI : TODO refactor — optional split: persistence, billing refresh, project CRUD into separate hooks.
+// AI : TODO (arch-thin-store) — HTTP docs/runs/billing stay here; project mutations delegate to SpineSession (parity.md §8.5).
+// AI : TODO (opt-browser-tui-snapshot) — optional: expose SessionSnapshot from this store so a DOM TUI
+// AI :   can call to*View without a second SpineSession. Mutations stay these methods.
+// AI : TODO (spec) — prefetch project-scoped cache entries on hydrate; Cache tab should not refetch from cold on every open.
+// AI : the client half of the bridge — hydrates from GET /api/state, applies mutations
+// AI : optimistically, and persists them through the thin API routes. Method names match
+// AI : SpineSession (lib/core/session.ts); overlay rules are shared from lib/core/realtime.ts.
+
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  type Dispatch,
+  type ReactNode,
+  type SetStateAction,
+} from "react"
+import { confidentialUploadWarning } from "@/lib/confidential-upload"
+import { uid } from "@/lib/id"
+import type {
+  DocId,
+  DocLabel,
+  DocRef,
+  ModuleId,
+  PipelineModule,
+  PipelineRun,
+  Project,
+  ProjectId,
+  RunTestReport,
+  Strategy,
+  StructureModel,
+  StructureModelId,
+  TypeAlias,
+  TypeAliasId,
+  InputType,
+  ModelOptionPublic,
+} from "@/lib/types"
+import { DEFAULT_MODEL } from "@/lib/types"
+import { AUTHORED_PROJECT_KIND } from "@/lib/project-assistant-types"
+import {
+  apiJson,
+  apiPut,
+  FETCH_CREDENTIALS,
+  formatApiError,
+  JSON_HEADERS,
+  logApiFailure,
+  readApiErrorBody,
+} from "@/lib/api-client"
+import { API_ROUTES } from "@/lib/api-routes"
+import {
+  studioProjectForWebsite,
+  websiteDisplayName,
+  UNNAMED_WEBSITE_NAME,
+  type pipeline_website_delete_action,
+} from "@/lib/website-pipelines"
+import { readEditingWebsiteSession } from "@/lib/editing-website-session"
+import { migrateProjectModules } from "@/lib/quote-steps"
+import { authoredPipelineModules, syncManagedPipelineSteps } from "@/lib/structure-parse-steps"
+import { functionsOnProject } from "@/lib/pipeline-functions"
+import { stripSharedModels, stripBuiltinTypeAliases, withBuiltinTypeAliases, withSharedModels } from "@/lib/structure"
+import { mergeInferredStructuresForDoc, modelsChanged } from "@/lib/sync-doc-structures"
+import { docTextContent, fetchDocText, invalidateDocText } from "@/lib/doc-text-cache"
+import {
+  clearActiveProjectSession,
+  readActiveProjectSession,
+  writeActiveProjectSession,
+} from "@/lib/active-project-session"
+import { navigateToBuildWorkspace, navigateToProjectPicker } from "@/lib/app-mode-nav"
+import { peekPendingPickerList } from "@/lib/picker-list"
+import { registerStoreNavigationBridge } from "@/lib/store-navigation-bridge"
+import { dedupeDocsNewestByName, projectsWithDocAvailability } from "@/lib/project-docs"
+import { readStateSnapshot, seedProjectInStateSnapshot, writeStateSnapshot } from "@/lib/state-snapshot-cache"
+import { queueBackgroundProjectPrefetches } from "@/lib/background-project-prefetch"
+import {
+  clearProjectStateCache,
+  readAccountStateCache,
+  readBillingRunsCache,
+  readProjectRunsCache,
+  readProjectStateCache,
+  writeAccountStateCache,
+  writeBillingRunsCache,
+  writeProjectRunsCache,
+  writeProjectStateCache,
+} from "@/lib/project-state-cache"
+import { readStateStream, type StateStreamChunk } from "@/lib/state-stream"
+import { readBillingSnapshot, writeBillingSnapshot } from "@/lib/billing-snapshot-cache"
+import { readEarningsSnapshot, writeEarningsSnapshot } from "@/lib/earnings-snapshot-cache"
+import { warmMarketplaceListings } from "@/lib/warm-run-data"
+import { warmSettingsAccount, warmSettingsTeams } from "@/lib/warm-settings-data"
+import { useTeamRealtime } from "@/lib/use-team-realtime"
+import {
+  deleteProjectSnapshot,
+} from "@/lib/core/project-ops"
+import { buildGuiSessionSnapshot, createGuiSpineSession } from "@/lib/core/gui-session-bridge"
+import { emptySessionSnapshot, type SpineSession } from "@/lib/core/session"
+import { DEMO_DEFAULT_PROJECT_ID } from "@/lib/demo-constants"
+import { setDemoMode } from "@/lib/demo-mode"
+import { overlayOptimisticProjects as mergeOptimisticProjects, confirmCreatedInMap, reseedCreatedFromLocal, shouldKeepLocalProject } from "@/lib/core/realtime"
+import type { ProjectCreateOpts as CoreProjectCreateOpts, EarningsAccountView } from "@/lib/core/types"
+import type { SharedLinkRecord } from "@/lib/shared-link-types"
+import { parseCreatedProjectResponse } from "@/lib/created-project-response"
+import { ProjectPickerSkeleton, StoreShellSkeleton } from "@/components/store-shell-skeletons"
+
+export type ProjectCreateOpts = CoreProjectCreateOpts & {
+  onHostedSites?: (sites: SharedLinkRecord[], siteError?: string) => void
+}
+export type { EarningsAccountView }
+
+export enum StoreMode {
+  Workspace = "workspace",
+  Picker = "picker",
+  Demo = "demo",
+}
+
+export type AccountRefreshOpts = { force?: boolean }
+
+// AI : client coalesce — billing tier is 20/min; many surfaces call refreshBilling on mount/hover/run.
+const BILLING_REFRESH_MIN_MS = 5_000
+
+// AI : sessionStorage can outlive a deleted project — never prefetch runs for unknown ids.
+function workspaceActiveProjectFromSession(): string {
+  const id = readActiveProjectSession()
+  if (!id) return ""
+  const account = readAccountStateCache()
+  if (account && !account.projects.some((p) => p.id === id)) {
+    clearActiveProjectSession()
+    return ""
+  }
+  return id
+}
+
+function accountKnowsProject(projectId: string, account: ReturnType<typeof readAccountStateCache>): boolean {
+  return !!(projectId && account?.projects.some((p) => p.id === projectId))
+}
+
+function upsertProjectInAccountCache(project: Project): void {
+  const account = readAccountStateCache()
+  const projects = account?.projects.some((p) => p.id === project.id)
+    ? account.projects.map((p) => (p.id === project.id ? project : p))
+    : [project, ...(account?.projects ?? [])]
+  writeAccountStateCache({
+    projects,
+    docs: account?.docs ?? [],
+    modelOptions: account?.modelOptions ?? [],
+  })
+}
+
+function pruneStaleProjectFromAccountCache(projectId: string): void {
+  const account = readAccountStateCache()
+  if (!account?.projects.some((p) => p.id === projectId)) return
+  writeAccountStateCache({
+    projects: account.projects.filter((p) => p.id !== projectId),
+    docs: account.docs,
+    modelOptions: account.modelOptions,
+  })
+}
+
+// AI : session/account cache can outlive a deleted or never-persisted project — evict everywhere.
+function evictStaleProject(
+  projectId: string,
+  setState: Dispatch<SetStateAction<ServerState | null>>,
+  setActiveProjectId: Dispatch<SetStateAction<string>>,
+  clearSaveError?: () => void,
+): void {
+  clearProjectStateCache(projectId)
+  pruneStaleProjectFromAccountCache(projectId)
+  const wasActiveSession = readActiveProjectSession() === projectId
+  if (wasActiveSession) clearActiveProjectSession()
+  setState((prev) => {
+    if (!prev?.projects.some((p) => p.id === projectId)) return prev
+    return { ...prev, projects: prev.projects.filter((p) => p.id !== projectId) }
+  })
+  setActiveProjectId((current) => (current === projectId ? "" : current))
+  clearSaveError?.()
+  if (wasActiveSession) navigateToProjectPicker()
+}
+
+// AI : PUT /api/projects/[id] — id is in the URL; createdAt is immutable server-side.
+function serializeProjectPutBody(p: Project): string {
+  return JSON.stringify({
+    name: p.name,
+    kind: p.kind,
+    models: p.models,
+    typeAliases: p.typeAliases,
+    modules: authoredPipelineModules(p.modules),
+    strategies: p.strategies,
+    seedDocNames: p.seedDocNames,
+    expectedOutputs: p.expectedOutputs,
+    inferencePresets: p.inferencePresets,
+    llmProviders: p.llmProviders,
+    documentation: p.documentation,
+    langfuseExport: p.langfuseExport,
+    windmillExecute: p.windmillExecute,
+    functions: p.functions?.length
+      ? functionsOnProject(p).map((fn) => ({
+          id: fn.id,
+          name: fn.name,
+          modules: authoredPipelineModules(fn.modules),
+        }))
+      : undefined,
+    activeFunctionId: p.activeFunctionId,
+    structureRows: p.structureRows,
+  })
+}
+
+export type BillingCreditHistoryEntry = {
+  creditKey: string
+  amountCents: number
+  source: "checkout" | "invoice" | "feedback"
+  createdAt: string
+}
+
+// AI : TODO (arch-billing-view) — richer GUI snapshot; thin CLI type lives in lib/core/types.ts. Share one type.
+export type BillingAccountView = {
+  balanceCents: number
+  totalBilledCents: number
+  totalUsageCents: number
+  freeCreditCents: number
+  feedbackCreditCents: number
+  feedbackMinChars: number
+  feedbackMaxCreditsPerDay: number
+  subscribed: boolean
+  minRunBalanceCents: number
+  topupOptionsCents: number[]
+  subCentsPerMonth: number
+  billingCapCents: number
+  creditHistory: BillingCreditHistoryEntry[]
+}
+
+const DEMO_BILLING: BillingAccountView = {
+  balanceCents: 4_200,
+  totalBilledCents: 12_000,
+  totalUsageCents: 7_800,
+  freeCreditCents: 4_200,
+  feedbackCreditCents: 100,
+  feedbackMinChars: 100,
+  feedbackMaxCreditsPerDay: 10,
+  subscribed: false,
+  minRunBalanceCents: 50,
+  topupOptionsCents: [500, 1000, 2500],
+  subCentsPerMonth: 2900,
+  billingCapCents: 50_000,
+  creditHistory: [],
+}
+
+const DEMO_EARNINGS: EarningsAccountView = {
+  balanceCents: 0,
+  totalEarnedCents: 0,
+  totalWithdrawnCents: 0,
+}
+
+async function fetchStateStream(
+  route: string,
+  onChunk?: (chunk: StateStreamChunk) => void,
+  signal?: AbortSignal,
+): Promise<ServerState> {
+  const chunk = await readStateStream(route, { onChunk }, signal)
+  return {
+    projects: chunk.projects ?? [],
+    docs: chunk.docs ?? [],
+    runs: chunk.runs ?? [],
+    allRuns: [],
+    modelOptions: chunk.modelOptions ?? [],
+  }
+}
+
+interface ServerState {
+  projects: Project[]
+  docs: DocRef[]
+  runs: PipelineRun[]
+  allRuns: PipelineRun[]
+  modelOptions: ModelOptionPublic[]
+}
+
+export type DeleteProjectOpts = { websiteAction?: pipeline_website_delete_action }
+
+interface StoreState {
+  projects: Project[]
+  activeProjectId: string
+  setActiveProjectId: (id: string) => void
+  addProject: (opts?: ProjectCreateOpts) => Promise<Project>
+  cloneFromTemplate: (templateId: string, opts?: ProjectCreateOpts) => Promise<Project>
+  cloneProject: (projectId: string, opts?: ProjectCreateOpts) => Promise<Project>
+  resyncExamples: () => Promise<number>
+  renameProject: (id: string, name: string) => void
+  deleteProject: (id: string, opts?: DeleteProjectOpts) => Promise<void>
+  project: Project
+  // shortcuts that read/write the active project
+  models: StructureModel[]
+  setModels: (m: StructureModel[] | ((prev: StructureModel[]) => StructureModel[])) => void
+  typeAliases: TypeAlias[]
+  setTypeAliases: (t: TypeAlias[] | ((prev: TypeAlias[]) => TypeAlias[])) => void
+  modules: PipelineModule[]
+  setModules: (m: PipelineModule[]) => void
+  setActiveFunction: (id: import("@/lib/types").pipeline_function_id) => void
+  addPipelineFunction: (name?: string) => void
+  renamePipelineFunction: (id: import("@/lib/types").pipeline_function_id, name: string) => void
+  deletePipelineFunction: (id: import("@/lib/types").pipeline_function_id) => void
+  // AI : atomic models+modules patch — avoids stale closure when assistant changes both at once
+  applyProjectChanges: (changes: {
+    models?: StructureModel[]
+    modules?: PipelineModule[]
+    typeAliases?: TypeAlias[]
+  }) => void
+  strategies: Strategy[]
+  setStrategies: (s: Strategy[]) => void
+  documentation: string
+  setDocumentation: (text: string) => void
+  // global model
+  model: string
+  setModel: (m: string) => void
+  modelOptions: ModelOptionPublic[]
+  // documents — real upload through POST /api/docs (content-hash dedupe server-side)
+  docs: DocRef[]
+  addDoc: (file: File, label: DocLabel, projectId?: string) => Promise<DocRef>
+  addDocContent: (
+    name: string,
+    type: InputType,
+    content: string,
+    label: DocLabel,
+    projectId?: string,
+    replaceDocId?: DocId,
+  ) => Promise<DocRef>
+  removeDoc: (docId: DocId, projectId?: string) => Promise<void>
+  setDocProjects: (docId: DocId, projectIds: ProjectId[]) => Promise<void>
+  // runs / logs
+  runs: PipelineRun[]
+  addRun: (r: PipelineRun) => void
+  updateRunNotes: (runId: PipelineRun["id"], notes: string | undefined) => Promise<void>
+  // AI : persist the Testing-tab verdict (expected vs actual per step) onto the run for Logging.
+  updateRunTest: (runId: PipelineRun["id"], test: RunTestReport) => Promise<void>
+  // AI : survives Inference tab unmount — doc ids only, resolved against hydrated docs on restore.
+  inferenceInputDocIds: Partial<Record<ModuleId, DocId | DocId[]>>
+  setInferenceInputDocIds: (docs: Partial<Record<ModuleId, DocId | DocId[]>>) => void
+  // billing — run history for spend charts (project-scoped + account-wide)
+  billingRuns: PipelineRun[]
+  refreshBillingRuns: () => Promise<PipelineRun[]>
+  hydrateRunDetail: (runId: PipelineRun["id"]) => Promise<void>
+  billingAccount: BillingAccountView | null
+  refreshBilling: (opts?: AccountRefreshOpts) => Promise<void>
+  earningsAccount: EarningsAccountView | null
+  refreshEarnings: (opts?: AccountRefreshOpts) => Promise<void>
+  refresh: () => Promise<void>
+  prefetchProject: (id: string) => void
+  projectLoading: boolean
+  // AI : true while /api/state is refreshing — cached docs can 404 until syncDocsFromDb lands.
+  stateSyncing: boolean
+  saveError: string | null
+  clearSaveError: () => void
+  // AI : flush debounced project save immediately — call before startRun to avoid stale server state.
+  flushPendingSave: () => Promise<boolean>
+  // AI : run/save 404 unknown project — drop ghost cache and return to picker.
+  reportMissingProject: (projectId: string) => void
+  patchProject: (patch: Partial<Project>) => void
+}
+
+export interface ProjectPickerStoreState {
+  projects: Project[]
+  addProject: (opts?: ProjectCreateOpts) => Promise<Project>
+  cloneFromTemplate: (templateId: string, opts?: ProjectCreateOpts) => Promise<Project>
+  cloneProject: (projectId: string, opts?: ProjectCreateOpts) => Promise<Project>
+  ingestCreatedProject: (project: Project) => void
+  resyncExamples: () => Promise<number>
+  renameProject: (id: string, name: string) => void
+  deleteProject: (id: string, opts?: DeleteProjectOpts) => Promise<void>
+  openProject: (id: ProjectId) => void
+  prefetchProject: (id: string) => void
+  saveError: string | null
+  clearSaveError: () => void
+  syncing: boolean
+}
+
+// AI : run shared links + billing without opening a builder project first.
+export interface ConsumerStoreState {
+  projects: Project[]
+  billingRuns: PipelineRun[]
+  refreshBillingRuns: () => Promise<PipelineRun[]>
+  billingAccount: BillingAccountView | null
+  refreshBilling: (opts?: AccountRefreshOpts) => Promise<void>
+  earningsAccount: EarningsAccountView | null
+  refreshEarnings: (opts?: AccountRefreshOpts) => Promise<void>
+  model: string
+  setModel: (m: string) => void
+  modelOptions: ModelOptionPublic[]
+  openProject: (id: ProjectId) => void
+  addProject: (opts?: ProjectCreateOpts) => Promise<Project>
+  cloneFromTemplate: (templateId: string, opts?: ProjectCreateOpts) => Promise<Project>
+  saveError: string | null
+  clearSaveError: () => void
+  stateSyncing: boolean
+}
+
+type PrefetchEntry = {
+  promise: Promise<PipelineRun[]>
+  data?: PipelineRun[]
+}
+
+// AI : shared pure computation for auto-inferring structures immediately after any doc upload.
+function computeDocStructureSync(
+  prev: ServerState,
+  pid: string,
+  doc: DocRef,
+  content: string,
+): { nextProjects: Project[]; changed: boolean } {
+  const p = prev.projects.find((x) => x.id === pid)
+  if (!p) return { nextProjects: prev.projects, changed: false }
+  const merged = mergeInferredStructuresForDoc(
+    p.models,
+    doc,
+    content,
+    () => uid<StructureModelId>(),
+  )
+  if (!modelsChanged(p.models, merged)) return { nextProjects: prev.projects, changed: false }
+  const models = stripSharedModels(merged)
+  const modules = syncManagedPipelineSteps(
+    migrateProjectModules(p).modules,
+    withSharedModels(models),
+    DEFAULT_MODEL,
+  )
+  return {
+    nextProjects: prev.projects.map((x) => (x.id === pid ? { ...p, models, modules } : x)),
+    changed: true,
+  }
+}
+
+const StoreContext = createContext<StoreState | null>(null)
+const ConsumerStoreContext = createContext<ConsumerStoreState | null>(null)
+const ProjectPickerContext = createContext<ProjectPickerStoreState | null>(null)
+
+export { ProjectPickerContext }
+
+export function StoreProvider({
+  children,
+  mode = StoreMode.Workspace,
+}: {
+  children: ReactNode
+  mode?: StoreMode
+}) {
+  // AI : always null on first render — readStateSnapshot() uses sessionStorage and would mismatch SSR.
+  const [state, setState] = useState<ServerState | null>(null)
+  const [loadError, setLoadError] = useState<string | null>(null)
+  const [billingAccount, setBillingAccount] = useState<BillingAccountView | null>(null)
+  const [earningsAccount, setEarningsAccount] = useState<EarningsAccountView | null>(null)
+  const [activeProjectId, setActiveProjectId] = useState<string>(() => {
+    if (mode === StoreMode.Demo) {
+      if (typeof window !== "undefined") {
+        const qs = new URLSearchParams(window.location.search)
+        const buildId = qs.get("buildId")
+        if (buildId) return buildId
+        const urlProjectId = qs.get("projectId")
+        if (urlProjectId) return urlProjectId
+      }
+      return DEMO_DEFAULT_PROJECT_ID
+    }
+    return mode === StoreMode.Workspace ? workspaceActiveProjectFromSession() : ""
+  })
+  // AI : page-only website studio — StoreContext needs a stub Project when there is no host pipeline.
+  const [pageOnlyStudio, setPageOnlyStudio] = useState(() => {
+    if (typeof window === "undefined") return false
+    return !!readEditingWebsiteSession() && !workspaceActiveProjectFromSession()
+  })
+  const [model, setModel] = useState<string>(DEFAULT_MODEL)
+  const [projectLoading, setProjectLoading] = useState(false)
+  const [stateSyncing, setStateSyncing] = useState(true)
+  const [saveError, setSaveError] = useState<string | null>(null)
+  const [inferenceInputsByProject, setInferenceInputsByProject] = useState<
+    Record<string, Partial<Record<ModuleId, DocId | DocId[]>>>
+  >({})
+  const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const pendingSaveRef = useRef<{ id: string; body: string } | null>(null)
+  const hydratedRef = useRef(false)
+  const prefetchedAllProjectsRef = useRef(false)
+  const prefetchCache = useRef(new Map<string, PrefetchEntry>())
+  const billingFetchRef = useRef<Promise<void> | null>(null)
+  const billingLastOkAtRef = useRef(0)
+  const billingRateLimitedUntilRef = useRef(0)
+  const earningsFetchRef = useRef<Promise<void> | null>(null)
+  // AI : ignore in-flight /api/state responses that started before a delete switched projects.
+  const stateLoadGenRef = useRef(0)
+  // AI : filter stale refetches that still list projects the user already deleted this session.
+  const deletedProjectIdsRef = useRef(new Set<string>())
+  // AI : full payloads — id-only sets cannot restore a create if applyState runs before setState flushes.
+  const createdProjectsRef = useRef(new Map<string, Project>())
+  const projectMutatedAtRef = useRef(new Map<string, number>())
+  const projectsRef = useRef<Project[]>([])
+  const spineMutationRef = useRef(false)
+  const spineHandlersRef = useRef({
+    onPersist: (_snap: import("@/lib/core/types").SessionSnapshot) => {},
+    scheduleProjectSave: (_project: Project) => {},
+  })
+  const spineSessionRef = useRef<SpineSession | null>(null)
+  if (!spineSessionRef.current) {
+    spineSessionRef.current = createGuiSpineSession({
+      onPersist: (snap) => spineHandlersRef.current.onPersist(snap),
+      scheduleProjectSave: (project) => spineHandlersRef.current.scheduleProjectSave(project),
+    })
+  }
+
+  // AI : prod GET /api/state lags POST/DELETE (warm-instance + realtime). Never let that snapshot drop local creates or resurrect tombstones.
+  const overlayOptimisticProjects = useCallback((projects: Project[]): Project[] => {
+    return mergeOptimisticProjects(projects, createdProjectsRef.current, deletedProjectIdsRef.current)
+  }, [])
+
+  const confirmCreatedProjects = useCallback((serverProjects: Project[]): void => {
+    confirmCreatedInMap(createdProjectsRef.current, serverProjects)
+  }, [])
+
+  const clearSaveError = useCallback(() => setSaveError(null), [])
+
+  const persistProject = useCallback(async (id: string, body: string): Promise<boolean> => {
+    if (mode === StoreMode.Demo) return true
+    const readOnly = state?.projects.find((p) => p.id === id)?.teamReadOnly
+    if (readOnly) return true
+    const runPut = () => apiPut(API_ROUTES.project(id), body)
+    let result = await runPut()
+    if (!result.ok && result.status === 429) {
+      const retryMs = 2_000
+      await new Promise((resolve) => setTimeout(resolve, retryMs))
+      result = await runPut()
+    }
+    if (!result.ok) {
+      if (result.status === 404 && !createdProjectsRef.current.has(id)) {
+        if (pendingSaveRef.current?.id === id) {
+          if (saveTimer.current) clearTimeout(saveTimer.current)
+          saveTimer.current = null
+          pendingSaveRef.current = null
+        }
+        evictStaleProject(id, setState, setActiveProjectId, clearSaveError)
+        return false
+      }
+      setSaveError(result.error)
+      return false
+    }
+    setSaveError(null)
+    return true
+  }, [mode, state?.projects, clearSaveError])
+
+  const scheduleDebouncedProjectSave = useCallback(
+    (project: Project) => {
+      projectMutatedAtRef.current.set(project.id, Date.now())
+      if (saveTimer.current) clearTimeout(saveTimer.current)
+      const body = serializeProjectPutBody(project)
+      pendingSaveRef.current = { id: project.id, body }
+      saveTimer.current = setTimeout(() => {
+        pendingSaveRef.current = null
+        void persistProject(project.id, body)
+      }, 500)
+    },
+    [persistProject],
+  )
+
+  useLayoutEffect(() => {
+    spineHandlersRef.current = {
+      onPersist: (snap) => {
+        spineMutationRef.current = true
+        projectsRef.current = snap.projects
+        for (const id of snap.deletedProjectIds) deletedProjectIdsRef.current.add(id)
+        setState((prev) => (prev ? { ...prev, projects: snap.projects } : prev))
+      },
+      scheduleProjectSave: scheduleDebouncedProjectSave,
+    }
+  }, [scheduleDebouncedProjectSave])
+
+  const syncSpineFromStore = useCallback(() => {
+    const session = spineSessionRef.current
+    if (!session || !state) return
+    session.hydrateSnapshot(
+      buildGuiSessionSnapshot(
+        {
+          projects: state.projects,
+          activeProjectId: activeProjectId || state.projects[0]?.id || "",
+          model,
+          docs: state.docs,
+          runs: state.runs,
+          inferenceInputDocIds: inferenceInputsByProject[activeProjectId] ?? {},
+          pendingCreates: [...createdProjectsRef.current.values()],
+          deletedProjectIds: [...deletedProjectIdsRef.current],
+        },
+        session.getSnapshot(),
+      ),
+    )
+  }, [state, activeProjectId, model, inferenceInputsByProject])
+
+  useLayoutEffect(() => {
+    if (spineMutationRef.current) {
+      spineMutationRef.current = false
+      return
+    }
+    syncSpineFromStore()
+  }, [syncSpineFromStore])
+
+  const refreshBilling = useCallback(async (opts?: AccountRefreshOpts) => {
+    const force = opts?.force === true
+    const now = Date.now()
+    if (!force && now < billingRateLimitedUntilRef.current) return
+    if (!force && billingFetchRef.current) return billingFetchRef.current
+    if (!force && now - billingLastOkAtRef.current < BILLING_REFRESH_MIN_MS) return
+
+    const run = (async () => {
+      if (mode === StoreMode.Demo) {
+        setBillingAccount(DEMO_BILLING)
+        billingLastOkAtRef.current = Date.now()
+        return
+      }
+      try {
+        const res = await fetch(API_ROUTES.billing, { credentials: FETCH_CREDENTIALS })
+        if (res.status === 429) {
+          const retryAfterSec = Number(res.headers.get("Retry-After"))
+          const body = await readApiErrorBody(res)
+          logApiFailure(API_ROUTES.billing, res, body, "GET")
+          billingRateLimitedUntilRef.current =
+            Date.now() +
+            (Number.isFinite(retryAfterSec) && retryAfterSec > 0 ? retryAfterSec * 1000 : 60_000)
+          return
+        }
+        if (res.status === 503) return
+        if (!res.ok) {
+          const body = await readApiErrorBody(res)
+          logApiFailure(API_ROUTES.billing, res, body, "GET")
+          return
+        }
+        const data = (await res.json()) as BillingAccountView
+        const next = {
+          ...data,
+          creditHistory: data.creditHistory ?? [],
+        }
+        setBillingAccount(next)
+        writeBillingSnapshot(next)
+        billingLastOkAtRef.current = Date.now()
+      } catch (err) {
+        console.error("refreshBilling failed:", err)
+      }
+    })()
+    billingFetchRef.current = run
+    try {
+      await run
+    } finally {
+      billingFetchRef.current = null
+    }
+  }, [mode])
+
+  const refreshEarnings = useCallback(async (opts?: AccountRefreshOpts) => {
+    const force = opts?.force === true
+    if (!force && earningsFetchRef.current) return earningsFetchRef.current
+    const run = (async () => {
+      if (mode === StoreMode.Demo) {
+        setEarningsAccount(DEMO_EARNINGS)
+        return
+      }
+      const data = await apiJson<EarningsAccountView>(API_ROUTES.earnings)
+      const next = {
+        balanceCents: data.balanceCents ?? 0,
+        totalEarnedCents: data.totalEarnedCents ?? 0,
+        totalWithdrawnCents: data.totalWithdrawnCents ?? 0,
+      }
+      setEarningsAccount(next)
+      writeEarningsSnapshot(next)
+    })()
+    earningsFetchRef.current = run
+    try {
+      await run
+    } finally {
+      earningsFetchRef.current = null
+    }
+  }, [mode])
+
+  const fetchState = useCallback(
+    async (projectId: string, onChunk?: (chunk: StateStreamChunk) => void, signal?: AbortSignal) => {
+      const params = new URLSearchParams()
+      if (projectId) params.set("projectId", projectId)
+      if (mode === StoreMode.Demo && typeof window !== "undefined") {
+        const qs = new URLSearchParams(window.location.search)
+        const buildId = qs.get("buildId")
+        if (buildId) params.set("buildId", buildId)
+        // AI : SECURITY — forward signed landing-build access token to /api/demo/state.
+        const accessToken = qs.get("accessToken")
+        if (accessToken) params.set("accessToken", accessToken)
+        const urlProjectId = qs.get("projectId")
+        if (urlProjectId && !params.get("projectId")) params.set("projectId", urlProjectId)
+      }
+      const q = params.toString() ? `?${params}` : ""
+      const route = mode === StoreMode.Demo ? API_ROUTES.demoState : API_ROUTES.state
+      return fetchStateStream(`${route}${q}`, onChunk, signal)
+    },
+    [mode],
+  )
+
+  const fetchProjectRuns = useCallback(
+    async (projectId: string) => {
+      if (mode === StoreMode.Demo) return [] as PipelineRun[]
+      const account = readAccountStateCache()
+      if (!accountKnowsProject(projectId, account)) return [] as PipelineRun[]
+      const url = `${API_ROUTES.runs}?projectId=${encodeURIComponent(projectId)}`
+      const res = await fetch(url, { credentials: FETCH_CREDENTIALS })
+      if (res.status === 404) {
+        const body = await readApiErrorBody(res)
+        logApiFailure(url, res, body, "GET")
+        // AI : a just-created project can 404 on another prod instance — don't evict it.
+        if (!createdProjectsRef.current.has(projectId)) {
+          evictStaleProject(projectId, setState, setActiveProjectId)
+        }
+        return [] as PipelineRun[]
+      }
+      if (!res.ok) {
+        const body = await readApiErrorBody(res)
+        logApiFailure(url, res, body, "GET")
+        throw new Error(formatApiError(`GET ${url}`, res, body))
+      }
+      const data = (await res.json()) as { runs: PipelineRun[] }
+      writeProjectRunsCache(projectId, data.runs)
+      return data.runs
+    },
+    [mode],
+  )
+
+  const refreshBillingRuns = useCallback(async () => {
+    if (mode === StoreMode.Demo) return [] as PipelineRun[]
+    const cached = readBillingRunsCache()
+    if (cached) {
+      setState((prev) => (prev ? { ...prev, allRuns: cached } : prev))
+      return cached
+    }
+    const data = await apiJson<{ runs: PipelineRun[] }>(API_ROUTES.runsAccount)
+    writeBillingRunsCache(data.runs)
+    setState((prev) => (prev ? { ...prev, allRuns: data.runs } : prev))
+    return data.runs
+  }, [mode])
+
+  const loadProjectState = useCallback(
+    async (projectId: string, onChunk?: (chunk: StateStreamChunk) => void, signal?: AbortSignal) => {
+      const account = readAccountStateCache()
+      const cachedRuns = projectId ? readProjectRunsCache(projectId) : null
+      if (account && !projectId) {
+        return { ...account, runs: [], allRuns: readBillingRunsCache() ?? [] }
+      }
+
+      if (account && projectId && accountKnowsProject(projectId, account)) {
+        // AI : paint from cache immediately, but always reconcile with server — sessionStorage can outlive deleted projects.
+        onChunk?.({
+          projects: account.projects,
+          docs: account.docs,
+          modelOptions: account.modelOptions,
+          runs: cachedRuns?.runs ?? [],
+        })
+        const data = await fetchState(projectId, onChunk, signal)
+        writeAccountStateCache({
+          projects: overlayOptimisticProjects(data.projects),
+          docs: data.docs,
+          modelOptions: data.modelOptions,
+        })
+        writeProjectRunsCache(projectId, data.runs)
+        return { ...data, allRuns: readBillingRunsCache() ?? [] }
+      }
+
+      const prefetched = projectId ? prefetchCache.current.get(projectId) : undefined
+      if (prefetched?.data) {
+        const accountData = account ?? readAccountStateCache()
+        if (accountData) {
+          return { ...accountData, runs: prefetched.data, allRuns: readBillingRunsCache() ?? [] }
+        }
+      }
+      if (prefetched?.promise) {
+        const runs = await prefetched.promise
+        const accountData = account ?? readAccountStateCache()
+        if (accountData) {
+          return { ...accountData, runs, allRuns: readBillingRunsCache() ?? [] }
+        }
+      }
+
+      const data = await fetchState(projectId, onChunk, signal)
+      writeAccountStateCache({
+        projects: overlayOptimisticProjects(data.projects),
+        docs: data.docs,
+        modelOptions: data.modelOptions,
+      })
+      if (projectId) writeProjectRunsCache(projectId, data.runs)
+      return data
+    },
+    [fetchState, fetchProjectRuns, overlayOptimisticProjects],
+  )
+
+  const prefetchProject = useCallback(
+    (projectId: string) => {
+      if (!projectId || projectId === activeProjectId) return
+      if (!accountKnowsProject(projectId, readAccountStateCache())) return
+      if (readProjectRunsCache(projectId)) return
+      if (prefetchCache.current.has(projectId)) return
+      const entry: PrefetchEntry = {
+        promise: fetchProjectRuns(projectId).then((runs) => {
+          entry.data = runs
+          return runs
+        }),
+      }
+      prefetchCache.current.set(projectId, entry)
+    },
+    [activeProjectId, fetchProjectRuns],
+  )
+
+  const applyState = useCallback(
+    (data: ServerState, projectId: string, fetchedAt = 0) => {
+      setLoadError(null)
+      const pendingSaveId = pendingSaveRef.current?.id
+      reseedCreatedFromLocal(
+        createdProjectsRef.current,
+        projectsRef.current,
+        data.projects,
+        deletedProjectIdsRef.current,
+      )
+      confirmCreatedProjects(data.projects)
+      const visibleProjects = overlayOptimisticProjects(data.projects)
+      setState((prev) => {
+        const mergedProjects = visibleProjects.map((p) => {
+          const local = prev?.projects.find((x) => x.id === p.id)
+          if (
+            local &&
+            shouldKeepLocalProject(local, {
+              mutatedAt: projectMutatedAtRef.current.get(p.id) ?? 0,
+              fetchedAt,
+              pendingSave: pendingSaveId === p.id,
+            })
+          ) {
+            const lastOpenedAt = Math.max(local.lastOpenedAt ?? 0, p.lastOpenedAt ?? 0)
+            return lastOpenedAt === local.lastOpenedAt ? local : { ...local, lastOpenedAt }
+          }
+          if (!local?.lastOpenedAt) return p
+          if (!p.lastOpenedAt || local.lastOpenedAt > p.lastOpenedAt) return { ...p, lastOpenedAt: local.lastOpenedAt }
+          return p
+        })
+        return {
+          ...data,
+          projects: mergedProjects,
+          docs: dedupeDocsNewestByName(data.docs),
+          allRuns: data.allRuns.length ? data.allRuns : (prev?.allRuns ?? []),
+        }
+      })
+      if (mode !== StoreMode.Demo) {
+        writeAccountStateCache({
+          projects: visibleProjects,
+          docs: dedupeDocsNewestByName(data.docs),
+          modelOptions: data.modelOptions,
+        })
+      }
+      // AI : workspace — only auto-open a project when sessionStorage says so (returning builders).
+      if (mode === StoreMode.Workspace) {
+        const known = !!projectId && visibleProjects.some((p) => p.id === projectId)
+        const resolved = known ? projectId : ""
+        const hadUnknownProject = !!projectId && !resolved
+        if (known) {
+          setActiveProjectId(resolved)
+          writeActiveProjectSession(resolved as ProjectId)
+        } else if (!hadUnknownProject) {
+          setActiveProjectId("")
+          clearActiveProjectSession()
+        }
+        // AI : stale session pointed at a deleted/missing project — builder shell would skeleton forever.
+        if (hadUnknownProject) {
+          setActiveProjectId("")
+          clearActiveProjectSession()
+          clearProjectStateCache(projectId)
+          pruneStaleProjectFromAccountCache(projectId)
+          if (pendingSaveRef.current?.id === projectId) {
+            if (saveTimer.current) clearTimeout(saveTimer.current)
+            saveTimer.current = null
+            pendingSaveRef.current = null
+          }
+          navigateToProjectPicker()
+        }
+      }
+      if (mode === StoreMode.Demo && projectId && visibleProjects.some((p) => p.id === projectId)) {
+        setActiveProjectId(projectId)
+      }
+      if (mode === StoreMode.Demo) {
+        const fromApi =
+          "activeProjectId" in data && typeof data.activeProjectId === "string"
+            ? (data.activeProjectId as string)
+            : null
+        const resolved =
+          (projectId && visibleProjects.some((p) => p.id === projectId) ? projectId : null) ??
+          (fromApi && visibleProjects.some((p) => p.id === fromApi) ? fromApi : null) ??
+          (visibleProjects.some((p) => p.id === DEMO_DEFAULT_PROJECT_ID)
+            ? DEMO_DEFAULT_PROJECT_ID
+            : visibleProjects[0]?.id)
+        if (resolved) setActiveProjectId(resolved)
+      }
+    },
+    [confirmCreatedProjects, mode, overlayOptimisticProjects],
+  )
+
+  const selectActiveProject = useCallback(
+    (id: string, opts?: { skipPersist?: boolean }) => {
+      if (id === activeProjectId) return
+      if (opts?.skipPersist) {
+        setState((prev) => {
+          if (!prev) return prev
+          const current = prev.projects.find((p) => p.id === id)
+          if (!current) return prev
+          const next = { ...current, lastOpenedAt: Date.now() }
+          return { ...prev, projects: prev.projects.map((p) => (p.id === id ? next : p)) }
+        })
+      } else {
+        spineSessionRef.current?.setActiveProjectId(id)
+        if (saveTimer.current) clearTimeout(saveTimer.current)
+        saveTimer.current = null
+        pendingSaveRef.current = null
+        const opened = spineSessionRef.current?.getSnapshot().projects.find((p) => p.id === id)
+        if (opened && !opened.teamReadOnly) {
+          void persistProject(id, serializeProjectPutBody(opened))
+        }
+      }
+      writeActiveProjectSession(id as ProjectId)
+      setActiveProjectId(id)
+    },
+    [activeProjectId, persistProject],
+  )
+
+  const openProject = useCallback(
+    (id: ProjectId) => {
+      selectActiveProject(id)
+      navigateToBuildWorkspace(id)
+    },
+    [selectActiveProject],
+  )
+
+  useEffect(() => {
+    registerStoreNavigationBridge({
+      enterBuilder: (id: ProjectId) => {
+        setPageOnlyStudio(false)
+        selectActiveProject(id)
+      },
+      leaveBuilder: () => {
+        setPageOnlyStudio(false)
+        clearActiveProjectSession()
+        setActiveProjectId("")
+      },
+      enterPicker: () => {
+        setPageOnlyStudio(false)
+        clearActiveProjectSession()
+        setActiveProjectId("")
+      },
+      enterWebsiteStudio: () => {
+        clearActiveProjectSession()
+        setActiveProjectId("")
+        setPageOnlyStudio(true)
+      },
+    })
+    return () => registerStoreNavigationBridge(null)
+  }, [selectActiveProject])
+
+  useLayoutEffect(() => {
+    if (mode === StoreMode.Demo) return
+    const snapshot = readStateSnapshot()
+    if (snapshot) {
+      setState(snapshot)
+      writeAccountStateCache({
+        projects: snapshot.projects,
+        docs: snapshot.docs,
+        modelOptions: snapshot.modelOptions,
+      })
+      const sessionProjectId = readActiveProjectSession()
+      if (sessionProjectId && snapshot.runs.length) {
+        writeProjectRunsCache(sessionProjectId, snapshot.runs)
+      }
+      setStateSyncing(false)
+      hydratedRef.current = true
+    }
+    const billing = readBillingSnapshot()
+    if (billing) setBillingAccount(billing)
+    const earnings = readEarningsSnapshot()
+    if (earnings) setEarningsAccount(earnings)
+  }, [mode])
+
+  useLayoutEffect(() => {
+    if (mode !== StoreMode.Demo) return
+    setDemoMode(true)
+    return () => setDemoMode(false)
+  }, [mode])
+
+  useEffect(() => {
+    if (mode === StoreMode.Picker) clearActiveProjectSession()
+  }, [mode])
+
+  const refresh = useCallback(async (projectId = activeProjectId) => {
+    refreshBilling().catch(console.error)
+    refreshEarnings().catch(console.error)
+    const fetchedAt = Date.now()
+    applyState(await fetchState(projectId), projectId, fetchedAt)
+  }, [activeProjectId, applyState, fetchState, refreshBilling, refreshEarnings])
+
+  // AI : Realtime on shared-pointer tables — pull /api/state so warm-cache lag cannot 404 runs.
+  useTeamRealtime({
+    enabled: mode === StoreMode.Workspace || mode === StoreMode.Picker,
+    onProjectsChanged: () => {
+      if (!hydratedRef.current) return
+      refresh().catch(console.error)
+    },
+    onRunsChanged: () => {
+      if (!hydratedRef.current || !activeProjectId) return
+      void fetchProjectRuns(activeProjectId)
+        .then((runs) => {
+          setState((prev) => (prev ? { ...prev, runs } : prev))
+        })
+        .catch(console.error)
+    },
+    onMembershipChanged: () => {
+      if (!hydratedRef.current) return
+      refresh().catch(console.error)
+      warmSettingsTeams().catch(() => {})
+    },
+  })
+
+  useEffect(() => {
+    stateLoadGenRef.current += 1
+    const loadGen = stateLoadGenRef.current
+    const scopedProjectId = mode === StoreMode.Picker ? "" : activeProjectId
+    const isInitialHydrate = !hydratedRef.current
+
+    // AI : project picker already has the list — skip another /api/state round-trip.
+    if (mode === StoreMode.Workspace && scopedProjectId === "" && hydratedRef.current && state) {
+      setProjectLoading(false)
+      setStateSyncing(false)
+      return
+    }
+
+    const cached = mode === StoreMode.Demo ? null : readProjectStateCache(scopedProjectId)
+    const instant = !!cached
+
+    if (instant) {
+      applyState(cached, scopedProjectId)
+      setProjectLoading(false)
+      // AI : keep syncing until network /api/state finishes — cached doc ids often 404 on warm-cache purge.
+      setStateSyncing(true)
+      if (isInitialHydrate) hydratedRef.current = true
+    } else {
+      if (mode === StoreMode.Workspace && hydratedRef.current && scopedProjectId) setProjectLoading(true)
+      setStateSyncing(true)
+    }
+
+    if (isInitialHydrate && !instant) {
+      refreshBilling().catch(console.error)
+      refreshEarnings().catch(console.error)
+      warmSettingsTeams().catch(() => {})
+      warmSettingsAccount().catch(() => {})
+      if (mode !== StoreMode.Demo) warmMarketplaceListings().catch(console.error)
+    }
+
+    let alive = true
+    const fetchedAt = Date.now()
+
+    void loadProjectState(
+      scopedProjectId,
+      (chunk) => {
+        if (!alive || loadGen !== stateLoadGenRef.current) return
+        setState((prev) => {
+          if (chunk.projects && prev) {
+            reseedCreatedFromLocal(
+              createdProjectsRef.current,
+              prev.projects,
+              chunk.projects,
+              deletedProjectIdsRef.current,
+            )
+          }
+          return {
+            projects: chunk.projects
+              ? overlayOptimisticProjects(chunk.projects)
+              : (prev?.projects ?? []),
+            docs: chunk.docs ? dedupeDocsNewestByName(chunk.docs) : (prev?.docs ?? []),
+            runs: chunk.runs ?? prev?.runs ?? [],
+            allRuns: prev?.allRuns ?? [],
+            modelOptions: chunk.modelOptions ?? prev?.modelOptions ?? [],
+          }
+        })
+        if (chunk.projects) setStateSyncing(false)
+        if (chunk.runs) setProjectLoading(false)
+      },
+    )
+      .then((data) => {
+        if (!alive || loadGen !== stateLoadGenRef.current) return
+        applyState(data, scopedProjectId, fetchedAt)
+        if (!prefetchedAllProjectsRef.current && data.projects.length) {
+          prefetchedAllProjectsRef.current = true
+          const otherIds = data.projects.map((p) => p.id).filter((id) => id !== scopedProjectId)
+          queueBackgroundProjectPrefetches(otherIds, fetchProjectRuns)
+        }
+        refreshBillingRuns().catch(console.error)
+      })
+      .catch((err) => {
+        if (alive) setLoadError(err instanceof Error ? err.message : "Failed to load store")
+      })
+      .finally(() => {
+        if (!alive) return
+        setProjectLoading(false)
+        setStateSyncing(false)
+        if (loadGen === stateLoadGenRef.current) hydratedRef.current = true
+      })
+
+    return () => {
+      alive = false
+    }
+    // AI : refetch on project switch so runs/docs re-scope; cache makes switches instant.
+  }, [activeProjectId, mode]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // AI : apply cached project runs before paint when switching from the dropdown.
+  useLayoutEffect(() => {
+    if (mode !== "workspace" || !activeProjectId) return
+    const cached = readProjectStateCache(activeProjectId)
+    if (cached) {
+      applyState(cached, activeProjectId)
+      setProjectLoading(false)
+      return
+    }
+    const account = readAccountStateCache()
+    const runs = readProjectRunsCache(activeProjectId)
+    if (!account || !runs) return
+    applyState(
+      { ...account, runs: runs.runs, allRuns: readBillingRunsCache() ?? [] },
+      activeProjectId,
+    )
+    setProjectLoading(false)
+  }, [activeProjectId, mode, applyState])
+
+  useEffect(() => {
+    if (mode === StoreMode.Demo) return
+    if (state) writeStateSnapshot(state)
+  }, [state, mode])
+
+  useEffect(() => {
+    return () => {
+      if (saveTimer.current) clearTimeout(saveTimer.current)
+    }
+  }, [])
+
+  // AI : Stripe Checkout success redirect — confirm session once, then strip query params.
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search)
+    const sessionId = params.get("session_id")
+    const canceled = params.has("canceled")
+    if (!sessionId && !canceled) return
+
+    const clean = () => window.history.replaceState({}, "", window.location.pathname)
+    if (canceled) {
+      clean()
+      return
+    }
+    apiJson<{ creditedCents: number }>(API_ROUTES.billingConfirm, {
+      method: "POST",
+      headers: JSON_HEADERS,
+      body: JSON.stringify({ sessionId }),
+    })
+      .then(({ creditedCents }) => refreshBilling({ force: true }).then(() => creditedCents))
+      .catch(console.error)
+      .finally(clean)
+  }, [refreshBilling])
+
+  const projects = state?.projects ?? []
+  projectsRef.current = projects
+  const migratedProjects = useMemo(
+    () => projects.map((p) => migrateProjectModules(p)),
+    [projects],
+  )
+  const project = useMemo(
+    () =>
+      studioProjectForWebsite({
+        activeProject: migratedProjects.find((p) => p.id === activeProjectId),
+        pageOnlyStudio,
+        siteName: (() => {
+          const site = pageOnlyStudio ? readEditingWebsiteSession() : null
+          return site ? websiteDisplayName(site) : UNNAMED_WEBSITE_NAME
+        })(),
+      }),
+    [migratedProjects, activeProjectId, pageOnlyStudio],
+  )
+
+  // AI : activeProjectId can outlive a deleted project — leave builder shell before WarmShellSlot skeletons stick.
+  useEffect(() => {
+    if (mode !== StoreMode.Workspace || !state || projectLoading || stateSyncing) return
+    if (pageOnlyStudio) return
+    if (!activeProjectId || project) return
+    if (createdProjectsRef.current.has(activeProjectId)) return
+    if (peekPendingPickerList()) return
+    setActiveProjectId("")
+    clearActiveProjectSession()
+    navigateToProjectPicker()
+  }, [mode, state, projectLoading, stateSyncing, activeProjectId, project, pageOnlyStudio])
+
+  // AI : project patches go through SpineSession — persist port owns debounced PUT (parity.md §8.5).
+  const patchProject = useCallback((patch: Partial<Project>) => {
+    spineSessionRef.current?.patchProject(patch)
+  }, [])
+
+  // AI : cancel the debounce and persist immediately — call before startRun / Approve to avoid stale server state.
+  const flushPendingSave = useCallback(async (): Promise<boolean> => {
+    const pending = pendingSaveRef.current
+    if (pending) {
+      if (saveTimer.current) clearTimeout(saveTimer.current)
+      saveTimer.current = null
+      pendingSaveRef.current = null
+      const ok = await persistProject(pending.id, pending.body)
+      if (!ok) pendingSaveRef.current = pending
+      return ok
+    }
+    const id = activeProjectId
+    const current = state?.projects.find((p) => p.id === id)
+    if (!current || mode === StoreMode.Demo) return true
+    if (current.teamReadOnly) return true
+    return persistProject(id, serializeProjectPutBody(current))
+  }, [activeProjectId, mode, persistProject, state?.projects])
+
+  // AI : inference/save hit unknown project — same eviction path as runs prefetch 404.
+  const reportMissingProject = useCallback(
+    (projectId: string) => {
+      if (pendingSaveRef.current?.id === projectId) {
+        if (saveTimer.current) clearTimeout(saveTimer.current)
+        saveTimer.current = null
+        pendingSaveRef.current = null
+      }
+      evictStaleProject(projectId, setState, setActiveProjectId, clearSaveError)
+    },
+    [clearSaveError],
+  )
+
+  const ingestCreatedProject = useCallback((fresh: Project) => {
+    const stamped = { ...fresh, lastOpenedAt: Date.now() }
+    createdProjectsRef.current.set(fresh.id, stamped)
+    deletedProjectIdsRef.current.delete(fresh.id)
+    projectMutatedAtRef.current.set(fresh.id, Date.now())
+    seedProjectInStateSnapshot(stamped)
+    upsertProjectInAccountCache(stamped)
+    writeProjectRunsCache(fresh.id, [])
+    setState((prev) => {
+      if (!prev) return prev
+      const without = prev.projects.filter((p) => p.id !== fresh.id)
+      return { ...prev, projects: overlayOptimisticProjects([stamped, ...without]) }
+    })
+    return stamped
+  }, [overlayOptimisticProjects])
+
+  const postNewProject = useCallback((
+    body: { templateId?: string; cloneFrom?: string },
+    opts?: ProjectCreateOpts,
+  ) => {
+    const open = opts?.open !== false
+    return apiJson<unknown>(API_ROUTES.projects, {
+      method: "POST",
+      headers: JSON_HEADERS,
+      body: JSON.stringify(body),
+    })
+      .then(async (raw) => {
+        const created = parseCreatedProjectResponse(raw)
+        ingestCreatedProject(created.project)
+        opts?.onHostedSites?.(created.sites, created.siteError)
+        if (!open) return created.project
+        selectActiveProject(created.project.id, { skipPersist: true })
+        navigateToBuildWorkspace(created.project.id as ProjectId)
+        // AI : clone may ingest/rename bundled seed docs server-side — reload docs + backfilled seedDocNames.
+        await refresh(created.project.id)
+        return created.project
+      })
+      .catch((err) => {
+        setSaveError(err instanceof Error ? err.message : "Failed to create project")
+        throw err
+      })
+  }, [ingestCreatedProject, refresh, selectActiveProject])
+
+  const addProject = useCallback(
+    (opts?: ProjectCreateOpts) => postNewProject({}, opts),
+    [postNewProject],
+  )
+
+  const cloneFromTemplate = useCallback(
+    (templateId: string, opts?: ProjectCreateOpts) => postNewProject({ templateId }, opts),
+    [postNewProject],
+  )
+
+  const cloneProjectById = useCallback(
+    (cloneFrom: string, opts?: ProjectCreateOpts) => postNewProject({ cloneFrom }, opts),
+    [postNewProject],
+  )
+
+  const resyncExamples = useCallback(() => {
+    return apiJson<{ updated: number }>(API_ROUTES.projectsResyncExamples, { method: "POST" })
+      .then(async ({ updated }) => {
+        await refresh()
+        return updated
+      })
+      .catch((err) => {
+        setSaveError(err instanceof Error ? err.message : "Failed to refresh examples")
+        throw err
+      })
+  }, [refresh])
+
+  const renameProject = useCallback(
+    (id: string, name: string) => {
+      spineSessionRef.current?.renameProject(id, name)
+      if (saveTimer.current) clearTimeout(saveTimer.current)
+      saveTimer.current = null
+      pendingSaveRef.current = null
+      const next = spineSessionRef.current?.getSnapshot().projects.find((p) => p.id === id)
+      if (next) void persistProject(id, serializeProjectPutBody(next))
+    },
+    [persistProject],
+  )
+
+  const deleteProject = useCallback(
+    (id: string, opts?: DeleteProjectOpts): Promise<void> => {
+      // AI : drop stale prefetches and debounced saves so a project switch cannot resurrect this row.
+      const pendingCreated = createdProjectsRef.current.get(id)
+      deletedProjectIdsRef.current.add(id)
+      createdProjectsRef.current.delete(id)
+      pruneStaleProjectFromAccountCache(id)
+      clearProjectStateCache(id)
+      prefetchCache.current.delete(id)
+      if (pendingSaveRef.current?.id === id) {
+        if (saveTimer.current) clearTimeout(saveTimer.current)
+        saveTimer.current = null
+        pendingSaveRef.current = null
+      }
+
+      let removed: Project | undefined
+      removed = state?.projects.find((p) => p.id === id)
+      const session = spineSessionRef.current
+      if (session && state) {
+        session.hydrateSnapshot(
+          buildGuiSessionSnapshot(
+            {
+              projects: state.projects,
+              activeProjectId,
+              model,
+              docs: state.docs,
+              runs: state.runs,
+              inferenceInputDocIds: inferenceInputsByProject[activeProjectId] ?? {},
+              pendingCreates: [...createdProjectsRef.current.values()],
+              deletedProjectIds: [...deletedProjectIdsRef.current],
+            },
+            session.getSnapshot(),
+          ),
+        )
+        session.deleteProject(id)
+      } else {
+        setState((prev) => {
+          if (!prev) return prev
+          removed = prev.projects.find((p) => p.id === id)
+          const nextSnap = deleteProjectSnapshot(
+            {
+              ...emptySessionSnapshot(),
+              projects: prev.projects,
+              activeProjectId,
+              deletedProjectIds: [...deletedProjectIdsRef.current],
+            },
+            id,
+          )
+          return { ...prev, projects: overlayOptimisticProjects(nextSnap.projects) }
+        })
+      }
+      // AI : only leave the builder if this delete removed the project on screen — not a later in-flight DELETE.
+      if (activeProjectId === id) {
+        setActiveProjectId("")
+        clearActiveProjectSession()
+        navigateToProjectPicker()
+      }
+
+      if (mode === StoreMode.Demo) return Promise.resolve()
+
+      // AI : resolve immediately so the picker can clone again — prod DELETE latency used to apply the
+      // AI : removal later and wipe clones that landed in between.
+      void apiJson<{ ok: true }>(API_ROUTES.project(id), {
+        method: "DELETE",
+        headers: JSON_HEADERS,
+        body: JSON.stringify(opts?.websiteAction ? { websiteAction: opts.websiteAction } : {}),
+      }).catch((err) => {
+        deletedProjectIdsRef.current.delete(id)
+        if (pendingCreated) createdProjectsRef.current.set(id, pendingCreated)
+        const restored = pendingCreated ?? removed
+        if (restored) {
+          setState((prev) => {
+            if (!prev) return prev
+            if (prev.projects.some((p) => p.id === id)) return prev
+            return { ...prev, projects: overlayOptimisticProjects([restored, ...prev.projects]) }
+          })
+        }
+        setSaveError(err instanceof Error ? err.message : "Failed to delete project")
+      })
+      return Promise.resolve()
+    },
+    [activeProjectId, mode, overlayOptimisticProjects, state, model, inferenceInputsByProject],
+  )
+
+  const addDoc = useCallback(async (file: File, label: DocLabel, projectId?: string) => {
+    const blocked = confidentialUploadWarning(file.name)
+    if (blocked) throw new Error(blocked)
+    const pid = projectId ?? activeProjectId
+    const target = state?.projects.find((p) => p.id === pid)
+    if (target?.teamReadOnly) throw new Error("This team project is read-only for your role.")
+
+    const form = new FormData()
+    form.append("file", file)
+    form.append("label", label)
+    if (projectId) form.append("projectId", projectId)
+    const doc = await apiJson<DocRef>(API_ROUTES.docs, { method: "POST", body: form })
+    invalidateDocText(doc.id)
+
+    setState((prev) => {
+      if (!prev) return prev
+      const hasDoc = prev.docs.some((d) => d.id === doc.id)
+      const nextDocs = hasDoc ? prev.docs : [doc, ...prev.docs]
+      if (!pid) return hasDoc ? prev : { ...prev, docs: nextDocs }
+      const names = prev.projects.find((p) => p.id === pid)?.seedDocNames ?? []
+      if (names.includes(doc.name)) return hasDoc ? prev : { ...prev, docs: nextDocs }
+      const nextProjects = prev.projects.map((p) =>
+        p.id === pid ? { ...p, seedDocNames: [...(p.seedDocNames ?? []), doc.name] } : p,
+      )
+      return { ...prev, docs: nextDocs, projects: nextProjects }
+    })
+
+    if (pid) {
+      try {
+        const data = await fetchDocText(doc.id)
+        const content = docTextContent(data)
+        setState((prev) => {
+          if (!prev) return prev
+          const { nextProjects, changed } = computeDocStructureSync(prev, pid, doc, content)
+          if (!changed) return prev
+          if (saveTimer.current) clearTimeout(saveTimer.current)
+          const updated = nextProjects.find((x) => x.id === pid)
+          if (!updated) return prev
+          const body = serializeProjectPutBody(updated)
+          saveTimer.current = setTimeout(() => { void persistProject(pid, body) }, 500)
+          return { ...prev, projects: nextProjects }
+        })
+      } catch (err) {
+        console.error("structure sync after upload failed", err)
+      }
+    }
+
+    return doc
+  }, [activeProjectId, persistProject, state?.projects])
+
+  // AI : shared-pointer uploads stay on the owner's project — read-only members cannot add docs.
+  const addDocContent = useCallback(
+    async (
+      name: string,
+      type: InputType,
+      content: string,
+      label: DocLabel,
+      projectId?: string,
+      replaceDocId?: DocId,
+    ) => {
+      const blocked = confidentialUploadWarning(name)
+      if (blocked) throw new Error(blocked)
+      const pidGate = projectId ?? activeProjectId
+      const target = state?.projects.find((p) => p.id === pidGate)
+      if (target?.teamReadOnly) throw new Error("This team project is read-only for your role.")
+
+      const doc = await apiJson<DocRef>(API_ROUTES.docsContent, {
+        method: "POST",
+        headers: JSON_HEADERS,
+        body: JSON.stringify({ name, type, content, label, projectId: projectId ?? activeProjectId, replaceDocId }),
+      })
+      if (replaceDocId) invalidateDocText(replaceDocId)
+      invalidateDocText(doc.id)
+      const pid = projectId ?? activeProjectId
+
+      setState((prev) => {
+        if (!prev) return prev
+        // AI : one logical file per name — drop superseded content-hash rows after an in-place edit.
+        const withoutReplaced = prev.docs.filter(
+          (d) => d.id !== replaceDocId && !(d.name === doc.name && d.id !== doc.id),
+        )
+        const hasDoc = withoutReplaced.some((d) => d.id === doc.id)
+        const nextDocs = hasDoc ? withoutReplaced : [doc, ...withoutReplaced]
+        if (!pid) return { ...prev, docs: nextDocs }
+        const names = prev.projects.find((p) => p.id === pid)?.seedDocNames ?? []
+        if (names.includes(doc.name)) return { ...prev, docs: nextDocs }
+        const nextProjects = prev.projects.map((p) =>
+          p.id === pid ? { ...p, seedDocNames: [...(p.seedDocNames ?? []), doc.name] } : p,
+        )
+        return { ...prev, docs: nextDocs, projects: nextProjects }
+      })
+
+      if (pid) {
+        try {
+          setState((prev) => {
+            if (!prev) return prev
+            const { nextProjects, changed } = computeDocStructureSync(prev, pid, doc, content)
+            if (!changed) return prev
+            if (saveTimer.current) clearTimeout(saveTimer.current)
+            const updated = nextProjects.find((x) => x.id === pid)
+            if (!updated) return prev
+            const body = serializeProjectPutBody(updated)
+            saveTimer.current = setTimeout(() => { void persistProject(pid, body) }, 500)
+            return { ...prev, projects: nextProjects }
+          })
+        } catch (err) {
+          console.error("structure sync after content upload failed", err)
+        }
+      }
+
+      return doc
+    },
+    [activeProjectId, persistProject, state?.projects],
+  )
+
+  const removeDoc = useCallback(async (docId: DocId, projectId?: string) => {
+    const pid = projectId ?? activeProjectId
+    const target = state?.projects.find((p) => p.id === pid)
+    if (target?.teamReadOnly) throw new Error("This team project is read-only for your role.")
+    const q = pid ? `?projectId=${encodeURIComponent(pid)}` : ""
+    await apiJson<{ ok: true }>(`${API_ROUTES.doc(docId)}${q}`, { method: "DELETE" })
+    invalidateDocText(docId)
+    setState((prev) => {
+      if (!prev) return prev
+      const doc = prev.docs.find((d) => d.id === docId)
+      if (!doc) return prev
+      const p = pid ? prev.projects.find((x) => x.id === pid) : undefined
+      const names = p?.seedDocNames ?? []
+      const unlinked = names.includes(doc.name)
+      const nextProjects =
+        unlinked && p
+          ? prev.projects.map((x) =>
+              x.id === pid ? { ...p, seedDocNames: names.filter((n) => n !== doc.name) } : x,
+            )
+          : prev.projects
+      const stillLinked = prev.projects.some(
+        (x) => x.id !== pid && (x.seedDocNames?.includes(doc.name) ?? false),
+      )
+      if (stillLinked) return { ...prev, projects: nextProjects }
+      return {
+        ...prev,
+        docs: prev.docs.filter((d) => d.id !== docId),
+        projects: nextProjects,
+      }
+    })
+  }, [activeProjectId, state?.projects])
+
+  const setDocProjects = useCallback(async (docId: DocId, projectIds: ProjectId[]) => {
+    const { projectIds: saved } = await apiJson<{ projectIds: ProjectId[] }>(API_ROUTES.doc(docId), {
+      method: "PATCH",
+      headers: JSON_HEADERS,
+      body: JSON.stringify({ projectIds }),
+    })
+    setState((prev) => {
+      if (!prev) return prev
+      const doc = prev.docs.find((d) => d.id === docId)
+      if (!doc) return prev
+      const nextProjects = projectsWithDocAvailability(prev.projects, doc.name, saved)
+      const stillLinked = nextProjects.some((p) => p.seedDocNames?.includes(doc.name))
+      return {
+        ...prev,
+        projects: nextProjects,
+        docs: stillLinked ? prev.docs : prev.docs.filter((d) => d.id !== docId),
+      }
+    })
+  }, [])
+
+  // AI : mirror server runs locally — upsert so Testing can attach test verdict on an existing row.
+  const hydrateRunDetail = useCallback(async (runId: PipelineRun["id"]) => {
+    if (mode === StoreMode.Demo) return
+    const { run } = await apiJson<{ run: PipelineRun }>(API_ROUTES.run(runId))
+    setState((prev) => {
+      if (!prev) return prev
+      const patch = (r: PipelineRun) => (r.id === runId ? run : r)
+      return {
+        ...prev,
+        runs: prev.runs.some((r) => r.id === runId) ? prev.runs.map(patch) : prev.runs,
+        allRuns: prev.allRuns.some((r) => r.id === runId) ? prev.allRuns.map(patch) : prev.allRuns,
+      }
+    })
+  }, [mode])
+
+  const addRun = useCallback((r: PipelineRun) => {
+    setState((prev) => {
+      if (!prev) return prev
+      const i = prev.runs.findIndex((x) => x.id === r.id)
+      const runs =
+        i >= 0 ? prev.runs.map((x, idx) => (idx === i ? { ...x, ...r } : x)) : [r, ...prev.runs]
+      const allRuns = prev.allRuns.some((x) => x.id === r.id)
+        ? prev.allRuns.map((x) => (x.id === r.id ? { ...x, ...r } : x))
+        : [r, ...prev.allRuns]
+      return { ...prev, runs, allRuns }
+    })
+  }, [])
+
+  const setInferenceInputDocIds = useCallback(
+    (projectId: string, docs: Partial<Record<ModuleId, DocId | DocId[]>>) => {
+      setInferenceInputsByProject((prev) => ({ ...prev, [projectId]: docs }))
+    },
+    [],
+  )
+
+  const updateRunNotes = useCallback(async (runId: PipelineRun["id"], notes: string | undefined) => {
+    await apiJson(API_ROUTES.run(runId), {
+      method: "PATCH",
+      headers: JSON_HEADERS,
+      body: JSON.stringify({ notes: notes ?? null }),
+    })
+    setState((prev) => {
+      if (!prev) return prev
+      const i = prev.runs.findIndex((r) => r.id === runId)
+      if (i < 0) return prev
+      const next = notes?.trim() ? notes.trim() : undefined
+      if (prev.runs[i].notes === next) return prev
+      const runs = [...prev.runs]
+      runs[i] = { ...runs[i], notes: next }
+      return { ...prev, runs }
+    })
+  }, [])
+
+  const updateRunTest = useCallback(async (runId: PipelineRun["id"], test: RunTestReport) => {
+    setState((prev) => {
+      if (!prev) return prev
+      const patch = (r: PipelineRun) => (r.id === runId ? { ...r, test } : r)
+      const i = prev.runs.findIndex((r) => r.id === runId)
+      if (i < 0) return prev
+      return {
+        ...prev,
+        runs: prev.runs.map(patch),
+        allRuns: prev.allRuns.map(patch),
+      }
+    })
+    await apiJson(API_ROUTES.run(runId), {
+      method: "PATCH",
+      headers: JSON_HEADERS,
+      body: JSON.stringify({ test }),
+    })
+  }, [])
+
+  const runs = state?.runs ?? []
+  const billingRuns = state?.allRuns ?? state?.runs ?? []
+  const modules = useMemo(
+    () => (project ? migrateProjectModules(project).modules : []),
+    [project],
+  )
+
+  const setModels = useCallback(
+    (m: StructureModel[] | ((prev: StructureModel[]) => StructureModel[])) => {
+      spineSessionRef.current?.setModels(m)
+    },
+    [],
+  )
+
+  const setTypeAliases = useCallback(
+    (t: TypeAlias[] | ((prev: TypeAlias[]) => TypeAlias[])) => {
+      spineSessionRef.current?.setTypeAliases(t)
+    },
+    [],
+  )
+
+  const setModules = useCallback((m: PipelineModule[]) => {
+    spineSessionRef.current?.setModules(m)
+  }, [])
+
+  const setActiveFunction = useCallback((id: import("@/lib/types").pipeline_function_id) => {
+    spineSessionRef.current?.setActiveFunction(id)
+  }, [])
+
+  const addPipelineFunction = useCallback((name?: string) => {
+    spineSessionRef.current?.addPipelineFunction(name)
+  }, [])
+
+  const renamePipelineFunction = useCallback(
+    (id: import("@/lib/types").pipeline_function_id, name: string) => {
+      spineSessionRef.current?.renamePipelineFunction(id, name)
+    },
+    [],
+  )
+
+  const deletePipelineFunction = useCallback((id: import("@/lib/types").pipeline_function_id) => {
+    spineSessionRef.current?.deletePipelineFunction(id)
+  }, [])
+
+  const applyProjectChanges = useCallback(
+    (changes: {
+      models?: StructureModel[]
+      modules?: PipelineModule[]
+      typeAliases?: TypeAlias[]
+    }) => {
+      spineSessionRef.current?.applyProjectChanges(changes)
+    },
+    [],
+  )
+
+  const setStrategies = useCallback((s: Strategy[]) => {
+    spineSessionRef.current?.setStrategies(s)
+  }, [])
+
+  const setDocumentation = useCallback((text: string) => {
+    spineSessionRef.current?.setDocumentation(text)
+  }, [])
+
+  const boundSetModel = useCallback((m: string) => {
+    setModel(m)
+    spineSessionRef.current?.setModel(m)
+  }, [])
+
+  const boundSetInferenceInputDocIds = useCallback(
+    (docs: Partial<Record<ModuleId, DocId | DocId[]>>) => {
+      if (!project) return
+      setInferenceInputDocIds(project.id, docs)
+      spineSessionRef.current?.setInferenceInputDocIds(docs)
+    },
+    [project, setInferenceInputDocIds],
+  )
+
+  const value = useMemo<StoreState | null>(() => {
+    if (!state || !project) return null
+    return {
+      projects,
+      activeProjectId: project.id,
+      setActiveProjectId: selectActiveProject,
+      addProject,
+      cloneFromTemplate,
+      cloneProject: cloneProjectById,
+      resyncExamples,
+      renameProject,
+      deleteProject,
+      project,
+      models: withSharedModels(project.models),
+      setModels,
+      typeAliases: withBuiltinTypeAliases(project.typeAliases ?? []),
+      setTypeAliases,
+      modules,
+      setModules,
+      setActiveFunction,
+      addPipelineFunction,
+      renamePipelineFunction,
+      deletePipelineFunction,
+      applyProjectChanges,
+      strategies: project.strategies,
+      setStrategies,
+      documentation: project.documentation ?? "",
+      setDocumentation,
+      model,
+      setModel: boundSetModel,
+      modelOptions: state.modelOptions,
+      docs: state.docs,
+      addDoc,
+      addDocContent,
+      removeDoc,
+      setDocProjects,
+      runs,
+      addRun,
+      updateRunNotes,
+      updateRunTest,
+      inferenceInputDocIds: inferenceInputsByProject[project.id] ?? {},
+      setInferenceInputDocIds: boundSetInferenceInputDocIds,
+      billingRuns,
+      refreshBillingRuns,
+      hydrateRunDetail,
+      billingAccount,
+      refreshBilling,
+      earningsAccount,
+      refreshEarnings,
+      refresh,
+      prefetchProject,
+      projectLoading,
+      stateSyncing,
+      saveError,
+      clearSaveError,
+      flushPendingSave,
+      reportMissingProject,
+      patchProject,
+    }
+  }, [
+    state,
+    projects,
+    project,
+    modules,
+    setModels,
+    setTypeAliases,
+    setModules,
+    setActiveFunction,
+    addPipelineFunction,
+    renamePipelineFunction,
+    deletePipelineFunction,
+    applyProjectChanges,
+    setStrategies,
+    setDocumentation,
+    boundSetModel,
+    addDoc,
+    addDocContent,
+    removeDoc,
+    setDocProjects,
+    runs,
+    addRun,
+    updateRunNotes,
+    updateRunTest,
+    inferenceInputsByProject,
+    boundSetInferenceInputDocIds,
+    billingRuns,
+    refreshBillingRuns,
+    hydrateRunDetail,
+    billingAccount,
+    refreshBilling,
+    earningsAccount,
+    refreshEarnings,
+    refresh,
+    prefetchProject,
+    projectLoading,
+    stateSyncing,
+    saveError,
+    clearSaveError,
+    flushPendingSave,
+    reportMissingProject,
+    patchProject,
+    addProject,
+    cloneFromTemplate,
+    cloneProjectById,
+    resyncExamples,
+    renameProject,
+    deleteProject,
+    selectActiveProject,
+  ])
+
+  const consumerValue = useMemo<ConsumerStoreState | null>(() => {
+    if (!state) return null
+    return {
+      projects: migratedProjects,
+      billingRuns,
+      refreshBillingRuns,
+      billingAccount,
+      refreshBilling,
+      earningsAccount,
+      refreshEarnings,
+      model,
+      setModel,
+      modelOptions: state.modelOptions,
+      openProject,
+      addProject,
+      cloneFromTemplate,
+      saveError,
+      clearSaveError,
+      stateSyncing,
+    }
+  }, [
+    state,
+    migratedProjects,
+    billingRuns,
+    refreshBillingRuns,
+    billingAccount,
+    refreshBilling,
+    earningsAccount,
+    refreshEarnings,
+    model,
+    setModel,
+    addProject,
+    cloneFromTemplate,
+    openProject,
+    saveError,
+    clearSaveError,
+    stateSyncing,
+  ])
+
+  const pickerValue = useMemo<ProjectPickerStoreState | null>(() => {
+    if (!state) return null
+    return {
+      projects: migratedProjects,
+      addProject,
+      cloneFromTemplate,
+      cloneProject: cloneProjectById,
+      ingestCreatedProject,
+      resyncExamples,
+      renameProject,
+      deleteProject,
+      openProject,
+      prefetchProject,
+      saveError,
+      clearSaveError,
+      syncing: stateSyncing,
+    }
+  }, [
+    state,
+    migratedProjects,
+    addProject,
+    cloneFromTemplate,
+    cloneProjectById,
+    ingestCreatedProject,
+    resyncExamples,
+    renameProject,
+    deleteProject,
+    openProject,
+    prefetchProject,
+    saveError,
+    clearSaveError,
+    stateSyncing,
+  ])
+
+  if (loadError) {
+    return (
+      <div className="flex h-dvh flex-col items-center justify-center gap-2 bg-background px-6 text-center">
+        <p className="font-mono text-xs text-destructive">{loadError}</p>
+        <button
+          type="button"
+          onClick={() => {
+            setLoadError(null)
+            refresh().catch((err) => setLoadError(err instanceof Error ? err.message : "Failed to load store"))
+          }}
+          className="font-mono text-[11px] text-muted-foreground underline"
+        >
+          retry
+        </button>
+      </div>
+    )
+  }
+
+  const saveErrorBanner = saveError ? (
+    <div
+      role="alert"
+      className="fixed inset-x-0 top-0 z-50 flex items-center justify-between gap-3 border-b border-destructive/30 bg-destructive/10 px-4 py-2 font-mono text-[11px] text-destructive"
+    >
+      <span>Save failed: {saveError}</span>
+      <span className="flex shrink-0 items-center gap-3">
+        <button
+          type="button"
+          onClick={() => {
+            void flushPendingSave()
+          }}
+          className="underline"
+        >
+          retry
+        </button>
+        <button type="button" onClick={clearSaveError} className="underline">
+          dismiss
+        </button>
+      </span>
+    </div>
+  ) : null
+
+  if (mode === StoreMode.Picker) {
+    if (!state || !pickerValue) {
+      return <ProjectPickerSkeleton />
+    }
+    return (
+      <>
+        {saveErrorBanner}
+        <ProjectPickerContext.Provider value={pickerValue}>{children}</ProjectPickerContext.Provider>
+      </>
+    )
+  }
+
+  if (!state) {
+    return (
+      <>
+        {saveErrorBanner}
+        <StoreShellSkeleton />
+      </>
+    )
+  }
+
+  // AI : keep AppShellLayout mounted while a project loads — replacing it with a skeleton unmounts the picker.
+
+  let wrapped = children
+  if (pickerValue) {
+    wrapped = <ProjectPickerContext.Provider value={pickerValue}>{wrapped}</ProjectPickerContext.Provider>
+  }
+  if (consumerValue) {
+    wrapped = <ConsumerStoreContext.Provider value={consumerValue}>{wrapped}</ConsumerStoreContext.Provider>
+  }
+  if (value) {
+    wrapped = <StoreContext.Provider value={value}>{wrapped}</StoreContext.Provider>
+  }
+
+  return (
+    <>
+      {saveErrorBanner}
+      {wrapped}
+    </>
+  )
+}
+
+export function useOptionalStore() {
+  return useContext(StoreContext)
+}
+
+export function useOptionalConsumerStore() {
+  return useContext(ConsumerStoreContext)
+}
+
+export function useConsumerStore() {
+  const ctx = useContext(ConsumerStoreContext)
+  if (!ctx) throw new Error("useConsumerStore must be used within consumer StoreProvider")
+  return ctx
+}
+
+export function useStore() {
+  const ctx = useOptionalStore()
+  if (!ctx) throw new Error("useStore must be used within StoreProvider")
+  return ctx
+}
+
+export function useStorePicker() {
+  const ctx = useContext(ProjectPickerContext)
+  if (!ctx) throw new Error("useStorePicker must be used within StoreProvider mode=\"picker\"")
+  return ctx
+}
+
+export { uid }
+export type { Project, ProjectId }

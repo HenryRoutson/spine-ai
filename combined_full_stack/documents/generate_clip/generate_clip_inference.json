@@ -1,0 +1,6 @@
+{
+  "description": "Generate a clip from a typed prompt — webhook poll + stored VideoClip (not a vendor connector).",
+  "inputs": {
+    "Clip prompt": "clip_prompt.json"
+  }
+}

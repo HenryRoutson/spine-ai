@@ -1,0 +1,7 @@
+{
+  "description": "Research brief + n8n-shaped search hits — scrape HTML snapshots, extract facts, write a briefing.",
+  "inputs": {
+    "Research Brief": "research_brief.txt",
+    "Search Hits": "search_hits.json"
+  }
+}

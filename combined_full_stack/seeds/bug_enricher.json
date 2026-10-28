@@ -1,0 +1,193 @@
+{
+  "id": "p_bug_enricher",
+  "name": "Bug Report Enricher",
+  "kind": "engineering",
+  "models": [
+    {
+      "id": "m_combined",
+      "name": "BugEnrichInput",
+      "auto": true,
+      "description": "User report (pipeline) + log snippet document.",
+      "fields": [
+        {
+          "id": "f_logs",
+          "name": "app_logs",
+          "type": "document",
+          "optional": false,
+          "description": "Log excerpt"
+        },
+        {
+          "id": "f_report",
+          "name": "user_report",
+          "type": "model",
+          "optional": false,
+          "description": "Parsed bug report",
+          "ref": "m_builtin_document"
+        }
+      ]
+    },
+    {
+      "id": "m_enriched",
+      "name": "EnrichedBug",
+      "description": "Structured bug ticket ready for triage.",
+      "fields": [
+        {
+          "id": "f_steps",
+          "name": "repro_steps",
+          "type": "list[text]",
+          "optional": false,
+          "description": "Numbered repro steps"
+        },
+        {
+          "id": "f_sev",
+          "name": "severity",
+          "type": "text",
+          "optional": false,
+          "description": "critical | high | medium | low"
+        },
+        {
+          "id": "f_comp",
+          "name": "likely_component",
+          "type": "text",
+          "optional": false,
+          "description": "Suspected code area"
+        },
+        {
+          "id": "f_summary",
+          "name": "summary",
+          "type": "text",
+          "optional": false,
+          "description": "One-line title"
+        }
+      ]
+    }
+  ],
+  "modules": [
+    {
+      "id": "mod_in_report",
+      "kind": "input",
+      "label": "Bug Report",
+      "inputType": "text",
+      "inputNameContains": "bug_report",
+      "outStructureId": "m_builtin_document",
+      "cached": true,
+      "avgMs": 90,
+      "avgCostCents": 0,
+      "inputDescription": "User-submitted bug report describing steps to reproduce and expected behavior"
+    },
+    {
+      "id": "mod_in_logs",
+      "kind": "input",
+      "label": "App Logs",
+      "inputType": "text",
+      "inputNameContains": "app_logs",
+      "outStructureId": "m_builtin_document",
+      "cached": true,
+      "avgMs": 90,
+      "avgCostCents": 0,
+      "inputDescription": "Application log snippet around the time of the reported failure"
+    },
+    {
+      "id": "mod_combine",
+      "kind": "combine",
+      "label": "Combine Inputs",
+      "inStructureId": "m_builtin_document",
+      "outStructureId": "m_combined",
+      "cached": true,
+      "avgMs": 40,
+      "avgCostCents": 0,
+      "inputDescription": "User-submitted bug report describing steps to reproduce and expected behavior"
+    },
+    {
+      "id": "mod_enrich",
+      "kind": "llm",
+      "label": "Enrich Bug",
+      "inStructureId": "m_combined",
+      "outStructureId": "m_enriched",
+      "inputDescription": "Combined bug input — user_report document plus app_logs log excerpt",
+      "prompt": "user_report is the bug report Document (use user_report.content). app_logs is the log document (use app_logs.content). Infer repro_steps, severity, likely_component (e.g. export/pdf/fonts), and a concise summary.",
+      "model": "deepseek-v4",
+      "cached": true,
+      "avgMs": 2400,
+      "avgCostCents": 7
+    },
+    {
+      "id": "mod_out",
+      "kind": "output",
+      "label": "Enriched Ticket",
+      "inStructureId": "m_enriched",
+      "outStructureId": "m_enriched",
+      "cached": true,
+      "avgMs": 40,
+      "avgCostCents": 0,
+      "inputDescription": "Single EnrichedBug object — structured ticket ready for engineering triage"
+    }
+  ],
+  "strategies": [
+    {
+      "id": "s_single_bug",
+      "kind": "single-llm",
+      "name": "Single LLM Call",
+      "enabled": true,
+      "model": "deepseek-v4",
+      "accuracy": 78,
+      "latencyMs": 3200,
+      "costCents": 8,
+      "passRate": 90
+    },
+    {
+      "id": "s_agent_bug",
+      "kind": "claude-code",
+      "name": "Agent (Frontier)",
+      "enabled": true,
+      "model": "deepseek-v4",
+      "accuracy": 92,
+      "latencyMs": 28000,
+      "costCents": 160,
+      "passRate": 97
+    },
+    {
+      "id": "s_cheap_bug",
+      "kind": "cheap-agent",
+      "name": "Agent (Cheap Model)",
+      "enabled": true,
+      "model": "deepseek-v4",
+      "accuracy": 82,
+      "latencyMs": 18000,
+      "costCents": 12,
+      "passRate": 89
+    }
+  ],
+  "docs": [
+    {
+      "name": "ticket_8842_bug_report.md",
+      "type": "text",
+      "label": "inference",
+      "file": "bug_enricher/bug_report.md"
+    },
+    {
+      "name": "ticket_8842_app_logs.md",
+      "type": "text",
+      "label": "inference",
+      "file": "bug_enricher/app_logs_snippet.md"
+    }
+  ],
+  "hostedSite": {
+    "brand": {
+      "companyName": "Triagebay",
+      "tagline": "User report plus logs, ready for eng.",
+      "primaryColor": "#111827",
+      "accentColor": "#7c3aed",
+      "backgroundColor": "#f5f3ff",
+      "textColor": "#1e1b4b"
+    },
+    "kicker": "Bug enricher",
+    "lede": "Paste the ticket and a log excerpt. Triagebay returns repro steps, severity, and a likely component.",
+    "cta": "Enrich this ticket",
+    "features": [
+      { "kicker": "01", "title": "Report + logs", "body": "Two inputs, one typed finding — not a pile of free text." },
+      { "kicker": "02", "title": "Actionable output", "body": "Severity and component land as fields your board already understands." },
+      { "kicker": "03", "title": "Eng portal", "body": "This website runs the Bug Report Enricher pipeline." }
+    ]
+  }
+}

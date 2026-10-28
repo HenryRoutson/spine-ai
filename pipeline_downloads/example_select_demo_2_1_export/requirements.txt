@@ -1,0 +1,6 @@
+# Python pipeline runner
+pydantic>=2
+python-dotenv>=1
+grpcio>=1.62
+grpcio-tools>=1.62  # protoc for pipeline_connector.proto
+httpx>=0.27  # OpenRouter client for llm_structured

@@ -1,0 +1,10 @@
+{
+  "description": "Test scaffold for Company Legal Evaluation — inputs are pinned; fill the null expected outputs from a verified run (only listed steps are checked).",
+  "inputs": {
+    "Legal Document": "health_data_legal_requirements.pdf",
+    "Company Data Input": "mediflow_company_legal_compliance.md"
+  },
+  "expectedOutputs": {
+    "Legal Considerations": null
+  }
+}

@@ -1,0 +1,77 @@
+import { NextResponse, type NextRequest } from "next/server";
+// AI : TODO (arch-assistant-billing-http) — billing/auth/model parse duplicates assistant-route.runBilledProjectAssistant.
+import { docsForProject } from "@/lib/project-docs";
+import { apiError, billingResponse, requireAuthStore } from "@/lib/server/api_context";
+import { parseRequestJson, testingAssistantBodySchema } from "@/lib/server/api_schemas";
+import { HTTP } from "@/lib/server/api-errors";
+import { requireProjectOr404, parseAssistantRequestModel } from "@/lib/server/assistant-route";
+import {
+  gateAssistantBilling,
+  recordAssistantBilling,
+  TESTING_ASSISTANT_BILLING_CHART_KEY,
+} from "@/lib/server/assistant_billing";
+import { ensureModelOptionsFresh } from "@/lib/server/openrouter_models";
+import { generateTestFile } from "@/lib/server/testing_assistant";
+import { logger } from "@/lib/server/server_logger";
+import type { ProjectId } from "@/lib/server/types";
+
+const apiLog = logger("api:testing-assistant");
+
+export const maxDuration = 120;
+
+export async function POST(req: NextRequest) {
+  // AI : SECURITY — auth + rate limit before parsing large assistant bodies.
+  const ctx = await requireAuthStore("llm");
+  if (ctx instanceof NextResponse) return ctx;
+  const { store } = ctx;
+
+  const body = await parseRequestJson(req, testingAssistantBodySchema);
+  if ("validationError" in body) return apiError(body.validationError, HTTP.BAD_REQUEST);
+
+  const modelOrErr = parseAssistantRequestModel(body.model);
+  if (modelOrErr instanceof NextResponse) return modelOrErr;
+  const model = modelOrErr;
+
+  const projectOrErr = await requireProjectOr404(store, body.projectId as ProjectId, apiLog);
+  if (projectOrErr instanceof NextResponse) return projectOrErr;
+  const project = projectOrErr;
+
+  let billingKey;
+  try {
+    billingKey = await gateAssistantBilling();
+  } catch (err) {
+    const billed = billingResponse(err);
+    if (billed) return billed;
+    throw err;
+  }
+
+  apiLog.info(`POST /api/testing-assistant`, {
+    projectId: body.projectId,
+    model,
+    instructionChars: body.instruction.length,
+  });
+
+  const startedAt = Date.now();
+  try {
+    await ensureModelOptionsFresh();
+    const projectDocs = docsForProject(store.docs(), project);
+    const generated = await generateTestFile(project, projectDocs, body.instruction, model);
+    let billedCents = 0;
+    if (generated.usageCents > 0) {
+      billedCents = await recordAssistantBilling(billingKey, {
+        store,
+        projectId: project.id,
+        model,
+        message: body.instruction,
+        responseMessage: generated.name,
+        usageCents: generated.usageCents,
+        startedAt,
+        chartKey: TESTING_ASSISTANT_BILLING_CHART_KEY,
+      });
+    }
+    return NextResponse.json({ ...generated, billedCents });
+  } catch (err) {
+    apiLog.error(`testing assistant failed`, { projectId: body.projectId, error: (err as Error).message });
+    return apiError((err as Error).message, HTTP.UNPROCESSABLE);
+  }
+}

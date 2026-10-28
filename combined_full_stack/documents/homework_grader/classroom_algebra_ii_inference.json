@@ -1,0 +1,11 @@
+{
+  "description": "Three student submissions graded against the bundled Algebra II rubric.",
+  "inputs": {
+    "Marking Schema": "homework_marking_schema.json",
+    "Student Submissions": [
+      "homework_student_sam.md",
+      "homework_student_jordan.md",
+      "homework_student_alex.md"
+    ]
+  }
+}

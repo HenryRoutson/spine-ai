@@ -1,0 +1,7 @@
+{
+  "description": "Invoice Triage Fork — inputs pinned; fill expected outputs from a verified run.",
+  "inputs": {
+    "Invoice": "invoice_8841.md"
+  },
+  "expectedOutputs": {}
+}

@@ -1,0 +1,12 @@
+[
+  { "student_label": "Priya Nair", "section_id": "A", "score": 10, "max_score": 10 },
+  { "student_label": "Priya Nair", "section_id": "A", "score": 10, "max_score": 10 },
+  { "student_label": "Priya Nair", "section_id": "B", "score": 10, "max_score": 10 },
+  {
+    "student_label": "Priya Nair",
+    "section_id": "B",
+    "score": 2,
+    "max_score": 10,
+    "mistake_explanation": "Bare comparison with ∑1/n² — exactly 2 pts maximum per rubric; comparison hypotheses not satisfied."
+  }
+]

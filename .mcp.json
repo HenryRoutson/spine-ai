@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "spine": {
+      "command": "node",
+      "args": ["mcp_tool/spine-mcp.mjs"]
+    }
+  }
+}

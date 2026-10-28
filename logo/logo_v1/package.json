@@ -1,0 +1,17 @@
+{
+  "name": "logo",
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "export": "node export-svg.mjs && node export-raster.mjs",
+    "export:svg": "node export-svg.mjs",
+    "export:png": "node export-raster.mjs"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "description": "",
+  "dependencies": {
+    "@resvg/resvg-js": "^2.6.2"
+  }
+}

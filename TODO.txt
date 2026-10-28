@@ -1,0 +1,1010 @@
+
+create fully non technical buiild view. 
+
+
+
+PRIORITY
+
+
+Agent observe + run (parity with Build Logging / Inference / cache preview):
+  [done] Phase 0 — enrich run_error + @Runs + prompt_cache pins + recent run summaries
+  [done] Phase 1 — vibe last-failed auto summary; full server run enrich
+  [done] Phase 2 — proposedActions run_inference + Vibe Run / inputs / last-run (source assistant)
+  [done] Phase 3 — proposedActions run_test + testing-evaluate + follow-up verdict chat turn
+  [done] Phase 4 — optional read tools (get_run / get_step_prompt_cache / list_server_logs in propose loop)
+  See lib/assistant-observe.ts, lib/assistant-run.ts, ui_context_enrich, vibe-panel, project-assistant
+
+
+Cursor-style @ mentions in Agent composer:
+- Type @ → filtered list (Select UI, Issues, steps, models, types, files); pick pins a context chip
+- Same uiContext[] request path as Select UI; kinds include project_doc / model / type_alias / invalid_issue
+- Server enrichUiContextRefs loads doc bytes + live step/model defs before the LLM prompt
+- Kind-specific chips in composer + user bubbles (ui-context-chip.tsx)
+- See // AI : TODO (assistant-@-mention) for follow-ons: file tags/notes always-on; TipTap caret-anchored menu
+
+Cursor-style UI context picker (avoid copy-paste into agent):
+- Crosshair select mode from agent dock: hover highlight, click pins UI region as context chip
+- App-owned targets (not raw DOM): pipeline step, inspector field, IO mismatch, inference error/run slice
+- Store pins in project-assistant context; serialize uiContext[] on assistant request; inject prompt block
+- Prefer smallest meaningful target under pointer; multi-pin chips removable; size-cap snippets
+- Highlight agent chat text → floating Quote → chat_quote chip (same uiContext path)
+- See // AI : TODO (ui-context-picker) in assistant-chat, dock, api_schemas, assistant-prompt, pipeline-builder, inference-run-chrome, pipeline-fields/shared
+
+Cursor-style pasted chips in agent chat (differentiate paste for the LLM):
+- Paste → removable chip/attachment above ChatInput (not inline <pasted> in the textarea)
+- Chosen lib: @assistant-ui/react Composer.Attachments + text AttachmentAdapter
+- Also consider later: Prompt Kit PromptInput, TipTap atoms, Lexical DecoratorNode (refs in ChatInput TODO)
+- On send: typed text + each chip serialized as <pasted>…</pasted> so the model sees paste vs typed
+- Share chip row UX with ui-context-picker; kind differs (paste vs ui pin)
+- See // AI : TODO (pasted-chip) in chat.tsx, assistant-chat, assistant-history, assistant-prompt, api_schemas, project-assistant
+- Follow-on (separate): edit-inside-paste boundaries + extract JSON/Python from <pasted> regions
+
+
+Thinking of errors when running the homework assessment pipeline,
+although i can filter down file names to contains certain things like 
+marking criteria might always contain "marking guide" in their name,
+there is nothing stopping me from passing in a  "marking guide"  and a "homework sheet" which do not match. You need to have the option to only upload files after another input step when you can further filter down what files fit a format. You could do this both with pydantic format, where you check if the marking schema matches with the homework schema, but with extra marking fields. You could also do it with names where you parse the name into different values and check if those values equal. like marking_guide_SPLIT_grade10.txt and homework_SPLIT_james_miller_SPLIT_grade10.txt. However, this is janky and could lead to very long names, although names still do need to be unique. How do i approach this?
+
+
+
+
+Create an example around PTR or payment time reporting in austrlaia
+Map different excel files into the same PRT stanard format which is compliant with regulations
+Alteryx data cleaning software  - https://www.alteryx.com
+  to remove white spaces, unneeded commas, spelling, missing values, date format standardisation
+ensure all invoice dates are before payment dates
+remoev duplicate transactions
+calculate compliance statistics after all anomolies have been resolved.
+
+
+
+
+
+
+
+SEO https://search.google.com/search-console/welcome?utm_source=about-page
+
+
+
+human review got skipped over in inference tab, you need an approve or reject button for boolean and other logic for chat and single text : requirements for step options 6. Human review - bool
+7. Human review - chat until resolution - optional voice trascribe 
+8. Human review - single text response - optional voice trascribe
+
+
+need to make pydantic schemas able to limit what files are able to be uploaded. for example if i have a homework schema, i shouldn't be able to upload the wrong homework. there could be something like a naning limitation or a pydantic limtation
+
+
+try https://cloud.flowiseai.com/canvas
+
+
+
+need to handle logic for pass throughs and avoid rewriting each step completely. Need to be able to click a field and trace it's whole history, which might be difficult with custom code blocks. I want to be able to see ok this field alone is a function of these things.
+
+
+I just realised we can probably undercut API pricing because we're splitting up tasks. at high enough scale, we're getting SPLITS^2 the compute saving if SPLITS is the number of parallel llm calls.
+
+
+
+please add file types so that files like legal.txt and soil_report.txt can be differentiated. Maybe just put tags on files which add notes about them, which is automatically attatched to a prompt. Explain a legal file and a soil_report.
+
+
+i do like the idea of pure stateless functions, need to label which are which and which use state, note will need to use this for cache. may need AI to decide?
+
+
+
+note you can test if something is deterministic if you run it twice. with an llm.
+
+embed into websites as an option for sharing
+  [done mvp] Publish → Embed tab; emb_ shared_links + allowed_origins; /embed/[id]; iframe/script snippets
+  [done mvp] origin allowlist + parentOrigin check on run; CSP frame-ancestors in proxy; no API keys in HTML
+  remaining: CAPTCHA / tighter rate limits for owner-pays embeds; edit origins UI in deployments list; richer postMessage events
+  [done] embed session HMAC on /embed mint + required on /run (no spoofable parentOrigin); allowlist redacted from public GET
+  Embed vs Link vs API explanation in Share UI (when each fits; websites pick via config, not one path)
+
+  Embed deployment config options (creator / site picks what suits them):
+  - delivery: iframe snippet and/or JS loader script (both available; site chooses)
+  - allowed origins / domain allowlist (required for anti-theft; editable; revoke / rotate id)
+  - optional path allowlist, referrer strictness
+  - funding: reuse link-style modes (you pay anon / you pay + sign-in / viewer pays) + spend limit + enable/disable
+  - abuse controls: rate limits, optional CAPTCHA for owner-pays, max runs/day
+  - UI chrome: height, theme, hide branding, mobile sizing
+  - events: optional postMessage run lifecycle (started / finished / error) for host page integration
+  - custom UI path: document Hosted API from *their* server (no open CORS on invoke for browser keys)
+
+  Security / infra for Embed:
+  - /embed/[id] (or equivalent) with per-embed frame-ancestors from allowlist (override global SAMEORIGIN only for embed routes)
+  - origin-bound short-lived embed session for run/progress (not hosted API key)
+  - re-check Origin on embed run APIs; cloned snippets on other domains fail
+  - deployments list: manage embeds like links/APIs (copy snippet, toggle, spend, take down)
+
+
+
+regex RAG, with an example regex constant, connected to web search directly
+
+how to do integrations? like google search? don't code yourself.
+
+
+- latency flame charts?
+
+dashboard : - there should be a graph for overall activity, of how much people are using the landing page or app per day.
+
+explain if we do or don't reccomend and use rag in the landing page. You also might want to use Target rag, which is where an LLM will determine a sentence that has the best embedding rather than just the original prompt. maybe make post explaining this on blog.
+
+
+custom code should have a hash store of all the errors that code has produced, and maybe even something based on the similarity of the code which you could do with a keyword match and then git diff quite efficiently.
+
+
+
+switch to a normal graph approach after you get 100% reliablility with current linear approach. use React Flow / XYFlow, Litegraph.js, Rete.js, Drawflow, to use existing library code for Node editor.
+
+
+
+
+
+
+telem : https://posthog.com/ telem
+telem : OpenReplay? check AGPL license
+telem : HyperDX
+
+write code to recreate what a user is doing in the UI from database recorded clicks and inputs. make generic for any repo on react.
+
+
+delete old accounts and restart.
+
+
+add teams and orgs.
+
+
+update dashboard
+
+
+add clickable links in the question which link to the live demo like open the share tab if question is asking about that
+
+
+
+understand this more : https://boundaryml.com/explore#agents
+
+
+
+
+
+
+LANDING_DEMO_IP_SALT required on Vercel
+
+use testing flag to see which users are real.
+
+https://elu.dev
+
+
+need to add a marketplace
+  → Share tab: Publish → Marketplace (price or free) + Marketplace browse/search/copy
+
+
+please mark files as public before sharing them as examples
+
+
+please add email collection as a prereq before allowing agent use
+landing page needs to be a form to gather data before anything
+need email from ppl to send out updates
+put emails in supabase
+
+make a monitoring dashboard if supabase isn't good enough
+
+please segment types into JSON or not JSON.
+If and only if the type subset selected is all json can you parse to a pydantic struct inside this step. You will need to handle the if case of Using an llm if the format is not json, which should be a locked step which is added automatically for the inputs which are not automatically converted.
+Ensure the user doesn't have the think about, if this structure isn't json i need to run an llm to convert it and if it is i just want to load it directly. please just handle this logic and visualise it.
+  PDF - not json
+  Word - not json
+  Excel - json
+  JSON - json
+  Text - not json
+  Web - not json
+  Image - not json
+
+
+how to noify when something is finished. email or slack
+
+
+
+
+
+databases integration and profiling.
+third-party API calls and profiling.
+
+
+https://docs.ag-ui.com/introduction?
+
+
+
+need to be able to see if a field is from an llm or if from python, although the python might be from llm originally. trace full path to ensure something like quotes are valid and not generated and hence possibly hallucinated by the llm
+
+
+export excel with metadata
+
+
+fix 
+When input text/JSON is mapped into a structure, missing or wrong fields get silent defaults instead of failing validation. That matches the TODO about “text inputs being converted to pydantic objects” — pipelines can look valid in Structure but produce garbage at run time.
+
+
+
+fix 
+4. OCR is a placeholder
+useOcr on PDF/image inputs does not use real DeepSeek OCR; it falls back to PDF.js text extraction.
+https://docs.cloud.google.com/gemini-enterprise-agent-platform/models/maas/deepseek/deepseek-ocr#:~:text=Model%20ID,Fixed
+https://replicate.com/lucataco/deepseek-ocr
+
+
+
+fix 
+5. LLM “think first, then JSON” is not implemented
+Spec (and the cited paper) wants an optional non-JSON first response, auto-enabled on validation retry. Current behavior: both attempts use json_mode immediately; retry only appends “return corrected JSON.”
+
+fix 
+8. Billing arbitrage guard missing
+-10 account floor exists (MIN_ACCOUNT_BALANCE_CENTS = -1000), but profit-per-user tracking and arbitrage blocking from the spec are not implemented (billing_config.ts TODO).
+
+
+
+
+add API abilty
+
+
+
+add ability to share link with custom billing changes.
+The user should be able to make money by marking up an llm pipeline they built, money should be payed directly into a seperate account than they pay llm tokens with where they can take out that money.
+idea is that instead of something like shopify to markup items, you can use this to markup ai automation pipelines to make money.
+
+
+
+Please create a CLI that the UI wraps so that testing can be done without react, and this tool is able to be used by agents. 
+please write a bunch of tests 
+
+
+
+
+
+
+
+please create a testing suite for the AI agent in spine. it's not that good at the moment. please as cursor create a tonne of examples, and test them before asking the agent to create them in a single prompt without the whole context of the repo. ensure the agent and yourself have acess to the tools to see all the validation errors from json, and create a prompt that contiains all the info needed to create the single response pipeline, all beign contained in the pydantic / zod struct for modularity.
+
+
+add translations and new langauges by using constants
+
+
+there is an issue where text inputs are being converted to pydantic objects in the pipeline
+
+this doesn't work because input isn't a list : build me a pipeline to mark to convert hundreds of unstructured receipts into excel .
+need to make the landing page demo more reliable
+
+
+
+live preview isn't as good as being able to prompt something and getting a pipeline built.
+
+
+use auto visualiser
+
+
+Allow people to make money with their own stripe.
+Or allow markups on their deployments and ppl pay stripe.
+
+please have claude code with a cheap model as a backup if the pipeline fails
+add the idea of fallback pipelines
+
+how to export arbitrary file types? code runs on local broswer and saves?
+
+use learning_tips.txt under loading bar
+use new loading animation automic_code/loader
+
+No Langfuse-style open SDK for arbitrary apps; observability is scoped to spine pipelines only.
+
+
+Remove playground in structs, components/structure-builder.tsx
+
+
+
+there should be a group by on the fields where you can see the mapping of what has been mapped to what with autmoatically generated confusion matricies.
+
+https://www.strix.ai/
+
+
+add this demo UI to allow time to schedule 
+https://cal.com/team/strix/strix-demo
+
+
+
+
+pitch to ppl instead of shopify you can sell AI auomations,
+be able to upmark the stripe billing on top of my cut
+
+
+
+
+https://github.com/usestrix/strix
+
+OCR
+
+
+
+
+add a split function 
+
+everytime i open the cache in the UI it has to load in again, please fix this. in general try to fix this and load all data for a project but just change it with streaming
+
+Export
+- swift
+- Kotlin
+
+add this option in the fields of the structs : you should describe if certain fields are deterministic like a maths answer, or probabilistic if they're something like a summary which will almost never be the same. you should also mark certain steps as either probabilistic or deterministic, as we might want seeds for testing which you can vary, but need to consider when you decide to cache or not
+
+
+remove doc.label === "training", search for "training"
+add doc label "example"
+add an enum for these options
+
+get spine email,
+replace privacy@withspine.dev.  and any other emails.
+
+remove Allow duplicate runs
+
+Create a pipeline to turn documents into a structure with sections and sub section headings . Allow 2.6.3.6 . Create test file and example output file. Ensure it’s not just a single LLM call as this won’t work with longer contexts. input should be markdown and output json structures.
+
+
+there should be example input and expected output files which are used to test the pipeline, 
+this can be a demo for the inference. assert actual output equals expected. you should also write this for every single step, not just the final output to really isolate where things go wrong. write assert inputs and outputs inside the steps themselves.
+
+
+
+there should be checks for duplicate requests, trying not to waste inference. toggle to allow or disallow, and if allowed, the duplicates are collected and then denomalise to avoid extra billing.
+
+
+Create hidden bounaries for when something is pasted and when they edit inside the paste and extract json and python - create as a seperate project
+  → superseded UI approach: Cursor-style pasted chips (// AI : TODO (pasted-chip)); this line remains the
+    follow-on for edit-stable paste regions + JSON/Python extraction from <pasted> blocks.
+
+
+you should always have the ability to view the whole pipeline as code, 
+and if there are no errors in the pipeline there should be none in the code for any langauge.
+
+switch to GLM 5.2
+
+
+there should be a copy prompt button which copies the entire pipeline or just whatever you select, maybe a copy prompt tab. including validation errors, any selected logs, documents text includign excel, . everythign a prompt could ever need, 
+
+
+
+
+add an export to python button to export the whole pipeline to python, including the front end UI. this should include a lot of supabase info so maybe use sql, plus some derived errors like validation.
+
+
+
+=== TYPE SYSTEM: linter-first (Python or Rust) ===
+Target: generate models.py + pipeline_types.py (or .rs equivalents), lint with pyright / cargo check — NOT custom TS in validity.ts.
+- [ ] generatePipelineTypesRust → pipeline_types.rs + models.rs (type_codegen.ts)
+- [ ] scripts/typecheck_project.ts: --cargo, pyright as default; remove computeInvalid once linter covers spine IO
+- [ ] lintPipelineExportPy (pyright) + lintPipelineExportRust (cargo check) — primary CI; TS export lint secondary
+- [x] seed LLM + UI↔TS export parity (vitest + GitHub Actions); expand HARD_PARITY_SEEDS; Py/Rust/Go via OPENROUTER_BASE_URL → `npm run seed-llm`
+- [x] live parity uses OpenRouter DeepSeek V4 Flash + OPENROUTER_SEED (temp 0) via repo `.env` key — not the offline mock
+- [x] parity is headless (`run_engine` + export only) via `npm run test:parity` — excluded from `npm test` so it won't flood the terminal / brick the UI view
+- [ ] parity FIX: emit real JSON schemas in TS/Py/Rust/Go LLM export stubs (today `schema = {}` / `None`) — root cause of live soft mismatches vs UI
+- [ ] parity FIX: after schemas land, re-enable HARD_PARITY_SEEDS (start with small seeds, then all) so soft mismatches become hard fails
+- [ ] parity FIX: UI↔export step mismatches still soft-failing on Match Transactions / Enrich Bug / Draft Scope / Populate Workpaper / tutoring LaTeX etc. — verify once schemas exist
+- [ ] parity FIX: OpenRouter empty-content / slow seeds (audit_sampler, billed_work_catalog_select, example_select_demo, gps_site_profiling, homework_grader, tutoring_styled_batch timed out @5m) — abort in-flight work on soft budget, backoff on empty/429
+- [ ] parity FIX: Py/Rust/Go automated parity (TS-only for most seeds today)
+- [ ] parity FIX: tutoring_random_fill / tutoring_styled_batch testing.json need expectedOutputs (validate_tests currently skipped)
+- [ ] parity FIX: sla_breach default input filename vs required "sla_uptime" substring mismatch in harness assignment
+- [ ] UI Types tab: view generated .py/.rs, show pyright/cargo diagnostics (see docs/new_type_system_plan.md)
+- [ ] Delete stepAcceptsSpineType, cardinalityMismatch, bareTransformCanAutoWrapList when orchestrator is typed Py/Rust
+- [ ] Runtime validateStepOutput → pydantic from generated models, not zodFromModel
+- [ ] custom-code: pyright/cargo on user fn embedded in generated export, not tryCompileCustomCodeEntry heuristics
+- [ ] set/map/union/generic: only in generated Py/Rust + linter; drop z.array-as-set / z.record approximations
+Tag in code: AI : TODO (linter-first)
+
+allow plugins
+
+Make default input files mandatory 
+
+Need to hash code and use input and output descriptions rather than anything specific to make it generic. 
+
+Hash code to errors and also set a bunch of default functions to pick from
+
+non deterministic tests can be evaluated by an llm.
+
+
+need to save and hash errors, including any validation errors from LLMS. 
+
+
+Ensure custom code has typing 
+
+How to handle references, if you have ids you need to know which match which as you can’t match without this. Compare when the set of fields matches to add link
+
+
+
+
+inference contains a list of possible runs which have been pre selected, not just a single default one. these possible runs are named for example for a homework grader you could do a 1st grade example and a university grade example where the university includes latex formatting as a more advnaced test. you can also select from the tests in the inference tab.
+
+
+
+add voice mode to talk to the agent if not already. might be on mobile? just add a prompt
+
+
+
+
+
+
+
+
+add parallel pipelines, processing at the same time. 
+
+todo check XSS
+
+Give goodle auto evolution thing spine 
+
+Phone UI can be improved 
+
+Expected outputs for testing and evaluate comparison with git diff?
+
+
+Add doc to sections and table of contents pipeline example
+
+Need more previews options for outputs, 
+  check you can visualise markdown and graphs with mermaid
+
+Document chats with agent including responses and build a dashboard
+
+When the user makes a change to the agent , suggest updates to docs 
+
+remove outIsList as it's not generic and won't scale to other types
+
+
+move manage projects button to be dedicated
+
+create a single file for all colours to use, color pallete
+
+use viridis colour scheme and have selectors in settings for colour blindness
+
+
+ensure you can't change the input type away from document in the input step in the pipeilne if there is a pdf, but still be able to take in json and convert to struct easily
+
+ensure you can't change the input type away from document in the input step in the pipeline, unless it's json. don't try to load a pdf into some random json format without an explicit call. however json to structured model is ok.
+
+
+}
+Error: Can't resolve '../node_modules/shadcn/dist/tailwind.css' in '/Users/henry/Documents/documents.nosync/Git.nosync/antler_vc_hackathon/combined_full_stack'
+    [at finishWithoutResolve (/Users/henry/Documents/documents.nosync/Git.nosync/antler_vc_hackathon/combined_full_stack/node_modules/enhanced-resolve/lib/Resolver.js:943:18)]
+    [at /Users/henry/Documents/documents.nosync/Git.nosync/antler_vc_hackathon/combined_full_stack/node_modules/enhanced-resolve/lib/Resolver.js:1035:14]
+    [at /Users/henry/Documents/documents.nosync/Git.nosync/antler_vc_hackathon/combined_full_stack/node_modules/enhanced-resolve/lib/Resolver.js:1112:5]
+    [at eval (eval at create (/Users/henry/Documents/documents.nosync/Git.nosync/antler_vc_hackathon/combined_full_stack/node_modules/tapable/lib/HookCodeFactory.js:31:10), <anonymous>:15:1)]
+    [at /Users/henry/Documents/documents.nosync/Git.nosync/antler_vc_hackathon/combined_full_stack/node_modules/enhanced-resolve/lib/Resolver.js:1112:5]
+    [at eval (eval at create (/Users/henry/Documents/documents.nosync/Git.nosync/antler_vc_hackathon/combined_full_stack/node_modules/tapable/lib/HookCodeFactory.js:31:10), <anonymous>:27:1)]
+    [at /Users/henry/Documents/documents.nosync/Git.nosync/antler_vc_hackathon/combined_full_stack/node_modules/enhanced-resolve/lib/DescriptionFilePlugin.js:94:43]
+    [at /Users/henry/Documents/documents.nosync/Git.nosync/antler_vc_hackathon/combined_full_stack/node_modules/enhanced-resolve/lib/Resolver.js:1112:5]
+    [at eval (eval at create (/Users/henry/Documents/documents.nosync/Git.nosync/antler_vc_hackathon/combined_full_stack/node_modules/tapable/lib/HookCodeFactory.js:31:10), <anonymous>:15:1)]
+    [at /Users/henry/Documents/documents.nosync/Git.nosync/antler_vc_hackathon/combined_full_stack/node_modules/enhanced-resolve/lib/Resolver.js:1112:5] {
+  details: "resolve '../node_modules/shadcn/dist/tailwind.css' in '/Users/henry/Documents/documents.nosync/Git.nosync/antler_vc_hackathon/combined_full_stack'\n" +
+    '  using description file: /Users/henry/Documents/documents.nosync/Git.nosync/antler_vc_hackathon/combined_full_stack/package.json (relative path: .)\n' +
+    '    No description file found in /Users/henry/Documents/documents.nosync/Git.nosync/antler_vc_hackathon/node_modules/shadcn/dist or above\n' +
+    '    no extension\n' +
+    "      /Users/henry/Documents/documents.nosync/Git.nosync/antler_vc_hackathon/node_modules/shadcn/dist/tailwind.css doesn't exist\n" +
+    '    .css\n' +
+    "      /Users/henry/Documents/documents.nosync/Git.nosync/antler_vc_hackathon/node_modules/shadcn/dist/tailwind.css.css doesn't exist\n" +
+    '    as directory\n' +
+    "      /Users/henry/Documents/documents.nosync/Git.nosync/antler_vc_hackathon/node_modules/shadcn/dist/tailwind.css doesn't exist"
+}
+
+
+
+
+
+
+
+
+
+
+================================================================================
+PLAN: OpenHands agent tier (separate server) — managed, minimal complexity
+================================================================================
+Goal: run OpenHands (open models via OpenRouter) on infrastructure separate from
+the Vercel UI so agent jobs (minutes, Docker, bash) never slow inference/API.
+Skip multi-node Ray / KubeRay / autoscaling for v1 — one managed VM is enough.
+
+--- architecture (3 tiers, no cluster) ---
+
+  [Vercel] Next.js UI + /api/runs          enqueue only, poll Supabase
+       |
+       v
+  [Supabase] jobs, runs, docs, billing     shared state + agent job rows
+       |
+       v
+  [Agent VM] Docker Compose stack          OpenHands + thin gateway (+ optional Ray)
+
+UI never runs agents. Pipeline pauses at openhands steps (like custom-code pause),
+resumes on webhook/callback when agent returns validated JSON.
+
+--- v1 deployment (recommended: Fly.io or Railway, single machine) ---
+
+Why Fly/Railway over raw EC2: git-push deploy, TLS, secrets UI, persistent volume,
+Docker-in-Docker or sibling containers without you managing the OS. No scaling config.
+
+Machine: 4 vCPU / 8GB RAM minimum (OpenHands Docker sandbox is hungry).
+Region: same as Supabase (eu-west) to cut latency.
+
+Docker Compose on the agent VM (3 services):
+
+  1. agent-gateway (Python FastAPI or Node — ~100 lines)
+     - POST /agent/jobs  → returns agentJobId immediately
+     - GET  /agent/jobs/{id} → status, events tail, result JSON
+     - POST /agent/jobs/{id}/cancel
+     - Auth: shared secret header AGENT_GATEWAY_KEY (Vercel env only)
+     - Writes progress to Supabase (or callbacks to Vercel /api/agent/callback)
+     - Does NOT run agents — only queues and tracks
+
+  2. openhands-worker (long-running; pulls jobs from gateway queue)
+     - Image: ghcr.io/openhands/agent-server:latest-python
+       (pre-built — do NOT DockerDevWorkspace build on demand in prod)
+     - Env:
+         LLM_BASE_URL=https://openrouter.ai/api/v1
+         LLM_MODEL=deepseek/deepseek-chat   (or qwen — benchmark tool reliability)
+         OPENROUTER_API_KEY=...             (only on worker + proxy, never Vercel)
+         OH_SECRET_KEY=...                  (openssl rand -hex 32)
+         SESSION_API_KEY=...                (gateway → openhands internal auth)
+     - Mount: /data/workspaces → Fly/Railway persistent volume
+     - Per job: gateway spawns isolated DockerWorkspace container OR
+       uses OpenHands conversation API with workspace dir /data/workspaces/{runId}/
+
+  3. openrouter-proxy (optional, recommended)
+     - Tiny forwarder to openrouter.ai — meters tokens per agentJobId for billing
+     - OpenHands points at http://openrouter-proxy:8080/v1 not OpenRouter direct
+     - Keeps API key out of sandboxes
+
+Deploy steps (Fly example — adapt names):
+  - fly launch --no-deploy  (pick region, attach volume for /data)
+  - fly secrets set OPENROUTER_API_KEY=... OH_SECRET_KEY=... AGENT_GATEWAY_KEY=...
+  - docker compose up (via fly.toml [build] or Dockerfile that COPY compose)
+  - fly deploy
+  - Restrict ingress: only Vercel outbound IPs + your dev IP on :443
+  - Vercel env: AGENT_GATEWAY_URL=https://forge-agent.fly.dev  AGENT_GATEWAY_KEY=...
+
+Railway: same pattern — one service from Dockerfile, volume mount /data, env in dashboard.
+
+--- Ray (v1 = optional, single-node only) ---
+
+Skip Ray until >3 concurrent agent jobs hurt. When needed, add ON THE SAME VM:
+
+  ray start --head --num-cpus=4
+  ray serve run gateway:app   # wraps the FastAPI gateway as @serve.deployment
+
+Use Ray only for:
+  - one Actor per agentJobId (conversation state survives polls)
+  - ray.get(timeout=900) hard kill on stuck jobs
+  - NOT multi-node, NOT KubeRay, NOT GPU Serve LLM (models stay on OpenRouter)
+
+Do not add Ray Serve LLM / vLLM unless self-hosting models later.
+
+--- integration with combined_full_stack (phased) ---
+
+Phase 0 — prove agent VM alone (no UI)
+  [ ] Deploy compose stack to Fly/Railway
+  [ ] curl POST /agent/jobs with bug_enricher docs pasted as files
+  [ ] Confirm: Docker sandbox starts, agent reads files, returns JSON, container dies
+  [ ] Confirm: OpenRouter usage visible in openrouter.ai dashboard
+
+Phase 1 — Supabase agent job table
+  [ ] Table agent_jobs: id, run_id, step_id, user_id, status, events_json, result_json, error
+  [ ] Gateway writes status transitions: queued → running → ok|error
+  [ ] Vercel polls agent_jobs (or gateway proxies Supabase row)
+
+Phase 2 — pipeline pause/resume (decouple UI — see "setup as an agent API" below)
+  [ ] Add executionMode on llm modules: direct | openhands
+  [ ] run_engine: on openhands step → POST gateway, throw AgentStepPendingError
+  [ ] Checkpoint in run_jobs (same pattern as ClientStepPendingError / custom-code)
+  [ ] /api/agent/callback webhook from gateway → resumeRunPipeline with result
+  [ ] Include executionMode in run fingerprint hash
+
+Phase 3 — inference UX
+  [ ] Stream agent events into job debug logs (bash output, file reads)
+  [ ] Logging tab: show agent transcript fenced like A/B strategy logs
+  [ ] Fallback chain: direct OpenRouter first → openhands on schema failure
+
+Phase 4 — wire A/B strategy placeholder
+  [ ] strategies.ts "claude-code" / "cheap-agent" → call same gateway (not fake loop)
+  [ ] Replaces "setup claude code as a step option" + "Claude code instance as strategy"
+
+--- Docker security defaults (non-negotiable in prod) ---
+
+  - One workspace dir per job: /data/workspaces/{userId}/{runId}/{stepId}/
+  - No host mounts except that volume root
+  - openhands headless = auto-approve tools → ONLY inside Docker sandbox
+  - Max job wall time: 15 min then SIGKILL container
+  - Max concurrent jobs per user: 2 (gateway enforces before spawn)
+  - Sandbox egress: openrouter-proxy only (block general internet if possible)
+  - Never put OPENROUTER_API_KEY in Vercel or client bundle
+
+--- env vars checklist ---
+
+  Vercel (UI):
+    AGENT_GATEWAY_URL
+    AGENT_GATEWAY_KEY
+    (existing SUPABASE_*, OPENROUTER_* stays for direct llm steps only)
+
+  Agent VM:
+    OPENROUTER_API_KEY
+    OH_SECRET_KEY
+    SESSION_API_KEY          (internal)
+    AGENT_GATEWAY_KEY        (must match Vercel)
+    SUPABASE_URL + SERVICE_ROLE_KEY   (gateway writes agent_jobs)
+    WORKSPACE_ROOT=/data/workspaces
+
+--- cost / ops expectations (v1) ---
+
+  - ~$30–50/mo single Fly machine + OpenRouter usage per job
+  - No autoscaling — if queue backs up, user sees "agent busy, queued"
+  - Upgrade path later: second worker VM + Redis queue (still no KubeRay until needed)
+
+--- defers (do not build yet) ---
+
+  - Multi-node Ray cluster, KubeRay, Anyscale
+  - Self-hosted vLLM on GPU
+  - Per-job Kubernetes pods
+  - Horizontal autoscaling
+  - MCP/skills inside OpenHands (Phase 5+)
+
+================================================================================
+
+
+
+add dynamic schema with homework example. provide the marking schema as a file, not just unmarked.
+
+given this is a developing product, can you create a log of all user actions to record everything? this is for me to find issues users might have and where they get stuck
+
+
+
+
+please make a plan for how to have a complete type system in this project. currently the types are kind of vibes . if something is a list like an input step, somehow it doesn't matter if you change it to a list of not. don't code. ideally i would just compile a python script dervied from the json and see what errors come from that. what would be best? i still want to support generics and document types like word. i also want to see errors per step like they are not and not overall. be step specific. 
+
+
+
+
+
+
+could have prompt evaluations, but i think the formats we use are more important like pydantic structures.
+
+
+document conversion ?
+  add Reducto
+  add Anyformat?
+
+  just deepseek ocr to keep simple
+
+
+
+add option for custom llm calls. 
+  def(prompt : str, args**)
+
+
+how to reorder fallbacks up and down buttons
+
+allow git sync to setup coding in custom code step, with env
+
+add ai editing to code snippets for code step
+
+
+please add an env model which is shared between all projects and a specific project env model. this shouldn't be a text file, but a struct that is locked from being deleted. it will be passed into all custom code steps and also be the env for implicit calls which use that.
+?
+
+
+
+maybe add a code type to the output in strcutre which is like code[typescript] or code[python] and validate by running and add syntax highlighting but treat like a string otherwise
+maybe have different types of text like markdown text which is also displayed in format or latex.
+
+
+bring back cache
+
+get rid of combine inputs option?
+
+can't open new projects
+
+raise error if code doesn't compile in code step
+
+
+fix bug with cached log coming up in inference even if struct changes, likely need to store a hash of each struct
+
+n8n step option, ideally not. i kind of want the custom code steps to be able to handle everything. 
+
+add fallback support in custom code step
+
+
+
+create fallback logic in custom code module, display fallbacks in logging, keeping track of what exactly failed with lines of code and exact input to recreate everything that failed. just take in a list of typescript code for now, other languages will be supported in future 
+
+add python support to custom code step.
+create something like {
+  fallback_list : [
+    ("python") : "def ...",
+    ("python") : "def ...",
+    ("typescript") : "..."
+  ]
+}
+
+you can attribute failures to parts of the code to pinpoint issues. say this code failed, you changed it like this, this still failed, etc
+
+need to make sub pipelines as an option.
+
+
+
+allow for multiple possible options for fallback instead of a stright line? 
+
+
+need to add .env support for custom code and basically just allow it to execute elsewhere maybe? or at least to code it in cursor one their local machine and avoid any syncing headaches
+
+
+
+Need dynamic scehmas. If you have a task to mark homework, you're provided with a doc to text conversion of homework to text. from this you need to create an output schema of what the marking should check like question 7 should have fields a, b, c maybe, and the question descriptoins and marking criteria is inside each of those fields. you can't hardcode this for every homework sheet. Allow the option to request llm calls to output in a dynamic format and validate in same way. Maybe a format that adheres to a certain generic structure.
+
+
+
+export whole tool to cli
+
+export whole tool as claude code mcp plugin
+export whole tool as claude code skill?
+
+
+add deepseek OCR
+
+
+add human review step and what they see.
+
+
+- add an example of enrichment, where you keep the same format but just add things to it. do a test which would go over the context limit if you had to repeat the whole structure rather than just the new fields. 
+
+add mcp connections
+add skills?
+
+similar runs
+
+
+flag uploads if they contain 'confidential'
+
+fix hashing bug with cached log
+
+
+add an explaintion section for each project for shared markdown documentation.
+
+
+
+build and saturate benchmark
+compare to claude code
+
+
+cache all llm requests in a database, don't make per user if you end up sharing pipelines, just based on hash of input and model. attribute to user so they an look through and see all their prompts and reponses with models in a list view if they want, or search through this.
+
+
+
+- human to setup github and google sign in
+- rm china and us from chatbot selection
+- AB testing 
+- setup claude code as a step option
+
+input pdf to source doucment doesn't make sense and is implicit. 
+  should be to either text or json and that's it. then a step after that which validated what it is if json. use same lock techniqe to add this autoamaticcly if it's a json as link quotes.
+
+
+
+can remove combine input, and just use input and implicit combine
+
+https://www.baseten.co/
+
+
+fix logging view of inputs with multiple files, create a clear list view in logging. … same prompt × 15 items isn't going to cut it. maybe add <> buttons
+
+constrained decoding
+
+
+Dynamic schemas bad idea
+
+
+try 100 pipelines and then pick the one which performs the best on evaluation, or just iterative improve with AI automatically. then plot the speed, cost and accuracy over time or iterations or if 100 just on a single plot with efficient fronteir.
+
+
+need to allow pydantic model to expand with ALL the previous step outputs keyed by step label and then draw arrows for which is being used in which step back,
+and then automatically collapse into a more efficient tree to allow parallel execution. Directed Acyclic Graph. RxJS, XState, maybe? need to add an option in the UI to show the visual change of moving things into parallel.
+you need to give access to the label-keyed pydantic model for each lambda function / custom ts — see combined_full_stack/lib/server/pipeline_state.ts TODO(spec)
+The input pydantic field will need to be removed.
+ACTUALLY, I change my mind. this is going to make things much more complex and everything can be achived with a linear pipeline ideally. visually, and also in the complexity things will be worse. need to figure out how to enrich without using all the tokens to repeat something in a single step. probably just need a step to merge things.
+
+
+auto derive format from excel or JSON with UI.
+
+openclaw add? can't be in custom code?
+
+
+should i be able to delete the core SourceDocument? put a lock icon on it.
+also rename SourceDocument purpose?
+
+need more evidence in 
+Audit Sample Tester
+
+
+uploading a new document will check if it matches any of the existing structs and display this. you have the option to add any new structures in the document.
+
+each step of the pipeline should have an optional evaluate prompt where an llm can evaluate ?
+
+automatic AI reason for failure in pipeline
+
+allow creating alternate paths, and add testing option, then multiplex that with projects inside projects.
+  create optional paths or steps
+
+
+need to add enum type in structs
+
+add a feedback button into the UI
+
+add in asserts — assert step kind; step[\"Label\"]/len helpers; syncAssertPlacement; homework Grade Count Check
+
+
+mediflow_ai_company_profile.pdf : {"error":"no pdf file for sha_8b4a33391ead33d7"}
+
+after inference is finished or if it's cached, the final output should show up. With a json, excel style viewer, or even custom visualisations like video, plots.
+
+are you prompting with the input schema in addition to output schema?
+Allow option to view full prompt
+
+
+combine inputs should be able to take in lots of inputs not just 1.
+
+
+
+need a more complete type system? allow this type or that type?
+
+prompting should be stored in json for it's different components and then a static flatten function should be used to convert to the actual prompt. for example, don't store 1000 prompts with the denormalised text from a document as this is inefficient. only denormalise when sending to prompt.
+
+
+
+need to be able to click on SOURCE DOCUMENT: and link back to document tab
+
+
+backend supabase should contain profit per user as a virtual table or concrete table. main expense is llm calls, ensure no user is arbitraging some mispriced llm calls. block account if value goes below -10$. ensure safegard.
+
+
+add example field to the structure tab.
+
+
+
+i can change source doucment in weird ways and this never throws an error
+
+
+shoud have double prompting and seperate thinking and llm call step as an option or something which gets enabled if things fail.
+
+
+What is inference vs training?
+
+
+
+
+combine inputs i think is hard coded because idk how you rename the fields you're combining.
+  like company_data and company_legal_requirements. 
+  is it auto generated? should i add a link between things? 
+ 
+One of the important steps i havent yet investigated is AB testing, comparing which algorithm is better for different steps. 
+
+
+
+structs need to include exampels, and for any custom code you should test and display the output of running the eample data through the function at "compile" time before infence
+
+how does SOURCE DOCUMENT: work?
+
+SOURCE DOCUMENT: needs to be highlighted in logging.  need a quote step to add which handles stuff.
+
+
+do i need the 2 llm call thing? output json in not formatted first.
+
+setup as an agent API, decouple UI
+
+
+load documents while processing the rest of the pipeline, make parallel but keep design simple with linear, make async autoamatic
+
+
+create a twitter for a help desk
+
+
+create a pipeline which takes in a will in plain text and an excel file containing name or relation to a person and their bank id, and then a breakdown of someones personal assets. produce a final document which flag inconsistencies like sold assets which are passed down, describes actual outcome for each person. 
+
+
+make input and output clear. also prompt and response
+
+
+Add a plot for the size of prompts and their breakdown in input down to json and what classes are being passed in.
+
+use claude desktop to develop slides
+
+
+https://openrouter.ai/workspaces/default/keys
+
+
+
+https://vercel.com/henryroutsons-projects/antler-vc-hackathon/deployments
+
+
+https://dashboard.stripe.com/acct_1TgyfqFu5fCTjk8r/dashboard
+
+
+https://antler-vc-hackathon.vercel.app/
+https://vercel.com/henryroutsons-projects/~/deployments
+
+
+
+https://auto-pipeline.dev/
+https://auto-pipeline-app.dev/login?next=%2F
+
+
+
+
+Combine pipelines to make higher level, like a web search plus something elss
+Build web search
+Put into cursor 
+Prompt cursor from phone
+Add a chatbot option where the input is something and the output is that plus a chat. How to prompt, no chat
+CLI batch 
+Claude code instance as strategy
+LLM filter
+Add export to excel.
+Add load excel to json and pydantic 
+Allow editing schema in JSON
+Allow json export 
+Allow pdf export from markdown, generate on client side 
+Export other file types make general
+Enrichment, how to handle adding more to an existing model without getting everything in the response again?
+How to handle something you use repeatedly?  Need parallel pipelines? Avoid having field in every model to pass through 
+KIMI swarm - maybe? expensive and propriety. Could be good?
+Maybe LLM clustering
+PAdd group by from SQL
+Hallucination detector - duplicates in name key and valued 
+How are generics handled? Tree node generic
+Include LLM call option in custom lambda 
+I like the idea of each step being named and accumulating all the data from previous, but could make prompting complex
+For the custom functions, give access to the input model and the json to make it easier ?
+Compare on benchmark to Claude code in accuracy, time, lines of code, and cost
+Marketplace to buy and sell pipelines
+
+
+
+
+need to allow dynamic file loading, can't just be doing pipelines manually all the time, this will be done with cli
+
+
+
+remove rlm.
+
+
+compare runs
+
+
+
+at some point a confiential deployment will be useful.
+
+
+
+
+need to add code editor for more natural developer workflow, and outsource llm calls out of my pocket
+
+
+------------------------------------------------------------
+AI suggesetions 
+------------------------------------------------------------
+
+Scheduled / folder-watch runs — renewals, competitor monitoring, comment periods
+Email & webhook ingest — shipping exceptions, tickets, whistleblower
+Human approval queue — legal, HR, refunds before anything ships
+External write-back — CRM, ERP, ticketing (export CSV/JSON is enough for v1)
+Retrieval connector — live KB/vector search instead of static uploads
+Better OCR / images — receipts, scanned clinical forms
+Tabular join step — reconciliation without bespoke Custom TS every time
+
+
+
+
+
+
+
+SECURITY STANDARDS from https://www.stackai.com/
+  HIPAA
+  ISO 27001 information security certification badge

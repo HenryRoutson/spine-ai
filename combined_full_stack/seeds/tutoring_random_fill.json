@@ -1,0 +1,218 @@
+{
+  "id": "p_tutoring_random_fill",
+  "name": "Tutoring Random Fill",
+  "kind": "education",
+  "models": [
+    {
+      "id": "m_request",
+      "name": "Request",
+      "description": "Pipeline parameters \u2014 question type plus how many variations to fill.",
+      "fields": [
+        {
+          "id": "f_qtype",
+          "name": "question_type",
+          "type": "text",
+          "optional": false,
+          "description": "Topic / year level / question style to generate"
+        },
+        {
+          "id": "f_vars_n",
+          "name": "variations",
+          "type": "int",
+          "optional": false,
+          "description": "How many distinct filled examples to generate"
+        }
+      ]
+    },
+    {
+      "id": "m_q_template",
+      "name": "QuestionTemplate",
+      "description": "LaTeX question template with {var} placeholders filled by random integers.",
+      "fields": [
+        {
+          "id": "f_title",
+          "name": "title",
+          "type": "text",
+          "optional": false,
+          "description": "Short worksheet title"
+        },
+        {
+          "id": "f_topic",
+          "name": "topic",
+          "type": "text",
+          "optional": false,
+          "description": "Curriculum topic from question_type"
+        },
+        {
+          "id": "f_latex",
+          "name": "latex_template",
+          "type": "text",
+          "optional": false,
+          "description": "LaTeX question body; use {a}, {b}, \u2026 for variables",
+          "deterministic": false
+        },
+        {
+          "id": "f_vars",
+          "name": "variables",
+          "type": "list[text]",
+          "optional": false,
+          "description": "Placeholder names used in latex_template (without braces)"
+        },
+        {
+          "id": "f_notes",
+          "name": "tutor_notes",
+          "type": "text",
+          "optional": true,
+          "description": "Optional teaching notes for tutors",
+          "deterministic": false
+        }
+      ]
+    },
+    {
+      "id": "m_latex_pack",
+      "name": "LatexPack",
+      "description": "Final LaTeX worksheet \u2014 same template filled with random integers.",
+      "fields": [
+        {
+          "id": "f_title",
+          "name": "title",
+          "type": "text",
+          "optional": false,
+          "description": "Worksheet title"
+        },
+        {
+          "id": "f_latex",
+          "name": "latex",
+          "type": "text",
+          "optional": false,
+          "description": "Complete LaTeX document text",
+          "deterministic": false
+        }
+      ]
+    }
+  ],
+  "modules": [
+    {
+      "id": "mod_input",
+      "kind": "input",
+      "label": "Request",
+      "inputType": "json",
+      "inputDescription": "JSON with question_type (string) and variations (positive integer count)",
+      "outStructureId": "m_request",
+      "note": "Parameters: question_type + variations"
+    },
+    {
+      "id": "mod_template",
+      "kind": "llm",
+      "label": "Generate Question Template",
+      "note": "Request \u2192 QuestionTemplate \u2014 one LaTeX body with {var} placeholders.",
+      "inputDescription": "Request \u2014 question_type and variations",
+      "inStructureId": "m_request",
+      "outStructureId": "m_q_template",
+      "prompt": "You write exam-style questions for a tutoring company.\n\nInput fields:\n- question_type: topic / year level / style\n- variations: ignored here (a later step fills that many copies with random integers)\n\nProduce ONE reusable question template matching question_type:\n- title and topic\n- latex_template: LaTeX question BODY (not a full document). Every blank is a braced placeholder like {a}, {b}. Only placeholders \u2014 no concrete numbers. Include TikZ only when the question type needs a diagram.\n- variables: placeholder names without braces, in order. Prefer placeholders that work with small positive integers (1\u201312).\n- tutor_notes: brief tip for the tutor\n\nKeep any diagram self-contained in tikzpicture. Use only standard LaTeX/TikZ.",
+      "model": "deepseek-v4"
+    },
+    {
+      "id": "mod_format",
+      "kind": "transform",
+      "label": "Fill Random Variations",
+      "note": "QuestionTemplate \u2192 LatexPack \u2014 N random integer fills of {var}, no LLM.",
+      "inputDescription": "QuestionTemplate with latex_template and variables",
+      "inStructureId": "m_q_template",
+      "outStructureId": "m_latex_pack",
+      "code": "(tmpl, state) => { const req = state[\"Request\"] ?? {}; const n = Math.max(1, Math.min(12, Number(req?.variations) || 4)); const template = String(tmpl?.latex_template ?? \"\"); const title = String(tmpl?.title ?? \"Tutoring questions\"); const vars = Array.isArray(tmpl?.variables) ? tmpl.variables.map(String) : []; const used = new Set(); const fillOnce = () => { const bind = {}; for (const k of vars) { let v; do { v = String(1 + Math.floor(Math.random() * 12)); } while (vars.length > 1 && used.has(k + \":\" + v) && used.size < vars.length * 12); used.add(k + \":\" + v); bind[k] = v; } let out = template; for (const [k, v] of Object.entries(bind)) out = out.split(\"{\" + k + \"}\").join(v); return out; }; const body = Array.from({ length: n }, (_, i) => \"\\\\subsection*{Example \" + (i + 1) + \"}\\n\" + fillOnce()).join(\"\\n\\n\"); const latex = [\"\\\\documentclass{article}\", \"\\\\usepackage{amsmath,amssymb,tikz}\", \"\\\\begin{document}\", \"\\\\section*{\" + title.trim() + \"}\", \"\", body, \"\\\\end{document}\"].join(\"\\n\"); return { title, latex }; }"
+    },
+    {
+      "id": "mod_output",
+      "kind": "output",
+      "label": "LaTeX Worksheet",
+      "inputDescription": "Single LatexPack \u2014 title plus complete LaTeX document text",
+      "inStructureId": "m_latex_pack",
+      "outStructureId": "m_latex_pack",
+      "note": ""
+    }
+  ],
+  "strategies": [
+    {
+      "id": "s_single_random",
+      "kind": "single-llm",
+      "name": "Single LLM Call",
+      "enabled": true,
+      "model": "deepseek-v4",
+      "accuracy": 76,
+      "latencyMs": 5200,
+      "costCents": 14,
+      "passRate": 88
+    },
+    {
+      "id": "s_agent_random",
+      "kind": "claude-code",
+      "name": "Agent (Frontier)",
+      "enabled": true,
+      "model": "deepseek-v4",
+      "accuracy": 91,
+      "latencyMs": 24000,
+      "costCents": 140,
+      "passRate": 97
+    },
+    {
+      "id": "s_cheap_random",
+      "kind": "cheap-agent",
+      "name": "Agent (Cheap Model)",
+      "enabled": true,
+      "model": "deepseek-v4",
+      "accuracy": 80,
+      "latencyMs": 16000,
+      "costCents": 11,
+      "passRate": 90
+    }
+  ],
+  "docs": [
+    {
+      "name": "year10_request.json",
+      "type": "json",
+      "label": "inference",
+      "file": "tutoring_random_fill/year10_request.json"
+    },
+    {
+      "name": "year12_request.json",
+      "type": "json",
+      "label": "inference",
+      "file": "tutoring_random_fill/year12_request.json"
+    },
+    {
+      "name": "year10_inference.json",
+      "type": "json",
+      "label": "inference",
+      "file": "tutoring_random_fill/year10_inference.json"
+    },
+    {
+      "name": "year12_inference.json",
+      "type": "json",
+      "label": "inference",
+      "file": "tutoring_random_fill/year12_inference.json"
+    },
+    {
+      "name": "tutoring_random_fill_testing.json",
+      "type": "json",
+      "label": "training",
+      "file": "tutoring_random_fill/tutoring_random_fill_testing.json"
+    }
+  ],
+  "inferencePresets": [
+    {
+      "name": "Year 10 Pythagoras",
+      "description": "Year 10 right-triangle missing-side questions \u2014 4 random fills",
+      "inputs": {
+        "Request": "year10_request.json"
+      }
+    },
+    {
+      "name": "Year 12 Differentiation",
+      "description": "Year 12 calculus differentiation questions \u2014 3 random fills",
+      "inputs": {
+        "Request": "year12_request.json"
+      }
+    }
+  ]
+}

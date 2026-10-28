@@ -1,0 +1,92 @@
+<div class="grid-spinner">
+  <span></span><span></span><span></span>
+  <span></span><span></span><span></span>
+</div>
+
+<style>
+.grid-spinner {
+  /* wave direction + motion */
+  --wave-angle: 0;              /* deg — 0 = left→right, 90 = top→bottom */
+  --wave-angle-speed: 45;       /* deg/s — set 0 to freeze direction */
+  --wave-duration: 1.2s;
+  --wave-stagger: 0.36s;        /* max delay spread across the grid */
+  /* layout + look */
+  --wave-cols: 3;
+  --wave-rows: 2;
+  --wave-gap: 4px;
+  --wave-color: #171717;        /* use #ededed on dark bg */
+  --wave-radius: 2px;
+  --wave-dim-opacity: 0.15;
+
+  display: grid;
+  grid-template-columns: repeat(var(--wave-cols), 1fr);
+  grid-template-rows: repeat(var(--wave-rows), 1fr);
+  gap: var(--wave-gap);
+  width: 52px;
+  height: 34px;
+}
+
+.grid-spinner span {
+  background: var(--wave-color);
+  border-radius: var(--wave-radius);
+  opacity: var(--wave-dim-opacity);
+  animation: grid-pulse var(--wave-duration) ease-in-out infinite;
+}
+
+@keyframes grid-pulse {
+  0%, 60%, 100% { opacity: var(--wave-dim-opacity); }
+  30%           { opacity: 1; }
+}
+</style>
+
+<script>
+(() => {
+  const spinner = document.querySelector(".grid-spinner");
+  if (!spinner) return;
+
+  const cells = [...spinner.children];
+
+  // AI : read numeric CSS vars; strips trailing units like "s" or "deg"
+  const readNum = (name, fallback) => {
+    const raw = getComputedStyle(spinner).getPropertyValue(name).trim();
+    const n = parseFloat(raw);
+    return Number.isFinite(n) ? n : fallback;
+  };
+
+  const cols = () => readNum("--wave-cols", 3);
+  const rows = () => readNum("--wave-rows", 2);
+
+  const wavePhase = (col, row, angleRad) =>
+    col * Math.cos(angleRad) + row * Math.sin(angleRad);
+
+  const applyWaveDelays = (angleDeg) => {
+    const angleRad = (angleDeg * Math.PI) / 180;
+    const stagger = readNum("--wave-stagger", 0.36);
+    const c = cols();
+    const phases = cells.map((_, i) => {
+      const col = i % c;
+      const row = Math.floor(i / c);
+      return wavePhase(col, row, angleRad);
+    });
+    const min = Math.min(...phases);
+    const max = Math.max(...phases);
+    const range = max - min || 1;
+    cells.forEach((cell, i) => {
+      cell.style.animationDelay = `${((phases[i] - min) / range) * stagger}s`;
+    });
+  };
+
+  const startedAt = performance.now();
+  const baseAngle = () => readNum("--wave-angle", 0);
+  const angleSpeed = () => readNum("--wave-angle-speed", 0);
+
+  const tick = (now) => {
+    const t = (now - startedAt) / 1000;
+    applyWaveDelays(baseAngle() + angleSpeed() * t);
+    requestAnimationFrame(tick);
+  };
+
+  applyWaveDelays(baseAngle());
+  requestAnimationFrame(tick);
+})();
+</script>
